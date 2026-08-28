@@ -1,0 +1,64 @@
+{
+  "title": "LLM Gateway",
+  "uid": "llm-gateway",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "QPS by status",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "targets": [
+        {"expr": "sum by (status) (rate(gateway_requests_total[1m]))", "legendFormat": "{{status}}"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "reqps"}}
+    },
+    {
+      "type": "timeseries",
+      "title": "TTFT P50/P95/P99",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "targets": [
+        {"expr": "histogram_quantile(0.5, sum by (le) (rate(gateway_ttft_seconds_bucket[1m])))", "legendFormat": "P50"},
+        {"expr": "histogram_quantile(0.95, sum by (le) (rate(gateway_ttft_seconds_bucket[1m])))", "legendFormat": "P95"},
+        {"expr": "histogram_quantile(0.99, sum by (le) (rate(gateway_ttft_seconds_bucket[1m])))", "legendFormat": "P99"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "s"}}
+    },
+    {
+      "type": "timeseries",
+      "title": "Active Streams",
+      "gridPos": {"h": 8, "w": 6, "x": 0, "y": 8},
+      "targets": [
+        {"expr": "gateway_active_streams", "legendFormat": "active"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Limiter: allowed vs limited",
+      "gridPos": {"h": 8, "w": 6, "x": 6, "y": 8},
+      "targets": [
+        {"expr": "sum by (tenant) (rate(limiter_allowed_total[1m]))", "legendFormat": "allowed {{tenant}}"},
+        {"expr": "sum by (tenant) (rate(limiter_limited_total[1m]))", "legendFormat": "limited {{tenant}}"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Latency P95",
+      "gridPos": {"h": 8, "w": 6, "x": 12, "y": 8},
+      "targets": [
+        {"expr": "histogram_quantile(0.95, sum by (le) (rate(gateway_latency_seconds_bucket[1m])))", "legendFormat": "P95"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "s"}}
+    },
+    {
+      "type": "timeseries",
+      "title": "Limiter queue wait P95",
+      "gridPos": {"h": 8, "w": 6, "x": 18, "y": 8},
+      "targets": [
+        {"expr": "histogram_quantile(0.95, sum by (le) (rate(limiter_queue_wait_seconds_bucket[1m])))", "legendFormat": "queue P95"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "s"}}
+    }
+  ]
+}
