@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package control;
+
+option go_package = "llm-gateway/proto/control;control";
+
+// ConfigService 控制面配置下发契约，与 internal/control/control.go 的 Go 结构体等价。
+// 本仓库为零依赖演示，手写 JSON+gRPC 实现；生产用 protoc 生成 Go 代码可直接替换。
+service ConfigService {
+  rpc GetConfig(GetRequest) returns (Config);
+  rpc WatchConfig(WatchRequest) returns (stream Config);
+}
+
+message Config {
+  int64 version = 1;
+  map<string, string> keys = 2;               // rawKey -> tenant
+  map<string, ProviderList> routes = 3;       // model -> providers
+}
+
+message ProviderList {
+  repeated string providers = 1;
+}
+
+message GetRequest {}
+
+message WatchRequest {
+  int64 version = 1;
+}
