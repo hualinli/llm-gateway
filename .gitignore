@@ -1,0 +1,15 @@
+# Go
+*.exe
+*.test
+*.out
+/vendor/
+
+# 环境与本地数据
+.env
+*.local.yaml
+/data/
+
+# IDE / 系统
+.idea/
+.vscode/
+.DS_Store
