@@ -67,7 +67,8 @@ func (c *Consumer) Run(ctx context.Context) {
 }
 
 // handle 处理单条消息:
-//   - 字段缺失/解析异常 -> 进 DLQ 并 ack,避免毒丸无限重投且不丢原始数据
+//   - 字段缺失/解析异常 -> 写入 DLQ 成功后 ack,避免毒丸无限重投且不丢原始数据
+//     (DLQ 写入失败则不 ack,留在 PEL 由 XAutoClaim 重试"搬进 DLQ"本身)
 //   - ledger 写入失败   -> 不 ack,留在 PEL 由 reclaimLoop 经 XAutoClaim 重投
 //     (PGLedger 用 ON CONFLICT DO NOTHING 保证重投幂等)
 //   - 成功/去重         -> ack
@@ -75,15 +76,13 @@ func (c *Consumer) handle(ctx context.Context, m redis.XMessage) {
 	raw, ok := m.Values["data"].(string)
 	if !ok {
 		log.Printf("metering: missing/invalid data field id=%s", m.ID)
-		c.sendToDLQ(ctx, m)
-		_ = c.rdb.XAck(ctx, StreamName, GroupName, m.ID).Err()
+		c.deadLetter(ctx, m, "missing_field:data")
 		return
 	}
 	var e Event
 	if err := json.Unmarshal([]byte(raw), &e); err != nil {
 		log.Printf("metering: bad event id=%s err=%v", m.ID, err)
-		c.sendToDLQ(ctx, m)
-		_ = c.rdb.XAck(ctx, StreamName, GroupName, m.ID).Err()
+		c.deadLetter(ctx, m, "bad_event: "+err.Error())
 		return
 	}
 
@@ -103,14 +102,23 @@ func (c *Consumer) handle(ctx context.Context, m redis.XMessage) {
 	}
 }
 
-// sendToDLQ 将无法处理的原始消息写入死信队列,便于事后排查而不丢失数据。
-func (c *Consumer) sendToDLQ(ctx context.Context, m redis.XMessage) {
-	b, _ := json.Marshal(m.Values) // 原始字段转 JSON 存档
+// deadLetter 把无法处理的原始消息搬进 DLQ,成功后才 ack。
+// 写入失败时不 ack:XAdd 与 XAck 走同一 Redis,写不进 DLQ 时 ACK 大概率同样失败,
+// 消息留在 PEL 由 XAutoClaim 重试整个"搬进 DLQ"动作,退化为 fail-stop 而非静默丢单。
+func (c *Consumer) deadLetter(ctx context.Context, m redis.XMessage, reason string) {
+	b, _ := json.Marshal(m.Values) // 原始字段整体转 JSON 存档,缺字段时也能还原现场
+	// 死信是人工补单队列而非审计日志,有界(approximate trimming ~1 万条)可接受
 	if err := c.rdb.XAdd(ctx, &redis.XAddArgs{
 		Stream: DLQStreamName,
-		Values: map[string]any{"id": m.ID, "raw": string(b)},
+		MaxLen: 10000,
+		Approx: true,
+		Values: map[string]any{"original_id": m.ID, "reason": reason, "raw": string(b)},
 	}).Err(); err != nil {
-		log.Printf("metering: send to DLQ failed id=%s err=%v", m.ID, err)
+		log.Printf("metering: DLQ write failed, keeping pending id=%s reason=%s err=%v", m.ID, reason, err)
+		return
+	}
+	if err := c.rdb.XAck(ctx, StreamName, GroupName, m.ID).Err(); err != nil {
+		log.Printf("metering: xack failed id=%s err=%v", m.ID, err)
 	}
 }
 
