@@ -47,6 +47,21 @@ func do(t *testing.T, providers []provider.Provider, body string) *httptest.Resp
 
 const streamBody = `{"model":"m1","stream":true,"messages":[]}`
 
+func TestRequestIDValidation(t *testing.T) {
+	if got, err := resolveRequestID("client-123"); err != nil || got != "client-123" {
+		t.Fatalf("valid request ID: got %q err=%v", got, err)
+	}
+	if _, err := resolveRequestID(strings.Repeat("x", 129)); err == nil {
+		t.Fatal("request ID longer than 128 bytes must be rejected")
+	}
+	if _, err := resolveRequestID("client id"); err == nil {
+		t.Fatal("request ID containing whitespace must be rejected")
+	}
+	if got, err := resolveRequestID(""); err != nil || len(got) != 32 {
+		t.Fatalf("generated request ID: got %q err=%v", got, err)
+	}
+}
+
 func TestNonStreamRejected(t *testing.T) {
 	called := false
 	p := &fakeProvider{name: "a", called: &called}

@@ -31,6 +31,23 @@ func main() {
 			provider.NewMockProvider("mock-b", 80*time.Millisecond),
 		},
 	})
+	// Real Provider registration is explicit. A control-plane route can only
+	// reference a provider that has been registered here (or by another
+	// deployment-specific bootstrap path); unknown names are rejected.
+	if baseURL := os.Getenv("OPENAI_BASE_URL"); baseURL != "" {
+		name := os.Getenv("OPENAI_PROVIDER_ID")
+		if name == "" {
+			name = "openai"
+		}
+		cfg := provider.DefaultOpenAIConfig(name, baseURL, os.Getenv("OPENAI_API_KEY"))
+		cfg.Model = os.Getenv("OPENAI_MODEL")
+		if err := registry.RegisterFactory(name, func() (provider.Provider, error) {
+			return provider.NewOpenAIProvider(cfg)
+		}); err != nil {
+			log.Fatalf("register openai provider: %v", err)
+		}
+		log.Printf("provider registered: %s endpoint=%s", name, baseURL)
+	}
 
 	// Redis 复用：限流 + Stream 共享同一实例
 	redisAddr := os.Getenv("REDIS_ADDR")
@@ -41,8 +58,14 @@ func main() {
 	lim := limiter.New(rdb, 20, 40, 500*time.Millisecond)
 	log.Printf("limiter: redis=%s rate=20 burst=40 queue=500ms", redisAddr)
 
-	// 计量生产：批量 XADD，不阻塞热路径
-	meterProducer := metering.NewProducer(rdb, 1000, 50, 200*time.Millisecond)
+	// 计量生产：批量 XADD，不阻塞热路径；Redis 故障时落本地 JSONL spool。
+	spoolDir := os.Getenv("METERING_SPOOL_DIR")
+	if spoolDir == "" {
+		spoolDir = "./data/metering-spool"
+	}
+	meterProducer := metering.NewProducerWithOptions(rdb, 1000, 50, 200*time.Millisecond, metering.ProducerOptions{
+		SpoolDir: spoolDir,
+	})
 	proxyHandler := proxy.NewHandler(registry, meterProducer)
 
 	// 演示用固定 Key，生产由控制面下发；明文只在这里出现一次，落 Store 即哈希
@@ -64,8 +87,14 @@ func main() {
 				return
 			}
 			log.Printf("control: hot reload %d -> %d", applied, cfg.Version)
+			if err := registry.UpdateRoutes(control.RoutesFromProto(cfg.Routes)); err != nil {
+				// 路由配置失败时仍优先撤销已删除凭据，避免无效 Provider
+				// 阻塞安全相关的 key deletion；新增 key 要等完整配置修复后生效。
+				authStore.RevokeMissing(cfg.Keys)
+				log.Printf("control: reject config v%d: %v", cfg.Version, err)
+				return
+			}
 			authStore.Update(cfg.Keys)
-			registry.UpdateRoutes(control.RoutesFromProto(cfg.Routes))
 			applied = cfg.Version
 		}
 		for {
@@ -148,5 +177,9 @@ func main() {
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Fatalf("shutdown: %v", err)
 	}
+	if err := meterProducer.Close(ctx); err != nil {
+		log.Printf("metering producer close: %v", err)
+	}
+	_ = rdb.Close()
 	log.Println("exit")
 }

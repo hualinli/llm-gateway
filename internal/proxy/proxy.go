@@ -2,12 +2,15 @@ package proxy
 
 import (
 	"bytes"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"llm-gateway/internal/auth"
@@ -19,12 +22,19 @@ import (
 // Handler 是数据面的核心：鉴权/限流之后、真正做透传的地方。
 // 现在只做最小闭环：选主备 Provider，首字节前失败自动切备，边读边 Flush。
 type Handler struct {
-	registry *provider.Registry
-	producer *metering.Producer
+	registry     *provider.Registry
+	producer     *metering.Producer
+	writeTimeout time.Duration
 }
 
+const defaultDownstreamWriteTimeout = 30 * time.Second
+
 func NewHandler(r *provider.Registry, p *metering.Producer) *Handler {
-	return &Handler{registry: r, producer: p}
+	return &Handler{
+		registry:     r,
+		producer:     p,
+		writeTimeout: defaultDownstreamWriteTimeout,
+	}
 }
 
 // countingWriter 用来判断"是否已向下游写过字节"，
@@ -33,11 +43,17 @@ type countingWriter struct {
 	http.ResponseWriter
 	written       bool
 	status        int
+	writeTimeout  time.Duration
 	firstByteAt   time.Time
 	firstByteTTFT time.Duration
 }
 
 func (c *countingWriter) Write(b []byte) (int, error) {
+	if c.writeTimeout > 0 {
+		controller := http.NewResponseController(c.ResponseWriter)
+		_ = controller.SetWriteDeadline(time.Now().Add(c.writeTimeout))
+		defer func() { _ = controller.SetWriteDeadline(time.Time{}) }()
+	}
 	if !c.written {
 		c.written = true
 		c.firstByteAt = time.Now()
@@ -46,7 +62,10 @@ func (c *countingWriter) Write(b []byte) (int, error) {
 }
 
 func (c *countingWriter) WriteHeader(code int) {
-	c.status = code
+	if !c.written {
+		c.written = true
+		c.status = code
+	}
 	c.ResponseWriter.WriteHeader(code)
 }
 
@@ -68,6 +87,17 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	requestID, err := resolveRequestID(r.Header.Get("X-Request-ID"))
+	if err != nil {
+		metrics.RequestsTotal.WithLabelValues(tenant, "", "400").Inc()
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("X-Request-ID", requestID)
+
+	// Bound request memory before reading the JSON. ReadTimeout protects time,
+	// not size; without this a client can force an unbounded allocation.
+	r.Body = http.MaxBytesReader(w, r.Body, 4<<20)
 	body, err := ioReadAll(r)
 	if err != nil {
 		metrics.RequestsTotal.WithLabelValues(tenant, "", "400").Inc()
@@ -88,10 +118,6 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	providers := h.registry.ProvidersFor(model)
 	if len(providers) == 0 {
-		// 模型未配置路由时退化到默认列表（便于本地 mock 演示）
-		providers = h.registry.ProvidersFor("default")
-	}
-	if len(providers) == 0 {
 		metrics.RequestsTotal.WithLabelValues(tenant, model, "502").Inc()
 		http.Error(w, "no provider available", http.StatusBadGateway)
 		return
@@ -103,7 +129,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 
-	cw := &countingWriter{ResponseWriter: w}
+	cw := &countingWriter{
+		ResponseWriter: w,
+		writeTimeout:   h.writeTimeout,
+	}
 
 	var lastErr error
 	for i, p := range providers {
@@ -115,10 +144,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				log.Printf("provider=%s model=%s usage=%+v", p.Name(), model, *usage)
 			}
 			if h.producer != nil {
-				reqID := r.Header.Get("X-Request-ID")
-				if reqID == "" {
-					reqID = fmt.Sprintf("%d-%s", time.Now().UnixNano(), tenant)
-				}
+				// The ledger key is tenant-scoped. A client may reuse its
+				// request ID across tenants without suppressing another tenant's
+				// charge; the response header still exposes the client-facing ID.
+				reqID := tenant + ":" + requestID
 				prompt := 0
 				comp := 0
 				if usage != nil {
@@ -150,6 +179,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		lastErr = err
+		if r.Context().Err() != nil {
+			// The client went away; do not spend another upstream attempt or
+			// write an error response to a disconnected connection.
+			return
+		}
 		log.Printf("provider=%s failed (attempt %d/%d): %v written=%v", p.Name(), i+1, len(providers), err, cw.written)
 		if i > 0 {
 			metrics.ProviderRetryTotal.WithLabelValues(p.Name(), model).Inc()
@@ -177,6 +211,26 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // --- helpers ---
+
+func resolveRequestID(raw string) (string, error) {
+	id := strings.TrimSpace(raw)
+	if id == "" {
+		var b [16]byte
+		if _, err := rand.Read(b[:]); err != nil {
+			return fmt.Sprintf("%d", time.Now().UnixNano()), nil
+		}
+		return hex.EncodeToString(b[:]), nil
+	}
+	if len(id) > 128 {
+		return "", fmt.Errorf("X-Request-ID is too long")
+	}
+	for i := 0; i < len(id); i++ {
+		if id[i] < 0x21 || id[i] > 0x7e {
+			return "", fmt.Errorf("X-Request-ID contains invalid characters")
+		}
+	}
+	return id, nil
+}
 
 func ioReadAll(r *http.Request) ([]byte, error) {
 	// 复用 bytes.Buffer + sync.Pool 是后续深水区优化，现在先用 ReadAll 保持可读

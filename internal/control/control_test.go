@@ -83,6 +83,48 @@ func TestApplyConfigMonotonicAndPersisted(t *testing.T) {
 
 // 持久化失败必须拒绝写入：版本不推进、内存不变。
 // 否则控制面重启后 Store 里没有这一版，"单调"就是假的。
+func TestApplyConfigSerializesConcurrentVersions(t *testing.T) {
+	st := NewMemoryStore()
+	srv, err := NewServer(st)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const n = 32
+	versions := make(chan int64, n)
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			cfg, err := srv.ApplyConfig(map[string]string{"sk-1": "t1"}, routes())
+			if err != nil {
+				t.Errorf("ApplyConfig: %v", err)
+				return
+			}
+			versions <- cfg.Version
+		}()
+	}
+	wg.Wait()
+	close(versions)
+
+	seen := make(map[int64]bool, n)
+	for version := range versions {
+		if seen[version] {
+			t.Fatalf("duplicate version %d", version)
+		}
+		seen[version] = true
+	}
+	if len(seen) != n || srv.CurrentConfig().Version != n {
+		t.Fatalf("versions=%d current=%d, want %d unique versions", len(seen), srv.CurrentConfig().Version, n)
+	}
+	for version := int64(1); version <= n; version++ {
+		if !seen[version] {
+			t.Fatalf("missing version %d", version)
+		}
+	}
+}
+
 func TestApplyConfigPersistenceFailureRollsBack(t *testing.T) {
 	st := &failStore{NewMemoryStore()}
 	srv, err := NewServer(st)

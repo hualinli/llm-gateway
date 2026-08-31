@@ -4,7 +4,7 @@ import "time"
 
 // Event 网关每完成一次流式请求产生一条，落 Redis Stream 前已归一化
 type Event struct {
-	RequestID        string    `json:"request_id"` // 幂等键，去重依据
+	RequestID        string    `json:"request_id"` // 当前为 tenant-scoped 幂等键
 	TenantID         string    `json:"tenant_id"`
 	Model            string    `json:"model"`
 	Provider         string    `json:"provider"`

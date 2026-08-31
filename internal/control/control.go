@@ -12,6 +12,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/keepalive"
 )
 
 // Server 控制面实现：内存热配置 + PG 持久化 + watch 广播。
@@ -22,8 +23,11 @@ type Server struct {
 	cfg   atomic.Pointer[pb.Config]
 	store Store
 
+	// applyMu serializes version allocation and persistence. Without it,
+	// concurrent admin writes can compute the same next version.
+	applyMu  sync.Mutex
 	mu       sync.Mutex
-	watchers map[chan *pb.Config]struct{} // 每个 WatchConfig 流一个非阻塞投递口
+	watchers map[chan *pb.Config]struct{} // 每个 WatchConfig 流一个 latest-snapshot 投递口
 }
 
 // NewServer 创建并尝试从 Store 恢复最新配置；恢复失败视为启动期致命错误。
@@ -44,6 +48,9 @@ func NewServer(store Store) (*Server, error) {
 
 // ApplyConfig 写入新配置：版本 = 当前 + 1，落盘成功后才对内生效并广播。
 func (s *Server) ApplyConfig(keys map[string]string, routes map[string]*pb.ProviderList) (*pb.Config, error) {
+	s.applyMu.Lock()
+	defer s.applyMu.Unlock()
+
 	next := &pb.Config{Version: s.CurrentConfig().Version + 1, Keys: keys, Routes: routes}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -105,7 +112,24 @@ func (s *Server) broadcast(cfg *pb.Config) {
 	for ch := range s.watchers {
 		select {
 		case ch <- cfg:
-		default: // 满：丢弃，重连补拉
+		default:
+			// Keep the newest snapshot instead of dropping a version while
+			// leaving the stream alive. The watcher will observe the latest
+			// config and skip stale snapshots by version.
+			for {
+				select {
+				case <-ch:
+				default:
+					break
+				}
+				if len(ch) == 0 {
+					break
+				}
+			}
+			select {
+			case ch <- cfg:
+			default:
+			}
 		}
 	}
 }
@@ -136,7 +160,14 @@ type Client struct {
 }
 
 func Dial(addr string) (*Client, error) {
-	conn, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.Dial(addr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			Time:                15 * time.Second,
+			Timeout:             5 * time.Second,
+			PermitWithoutStream: true,
+		}),
+	)
 	if err != nil {
 		return nil, err
 	}

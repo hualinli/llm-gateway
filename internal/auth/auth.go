@@ -42,7 +42,7 @@ func (m *MemoryStore) Validate(rawKey string) (string, bool) {
 	return tenant, ok
 }
 
-// Update 热更全量 Keys（控制面推送时调用），原子替换
+// Update 热更全量 Keys（控制面推送时调用），原子替换。
 func (m *MemoryStore) Update(keys map[string]string) {
 	newKeys := make(map[string]string, len(keys))
 	for k, tenant := range keys {
@@ -51,6 +51,23 @@ func (m *MemoryStore) Update(keys map[string]string) {
 	m.mu.Lock()
 	m.keys = newKeys
 	m.mu.Unlock()
+}
+
+// RevokeMissing 只撤销当前快照中不存在的 key，不引入新 key。
+// Gateway 收到路由配置错误时也可以优先执行撤销，避免一个无效路由阻塞
+// 管理员刚刚删除的凭据；后续完整配置仍需修正后再原子替换。
+func (m *MemoryStore) RevokeMissing(keys map[string]string) {
+	allowed := make(map[string]struct{}, len(keys))
+	for k := range keys {
+		allowed[hash(k)] = struct{}{}
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for keyHash := range m.keys {
+		if _, ok := allowed[keyHash]; !ok {
+			delete(m.keys, keyHash)
+		}
+	}
 }
 
 func hash(s string) string {
