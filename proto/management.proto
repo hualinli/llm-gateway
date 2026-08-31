@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+package management;
+
+import "api.proto";
+
+option go_package = "llm-gateway/biz/model/management";
+
+// ManagementService 控制面 HTTP 管理后台，供 hz 生成 Hertz 代码
+// 全用 protobuf，不引 thrift
+service ManagementService {
+  rpc CreateKey(CreateKeyRequest) returns (CreateKeyResponse) {
+    option (api.post) = "/api/keys";
+  }
+  rpc ListKeys(ListKeysRequest) returns (ListKeysResponse) {
+    option (api.get) = "/api/keys";
+  }
+  rpc DeleteKey(DeleteKeyRequest) returns (DeleteKeyResponse) {
+    option (api.delete) = "/api/keys/:key";
+  }
+  rpc GetConfig(GetConfigRequest) returns (GetConfigResponse) {
+    option (api.get) = "/api/config";
+  }
+  rpc UpdateConfig(UpdateConfigRequest) returns (UpdateConfigResponse) {
+    option (api.post) = "/api/config";
+  }
+  rpc GetLedger(GetLedgerRequest) returns (GetLedgerResponse) {
+    option (api.get) = "/api/ledger";
+  }
+}
+
+message CreateKeyRequest {
+  string raw_key = 1 [(api.body) = "raw_key", (api.query) = "raw_key"];
+  string tenant = 2 [(api.body) = "tenant"];
+}
+message CreateKeyResponse {
+  string key = 1;
+  string tenant = 2;
+}
+
+message ListKeysRequest {}
+message ListKeysResponse {
+  repeated KeyItem keys = 1;
+}
+message KeyItem {
+  string key_prefix = 1; // 仅展示前缀，保护明文
+  string tenant = 2;
+}
+
+message DeleteKeyRequest {
+  string key = 1 [(api.path) = "key"];
+}
+message DeleteKeyResponse {
+  bool ok = 1;
+}
+
+message GetConfigRequest {}
+message GetConfigResponse {
+  int64 version = 1;
+  map<string, string> keys = 2;
+  map<string, ProviderList> routes = 3;
+}
+message ProviderList {
+  repeated string providers = 1;
+}
+
+message UpdateConfigRequest {
+  map<string, string> keys = 1;
+  map<string, ProviderList> routes = 2;
+}
+message UpdateConfigResponse {
+  int64 version = 1;
+}
+
+message GetLedgerRequest {
+  string tenant = 1 [(api.query) = "tenant"];
+}
+message GetLedgerResponse {
+  int64 count = 1;
+  int64 balance_cents = 2;
+}
