@@ -38,7 +38,10 @@ func TestRedisMeteringDeliveryAndReconcile(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	waitFor(t, time.Second, func() bool { return ledger.Count() == 1 })
+	waitFor(t, time.Second, func() bool {
+		count, _ := ledger.Count()
+		return count == 1
+	})
 
 	report, err := ReconcileStream(ctx, rdb, ledger)
 	if err != nil {
@@ -85,7 +88,10 @@ func TestRedisMeteringPendingIsReclaimed(t *testing.T) {
 		pending, err := rdb.XPending(ctx, StreamName, GroupName).Result()
 		return err == nil && pending.Count == 1
 	})
-	waitFor(t, time.Second, func() bool { return ledger.Count() == 1 })
+	waitFor(t, time.Second, func() bool {
+		count, _ := ledger.Count()
+		return count == 1
+	})
 
 	pending, err := rdb.XPending(ctx, StreamName, GroupName).Result()
 	if err != nil {
@@ -153,6 +159,6 @@ func (l *failOnceLedger) Add(e Event) (bool, error) {
 	}
 	return l.inner.Add(e)
 }
-func (l *failOnceLedger) Count() int                          { return l.inner.Count() }
-func (l *failOnceLedger) Balance(tenant string) int64         { return l.inner.Balance(tenant) }
-func (l *failOnceLedger) Snapshot() (map[string]Event, error) { return l.inner.Snapshot() }
+func (l *failOnceLedger) Count() (int, error)                  { return l.inner.Count() }
+func (l *failOnceLedger) Balance(tenant string) (int64, error) { return l.inner.Balance(tenant) }
+func (l *failOnceLedger) Snapshot() (map[string]Event, error)  { return l.inner.Snapshot() }

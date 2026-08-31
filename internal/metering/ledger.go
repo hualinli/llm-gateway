@@ -2,8 +2,10 @@ package metering
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 	"os"
+	"strings"
 	"sync"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -12,8 +14,8 @@ import (
 // Ledger 台账接口，内存和 PG 实现通用
 type Ledger interface {
 	Add(e Event) (bool, error)
-	Count() int
-	Balance(tenantID string) int64
+	Count() (int, error)
+	Balance(tenantID string) (int64, error)
 	Snapshot() (map[string]Event, error)
 }
 
@@ -39,8 +41,16 @@ func (l *MemoryLedger) Add(e Event) (bool, error) {
 	l.balance[e.TenantID] += e.CostCents
 	return true, nil
 }
-func (l *MemoryLedger) Count() int             { l.mu.Lock(); defer l.mu.Unlock(); return len(l.events) }
-func (l *MemoryLedger) Balance(t string) int64 { l.mu.Lock(); defer l.mu.Unlock(); return l.balance[t] }
+func (l *MemoryLedger) Count() (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return len(l.events), nil
+}
+func (l *MemoryLedger) Balance(t string) (int64, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.balance[t], nil
+}
 func (l *MemoryLedger) Snapshot() (map[string]Event, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -97,10 +107,12 @@ VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (request_id) DO NOTHING`,
 	n, _ := res.RowsAffected()
 	return n == 1, nil
 }
-func (p *PGLedger) Count() int {
+func (p *PGLedger) Count() (int, error) {
 	var n int
-	_ = p.db.QueryRow(`SELECT COUNT(*) FROM metering_events`).Scan(&n)
-	return n
+	if err := p.db.QueryRow(`SELECT COUNT(*) FROM metering_events`).Scan(&n); err != nil {
+		return 0, err
+	}
+	return n, nil
 }
 
 func (p *PGLedger) Snapshot() (map[string]Event, error) {
@@ -125,25 +137,31 @@ FROM metering_events`)
 	}
 	return out, nil
 }
-func (p *PGLedger) Balance(tenantID string) int64 {
-	var v sql.NullInt64
-	_ = p.db.QueryRow(`SELECT COALESCE(SUM(cost_cents),0) FROM metering_events WHERE tenant_id=$1`, tenantID).Scan(&v)
-	if v.Valid {
-		return v.Int64
+func (p *PGLedger) Balance(tenantID string) (int64, error) {
+	var v int64
+	if err := p.db.QueryRow(`SELECT COALESCE(SUM(cost_cents),0) FROM metering_events WHERE tenant_id=$1`, tenantID).Scan(&v); err != nil {
+		return 0, err
 	}
-	return 0
+	return v, nil
 }
 
-// NewLedger 工厂：优先 PG，失败回退内存
-func NewLedger() Ledger {
+// NewLedger 工厂：优先 PG；非强制模式下才允许回退内存。
+func NewLedger() (Ledger, error) {
 	dsn := os.Getenv("POSTGRES_DSN")
 	if dsn == "" {
 		dsn = "postgres://gateway:gateway@localhost:5433/llm_gateway?sslmode=disable"
 	}
 	if pg, err := NewPGLedger(dsn); err == nil {
-		return pg
+		return pg, nil
+	} else if requirePostgres() {
+		return nil, fmt.Errorf("postgres ledger required: %w", err)
 	} else {
 		log.Printf("pg ledger fallback to memory: %v", err)
-		return NewMemoryLedger()
+		return NewMemoryLedger(), nil
 	}
+}
+
+func requirePostgres() bool {
+	value := strings.ToLower(strings.TrimSpace(os.Getenv("METERING_REQUIRE_POSTGRES")))
+	return value == "1" || value == "true" || value == "yes"
 }

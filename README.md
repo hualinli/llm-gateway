@@ -189,8 +189,8 @@
 - 当前账单唯一键使用 `tenant_id:request_id`，已避免不同租户之间因为相同客户端 ID 互相去重；仍未拆分独立的 event ID 和 client request ID 字段；
 - `X-Request-ID` 现在会校验长度和字符集；未提供时由 Gateway 生成，并通过响应头返回；
 - `Reconcile` 已改为事件级比较并报告 duplicate/pending/DLQ/具体差异；仍未覆盖历史归档、超大 Stream 分页和完整 PG 集成场景；
-- Ledger 查询错误部分被吞掉并返回 0；
-- PostgreSQL 不可用时默认回退内存，重启会丢失台账。
+- Ledger 的 Count/Balance 查询错误现在会向上返回，HTTP 接口返回 503；
+- `METERING_REQUIRE_POSTGRES=true` 时 PostgreSQL 不可用会阻止 metering 启动；默认 Demo 模式仍允许回退内存，重启会丢失台账。
 
 因此当前只能说“计量链路骨架和基础幂等已经完成”，不能说“计量事件不丢”或“对账一致率 100%”。
 
@@ -623,6 +623,7 @@ REDIS_ADDR=localhost:6379
 POSTGRES_DSN='postgres://gateway:gateway@localhost:5433/llm_gateway?sslmode=disable'
 CONTROL_ADDR=localhost:50051
 METERING_SPOOL_DIR='./data/metering-spool' # 可选；Redis 故障时本地持久化计量事件
+METERING_REQUIRE_POSTGRES=false # 生产建议 true；PG 不可用时拒绝启动 metering
 
 # 可选：注册一个 OpenAI-compatible Provider
 OPENAI_BASE_URL='https://api.openai.com'
@@ -753,7 +754,7 @@ METERING_TEST_REDIS_ADDR=localhost:6379 \
 - Redis Lua 集成测试；
 - Producer 队列满丢弃、Redis flush 重试、spool 恢复和 Close flush 的完整测试；**基础单元测试已完成，Redis 恢复集成测试已完成第一版**；
 - Consumer 重复消费、pending reclaim、DLQ 测试；**Redis 集成测试已完成第一版**；
-- PG Ledger 集成测试；
+- PG Ledger 集成测试和生产模式启动失败测试；
 - 真实 HTTP Provider 契约测试已完成第一版；
 - SSE reader 边界测试已完成第一版；
 - gRPC 真实网络测试；
@@ -785,7 +786,9 @@ METERING_TEST_REDIS_ADDR=localhost:6379 \
 - Consumer kill -9 后 pending 可接管；**pending reclaim 集成测试已完成第一版**；
 - 重复事件不重复计费；**集成测试已完成第一版**；
 - 跨租户相同 request ID 不会互相去重；**基础逻辑已完成，PG 复合键迁移仍待做**；
-- 对账输出具体差异明细；**已完成第一版**。
+- 对账输出具体差异明细；**已完成第一版**；
+- PostgreSQL 查询错误不再静默返回 0；**已完成第一版**；
+- 生产模式可禁止静默回退 MemoryLedger；**已完成第一版**。
 
 ### Milestone 3：控制面和生产安全
 

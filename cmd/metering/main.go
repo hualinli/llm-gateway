@@ -21,7 +21,10 @@ func main() {
 	}
 	rdb := redis.NewClient(&redis.Options{Addr: redisAddr})
 
-	ledger := metering.NewLedger()
+	ledger, err := metering.NewLedger()
+	if err != nil {
+		log.Fatalf("create ledger: %v", err)
+	}
 	consumer := metering.NewConsumer(rdb, ledger)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -34,18 +37,26 @@ func main() {
 		w.Write([]byte("ok\n"))
 	})
 	mux.HandleFunc("/ledger/count", func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"count": ledger.Count(),
-		})
+		count, err := ledger.Count()
+		if err != nil {
+			http.Error(w, "ledger unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"count": count})
 	})
 	mux.HandleFunc("/ledger/balance", func(w http.ResponseWriter, r *http.Request) {
 		tenant := r.URL.Query().Get("tenant")
 		if tenant == "" {
 			tenant = "tenant-demo"
 		}
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		balance, err := ledger.Balance(tenant)
+		if err != nil {
+			http.Error(w, "ledger unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"tenant":        tenant,
-			"balance_cents": ledger.Balance(tenant),
+			"balance_cents": balance,
 		})
 	})
 	// 事件级对账：区分重复、pending、DLQ，以及 Stream/Ledger 两侧的具体差异。
