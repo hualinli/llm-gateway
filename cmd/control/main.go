@@ -13,18 +13,22 @@ import (
 )
 
 func main() {
-	srv := &control.Server{}
-	// 初始版，和 gateway 的写死版保持一致
-	srv.UpdateConfig(&pb.Config{
-		Version: 1,
-		Keys: map[string]string{
+	store := control.NewStore()
+	srv, err := control.NewServer(store)
+	if err != nil {
+		log.Fatalf("control init: %v", err)
+	}
+	// 空库启动时种入初始版，和 gateway 的写死版保持一致；有存档则直接恢复
+	if srv.CurrentConfig().Version == 0 {
+		if _, err := srv.ApplyConfig(map[string]string{
 			"sk-demo-123": "tenant-demo",
 			"sk-test-456": "tenant-test",
-		},
-		Routes: control.RoutesToProto(map[string][]string{
+		}, control.RoutesToProto(map[string][]string{
 			"default": {"mock-a", "mock-b"},
-		}),
-	})
+		})); err != nil {
+			log.Fatalf("control seed: %v", err)
+		}
+	}
 
 	// gRPC :50051
 	go func() {
@@ -55,19 +59,20 @@ func main() {
 				return
 			}
 			old, _ := srv.GetConfig(r.Context(), &pb.GetRequest{})
-			newCfg := &pb.Config{
-				Version: old.Version + 1,
-				Keys:    req.Keys,
-				Routes:  control.RoutesToProto(req.Routes),
-			}
 			// 兜底：空则保留旧值
-			if newCfg.Keys == nil {
-				newCfg.Keys = old.Keys
+			keys, routes := req.Keys, control.RoutesToProto(req.Routes)
+			if keys == nil {
+				keys = old.Keys
 			}
-			if newCfg.Routes == nil {
-				newCfg.Routes = old.Routes
+			if req.Routes == nil {
+				routes = old.Routes
 			}
-			srv.UpdateConfig(newCfg)
+			// 版本推进/持久化/广播全部收敛到 ApplyConfig，持久化失败则拒绝本次写入
+			newCfg, err := srv.ApplyConfig(keys, routes)
+			if err != nil {
+				http.Error(w, "persist config: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"version": newCfg.Version,
 				"keys":    newCfg.Keys,

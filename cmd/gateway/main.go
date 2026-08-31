@@ -17,6 +17,7 @@ import (
 	"llm-gateway/internal/metrics"
 	"llm-gateway/internal/provider"
 	"llm-gateway/internal/proxy"
+	pb "llm-gateway/proto/control"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
@@ -50,13 +51,23 @@ func main() {
 		"sk-test-456": "tenant-test",
 	})
 
-	// 控制面热更：3s 轮询 GetConfig，版本递增则原子热替（不中断在途流）
+	// 控制面同步：重连后先 GetConfig 补拉断连期间的版本，再 WatchConfig 长订即时热更；
+	// 版本单调，旧版本一律拒绝；流断开则 3s 后重连。
 	controlAddr := os.Getenv("CONTROL_ADDR")
 	if controlAddr == "" {
 		controlAddr = "localhost:50051"
 	}
 	go func() {
-		var curVersion int64 = 1
+		var applied int64
+		apply := func(cfg *pb.Config) {
+			if cfg == nil || cfg.Version <= applied {
+				return
+			}
+			log.Printf("control: hot reload %d -> %d", applied, cfg.Version)
+			authStore.Update(cfg.Keys)
+			registry.UpdateRoutes(control.RoutesFromProto(cfg.Routes))
+			applied = cfg.Version
+		}
 		for {
 			client, err := control.Dial(controlAddr)
 			if err != nil {
@@ -64,42 +75,30 @@ func main() {
 				time.Sleep(3 * time.Second)
 				continue
 			}
-			// 拉一次当前版
-			func() {
-				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-				defer cancel()
-				cfg, err := client.GetConfig(ctx)
-				if err == nil && cfg.Version > curVersion {
-					log.Printf("control: apply initial version %d", cfg.Version)
-					authStore.Update(cfg.Keys)
-					registry.UpdateRoutes(control.RoutesFromProto(cfg.Routes))
-					curVersion = cfg.Version
-				}
-			}()
-			ticker := time.NewTicker(3 * time.Second)
-			innerDone := false
-			for !innerDone {
-				select {
-				case <-ticker.C:
-					ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-					cfg, err := client.GetConfig(ctx)
-					cancel()
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			if cfg, err := client.GetConfig(ctx); err == nil {
+				apply(cfg)
+			} else {
+				log.Printf("control getconfig failed: %v", err)
+			}
+			cancel()
+
+			watchCtx, wcancel := context.WithCancel(context.Background())
+			if wc, err := client.WatchConfig(watchCtx, applied); err == nil {
+				for {
+					cfg, err := wc.Recv()
 					if err != nil {
-						log.Printf("control poll failed: %v", err)
-						innerDone = true
+						log.Printf("control watch ended: %v", err)
 						break
 					}
-					if cfg.Version > curVersion {
-						log.Printf("control: hot reload %d -> %d", curVersion, cfg.Version)
-						authStore.Update(cfg.Keys)
-						registry.UpdateRoutes(control.RoutesFromProto(cfg.Routes))
-						curVersion = cfg.Version
-					}
+					apply(cfg)
 				}
+			} else {
+				log.Printf("control watch open failed: %v", err)
 			}
-			ticker.Stop()
+			wcancel()
 			client.Close()
-			time.Sleep(2 * time.Second)
+			time.Sleep(3 * time.Second)
 		}
 	}()
 
