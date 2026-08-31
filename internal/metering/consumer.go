@@ -6,6 +6,8 @@ import (
 	"log"
 	"time"
 
+	"llm-gateway/internal/metrics"
+
 	"github.com/redis/go-redis/v9"
 )
 
@@ -89,6 +91,7 @@ func (c *Consumer) handle(ctx context.Context, m redis.XMessage) {
 	added, err := c.ledger.Add(e)
 	if err != nil {
 		// 写入失败:不 ack,保留在 PEL 等待重投
+		metrics.MeteringLedgerAddFailedTotal.Inc()
 		log.Printf("metering: ledger add failed request_id=%s err=%v", e.RequestID, err)
 		return
 	}
@@ -117,6 +120,7 @@ func (c *Consumer) deadLetter(ctx context.Context, m redis.XMessage, reason stri
 		log.Printf("metering: DLQ write failed, keeping pending id=%s reason=%s err=%v", m.ID, reason, err)
 		return
 	}
+	metrics.MeteringDLQTotal.Inc()
 	if err := c.rdb.XAck(ctx, StreamName, GroupName, m.ID).Err(); err != nil {
 		log.Printf("metering: xack failed id=%s err=%v", m.ID, err)
 	}
@@ -143,6 +147,7 @@ func (c *Consumer) reclaimLoop(ctx context.Context) {
 			if err != nil || len(msgs) == 0 {
 				continue
 			}
+			metrics.MeteringPendingClaimTotal.Add(float64(len(msgs)))
 			for _, m := range msgs {
 				c.handle(ctx, m)
 			}

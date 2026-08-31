@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"llm-gateway/internal/metrics"
+
 	"github.com/redis/go-redis/v9"
 )
 
@@ -79,6 +81,7 @@ func NewProducerWithOptions(rdb *redis.Client, buffer int, batch int, interval t
 	}
 	if options.SpoolDir != "" {
 		p.spoolPath = filepath.Join(options.SpoolDir, "events.jsonl")
+		updateSpoolGauge(p.spoolPath)
 	}
 	go p.loop()
 	return p
@@ -90,12 +93,14 @@ func (p *Producer) Enqueue(e Event) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	if p.closed {
+		metrics.MeteringDroppedTotal.WithLabelValues("producer_closed").Inc()
 		log.Printf("metering producer closed, drop request_id=%s", e.RequestID)
 		return
 	}
 	select {
 	case p.ch <- e:
 	default:
+		metrics.MeteringDroppedTotal.WithLabelValues("queue_full").Inc()
 		log.Printf("metering queue full, drop request_id=%s", e.RequestID)
 	}
 }
@@ -140,10 +145,13 @@ func (p *Producer) loop() {
 			}
 			batch := events[:n]
 			if err := p.flushBatch(ctx, batch); err != nil {
+				metrics.MeteringFlushFailedTotal.Inc()
 				if firstErr == nil {
 					firstErr = err
 				}
 				if spoolErr := p.appendSpool(batch); spoolErr != nil {
+					metrics.MeteringSpoolWriteFailedTotal.Inc()
+					metrics.MeteringDroppedTotal.WithLabelValues("spool_write_failed").Add(float64(len(batch)))
 					log.Printf("metering flush failed batch=%d err=%v; spool failed err=%v", len(batch), err, spoolErr)
 					if firstErr == nil {
 						firstErr = spoolErr
@@ -273,7 +281,11 @@ func (p *Producer) appendSpool(events []Event) error {
 	if _, err := f.Write(payload.Bytes()); err != nil {
 		return err
 	}
-	return f.Sync()
+	if err := f.Sync(); err != nil {
+		return err
+	}
+	updateSpoolGauge(p.spoolPath)
+	return nil
 }
 
 func (p *Producer) replaySpool(ctx context.Context) error {
@@ -292,6 +304,7 @@ func (p *Producer) replaySpool(ctx context.Context) error {
 		if err := p.flushBatch(ctx, events[:n]); err != nil {
 			return err
 		}
+		metrics.MeteringSpoolReplayTotal.Inc()
 		events = events[n:]
 		if err := rewriteSpool(p.spoolPath, events); err != nil {
 			return err
@@ -329,6 +342,7 @@ func rewriteSpool(path string, events []Event) error {
 		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
+		updateSpoolGauge(path)
 		return nil
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
@@ -360,5 +374,23 @@ func rewriteSpool(path string, events []Event) error {
 	if err := os.Chmod(tmpName, 0o600); err != nil {
 		return err
 	}
-	return os.Rename(tmpName, path)
+	if err := os.Rename(tmpName, path); err != nil {
+		return err
+	}
+	updateSpoolGauge(path)
+	return nil
+}
+
+func updateSpoolGauge(path string) {
+	if path == "" {
+		return
+	}
+	info, err := os.Stat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		metrics.MeteringSpoolBytes.Set(0)
+		return
+	}
+	if err == nil {
+		metrics.MeteringSpoolBytes.Set(float64(info.Size()))
+	}
 }
