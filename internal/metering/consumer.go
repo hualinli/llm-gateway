@@ -10,8 +10,9 @@ import (
 )
 
 const (
-	GroupName    = "metering-group"
-	ConsumerName = "consumer-1"
+	GroupName     = "metering-group"
+	ConsumerName  = "consumer-1"
+	DLQStreamName = StreamName + ":dlq"
 )
 
 // Consumer 从 Stream 拉事件，幂等落台账，成功后 XACK
@@ -65,21 +66,52 @@ func (c *Consumer) Run(ctx context.Context) {
 	}
 }
 
+// handle 处理单条消息:
+//   - 字段缺失/解析异常 -> 进 DLQ 并 ack,避免毒丸无限重投且不丢原始数据
+//   - ledger 写入失败   -> 不 ack,留在 PEL 由 reclaimLoop 经 XAutoClaim 重投
+//     (PGLedger 用 ON CONFLICT DO NOTHING 保证重投幂等)
+//   - 成功/去重         -> ack
 func (c *Consumer) handle(ctx context.Context, m redis.XMessage) {
-	raw, _ := m.Values["data"].(string)
-	var e Event
-	if err := json.Unmarshal([]byte(raw), &e); err != nil {
-		log.Printf("bad event id=%s err=%v", m.ID, err)
+	raw, ok := m.Values["data"].(string)
+	if !ok {
+		log.Printf("metering: missing/invalid data field id=%s", m.ID)
+		c.sendToDLQ(ctx, m)
 		_ = c.rdb.XAck(ctx, StreamName, GroupName, m.ID).Err()
 		return
 	}
-	added, _ := c.ledger.Add(e)
+	var e Event
+	if err := json.Unmarshal([]byte(raw), &e); err != nil {
+		log.Printf("metering: bad event id=%s err=%v", m.ID, err)
+		c.sendToDLQ(ctx, m)
+		_ = c.rdb.XAck(ctx, StreamName, GroupName, m.ID).Err()
+		return
+	}
+
+	added, err := c.ledger.Add(e)
+	if err != nil {
+		// 写入失败:不 ack,保留在 PEL 等待重投
+		log.Printf("metering: ledger add failed request_id=%s err=%v", e.RequestID, err)
+		return
+	}
 	if added {
 		log.Printf("ledger add request_id=%s tenant=%s cost=%d", e.RequestID, e.TenantID, e.CostCents)
 	} else {
 		log.Printf("ledger dedup request_id=%s", e.RequestID)
 	}
-	_ = c.rdb.XAck(ctx, StreamName, GroupName, m.ID).Err()
+	if err := c.rdb.XAck(ctx, StreamName, GroupName, m.ID).Err(); err != nil {
+		log.Printf("metering: xack failed id=%s err=%v", m.ID, err)
+	}
+}
+
+// sendToDLQ 将无法处理的原始消息写入死信队列,便于事后排查而不丢失数据。
+func (c *Consumer) sendToDLQ(ctx context.Context, m redis.XMessage) {
+	b, _ := json.Marshal(m.Values) // 原始字段转 JSON 存档
+	if err := c.rdb.XAdd(ctx, &redis.XAddArgs{
+		Stream: DLQStreamName,
+		Values: map[string]any{"id": m.ID, "raw": string(b)},
+	}).Err(); err != nil {
+		log.Printf("metering: send to DLQ failed id=%s err=%v", m.ID, err)
+	}
 }
 
 // reclaimLoop 每 10s 用 XAUTOCLAIM 认领超时未 ACK 的 pending
