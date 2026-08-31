@@ -44,23 +44,30 @@ func main() {
 			tenant = "tenant-demo"
 		}
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"tenant":     tenant,
+			"tenant":        tenant,
 			"balance_cents": ledger.Balance(tenant),
 		})
 	})
-	// 简单对账：比 Stream 长度和台账数
+	// 事件级对账：区分重复、pending、DLQ，以及 Stream/Ledger 两侧的具体差异。
 	mux.HandleFunc("/reconcile", func(w http.ResponseWriter, r *http.Request) {
-		n, _ := rdb.XLen(ctx, metering.StreamName).Result()
-		err := ledger.Reconcile(int(n))
-		resp := map[string]interface{}{"stream_len": n, "ledger_count": ledger.Count()}
+		report, err := metering.ReconcileStream(r.Context(), rdb, ledger)
 		if err != nil {
-			resp["ok"] = false
-			resp["error"] = err.Error()
-			w.WriteHeader(http.StatusConflict)
-		} else {
-			resp["ok"] = true
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"ok":    false,
+				"error": err.Error(),
+			})
+			return
 		}
-		json.NewEncoder(w).Encode(resp)
+		w.Header().Set("Content-Type", "application/json")
+		if !report.Consistent() {
+			w.WriteHeader(http.StatusConflict)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"ok":     report.Consistent(),
+			"report": report,
+		})
 	})
 
 	srv := &http.Server{Addr: ":8091", Handler: mux}

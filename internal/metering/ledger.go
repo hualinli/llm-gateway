@@ -2,7 +2,6 @@ package metering
 
 import (
 	"database/sql"
-	"fmt"
 	"log"
 	"os"
 	"sync"
@@ -15,7 +14,7 @@ type Ledger interface {
 	Add(e Event) (bool, error)
 	Count() int
 	Balance(tenantID string) int64
-	Reconcile(streamCount int) error
+	Snapshot() (map[string]Event, error)
 }
 
 // MemoryLedger 演示用内存版
@@ -32,22 +31,24 @@ func NewMemoryLedger() *MemoryLedger {
 func (l *MemoryLedger) Add(e Event) (bool, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if _, ok := l.events[e.RequestID]; ok {
+	key := eventKey(e)
+	if _, ok := l.events[key]; ok {
 		return false, nil
 	}
-	l.events[e.RequestID] = e
+	l.events[key] = e
 	l.balance[e.TenantID] += e.CostCents
 	return true, nil
 }
-func (l *MemoryLedger) Count() int { l.mu.Lock(); defer l.mu.Unlock(); return len(l.events) }
+func (l *MemoryLedger) Count() int             { l.mu.Lock(); defer l.mu.Unlock(); return len(l.events) }
 func (l *MemoryLedger) Balance(t string) int64 { l.mu.Lock(); defer l.mu.Unlock(); return l.balance[t] }
-func (l *MemoryLedger) Reconcile(streamCount int) error {
+func (l *MemoryLedger) Snapshot() (map[string]Event, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if len(l.events) != streamCount {
-		return fmt.Errorf("mismatch: stream=%d ledger=%d diff=%d", streamCount, len(l.events), streamCount-len(l.events))
+	out := make(map[string]Event, len(l.events))
+	for key, e := range l.events {
+		out[key] = e
 	}
-	return nil
+	return out, nil
 }
 
 // PGLedger 生产用 PG 版，UNIQUE(request_id) 兜底幂等
@@ -101,6 +102,29 @@ func (p *PGLedger) Count() int {
 	_ = p.db.QueryRow(`SELECT COUNT(*) FROM metering_events`).Scan(&n)
 	return n
 }
+
+func (p *PGLedger) Snapshot() (map[string]Event, error) {
+	rows, err := p.db.Query(`
+SELECT request_id, tenant_id, model, provider, prompt_tokens, completion_tokens, total_tokens, cost_cents, created_at
+FROM metering_events`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make(map[string]Event)
+	for rows.Next() {
+		var e Event
+		if err := rows.Scan(&e.RequestID, &e.TenantID, &e.Model, &e.Provider, &e.PromptTokens, &e.CompletionTokens, &e.TotalTokens, &e.CostCents, &e.CreatedAt); err != nil {
+			return nil, err
+		}
+		out[eventKey(e)] = e
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
 func (p *PGLedger) Balance(tenantID string) int64 {
 	var v sql.NullInt64
 	_ = p.db.QueryRow(`SELECT COALESCE(SUM(cost_cents),0) FROM metering_events WHERE tenant_id=$1`, tenantID).Scan(&v)
@@ -108,13 +132,6 @@ func (p *PGLedger) Balance(tenantID string) int64 {
 		return v.Int64
 	}
 	return 0
-}
-func (p *PGLedger) Reconcile(streamCount int) error {
-	c := p.Count()
-	if c != streamCount {
-		return fmt.Errorf("mismatch: stream=%d ledger=%d diff=%d", streamCount, c, streamCount-c)
-	}
-	return nil
 }
 
 // NewLedger 工厂：优先 PG，失败回退内存
