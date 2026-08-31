@@ -21,10 +21,44 @@ const (
 type Consumer struct {
 	rdb    *redis.Client
 	ledger Ledger
+	block  time.Duration
+	count  int64
+	claim  time.Duration
+	idle   time.Duration
+}
+
+type ConsumerOptions struct {
+	ReadBlock      time.Duration
+	ReadCount      int64
+	ReclaimEvery   time.Duration
+	PendingMinIdle time.Duration
 }
 
 func NewConsumer(rdb *redis.Client, ledger Ledger) *Consumer {
-	return &Consumer{rdb: rdb, ledger: ledger}
+	return NewConsumerWithOptions(rdb, ledger, ConsumerOptions{})
+}
+
+func NewConsumerWithOptions(rdb *redis.Client, ledger Ledger, options ConsumerOptions) *Consumer {
+	if options.ReadBlock <= 0 {
+		options.ReadBlock = 2 * time.Second
+	}
+	if options.ReadCount <= 0 {
+		options.ReadCount = 50
+	}
+	if options.ReclaimEvery <= 0 {
+		options.ReclaimEvery = 10 * time.Second
+	}
+	if options.PendingMinIdle <= 0 {
+		options.PendingMinIdle = 30 * time.Second
+	}
+	return &Consumer{
+		rdb:    rdb,
+		ledger: ledger,
+		block:  options.ReadBlock,
+		count:  options.ReadCount,
+		claim:  options.ReclaimEvery,
+		idle:   options.PendingMinIdle,
+	}
 }
 
 // EnsureGroup 启动时建组，已存在则忽略
@@ -53,8 +87,8 @@ func (c *Consumer) Run(ctx context.Context) {
 			Group:    GroupName,
 			Consumer: ConsumerName,
 			Streams:  []string{StreamName, ">"},
-			Count:    50,
-			Block:    2 * time.Second,
+			Count:    c.count,
+			Block:    c.block,
 		}).Result()
 		if err != nil && err != redis.Nil {
 			// 超时或空流，继续
@@ -128,7 +162,7 @@ func (c *Consumer) deadLetter(ctx context.Context, m redis.XMessage, reason stri
 
 // reclaimLoop 每 10s 用 XAUTOCLAIM 认领超时未 ACK 的 pending
 func (c *Consumer) reclaimLoop(ctx context.Context) {
-	ticker := time.NewTicker(10 * time.Second)
+	ticker := time.NewTicker(c.claim)
 	defer ticker.Stop()
 	for {
 		select {
@@ -140,9 +174,9 @@ func (c *Consumer) reclaimLoop(ctx context.Context) {
 				Stream:   StreamName,
 				Group:    GroupName,
 				Consumer: ConsumerName,
-				MinIdle:  30 * time.Second,
+				MinIdle:  c.idle,
 				Start:    "0-0",
-				Count:    50,
+				Count:    c.count,
 			}).Result()
 			if err != nil || len(msgs) == 0 {
 				continue

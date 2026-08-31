@@ -185,10 +185,10 @@
 - channel 满时仍然直接丢弃事件；
 - Redis flush 失败时已支持重试，并在配置 `METERING_SPOOL_DIR` 后落本地 JSONL spool；
 - Producer 已支持 `Close(ctx)` 和退出前 flush；
-- 当前 spool 是单进程本地文件，尚未实现多进程锁、spool 深度指标和完整恢复演练；
+- 当前 spool 是单进程本地文件，已有大小上限和 `metering_spool_bytes` 指标，尚未实现多进程锁和完整恢复演练；
 - 当前账单唯一键使用 `tenant_id:request_id`，已避免不同租户之间因为相同客户端 ID 互相去重；仍未拆分独立的 event ID 和 client request ID 字段；
 - `X-Request-ID` 现在会校验长度和字符集；未提供时由 Gateway 生成，并通过响应头返回；
-- `Reconcile` 仍只是比较 Stream 的 `XLEN` 和台账 count，无法正确处理重复、pending、DLQ 和历史事件；
+- `Reconcile` 已改为事件级比较并报告 duplicate/pending/DLQ/具体差异；仍未覆盖历史归档、超大 Stream 分页和完整 PG 集成场景；
 - Ledger 查询错误部分被吞掉并返回 0；
 - PostgreSQL 不可用时默认回退内存，重启会丢失台账。
 
@@ -740,12 +740,19 @@ go vet ./...              通过
 go test -race ./...       通过
 ```
 
+Redis 计量集成测试是显式 opt-in 的，需要一个专用 Redis：
+
+```bash
+METERING_TEST_REDIS_ADDR=localhost:6379 \
+  go test ./internal/metering -run TestRedisMetering -v -count=1
+```
+
 仍需补充：
 
 - auth 测试；
 - Redis Lua 集成测试；
-- Producer 队列满丢弃、Redis flush 重试、spool 恢复和 Close flush 的完整测试；
-- Consumer 重复消费、pending reclaim、DLQ 测试；
+- Producer 队列满丢弃、Redis flush 重试、spool 恢复和 Close flush 的完整测试；**基础单元测试已完成，Redis 恢复集成测试已完成第一版**；
+- Consumer 重复消费、pending reclaim、DLQ 测试；**Redis 集成测试已完成第一版**；
 - PG Ledger 集成测试；
 - 真实 HTTP Provider 契约测试已完成第一版；
 - SSE reader 边界测试已完成第一版；
@@ -773,12 +780,12 @@ go test -race ./...       通过
 
 验收标准：
 
-- Redis 短暂不可用后事件可恢复投递；
+- Redis 短暂不可用后事件可恢复投递；**本地 spool 和重放已完成第一版**；
 - Producer 退出前 flush；**已完成第一版**；
-- Consumer kill -9 后 pending 可接管；
-- 重复事件不重复计费；
-- 跨租户相同 request ID 不会互相去重；
-- 对账输出具体差异明细。
+- Consumer kill -9 后 pending 可接管；**pending reclaim 集成测试已完成第一版**；
+- 重复事件不重复计费；**集成测试已完成第一版**；
+- 跨租户相同 request ID 不会互相去重；**基础逻辑已完成，PG 复合键迁移仍待做**；
+- 对账输出具体差异明细；**已完成第一版**。
 
 ### Milestone 3：控制面和生产安全
 
