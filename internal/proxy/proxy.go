@@ -3,9 +3,11 @@ package proxy
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	"llm-gateway/internal/auth"
@@ -29,9 +31,9 @@ func NewHandler(r *provider.Registry, p *metering.Producer) *Handler {
 // 没写过时才允许重试切备，写过后只能断流。
 type countingWriter struct {
 	http.ResponseWriter
-	written      bool
-	status       int
-	firstByteAt  time.Time
+	written       bool
+	status        int
+	firstByteAt   time.Time
 	firstByteTTFT time.Duration
 }
 
@@ -73,7 +75,14 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	model := extractModel(body)
+	model, stream := extractModelStream(body)
+	// 当前仅支持流式：非流响应不在 SSE 契约内，与其伪装成 SSE 静默返回，
+	// 不如明确拒掉。缺省/非法 JSON 均按非流处理（OpenAI 的 stream 默认也是 false）。
+	if !stream {
+		metrics.RequestsTotal.WithLabelValues(tenant, model, "400").Inc()
+		http.Error(w, `only streaming requests are supported (set "stream": true)`, http.StatusBadRequest)
+		return
+	}
 	if model == "" {
 		model = "default"
 	}
@@ -146,22 +155,25 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			metrics.ProviderRetryTotal.WithLabelValues(p.Name(), model).Inc()
 		}
 
-		// 已向下游写过字节则不能再切备，避免客户端收到重复流
+		// 已流出字节：既不能重放（客户端会收到重复内容），也无法再改状态码，
+		// 断流处理；客户端携 X-Request-ID 重试可安全重发（计量端幂等）
 		if cw.written {
+			metrics.RequestsTotal.WithLabelValues(tenant, model, "200").Inc()
 			return
 		}
-		// 否则继续尝试下一个备
+		var ue *provider.UpstreamError
+		if errors.As(err, &ue) && !ue.Retryable {
+			// 终态错误（参数/配额/鉴权域）：换备家同样错，停止重试
+			break
+		}
+		// 可重试（5xx/429/超时/网络错误）：继续试下一个备
 	}
 
-	// 所有备都在首字节前失败，且尚未写过字节，才能安全地返回 502
-	if !cw.written {
-		metrics.LatencySeconds.WithLabelValues(tenant, model).Observe(time.Since(start).Seconds())
-		metrics.RequestsTotal.WithLabelValues(tenant, model, "502").Inc()
-		http.Error(w, "all providers failed: "+lastErr.Error(), http.StatusBadGateway)
-	} else {
-		// 写过后失败也计一次 200 后的断流，延迟已在首字节处计过
-		metrics.RequestsTotal.WithLabelValues(tenant, model, "200").Inc()
-	}
+	// 所有备均在首字节前失败或命中终态错误，且未写出过任何字节
+	status := clientStatus(lastErr)
+	metrics.LatencySeconds.WithLabelValues(tenant, model).Observe(time.Since(start).Seconds())
+	metrics.RequestsTotal.WithLabelValues(tenant, model, strconv.Itoa(status)).Inc()
+	http.Error(w, "upstream failed: "+lastErr.Error(), status)
 }
 
 // --- helpers ---
@@ -176,12 +188,31 @@ func ioReadAll(r *http.Request) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func extractModel(body []byte) string {
-	var m struct {
-		Model string `json:"model"`
+// extractModelStream 一次 unmarshal 提取路由字段，不动原始字节。
+// stream 缺省/非法 JSON 一律按非流处理。
+func extractModelStream(body []byte) (model string, stream bool) {
+	var p struct {
+		Model  string `json:"model"`
+		Stream *bool  `json:"stream"`
 	}
-	if err := json.Unmarshal(body, &m); err != nil {
-		return ""
+	if err := json.Unmarshal(body, &p); err != nil {
+		return "", false
 	}
-	return m.Model
+	return p.Model, p.Stream != nil && *p.Stream
+}
+
+// clientStatus 把上游错误映射为回给客户端的状态码。
+// 只透传客户端可行动语义的状态：400/404/413/422（改请求体）、429/408（退避重试）；
+// 上游的 401/402/403（网关侧凭据/余额问题）与 5xx 属于网关配置域错误，
+// 统一回 502，避免客户端误以为自己 key 失效去换 key。
+func clientStatus(err error) int {
+	var ue *provider.UpstreamError
+	if errors.As(err, &ue) {
+		switch ue.Status {
+		case http.StatusBadRequest, http.StatusNotFound, http.StatusRequestEntityTooLarge,
+			http.StatusUnprocessableEntity, http.StatusTooManyRequests, http.StatusRequestTimeout:
+			return ue.Status
+		}
+	}
+	return http.StatusBadGateway
 }

@@ -25,6 +25,8 @@ type Provider interface {
 	//  1. 必须尊重 ctx，客户端断开时立刻停止向上游读
 	//  2. 不得全量缓冲，边读边写（首块可在实现内小缓冲以确定首字节成功）
 	//  3. 返回的 Usage 为归一化后的用量；若上游未提供则返回 nil，由网关决定是否估算
+	//  4. 上游带状态码的失败应返回 *UpstreamError，proxy 依据其 Retryable 分类
+	//     决定切备还是直接透传；其他错误在未写出时按可重试处理
 	ChatStream(ctx context.Context, reqBody []byte, w io.Writer) (*Usage, error)
 }
 
