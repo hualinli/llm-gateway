@@ -13,7 +13,7 @@
 | Provider | OpenAI-compatible + Mock | Anthropic adapter、控制面 Provider 配置和更完整的真实上游治理仍待做 |
 | 限流 | 已完成基础实现 | Redis Lua 令牌桶和有界轮询等待；Redis 故障目前 fail-open |
 | 计量 | 已完成基础链路 | Redis Stream、Consumer Group、PG 唯一约束和基础 DLQ 已有；仍可能丢事件，对账口径也需重做 |
-| 控制面 | 已完成一致性基础 | gRPC Get/Watch、版本持久化、重连补拉、周期性校验和可选租约已有；管理面尚未鉴权，gRPC 仍未启用 TLS/mTLS |
+| 控制面 | 已完成一致性基础 | gRPC Get/Watch、版本持久化、重连补拉、周期性校验和可选租约已有；TLS/mTLS 已支持配置，管理面鉴权仍待做 |
 | 管理后台 | 尚未接入主线 | Hertz IDL/生成代码曾在 `wip/management-hertz`，handlers 仍为空；计划实现用户/管理员 CRUD 和安全接线 |
 | 可观测性 | 已完成基础实现 | Prometheus 指标、pprof、基础 Grafana Dashboard 已有 |
 | 压测 | 已完成基础工具 | 能统计 SSE TTFT/总耗时分位数；还没有足够可信的压测报告和完整抖动指标 |
@@ -214,7 +214,7 @@
 当前限制：
 
 - `/config` 管理接口没有认证和授权；
-- gRPC 使用 insecure credentials，没有 TLS/mTLS；
+- 本地 Demo 默认使用 insecure credentials；TLS/mTLS 已有可配置实现，生产部署必须提供证书并开启校验；
 - proto 和 PostgreSQL 中保存 raw API key；
 - `/config` GET 会直接返回明文 API key；
 - watcher channel 现在会保留最新快照，不再简单丢弃后续版本；仍需增加慢连接和生产网络故障注入测试；
@@ -625,6 +625,13 @@ POSTGRES_DSN='postgres://gateway:gateway@localhost:5433/llm_gateway?sslmode=disa
 CONTROL_ADDR=localhost:50051
 CONTROL_CONFIG_POLL_INTERVAL=30s # Gateway 周期性 GetConfig 校验
 CONTROL_CONFIG_LEASE=0s # 生产建议显式设置；租约到期后撤销本地 key
+CONTROL_TLS_CERT_FILE='' # Control 服务端证书；设置后启用 TLS
+CONTROL_TLS_KEY_FILE=''
+CONTROL_TLS_CA_FILE='' # mTLS 的 CA；服务端要求客户端证书时必填
+CONTROL_TLS_CLIENT_CERT_FILE='' # Gateway mTLS 客户端证书
+CONTROL_TLS_CLIENT_KEY_FILE=''
+CONTROL_TLS_SERVER_NAME='' # Gateway 校验证书时的 ServerName
+CONTROL_TLS_REQUIRE_CLIENT_CERT=false
 METERING_SPOOL_DIR='./data/metering-spool' # 可选；Redis 故障时本地持久化计量事件
 METERING_REQUIRE_POSTGRES=false # 生产建议 true；PG 不可用时拒绝启动 metering
 

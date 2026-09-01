@@ -85,6 +85,7 @@ func main() {
 		PollInterval:   durationEnv("CONTROL_CONFIG_POLL_INTERVAL", 30*time.Second),
 		LeaseTimeout:   durationEnv("CONTROL_CONFIG_LEASE", 0),
 		OnLeaseExpired: func() { authStore.Update(map[string]string{}) },
+		TLS:            control.TLSConfigFromEnv(),
 	})
 	go func() {
 		err := controlSync.Run(controlCtx, func(cfg *pb.Config) error {

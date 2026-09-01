@@ -30,9 +30,10 @@ func main() {
 		}
 	}
 
-	// gRPC :50051
+	// gRPC :50051；配置证书后启用 TLS/mTLS，否则仅用于本地 Demo。
+	tlsConfig := control.TLSConfigFromEnv()
 	go func() {
-		if err := control.Run(":50051", srv); err != nil {
+		if err := control.RunWithTLS(":50051", srv, tlsConfig); err != nil {
 			log.Fatalf("control grpc: %v", err)
 		}
 	}()

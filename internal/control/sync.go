@@ -16,6 +16,7 @@ type SyncOptions struct {
 	PollInterval     time.Duration
 	LeaseTimeout     time.Duration
 	OnLeaseExpired   func()
+	TLS              *TLSConfig
 }
 
 func (o SyncOptions) withDefaults() SyncOptions {
@@ -107,7 +108,7 @@ func (s *Synchronizer) Run(ctx context.Context, apply func(*pb.Config) error) er
 			return err
 		}
 		dialCtx, cancel := context.WithTimeout(ctx, options.DialTimeout)
-		client, err := DialContext(dialCtx, s.addr)
+		client, err := DialContextWithTLS(dialCtx, s.addr, options.TLS)
 		cancel()
 		if err != nil {
 			log.Printf("control sync dial failed %s: %v", s.addr, err)

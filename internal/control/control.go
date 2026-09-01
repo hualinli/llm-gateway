@@ -151,14 +151,39 @@ func cloneConfig(cfg *pb.Config) *pb.Config {
 
 // NewGRPCServer 构造控制面 gRPC server，便于进程入口和网络集成测试复用。
 func NewGRPCServer(s *Server) *grpc.Server {
-	gs := grpc.NewServer()
-	pb.RegisterConfigServiceServer(gs, s)
+	gs, err := NewGRPCServerWithTLS(s, nil)
+	if err != nil {
+		panic(err)
+	}
 	return gs
 }
 
-// Serve 在已有 listener 上启动 gRPC。
+// NewGRPCServerWithTLS constructs an insecure or TLS/mTLS gRPC server.
+func NewGRPCServerWithTLS(s *Server, cfg *TLSConfig) (*grpc.Server, error) {
+	serverCreds, err := serverCredentials(cfg)
+	if err != nil {
+		return nil, err
+	}
+	options := make([]grpc.ServerOption, 0, 1)
+	if serverCreds != nil {
+		options = append(options, grpc.Creds(serverCreds))
+	}
+	gs := grpc.NewServer(options...)
+	pb.RegisterConfigServiceServer(gs, s)
+	return gs, nil
+}
+
+// Serve 在已有 listener 上启动 insecure gRPC。
 func Serve(lis net.Listener, s *Server) error {
-	gs := NewGRPCServer(s)
+	return ServeWithTLS(lis, s, nil)
+}
+
+// ServeWithTLS 在已有 listener 上启动 TLS/mTLS gRPC。
+func ServeWithTLS(lis net.Listener, s *Server, cfg *TLSConfig) error {
+	gs, err := NewGRPCServerWithTLS(s, cfg)
+	if err != nil {
+		return err
+	}
 	log.Printf("control listening on %s", lis.Addr())
 	return gs.Serve(lis)
 }
@@ -170,6 +195,15 @@ func Run(addr string, s *Server) error {
 		return err
 	}
 	return Serve(lis, s)
+}
+
+// RunWithTLS 启动 TLS/mTLS gRPC，addr 如 :50051。
+func RunWithTLS(addr string, s *Server, cfg *TLSConfig) error {
+	lis, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
+	}
+	return ServeWithTLS(lis, s, cfg)
 }
 
 // Client 网关侧订阅端
@@ -193,12 +227,22 @@ func Dial(addr string) (*Client, error) {
 	return &Client{conn: conn, client: pb.NewConfigServiceClient(conn)}, nil
 }
 
-// DialContext is the bounded, blocking variant used by the synchronizer.
-// Dial keeps the historical non-blocking behavior for callers that only need
-// to construct a client and let gRPC establish the connection asynchronously.
+// DialContext is the bounded, blocking insecure variant used by local demos.
 func DialContext(ctx context.Context, addr string) (*Client, error) {
+	return DialContextWithTLS(ctx, addr, nil)
+}
+
+// DialContextWithTLS dials the control plane with TLS/mTLS when configured.
+func DialContextWithTLS(ctx context.Context, addr string, cfg *TLSConfig) (*Client, error) {
+	transportCreds, err := clientCredentials(cfg)
+	if err != nil {
+		return nil, err
+	}
+	if transportCreds == nil {
+		transportCreds = insecure.NewCredentials()
+	}
 	conn, err := grpc.DialContext(ctx, addr,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithTransportCredentials(transportCreds),
 		grpc.WithBlock(),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{
 			Time:                15 * time.Second,
