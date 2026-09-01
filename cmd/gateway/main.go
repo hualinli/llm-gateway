@@ -15,6 +15,7 @@ import (
 	"llm-gateway/internal/limiter"
 	"llm-gateway/internal/metering"
 	"llm-gateway/internal/metrics"
+	"llm-gateway/internal/observability"
 	"llm-gateway/internal/provider"
 	"llm-gateway/internal/proxy"
 	pb "llm-gateway/proto/control"
@@ -126,7 +127,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:         ":8090",
-		Handler:      mux,
+		Handler:      observability.Middleware(mux),
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 0, // SSE 长连接不能设写超时，由 handler 的 context 控制
 		IdleTimeout:  60 * time.Second,

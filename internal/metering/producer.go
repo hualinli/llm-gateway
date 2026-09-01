@@ -94,14 +94,14 @@ func (p *Producer) Enqueue(e Event) {
 	defer p.mu.RUnlock()
 	if p.closed {
 		metrics.MeteringDroppedTotal.WithLabelValues("producer_closed").Inc()
-		log.Printf("metering producer closed, drop request_id=%s", e.RequestID)
+		log.Printf("metering producer closed, request_id=%s client_request_id=%s trace_id=%s", e.RequestID, e.ClientRequestID, e.TraceID)
 		return
 	}
 	select {
 	case p.ch <- e:
 	default:
 		metrics.MeteringDroppedTotal.WithLabelValues("queue_full").Inc()
-		log.Printf("metering queue full, drop request_id=%s", e.RequestID)
+		log.Printf("metering queue full, request_id=%s client_request_id=%s trace_id=%s", e.RequestID, e.ClientRequestID, e.TraceID)
 	}
 }
 

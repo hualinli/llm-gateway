@@ -130,9 +130,9 @@ func (c *Consumer) handle(ctx context.Context, m redis.XMessage) {
 		return
 	}
 	if added {
-		log.Printf("ledger add request_id=%s tenant=%s cost=%d", e.RequestID, e.TenantID, e.CostCents)
+		log.Printf("ledger add request_id=%s client_request_id=%s trace_id=%s tenant=%s cost=%d", e.RequestID, e.ClientRequestID, e.TraceID, e.TenantID, e.CostCents)
 	} else {
-		log.Printf("ledger dedup request_id=%s", e.RequestID)
+		log.Printf("ledger dedup request_id=%s client_request_id=%s trace_id=%s", e.RequestID, e.ClientRequestID, e.TraceID)
 	}
 	if err := c.rdb.XAck(ctx, StreamName, GroupName, m.ID).Err(); err != nil {
 		log.Printf("metering: xack failed id=%s err=%v", m.ID, err)

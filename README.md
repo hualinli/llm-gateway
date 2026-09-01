@@ -187,8 +187,8 @@
 - Redis flush 失败时已支持重试，并在配置 `METERING_SPOOL_DIR` 后落本地 JSONL spool；
 - Producer 已支持 `Close(ctx)` 和退出前 flush；
 - 当前 spool 是单进程本地文件，已有大小上限和 `metering_spool_bytes` 指标，尚未实现多进程锁和完整恢复演练；
-- 当前账单唯一键使用 `tenant_id:request_id`，已避免不同租户之间因为相同客户端 ID 互相去重；仍未拆分独立的 event ID 和 client request ID 字段；
-- `X-Request-ID` 现在会校验长度和字符集；未提供时由 Gateway 生成，并通过响应头返回；
+- 当前账单唯一键使用 `tenant_id:request_id`，已避免不同租户之间因为相同客户端 ID 互相去重；计量事件现在单独记录 client request ID 和 trace ID，内部 event ID 仍待补充；
+- `X-Request-ID` 现在会校验长度和字符集；未提供时由 Gateway 生成，并通过响应头返回；Gateway 同时返回 `X-Trace-ID` 并解析 W3C `traceparent`；
 - `Reconcile` 已改为事件级比较并报告 duplicate/pending/DLQ/具体差异；仍未覆盖历史归档、超大 Stream 分页和完整 PG 集成场景；
 - Ledger 的 Count/Balance 查询错误现在会向上返回，HTTP 接口返回 503；
 - `METERING_REQUIRE_POSTGRES=true` 时 PostgreSQL 不可用会阻止 metering 启动；默认 Demo 模式仍允许回退内存，重启会丢失台账。
@@ -230,6 +230,7 @@
 
 - Prometheus counters、gauges、histograms；
 - Gateway 请求数、延迟、TTFT、活跃连接；
+- 请求响应和计量事件带 request ID/trace ID 相关性信息，Prometheus 不使用这些高基数字段作为 label；
 - 限流通过/拒绝/等待；
 - Provider 重试；
 - 基础 Grafana Dashboard；

@@ -2,20 +2,17 @@ package proxy
 
 import (
 	"bytes"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"llm-gateway/internal/auth"
 	"llm-gateway/internal/metering"
 	"llm-gateway/internal/metrics"
+	"llm-gateway/internal/observability"
 	"llm-gateway/internal/provider"
 )
 
@@ -87,13 +84,25 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	requestID, err := resolveRequestID(r.Header.Get("X-Request-ID"))
+	requestID := observability.RequestID(r.Context())
+	var err error
+	if requestID == "" {
+		requestID, err = observability.ResolveRequestID(r.Header.Get("X-Request-ID"))
+	} else {
+		requestID, err = observability.ResolveRequestID(requestID)
+	}
 	if err != nil {
 		metrics.RequestsTotal.WithLabelValues(tenant, "", "400").Inc()
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	traceID := observability.TraceID(r.Context())
+	if traceID == "" {
+		traceID = observability.ResolveTraceID(r.Header.Get("traceparent"))
+	}
+	r = r.WithContext(observability.WithTraceID(observability.WithRequestID(r.Context(), requestID), traceID))
 	w.Header().Set("X-Request-ID", requestID)
+	w.Header().Set("X-Trace-ID", traceID)
 
 	// Bound request memory before reading the JSON. ReadTimeout protects time,
 	// not size; without this a client can force an unbounded allocation.
@@ -141,7 +150,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err == nil {
 			// 成功：usage 异步落计量（不阻塞返回）
 			if usage != nil {
-				log.Printf("provider=%s model=%s usage=%+v", p.Name(), model, *usage)
+				log.Printf("request_id=%s trace_id=%s provider=%s model=%s usage=%+v", requestID, traceID, p.Name(), model, *usage)
 			}
 			if h.producer != nil {
 				// The ledger key is tenant-scoped. A client may reuse its
@@ -157,6 +166,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				total := prompt + comp
 				h.producer.Enqueue(metering.Event{
 					RequestID:        reqID,
+					ClientRequestID:  requestID,
+					TraceID:          traceID,
 					TenantID:         tenant,
 					Model:            model,
 					Provider:         p.Name(),
@@ -184,7 +195,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			// write an error response to a disconnected connection.
 			return
 		}
-		log.Printf("provider=%s failed (attempt %d/%d): %v written=%v", p.Name(), i+1, len(providers), err, cw.written)
+		log.Printf("request_id=%s trace_id=%s provider=%s model=%s failed (attempt %d/%d): %v written=%v", requestID, traceID, p.Name(), model, i+1, len(providers), err, cw.written)
 		if i > 0 {
 			metrics.ProviderRetryTotal.WithLabelValues(p.Name(), model).Inc()
 		}
@@ -213,23 +224,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // --- helpers ---
 
 func resolveRequestID(raw string) (string, error) {
-	id := strings.TrimSpace(raw)
-	if id == "" {
-		var b [16]byte
-		if _, err := rand.Read(b[:]); err != nil {
-			return fmt.Sprintf("%d", time.Now().UnixNano()), nil
-		}
-		return hex.EncodeToString(b[:]), nil
-	}
-	if len(id) > 128 {
-		return "", fmt.Errorf("X-Request-ID is too long")
-	}
-	for i := 0; i < len(id); i++ {
-		if id[i] < 0x21 || id[i] > 0x7e {
-			return "", fmt.Errorf("X-Request-ID contains invalid characters")
-		}
-	}
-	return id, nil
+	return observability.ResolveRequestID(raw)
 }
 
 func ioReadAll(r *http.Request) ([]byte, error) {
