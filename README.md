@@ -483,7 +483,7 @@ downstream client
 - Gateway 控制面连接已启用 gRPC keepalive；
 - Gateway 同步器已增加周期性 `GetConfig` 版本校验和可选配置租约；仍需增加生产网络故障注入、租约到期策略和慢 watcher 测试；
 - `CredentialService` 已支持 Create/List/Revoke：raw key 只在创建成功时返回一次，列表仅返回 metadata；
-- 已增加可替换的 `AuditSink`，记录安全 metadata 和 request/trace correlation，不记录 raw key/hash；
+- 已增加可替换的 `AuditSink`，记录安全 metadata 和 request/trace correlation，不记录 raw key/hash；使用 PostgreSQL Store 时启用 `PGAuditSink` 持久化审计，内存 Demo 使用 `MemoryAuditSink`；
 - 必要时关闭慢 watcher 连接，强制重连补拉；
 - 配置 map 和 slice 深拷贝；
 - 配置校验通过后再原子发布。
@@ -659,7 +659,7 @@ curl -X POST http://localhost:50052/config \
 
 如果只使用内置 Mock，则不设置 `OPENAI_BASE_URL`，默认路由使用 `mock-a` 和 `mock-b`。
 
-注意：`cmd/control` 的 `/config` 默认仍是本地 Demo 模式；生产必须设置 `CONTROL_ADMIN_TOKEN` 并开启 `CONTROL_REQUIRE_ADMIN_AUTH=true`，同时配置 gRPC TLS/mTLS。管理接口返回的是 key hash prefix，不返回 raw API key；正式模式会拒绝请求体中的 legacy `keys`，应使用 `key_records` 或后续 CredentialService；Service 层 admin/tenant-user 授权核心已完成，正式身份令牌和 HTTP facade 仍待接入。
+注意：`cmd/control` 的 `/config` 默认仍是本地 Demo 模式；生产必须设置 `CONTROL_ADMIN_TOKEN` 并开启 `CONTROL_REQUIRE_ADMIN_AUTH=true`，同时配置 gRPC TLS/mTLS。管理接口返回的是 key hash prefix，不返回 raw API key；正式模式会拒绝请求体中的 legacy `keys`，应使用 `key_records` 或后续 CredentialService；Service 层 admin/tenant-user 授权核心已完成，正式身份令牌和 HTTP facade 仍待接入；配置操作和 CredentialService 操作会产生审计事件，PG 模式写入 `control_audit_events`。
 
 ### 5.2 测试 SSE
 
