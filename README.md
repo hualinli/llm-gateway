@@ -632,6 +632,8 @@ CONTROL_TLS_CLIENT_CERT_FILE='' # Gateway mTLS 客户端证书
 CONTROL_TLS_CLIENT_KEY_FILE=''
 CONTROL_TLS_SERVER_NAME='' # Gateway 校验证书时的 ServerName
 CONTROL_TLS_REQUIRE_CLIENT_CERT=false
+CONTROL_ADMIN_TOKEN='' # 管理面 Bearer token；生产配合下方 require 开关
+CONTROL_REQUIRE_ADMIN_AUTH=false # 生产建议 true；未配置 token 时拒绝启动
 METERING_SPOOL_DIR='./data/metering-spool' # 可选；Redis 故障时本地持久化计量事件
 METERING_REQUIRE_POSTGRES=false # 生产建议 true；PG 不可用时拒绝启动 metering
 
@@ -652,7 +654,7 @@ curl -X POST http://localhost:50052/config \
 
 如果只使用内置 Mock，则不设置 `OPENAI_BASE_URL`，默认路由使用 `mock-a` 和 `mock-b`。
 
-注意：当前 `cmd/control` 的 `/config` 是未鉴权 Demo 管理面，当前 Compose 使用了默认账号密码和明文连接，只适合本地环境，不能直接暴露到公网。
+注意：`cmd/control` 的 `/config` 默认仍是本地 Demo 模式；生产必须设置 `CONTROL_ADMIN_TOKEN` 并开启 `CONTROL_REQUIRE_ADMIN_AUTH=true`，同时配置 gRPC TLS/mTLS。管理接口返回的是 key hash prefix，不返回 raw API key；当前完整角色/租户授权仍待 Management Service。
 
 ### 5.2 测试 SSE
 

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -11,6 +13,15 @@ import (
 	"llm-gateway/internal/control"
 	pb "llm-gateway/proto/control"
 )
+
+func redactKeys(keys map[string]string) map[string]string {
+	out := make(map[string]string, len(keys))
+	for raw, tenant := range keys {
+		sum := sha256.Sum256([]byte(raw))
+		out["sha256:"+hex.EncodeToString(sum[:])[:16]] = tenant
+	}
+	return out
+}
 
 func main() {
 	store := control.NewStore()
@@ -38,16 +49,21 @@ func main() {
 		}
 	}()
 
-	// 临时 HTTP 管理面 :50052
+	// HTTP 管理面 :50052；本地 Demo 可不配置 token，生产必须开启鉴权。
 	mux := http.NewServeMux()
-	mux.HandleFunc("/config", func(w http.ResponseWriter, r *http.Request) {
+	adminToken := os.Getenv("CONTROL_ADMIN_TOKEN")
+	requireAdminAuth := os.Getenv("CONTROL_REQUIRE_ADMIN_AUTH") == "1" || os.Getenv("CONTROL_REQUIRE_ADMIN_AUTH") == "true"
+	if requireAdminAuth && adminToken == "" {
+		log.Fatal("CONTROL_REQUIRE_ADMIN_AUTH requires CONTROL_ADMIN_TOKEN")
+	}
+	configHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			cfg, _ := srv.GetConfig(r.Context(), &pb.GetRequest{})
 			// 转成便于 curl 看的 JSON 形态
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"version": cfg.Version,
-				"keys":    cfg.Keys,
+				"keys":    redactKeys(cfg.Keys),
 				"routes":  control.RoutesFromProto(cfg.Routes),
 			})
 		case http.MethodPost:
@@ -74,15 +90,16 @@ func main() {
 				http.Error(w, "persist config: "+err.Error(), http.StatusInternalServerError)
 				return
 			}
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"version": newCfg.Version,
-				"keys":    newCfg.Keys,
+				"keys":    redactKeys(newCfg.Keys),
 				"routes":  req.Routes,
 			})
 		default:
 			http.Error(w, "method not allowed", 405)
 		}
 	})
+	mux.Handle("/config", control.AdminAuth(configHandler, adminToken, requireAdminAuth))
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok\n")) })
 
 	go func() {
