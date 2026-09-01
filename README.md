@@ -660,7 +660,25 @@ curl -X POST http://localhost:50052/config \
 
 如果只使用内置 Mock，则不设置 `OPENAI_BASE_URL`，默认路由使用 `mock-a` 和 `mock-b`。
 
-注意：`cmd/control` 的 `/config` 默认仍是本地 Demo 模式；生产必须设置 `CONTROL_ADMIN_TOKEN` 并开启 `CONTROL_REQUIRE_ADMIN_AUTH=true`，同时配置 gRPC TLS/mTLS。管理接口返回的是 key hash prefix，不返回 raw API key；正式模式会拒绝请求体中的 legacy `keys`，应使用 `key_records` 或后续 CredentialService；Service 层 admin/tenant-user 授权核心和 HMAC identity token verifier 已完成，tenant-user HTTP facade 仍待接入；配置操作和 CredentialService 操作会产生审计事件，PG 模式写入 `control_audit_events`。
+注意：`cmd/control` 的 `/config` 默认仍是本地 Demo 模式；生产必须设置 `CONTROL_ADMIN_TOKEN` 并开启 `CONTROL_REQUIRE_ADMIN_AUTH=true`，同时配置 gRPC TLS/mTLS。管理接口返回的是 key hash prefix，不返回 raw API key；正式模式会拒绝请求体中的 legacy `keys`，应使用 `key_records` 或 CredentialService。
+
+CredentialService 已通过 `/keys` HTTP facade 暴露：
+
+```bash
+# admin：创建成功时 raw_key 只在响应中出现一次
+curl -X POST http://localhost:50052/keys \
+  -H "Authorization: Bearer $CONTROL_ADMIN_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"tenant_id":"tenant-a"}'
+
+curl 'http://localhost:50052/keys?tenant_id=tenant-a' \
+  -H "Authorization: Bearer $CONTROL_ADMIN_TOKEN"
+
+curl -X DELETE http://localhost:50052/keys/<key_id> \
+  -H "Authorization: Bearer $CONTROL_ADMIN_TOKEN"
+```
+
+Service 层 admin/tenant-user 授权核心和 HMAC identity token verifier 已完成；tenant-user 使用签名身份 token 后只能访问自身 tenant。配置操作和 CredentialService 操作会产生审计事件，PG 模式写入 `control_audit_events`。
 
 ### 5.2 测试 SSE
 
