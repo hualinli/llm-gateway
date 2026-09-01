@@ -477,11 +477,12 @@ downstream client
 - gRPC TLS/mTLS；
 - 新配置 proto 和数据库不保存 raw API Key；**KeyRecord hash/metadata 第一阶段已完成，历史 payload 清理仍待做**；
 - `/config` 不返回密钥原文；**已完成**；
-- API Key 只保存 hash 或 credential reference；**当前已完成 hash 版本，credential reference 仍待接入**；
+- API Key 只保存 hash 或 credential reference；**hash 版本和 Key Create/List/Revoke service 已完成，外部 credential reference 仍待接入**；
 - `ApplyConfig` 串行生成版本，避免并发写入产生同版本；**已完成**；
 - 已完成 watcher 满时保留最新快照，避免连接保持存活但永久停留旧版本；
 - Gateway 控制面连接已启用 gRPC keepalive；
 - Gateway 同步器已增加周期性 `GetConfig` 版本校验和可选配置租约；仍需增加生产网络故障注入、租约到期策略和慢 watcher 测试；
+- `CredentialService` 已支持 Create/List/Revoke：raw key 只在创建成功时返回一次，列表仅返回 metadata；
 - 必要时关闭慢 watcher 连接，强制重连补拉；
 - 配置 map 和 slice 深拷贝；
 - 配置校验通过后再原子发布。
