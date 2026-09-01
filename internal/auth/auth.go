@@ -91,10 +91,13 @@ func Middleware(store Store) func(http.Handler) http.Handler {
 				http.Error(w, "missing Authorization", http.StatusUnauthorized)
 				return
 			}
-			// 兼容 "Bearer sk-xxx" 和直接 "sk-xxx"
-			rawKey := strings.TrimPrefix(auth, "Bearer ")
+			scheme, rawKey, ok := strings.Cut(auth, " ")
+			if !ok || !strings.EqualFold(scheme, "Bearer") {
+				http.Error(w, "invalid Authorization", http.StatusUnauthorized)
+				return
+			}
 			rawKey = strings.TrimSpace(rawKey)
-			if rawKey == "" {
+			if rawKey == "" || strings.IndexAny(rawKey, " \t\r\n") >= 0 {
 				http.Error(w, "invalid Authorization", http.StatusUnauthorized)
 				return
 			}

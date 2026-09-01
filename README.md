@@ -216,7 +216,7 @@
 - `/config` 管理接口没有认证和授权；
 - 本地 Demo 默认使用 insecure credentials；TLS/mTLS 已有可配置实现，生产部署必须提供证书并开启校验；
 - proto 和 PostgreSQL 中保存 raw API key；
-- `/config` GET 会直接返回明文 API key；
+- `/config` GET 已返回 key hash prefix，不再返回明文 API key；
 - watcher channel 现在会保留最新快照，不再简单丢弃后续版本；仍需增加慢连接和生产网络故障注入测试；
 - ApplyConfig 现在串行化版本生成；
 - 不存在的 Provider 现在会拒绝整版路由更新；
@@ -493,7 +493,7 @@ downstream client
 
 - 使用 `http.MaxBytesReader` 限制请求体大小；
 - 限制 messages 数量、单条内容长度和 model 长度；
-- 严格解析 `Authorization: Bearer ...`，不接受任意前缀；
+- 严格解析 `Authorization: Bearer ...`，不接受任意前缀；**已完成**；
 - pprof 仅允许内部访问或单独保护；
 - 增加 `/livez` 和 `/readyz`，分别表示进程存活和依赖可用；
 - Redis、PG 故障策略显式配置并暴露指标；

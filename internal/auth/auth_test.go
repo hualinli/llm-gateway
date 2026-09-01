@@ -1,6 +1,45 @@
 package auth
 
-import "testing"
+import (
+	"net/http"
+	"net/http/httptest"
+	"testing"
+)
+
+func TestMiddlewareRequiresBearerScheme(t *testing.T) {
+	store := NewMemoryStore(map[string]string{"test-key": "tenant-a"})
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := TenantFromContext(r.Context()); got != "tenant-a" {
+			t.Fatalf("tenant=%q, want tenant-a", got)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+	handler := Middleware(store)(next)
+
+	tests := []struct {
+		name       string
+		header     string
+		wantStatus int
+	}{
+		{name: "valid", header: "Bearer test-key", wantStatus: http.StatusNoContent},
+		{name: "case insensitive scheme", header: "bearer test-key", wantStatus: http.StatusNoContent},
+		{name: "direct key rejected", header: "test-key", wantStatus: http.StatusUnauthorized},
+		{name: "wrong scheme", header: "Basic test-key", wantStatus: http.StatusUnauthorized},
+		{name: "missing value", header: "Bearer", wantStatus: http.StatusUnauthorized},
+		{name: "multiple values", header: "Bearer test-key extra", wantStatus: http.StatusUnauthorized},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+			req.Header.Set("Authorization", tt.header)
+			recorder := httptest.NewRecorder()
+			handler.ServeHTTP(recorder, req)
+			if recorder.Code != tt.wantStatus {
+				t.Fatalf("status=%d, want %d", recorder.Code, tt.wantStatus)
+			}
+		})
+	}
+}
 
 func TestMemoryStoreRevokeMissing(t *testing.T) {
 	store := NewMemoryStore(map[string]string{
