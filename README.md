@@ -209,7 +209,7 @@
 - Gateway 连接控制面后先补拉再 Watch；
 - Gateway 只应用比本地版本更新的配置；
 - 内存 Store 可供本地 Demo 使用；
-- 已有版本递增、持久化失败、重启恢复、Watch 推送、真实 gRPC 网络调用、断线重连和版本跳跃测试；Gateway 同步器已支持周期性 GetConfig 和可选配置租约。
+- 已有版本递增、持久化失败、重启恢复、Watch 推送、真实 gRPC 网络调用、断线重连、版本跳跃和 key 删除失效 E2E 测试；Gateway 同步器已支持周期性 GetConfig 和可选配置租约。
 
 当前限制：
 
@@ -805,7 +805,7 @@ LIMITER_TEST_REDIS_ADDR=localhost:6379 \
 - 用户创建 API Key 只返回一次 raw key，列表仅返回 prefix，删除后优先撤销；
 - gRPC 使用 TLS/mTLS；
 - 数据库和配置下发不含 raw API Key；
-- Watch 丢消息后可以补拉最新版本；
+- Watch 丢消息后可以补拉最新版本；**已完成基础重连、版本跳跃和 Gateway key 撤销测试**；
 - Provider 配置失败不会静默变成 Mock；
 - 有明确的 live/readiness 和依赖故障策略。
 
