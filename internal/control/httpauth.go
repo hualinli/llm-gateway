@@ -12,7 +12,8 @@ import (
 func AdminAuth(next http.Handler, token string, require bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if token == "" && !require {
-			next.ServeHTTP(w, r)
+			ctx := WithPrincipal(r.Context(), Principal{Subject: "demo-admin", Role: RoleAdmin})
+			next.ServeHTTP(w, r.WithContext(ctx))
 			return
 		}
 		provided, ok := bearerToken(r.Header.Get("Authorization"))
@@ -21,7 +22,8 @@ func AdminAuth(next http.Handler, token string, require bool) http.Handler {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		next.ServeHTTP(w, r)
+		ctx := WithPrincipal(r.Context(), Principal{Subject: "admin-token", Role: RoleAdmin})
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
