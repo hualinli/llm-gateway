@@ -64,12 +64,15 @@ func (s *Server) ApplyConfig(keys map[string]string, routes map[string]*pb.Provi
 // ApplyKeyRecords writes a safe credential snapshot: raw keys are never placed
 // in the Config message, store payload, or Watch broadcast.
 func (s *Server) ApplyKeyRecords(records []*pb.KeyRecord, routes map[string]*pb.ProviderList) (*pb.Config, error) {
+	s.applyMu.Lock()
+	defer s.applyMu.Unlock()
+	return s.applyKeyRecordsLocked(records, routes)
+}
+
+func (s *Server) applyKeyRecordsLocked(records []*pb.KeyRecord, routes map[string]*pb.ProviderList) (*pb.Config, error) {
 	if err := validateKeyRecords(records); err != nil {
 		return nil, err
 	}
-	s.applyMu.Lock()
-	defer s.applyMu.Unlock()
-
 	next := cloneConfig(&pb.Config{Version: s.CurrentConfig().Version, KeyRecords: records, Routes: routes})
 	next.Version++
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
