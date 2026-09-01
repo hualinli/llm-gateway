@@ -69,11 +69,17 @@ func main() {
 	})
 	proxyHandler := proxy.NewHandler(registry, meterProducer)
 
-	// 演示用固定 Key，生产由控制面下发；明文只在这里出现一次，落 Store 即哈希
-	authStore := auth.NewMemoryStore(map[string]string{
-		"sk-demo-123": "tenant-demo",
-		"sk-test-456": "tenant-test",
-	})
+	// 本地 bootstrap key 仅通过环境变量注入，生产应由控制面下发；内存 Store 只保存 hash。
+	var bootstrapRecords []auth.KeyRecord
+	if rawKey := os.Getenv("LLM_GATEWAY_BOOTSTRAP_API_KEY"); rawKey != "" {
+		tenantID := os.Getenv("LLM_GATEWAY_BOOTSTRAP_TENANT_ID")
+		if tenantID == "" {
+			tenantID = "tenant-demo"
+		}
+		record := auth.NewKeyRecord("bootstrap-"+auth.HashKey(rawKey), rawKey, tenantID)
+		bootstrapRecords = []auth.KeyRecord{record}
+	}
+	authStore := auth.NewMemoryStoreFromRecords(bootstrapRecords)
 
 	// 控制面同步：GetConfig 补拉、Watch 低延迟推送、周期校验和可选租约。
 	// 版本跳跃由同步器接受，Gateway 只拒绝旧版本；租约到期时撤销本地 key。

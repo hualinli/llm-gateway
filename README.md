@@ -638,6 +638,8 @@ CONTROL_TLS_REQUIRE_CLIENT_CERT=false
 CONTROL_ADMIN_TOKEN='' # 管理面 admin Bearer token；生产配合下方 require 开关
 CONTROL_REQUIRE_ADMIN_AUTH=false # 生产建议 true；未配置 token 时拒绝启动
 CONTROL_IDENTITY_SIGNING_SECRET='' # 可选；>=32 字节，用于 tenant-user signed identity token
+LLM_GATEWAY_BOOTSTRAP_API_KEY='' # 可选；本地 Demo bootstrap credential，禁止写入源码/日志
+LLM_GATEWAY_BOOTSTRAP_TENANT_ID='tenant-demo'
 METERING_SPOOL_DIR='./data/metering-spool' # 可选；Redis 故障时本地持久化计量事件
 CONTROL_REQUIRE_POSTGRES=false # 生产建议 true；PG 不可用时拒绝启动 control
 # 正式模式（开启 CONTROL_REQUIRE_ADMIN_AUTH 或 CONTROL_REQUIRE_POSTGRES）拒绝 /config 的 legacy keys；仅本地 Demo 兼容
@@ -684,7 +686,7 @@ Service 层 admin/tenant-user 授权核心和 HMAC identity token verifier 已�
 
 ```bash
 curl -N \
-  -H 'Authorization: Bearer sk-demo-123' \
+  -H "Authorization: Bearer $GATEWAY_API_KEY" \
   -H 'Content-Type: application/json' \
   -H 'Accept: text/event-stream' \
   -d '{
@@ -734,10 +736,11 @@ go test ./internal/provider -run TestLiveOpenAI -v -count=1
 基础 SSE 压测：
 
 ```bash
-go run ./cmd/loadtest -c 100 -n 1000 -rate 0
+GATEWAY_API_KEY="$LLM_GATEWAY_BOOTSTRAP_API_KEY" \
+  go run ./cmd/loadtest -c 100 -n 1000 -rate 0
 ```
 
-当前压测结果只用于观察 Demo 行为，不能直接作为生产容量结论。正式报告应同时记录测试环境、Provider 行为、并发数、流持续时间、TTFT 分位数、总耗时、内存、CPU、GC 和失败率。
+当前压测结果只用于观察 Demo 行为，不能直接作为生产容量结论。代表性压测应先启动 Redis；Redis 未启动时 limiter 会 fail-open，连接失败延迟会污染结果。正式报告应同时记录测试环境、Provider 行为、并发数、流持续时间、TTFT 分位数、总耗时、内存、CPU、GC、失败率、限流配置和 Redis 状态。
 
 ### 5.5 清理本地数据
 
@@ -801,6 +804,7 @@ CONTROL_TEST_POSTGRES_DSN='postgres://gateway:gateway@localhost:5433/llm_gateway
 - Control PG 历史 raw-key payload 迁移集成测试已完成第一版；
 - 真实 HTTP Provider 契约测试已完成第一版；
 - SSE reader 边界测试已完成第一版；
+- loadtest worker 已校验首个 data event、`[DONE]` 完整性和非 200 统计；Collector 已校验并发报告和分位数；
 - gRPC 真实网络和端到端配置热更新测试已完成第一版；
 - 客户端断开和慢客户端测试；
 - 负载、故障注入和数据恢复测试。

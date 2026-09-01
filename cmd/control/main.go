@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"llm-gateway/internal/auth"
 	"llm-gateway/internal/control"
 	"llm-gateway/internal/observability"
 	pb "llm-gateway/proto/control"
@@ -74,10 +75,19 @@ func main() {
 	}
 
 	if srv.CurrentConfig().Version == 0 {
-		if _, err := srv.ApplyConfig(map[string]string{
-			"sk-demo-123": "tenant-demo",
-			"sk-test-456": "tenant-test",
-		}, control.RoutesToProto(map[string][]string{
+		var bootstrapRecords []*pb.KeyRecord
+		if rawKey := os.Getenv("LLM_GATEWAY_BOOTSTRAP_API_KEY"); rawKey != "" {
+			tenantID := os.Getenv("LLM_GATEWAY_BOOTSTRAP_TENANT_ID")
+			if tenantID == "" {
+				tenantID = "tenant-demo"
+			}
+			record := auth.NewKeyRecord("bootstrap-"+auth.HashKey(rawKey), rawKey, tenantID)
+			bootstrapRecords = []*pb.KeyRecord{{
+				KeyId: record.ID, KeyHash: record.Hash, KeyPrefix: record.Prefix,
+				TenantId: record.TenantID, Status: record.Status,
+			}}
+		}
+		if _, err := srv.ApplyKeyRecords(bootstrapRecords, control.RoutesToProto(map[string][]string{
 			"default": {"mock-a", "mock-b"},
 		})); err != nil {
 			log.Fatalf("control seed: %v", err)
