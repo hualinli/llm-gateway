@@ -44,8 +44,12 @@ func HashKey(rawKey string) string {
 }
 
 func keyPrefix(rawKey string) string {
-	if len(rawKey) <= 8 {
-		return rawKey
+	if len(rawKey) <= 2 {
+		return "***"
 	}
-	return rawKey[:8] + "..."
+	prefixLen := 8
+	if len(rawKey) < prefixLen {
+		prefixLen = len(rawKey) / 2
+	}
+	return rawKey[:prefixLen] + "..."
 }
