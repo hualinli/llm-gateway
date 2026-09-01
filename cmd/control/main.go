@@ -101,6 +101,18 @@ func main() {
 	if requireAdminAuth && adminToken == "" {
 		log.Fatal("CONTROL_REQUIRE_ADMIN_AUTH requires CONTROL_ADMIN_TOKEN")
 	}
+	identityVerifier, err := control.NewIdentityVerifier(adminToken, os.Getenv("CONTROL_IDENTITY_SIGNING_SECRET"))
+	if err != nil {
+		log.Fatalf("control identity: %v", err)
+	}
+	credentialService, err := control.NewCredentialServiceWithAudit(srv, auditSink)
+	if err != nil {
+		log.Fatalf("control credentials: %v", err)
+	}
+	credentialHandler, err := control.NewCredentialHTTPHandler(credentialService)
+	if err != nil {
+		log.Fatalf("control credential HTTP: %v", err)
+	}
 	configHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
@@ -170,6 +182,9 @@ func main() {
 		}
 	})
 	mux.Handle("/config", control.AdminAuth(configHandler, adminToken, requireAdminAuth))
+	keysAuth := control.IdentityAuth(credentialHandler, identityVerifier, true)
+	mux.Handle("/keys", keysAuth)
+	mux.Handle("/keys/", keysAuth)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok\n")) })
 
 	go func() {
