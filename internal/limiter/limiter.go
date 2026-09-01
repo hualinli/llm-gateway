@@ -23,17 +23,27 @@ type Limiter struct {
 
 // New 创建限流器，rate/burst 按租户配；queueTimeout 建议 0 或 300-500ms
 func New(rdb *redis.Client, rate, burst int, queueTimeout time.Duration) *Limiter {
+	if rate <= 0 {
+		rate = 1
+	}
+	if burst <= 0 {
+		burst = 1
+	}
+	if queueTimeout < 0 {
+		queueTimeout = 0
+	}
 	return &Limiter{rdb: rdb, rate: rate, burst: burst, queueTimeout: queueTimeout}
 }
 
 // Lua：原子地 补充 + 尝试扣 1 个令牌
-// KEYS[1]=桶 key, ARGV[1]=rate, ARGV[2]=burst, ARGV[3]=now_ms
+// KEYS[1]=桶 key, ARGV[1]=rate, ARGV[2]=burst；时间由 Redis TIME 提供
 const luaAllow = `
 local tokens = tonumber(redis.call('HMGET', KEYS[1], 'tokens', 'ts')[1])
 local last = tonumber(redis.call('HMGET', KEYS[1], 'tokens', 'ts')[2])
+local server_time = redis.call('TIME')
+local now = tonumber(server_time[1]) * 1000 + math.floor(tonumber(server_time[2]) / 1000)
 if tokens == nil then tokens = tonumber(ARGV[2]) end
-if last == nil then last = tonumber(ARGV[3]) end
-local now = tonumber(ARGV[3])
+if last == nil then last = now end
 local rate = tonumber(ARGV[1])
 local burst = tonumber(ARGV[2])
 tokens = math.min(burst, tokens + (now - last) * rate / 1000)
@@ -49,12 +59,19 @@ end
 `
 
 func (l *Limiter) allowOnce(ctx context.Context, key string) (bool, error) {
+	select {
+	case <-ctx.Done():
+		return false, ctx.Err()
+	default:
+	}
 	if l.rdb == nil {
 		return true, nil // 本地无 Redis 时 fail-open，不阻塞开发
 	}
-	now := time.Now().UnixMilli()
-	res, err := l.rdb.Eval(ctx, luaAllow, []string{key}, l.rate, l.burst, now).Result()
+	res, err := l.rdb.Eval(ctx, luaAllow, []string{key}, l.rate, l.burst).Result()
 	if err != nil {
+		if ctx.Err() != nil {
+			return false, ctx.Err()
+		}
 		// Redis 故障时 fail-open 保可用（计量侧是 fail-spool 保正确性）
 		return true, nil
 	}
@@ -71,10 +88,12 @@ func (l *Limiter) Allow(ctx context.Context, key string) bool {
 	// 有界排队：每 50ms 重试一次，直到超时或拿到令牌或 ctx 取消
 	deadline := time.Now().Add(l.queueTimeout)
 	for time.Now().Before(deadline) {
+		timer := time.NewTimer(50 * time.Millisecond)
 		select {
 		case <-ctx.Done():
+			timer.Stop()
 			return false
-		case <-time.After(50 * time.Millisecond):
+		case <-timer.C:
 		}
 		if ok, _ := l.allowOnce(ctx, key); ok {
 			return true

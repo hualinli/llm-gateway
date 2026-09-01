@@ -160,9 +160,9 @@
 当前限制：
 
 - rate、burst 目前是进程启动时的固定值，尚未由控制面动态下发；
-- Lua 使用应用机器当前时间，分布式部署时需改为 Redis `TIME` 或处理时钟偏差；
+- Lua 现在使用 Redis `TIME`，避免多 Gateway 实例之间的应用时钟偏差；
 - Redis 故障 fail-open 可能造成超额流量，生产环境必须显式配置并告警；
-- 目前没有 Redis/Lua 集成测试。
+- Redis/Lua 集成测试已完成第一版，仍需补充高并发和故障注入测试。
 
 ### 2.5 异步计量基础链路
 
@@ -746,12 +746,15 @@ Redis 计量集成测试是显式 opt-in 的，需要一个专用 Redis：
 ```bash
 METERING_TEST_REDIS_ADDR=localhost:6379 \
   go test ./internal/metering -run TestRedisMetering -v -count=1
+
+LIMITER_TEST_REDIS_ADDR=localhost:6379 \
+  go test ./internal/limiter -run TestRedisLimiter -v -count=1
 ```
 
 仍需补充：
 
 - auth 测试；
-- Redis Lua 集成测试；
+- Redis Lua 高并发和故障注入集成测试；
 - Producer 队列满丢弃、Redis flush 重试、spool 恢复和 Close flush 的完整测试；**基础单元测试已完成，Redis 恢复集成测试已完成第一版**；
 - Consumer 重复消费、pending reclaim、DLQ 测试；**Redis 集成测试已完成第一版**；
 - PG Ledger 集成测试和生产模式启动失败测试；
