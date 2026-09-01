@@ -623,6 +623,8 @@ go run ./cmd/gateway
 REDIS_ADDR=localhost:6379
 POSTGRES_DSN='postgres://gateway:gateway@localhost:5433/llm_gateway?sslmode=disable'
 CONTROL_ADDR=localhost:50051
+CONTROL_CONFIG_POLL_INTERVAL=30s # Gateway 周期性 GetConfig 校验
+CONTROL_CONFIG_LEASE=0s # 生产建议显式设置；租约到期后撤销本地 key
 METERING_SPOOL_DIR='./data/metering-spool' # 可选；Redis 故障时本地持久化计量事件
 METERING_REQUIRE_POSTGRES=false # 生产建议 true；PG 不可用时拒绝启动 metering
 
