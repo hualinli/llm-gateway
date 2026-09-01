@@ -635,8 +635,9 @@ CONTROL_TLS_CLIENT_CERT_FILE='' # Gateway mTLS 客户端证书
 CONTROL_TLS_CLIENT_KEY_FILE=''
 CONTROL_TLS_SERVER_NAME='' # Gateway 校验证书时的 ServerName
 CONTROL_TLS_REQUIRE_CLIENT_CERT=false
-CONTROL_ADMIN_TOKEN='' # 管理面 Bearer token；生产配合下方 require 开关
+CONTROL_ADMIN_TOKEN='' # 管理面 admin Bearer token；生产配合下方 require 开关
 CONTROL_REQUIRE_ADMIN_AUTH=false # 生产建议 true；未配置 token 时拒绝启动
+CONTROL_IDENTITY_SIGNING_SECRET='' # 可选；>=32 字节，用于 tenant-user signed identity token
 METERING_SPOOL_DIR='./data/metering-spool' # 可选；Redis 故障时本地持久化计量事件
 CONTROL_REQUIRE_POSTGRES=false # 生产建议 true；PG 不可用时拒绝启动 control
 # 正式模式（开启 CONTROL_REQUIRE_ADMIN_AUTH 或 CONTROL_REQUIRE_POSTGRES）拒绝 /config 的 legacy keys；仅本地 Demo 兼容
@@ -659,7 +660,7 @@ curl -X POST http://localhost:50052/config \
 
 如果只使用内置 Mock，则不设置 `OPENAI_BASE_URL`，默认路由使用 `mock-a` 和 `mock-b`。
 
-注意：`cmd/control` 的 `/config` 默认仍是本地 Demo 模式；生产必须设置 `CONTROL_ADMIN_TOKEN` 并开启 `CONTROL_REQUIRE_ADMIN_AUTH=true`，同时配置 gRPC TLS/mTLS。管理接口返回的是 key hash prefix，不返回 raw API key；正式模式会拒绝请求体中的 legacy `keys`，应使用 `key_records` 或后续 CredentialService；Service 层 admin/tenant-user 授权核心已完成，正式身份令牌和 HTTP facade 仍待接入；配置操作和 CredentialService 操作会产生审计事件，PG 模式写入 `control_audit_events`。
+注意：`cmd/control` 的 `/config` 默认仍是本地 Demo 模式；生产必须设置 `CONTROL_ADMIN_TOKEN` 并开启 `CONTROL_REQUIRE_ADMIN_AUTH=true`，同时配置 gRPC TLS/mTLS。管理接口返回的是 key hash prefix，不返回 raw API key；正式模式会拒绝请求体中的 legacy `keys`，应使用 `key_records` 或后续 CredentialService；Service 层 admin/tenant-user 授权核心和 HMAC identity token verifier 已完成，tenant-user HTTP facade 仍待接入；配置操作和 CredentialService 操作会产生审计事件，PG 模式写入 `control_audit_events`。
 
 ### 5.2 测试 SSE
 
