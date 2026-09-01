@@ -4,10 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -74,7 +76,14 @@ CREATE TABLE IF NOT EXISTS control_config (
 		_ = db.Close()
 		return nil, err
 	}
-	return &PGStore{db: db}, nil
+	store := &PGStore{db: db}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := store.MigrateLegacyPayloads(ctx); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("migrate legacy control payloads: %w", err)
+	}
+	return store, nil
 }
 
 func (p *PGStore) Save(ctx context.Context, cfg *pb.Config) error {
@@ -105,6 +114,63 @@ func (p *PGStore) LoadLatest(ctx context.Context) (*pb.Config, error) {
 		return nil, err
 	}
 	return cfg, nil
+}
+
+// MigrateLegacyPayloads removes raw-key maps from historical configuration
+// payloads. It preserves the version and converts them to KeyRecords in one
+// transaction so a partial migration cannot be observed.
+func (p *PGStore) MigrateLegacyPayloads(ctx context.Context) error {
+	tx, err := p.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	type migration struct {
+		version int64
+		payload string
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT version, payload::text FROM control_config ORDER BY version`)
+	if err != nil {
+		return err
+	}
+	var updates []migration
+	for rows.Next() {
+		var version int64
+		var raw string
+		if err := rows.Scan(&version, &raw); err != nil {
+			rows.Close()
+			return err
+		}
+		cfg := &pb.Config{}
+		if err := (protojson.UnmarshalOptions{DiscardUnknown: true}).Unmarshal([]byte(raw), cfg); err != nil {
+			rows.Close()
+			return fmt.Errorf("version %d: %w", version, err)
+		}
+		if len(cfg.Keys) == 0 {
+			continue
+		}
+		safe := normalizeConfig(cfg)
+		payload, err := protojson.Marshal(safe)
+		if err != nil {
+			rows.Close()
+			return fmt.Errorf("version %d: %w", version, err)
+		}
+		updates = append(updates, migration{version: version, payload: string(payload)})
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for _, update := range updates {
+		if _, err := tx.ExecContext(ctx, `UPDATE control_config SET payload=$1 WHERE version=$2`, update.payload, update.version); err != nil {
+			return fmt.Errorf("version %d: %w", update.version, err)
+		}
+	}
+	return tx.Commit()
 }
 
 // NewStore 工厂：优先 PG；只有非强制模式才允许回退内存。

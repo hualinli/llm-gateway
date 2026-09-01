@@ -215,7 +215,7 @@
 
 - `/config` 管理接口没有认证和授权；
 - 本地 Demo 默认使用 insecure credentials；TLS/mTLS 已有可配置实现，生产部署必须提供证书并开启校验；
-- 新配置已使用 `KeyRecord` 的 hash/metadata，不再写入 raw API key；旧历史配置仍可能包含 raw key，数据库历史 payload 脱敏迁移待做；
+- 新配置已使用 `KeyRecord` 的 hash/metadata，不再写入 raw API key；PGStore 启动时会在事务内迁移旧历史 payload，仍需补充真实 PG 集成演练；
 - `/config` GET 已返回 key hash prefix，不再返回明文 API key；
 - watcher channel 现在会保留最新快照，不再简单丢弃后续版本；仍需增加慢连接和生产网络故障注入测试；
 - ApplyConfig 现在串行化版本生成；
@@ -475,7 +475,7 @@ downstream client
 
 - 管理 HTTP API 认证和授权；
 - gRPC TLS/mTLS；
-- 新配置 proto 和数据库不保存 raw API Key；**KeyRecord hash/metadata 第一阶段已完成，历史 payload 清理仍待做**；
+- 新配置 proto 和数据库不保存 raw API Key；**KeyRecord hash/metadata 和 PGStore 历史 payload 迁移第一阶段已完成，仍需真实 PG 演练**；
 - `/config` 不返回密钥原文；**已完成**；
 - API Key 只保存 hash 或 credential reference；**hash 版本和 Key Create/List/Revoke service 已完成，外部 credential reference 仍待接入**；
 - `ApplyConfig` 串行生成版本，避免并发写入产生同版本；**已完成**；
@@ -742,11 +742,12 @@ docker compose down -v
   - 5xx 映射；
   - 429 透传；
   - Provider 401 映射。
-- `internal/control/control_test.go`
-  - 版本递增；
-  - 持久化失败；
-  - 重启恢复；
-  - Watch 初始补发和实时推送。
+- `internal/control/control_test.go`、`sync_test.go`、`tls_test.go`、`gateway_sync_test.go`
+  - 版本递增、持久化失败和重启恢复；
+  - Watch 初始补发、实时推送、断线重连和版本跳跃；
+  - key 删除后的 Gateway 失效；
+  - 真实 gRPC 网络调用和 mTLS；
+  - 配置快照隔离、租约到期和恢复。
 
 当前验证命令：
 
@@ -764,19 +765,22 @@ METERING_TEST_REDIS_ADDR=localhost:6379 \
 
 LIMITER_TEST_REDIS_ADDR=localhost:6379 \
   go test ./internal/limiter -run TestRedisLimiter -v -count=1
+
+CONTROL_TEST_POSTGRES_DSN='postgres://gateway:gateway@localhost:5433/llm_gateway?sslmode=disable' \
+  go test ./internal/control -run TestPostgresMigratesLegacyControlPayload -v -count=1
 ```
 
 仍需补充：
 
-- auth 测试；
+- auth 基础鉴权和 hash record 测试已完成；
 - Redis Lua 高并发和故障注入集成测试；
 - Producer 队列满丢弃、Redis flush 重试、spool 恢复和 Close flush 的完整测试；**基础单元测试已完成，Redis 恢复集成测试已完成第一版**；
 - Consumer 重复消费、pending reclaim、DLQ 测试；**Redis 集成测试已完成第一版**；
 - PG Ledger 集成测试和生产模式启动失败测试；
+- Control PG 历史 raw-key payload 迁移集成测试已完成第一版；
 - 真实 HTTP Provider 契约测试已完成第一版；
 - SSE reader 边界测试已完成第一版；
-- gRPC 真实网络测试；
-- 端到端配置热更新测试；
+- gRPC 真实网络和端到端配置热更新测试已完成第一版；
 - 客户端断开和慢客户端测试；
 - 负载、故障注入和数据恢复测试。
 
