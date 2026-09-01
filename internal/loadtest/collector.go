@@ -1,12 +1,15 @@
 package loadtest
 
 import (
+	"net/http"
 	"sort"
 	"sync"
 	"time"
 )
 
 // Collector 聚合 N 次 Result，算分布。后续可替换为 hdrhistogram 做流式分位数
+const httpStatusOK = http.StatusOK
+
 type Collector struct {
 	mu     sync.Mutex
 	ttfts  []time.Duration
@@ -18,11 +21,14 @@ type Collector struct {
 	errs    int
 }
 
-func NewCollector(cap int) *Collector {
+func NewCollector(capacity int) *Collector {
+	if capacity < 0 {
+		capacity = 0
+	}
 	return &Collector{
-		ttfts:  make([]time.Duration, 0, cap),
-		totals: make([]time.Duration, 0, cap),
-		chunks: make([]int, 0, cap),
+		ttfts:  make([]time.Duration, 0, capacity),
+		totals: make([]time.Duration, 0, capacity),
+		chunks: make([]int, 0, capacity),
 		status: make(map[int]int),
 	}
 }
@@ -63,40 +69,38 @@ type Report struct {
 }
 
 func (c *Collector) Report() Report {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	var rep Report
-	rep.Total = c.success + c.errs
-	for k, v := range c.status {
-		if rep.Status == nil {
-			rep.Status = make(map[int]int)
-		}
-		rep.Status[k] = v
-	}
-	// 非 200 的也计入 total
-	for _, v := range c.status {
-		rep.Total += v
-	}
-	// 去重：success 已含 200，其余 status 叠加会多算，校正：
-	rep.Total = c.success + c.errs
-	for code, cnt := range c.status {
-		if code != 200 {
-			rep.Total += cnt
-		}
-	}
 	rep.Success = c.success
 	rep.Errors = c.errs
-
-	if len(c.ttfts) > 0 {
-		rep.TTFT.P50, rep.TTFT.P95, rep.TTFT.P99, rep.TTFT.Min, rep.TTFT.Max, rep.TTFT.Avg = quantiles(c.ttfts)
-	}
-	if len(c.totals) > 0 {
-		rep.TotalDur.P50, rep.TotalDur.P95, rep.TotalDur.P99, rep.TotalDur.Min, rep.TotalDur.Max, rep.TotalDur.Avg = quantiles(c.totals)
-	}
-	if len(c.chunks) > 0 {
-		var sum int
-		for _, v := range c.chunks {
-			sum += v
+	rep.Total = c.success + c.errs
+	rep.Status = make(map[int]int, len(c.status))
+	for code, count := range c.status {
+		rep.Status[code] = count
+		if code != httpStatusOK {
+			rep.Total += count
 		}
-		rep.AvgChunks = float64(sum) / float64(len(c.chunks))
+	}
+
+	// Work on copies so Report does not reorder slices owned by Add and remains
+	// safe if a caller reports while workers are still completing.
+	ttfts := append([]time.Duration(nil), c.ttfts...)
+	totals := append([]time.Duration(nil), c.totals...)
+	chunks := append([]int(nil), c.chunks...)
+	if len(ttfts) > 0 {
+		rep.TTFT.P50, rep.TTFT.P95, rep.TTFT.P99, rep.TTFT.Min, rep.TTFT.Max, rep.TTFT.Avg = quantiles(ttfts)
+	}
+	if len(totals) > 0 {
+		rep.TotalDur.P50, rep.TotalDur.P95, rep.TotalDur.P99, rep.TotalDur.Min, rep.TotalDur.Max, rep.TotalDur.Avg = quantiles(totals)
+	}
+	if len(chunks) > 0 {
+		var sum int
+		for _, value := range chunks {
+			sum += value
+		}
+		rep.AvgChunks = float64(sum) / float64(len(chunks))
 	}
 	return rep
 }

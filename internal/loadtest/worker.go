@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"time"
@@ -11,12 +12,12 @@ import (
 
 // Result 单次流式请求的观测
 type Result struct {
-	TTFT     time.Duration // 首字节时间
-	Total    time.Duration // 建连到 [DONE] 总时长
-	Chunks   int           // 收到多少个 data 行
-	Status   int
-	Err      error
-	Retried  bool // 预留：后续做混沌切备统计
+	TTFT    time.Duration // 首字节时间
+	Total   time.Duration // 建连到 [DONE] 总时长
+	Chunks  int           // 收到多少个 data 行
+	Status  int
+	Err     error
+	Retried bool // 预留：后续做混沌切备统计
 }
 
 // Worker 无状态，goroutine 池里复用
@@ -65,37 +66,45 @@ func (w *Worker) Do(ctx context.Context) Result {
 		return Result{Status: resp.StatusCode, Total: time.Since(start)}
 	}
 
-	// SSE 是行协议，用 Scanner 按行读 "\n"
+	// SSE 是行协议。TTFT 只在收到第一个非空 data event 时记录，不能把
+	// comment/空行当成首 token；[DONE] 也不是一个业务 chunk。
 	reader := bufio.NewReader(resp.Body)
 	var ttft time.Duration
 	var chunks int
-	var firstByteSeen bool
+	var firstDataSeen bool
+	var doneSeen bool
 
 	for {
-		line, err := reader.ReadBytes('\n')
-		if err != nil {
-			if err == io.EOF {
+		line, readErr := reader.ReadBytes('\n')
+		if len(line) > 0 && bytes.HasPrefix(line, []byte("data:")) {
+			data := bytes.TrimSpace(bytes.TrimPrefix(line, []byte("data:")))
+			if bytes.Equal(data, []byte("[DONE]")) {
+				doneSeen = true
 				break
 			}
-			return Result{Status: resp.StatusCode, TTFT: ttft, Total: time.Since(start), Chunks: chunks, Err: err}
+			if len(data) > 0 {
+				if !firstDataSeen {
+					ttft = time.Since(start)
+					firstDataSeen = true
+				}
+				chunks++
+			}
 		}
-		if !firstByteSeen {
-			ttft = time.Since(start)
-			firstByteSeen = true
-		}
-		// 只计 data 行，跳过空行和注释
-		if bytes.HasPrefix(line, []byte("data:")) {
-			chunks++
-			// 读到 [DONE] 结束
-			if bytes.Contains(line, []byte("[DONE]")) {
+		if readErr != nil {
+			if errors.Is(readErr, io.EOF) {
 				break
 			}
+			total := time.Since(start)
+			return Result{Status: resp.StatusCode, TTFT: ttft, Total: total, Chunks: chunks, Err: readErr}
 		}
 	}
 
 	total := time.Since(start)
-	if !firstByteSeen {
+	if !firstDataSeen {
 		ttft = total
+	}
+	if !doneSeen {
+		return Result{Status: resp.StatusCode, TTFT: ttft, Total: total, Chunks: chunks, Err: errors.New("SSE stream ended before [DONE]")}
 	}
 	return Result{Status: resp.StatusCode, TTFT: ttft, Total: total, Chunks: chunks}
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"log"
+	"os"
 	"sync"
 	"time"
 
@@ -17,9 +18,12 @@ func main() {
 		concurrency = flag.Int("c", 100, "concurrent streams")
 		total       = flag.Int("n", 1000, "total requests")
 		rate        = flag.Int("rate", 0, "QPS limit, 0 = no limit")
-		key         = flag.String("key", "sk-demo-123", "API key")
+		key         = flag.String("key", os.Getenv("GATEWAY_API_KEY"), "API key (prefer env GATEWAY_API_KEY)")
 	)
 	flag.Parse()
+	if *key == "" {
+		log.Fatal("API key is required; pass -key or set GATEWAY_API_KEY")
+	}
 
 	body, _ := json.Marshal(map[string]interface{}{
 		"model": "default",
