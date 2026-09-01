@@ -66,7 +66,7 @@ func TestGatewayRevokesDeletedKeyAfterControlUpdate(t *testing.T) {
 			if err := registry.UpdateRoutes(RoutesFromProto(cfg.Routes)); err != nil {
 				return err
 			}
-			authStore.Update(cfg.Keys)
+			authStore.UpdateRecords(KeyRecordsToAuth(cfg.KeyRecords))
 			return nil
 		})
 	}()

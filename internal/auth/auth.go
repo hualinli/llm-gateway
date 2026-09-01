@@ -27,11 +27,18 @@ type MemoryStore struct {
 }
 
 func NewMemoryStore(keys map[string]string) *MemoryStore {
-	// keys: rawKey -> tenantID，入参是明文，内部转哈希
+	// Legacy compatibility constructor. New control-plane paths should use
+	// NewMemoryStoreFromRecords so raw keys never cross the config boundary.
 	m := &MemoryStore{keys: make(map[string]string, len(keys))}
 	for k, tenant := range keys {
 		m.keys[hash(k)] = tenant
 	}
+	return m
+}
+
+func NewMemoryStoreFromRecords(records []KeyRecord) *MemoryStore {
+	m := &MemoryStore{keys: make(map[string]string, len(records))}
+	m.UpdateRecords(records)
 	return m
 }
 
@@ -44,9 +51,23 @@ func (m *MemoryStore) Validate(rawKey string) (string, bool) {
 
 // Update 热更全量 Keys（控制面推送时调用），原子替换。
 func (m *MemoryStore) Update(keys map[string]string) {
+	// Legacy compatibility path. It hashes before replacing the snapshot.
 	newKeys := make(map[string]string, len(keys))
 	for k, tenant := range keys {
 		newKeys[hash(k)] = tenant
+	}
+	m.mu.Lock()
+	m.keys = newKeys
+	m.mu.Unlock()
+}
+
+func (m *MemoryStore) UpdateRecords(records []KeyRecord) {
+	newKeys := make(map[string]string, len(records))
+	for _, record := range records {
+		if record.Hash == "" || record.TenantID == "" || (record.Status != "" && record.Status != "active") {
+			continue
+		}
+		newKeys[record.Hash] = record.TenantID
 	}
 	m.mu.Lock()
 	m.keys = newKeys
@@ -57,9 +78,15 @@ func (m *MemoryStore) Update(keys map[string]string) {
 // Gateway 收到路由配置错误时也可以优先执行撤销，避免一个无效路由阻塞
 // 管理员刚刚删除的凭据；后续完整配置仍需修正后再原子替换。
 func (m *MemoryStore) RevokeMissing(keys map[string]string) {
-	allowed := make(map[string]struct{}, len(keys))
-	for k := range keys {
-		allowed[hash(k)] = struct{}{}
+	m.RevokeMissingRecords(LegacyRecords(keys))
+}
+
+func (m *MemoryStore) RevokeMissingRecords(records []KeyRecord) {
+	allowed := make(map[string]struct{}, len(records))
+	for _, record := range records {
+		if record.Hash != "" && (record.Status == "" || record.Status == "active") {
+			allowed[record.Hash] = struct{}{}
+		}
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()

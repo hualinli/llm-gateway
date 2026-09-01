@@ -1,8 +1,6 @@
 package main
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -14,11 +12,18 @@ import (
 	pb "llm-gateway/proto/control"
 )
 
-func redactKeys(keys map[string]string) map[string]string {
-	out := make(map[string]string, len(keys))
-	for raw, tenant := range keys {
-		sum := sha256.Sum256([]byte(raw))
-		out["sha256:"+hex.EncodeToString(sum[:])[:16]] = tenant
+func redactKeyRecords(records []*pb.KeyRecord) []map[string]string {
+	out := make([]map[string]string, 0, len(records))
+	for _, record := range records {
+		if record == nil {
+			continue
+		}
+		out = append(out, map[string]string{
+			"key_id":     record.KeyId,
+			"key_prefix": record.KeyPrefix,
+			"tenant_id":  record.TenantId,
+			"status":     record.Status,
+		})
 	}
 	return out
 }
@@ -66,37 +71,47 @@ func main() {
 			// 转成便于 curl 看的 JSON 形态
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"version": cfg.Version,
-				"keys":    redactKeys(cfg.Keys),
+				"keys":    redactKeyRecords(cfg.KeyRecords),
 				"routes":  control.RoutesFromProto(cfg.Routes),
 			})
 		case http.MethodPost:
 			var req struct {
-				Keys   map[string]string   `json:"keys"`
-				Routes map[string][]string `json:"routes"`
+				Keys       map[string]string   `json:"keys"` // legacy input; converted to hashes before persistence
+				KeyRecords []*pb.KeyRecord     `json:"key_records"`
+				Routes     map[string][]string `json:"routes"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				http.Error(w, err.Error(), 400)
 				return
 			}
 			old, _ := srv.GetConfig(r.Context(), &pb.GetRequest{})
-			// 兜底：空则保留旧值
-			keys, routes := req.Keys, control.RoutesToProto(req.Routes)
-			if keys == nil {
-				keys = old.Keys
+			// 兜底：空则保留旧值。Legacy keys 只在请求边界转换，新的
+			// Config/Store/Watch 路径只保存 KeyRecords。
+			records, routes := req.KeyRecords, control.RoutesToProto(req.Routes)
+			if records == nil && req.Keys == nil {
+				records = old.KeyRecords
 			}
 			if req.Routes == nil {
 				routes = old.Routes
 			}
-			// 版本推进/持久化/广播全部收敛到 ApplyConfig，持久化失败则拒绝本次写入
-			newCfg, err := srv.ApplyConfig(keys, routes)
-			if err != nil {
-				http.Error(w, "persist config: "+err.Error(), http.StatusInternalServerError)
+			var (
+				newCfg   *pb.Config
+				applyErr error
+			)
+			if records != nil {
+				newCfg, applyErr = srv.ApplyKeyRecords(records, routes)
+			} else {
+				// Compatibility for the local demo; ApplyConfig hashes immediately.
+				newCfg, applyErr = srv.ApplyConfig(req.Keys, routes)
+			}
+			if applyErr != nil {
+				http.Error(w, "persist config: "+applyErr.Error(), http.StatusInternalServerError)
 				return
 			}
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"version": newCfg.Version,
-				"keys":    redactKeys(newCfg.Keys),
-				"routes":  req.Routes,
+				"keys":    redactKeyRecords(newCfg.KeyRecords),
+				"routes":  control.RoutesFromProto(newCfg.Routes),
 			})
 		default:
 			http.Error(w, "method not allowed", 405)

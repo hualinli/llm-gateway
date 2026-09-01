@@ -62,7 +62,7 @@ func TestGRPCMutualTLSGetConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Version != 1 || cfg.Keys["test-key"] != "tenant-a" {
+	if cfg.Version != 1 || !hasKeyRecord(cfg.KeyRecords, "tenant-a") {
 		t.Fatalf("unexpected mTLS config: %+v", cfg)
 	}
 }

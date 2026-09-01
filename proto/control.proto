@@ -13,12 +13,21 @@ service ConfigService {
 
 message Config {
   int64 version = 1;
-  map<string, string> keys = 2;               // rawKey -> tenant
+  map<string, string> keys = 2 [deprecated = true]; // legacy rawKey -> tenant; do not populate in new configs
   map<string, ProviderList> routes = 3;       // model -> providers
+  repeated KeyRecord key_records = 4;         // hash-based credentials for new configs
 }
 
 message ProviderList {
   repeated string providers = 1;
+}
+
+message KeyRecord {
+  string key_id = 1;
+  string key_hash = 2;
+  string key_prefix = 3;
+  string tenant_id = 4;
+  string status = 5;
 }
 
 message GetRequest {}

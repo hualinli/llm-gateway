@@ -22,10 +22,12 @@ const (
 )
 
 type Config struct {
-	state         protoimpl.MessageState   `protogen:"open.v1"`
-	Version       int64                    `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
-	Keys          map[string]string        `protobuf:"bytes,2,rep,name=keys,proto3" json:"keys,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`     // rawKey -> tenant
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Version int64                  `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
+	// Deprecated: Marked as deprecated in proto/control.proto.
+	Keys          map[string]string        `protobuf:"bytes,2,rep,name=keys,proto3" json:"keys,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`     // legacy rawKey -> tenant; do not populate in new configs
 	Routes        map[string]*ProviderList `protobuf:"bytes,3,rep,name=routes,proto3" json:"routes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // model -> providers
+	KeyRecords    []*KeyRecord             `protobuf:"bytes,4,rep,name=key_records,json=keyRecords,proto3" json:"key_records,omitempty"`                                                 // hash-based credentials for new configs
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -67,6 +69,7 @@ func (x *Config) GetVersion() int64 {
 	return 0
 }
 
+// Deprecated: Marked as deprecated in proto/control.proto.
 func (x *Config) GetKeys() map[string]string {
 	if x != nil {
 		return x.Keys
@@ -77,6 +80,13 @@ func (x *Config) GetKeys() map[string]string {
 func (x *Config) GetRoutes() map[string]*ProviderList {
 	if x != nil {
 		return x.Routes
+	}
+	return nil
+}
+
+func (x *Config) GetKeyRecords() []*KeyRecord {
+	if x != nil {
+		return x.KeyRecords
 	}
 	return nil
 }
@@ -125,6 +135,82 @@ func (x *ProviderList) GetProviders() []string {
 	return nil
 }
 
+type KeyRecord struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	KeyId         string                 `protobuf:"bytes,1,opt,name=key_id,json=keyId,proto3" json:"key_id,omitempty"`
+	KeyHash       string                 `protobuf:"bytes,2,opt,name=key_hash,json=keyHash,proto3" json:"key_hash,omitempty"`
+	KeyPrefix     string                 `protobuf:"bytes,3,opt,name=key_prefix,json=keyPrefix,proto3" json:"key_prefix,omitempty"`
+	TenantId      string                 `protobuf:"bytes,4,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	Status        string                 `protobuf:"bytes,5,opt,name=status,proto3" json:"status,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *KeyRecord) Reset() {
+	*x = KeyRecord{}
+	mi := &file_proto_control_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *KeyRecord) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*KeyRecord) ProtoMessage() {}
+
+func (x *KeyRecord) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_control_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use KeyRecord.ProtoReflect.Descriptor instead.
+func (*KeyRecord) Descriptor() ([]byte, []int) {
+	return file_proto_control_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *KeyRecord) GetKeyId() string {
+	if x != nil {
+		return x.KeyId
+	}
+	return ""
+}
+
+func (x *KeyRecord) GetKeyHash() string {
+	if x != nil {
+		return x.KeyHash
+	}
+	return ""
+}
+
+func (x *KeyRecord) GetKeyPrefix() string {
+	if x != nil {
+		return x.KeyPrefix
+	}
+	return ""
+}
+
+func (x *KeyRecord) GetTenantId() string {
+	if x != nil {
+		return x.TenantId
+	}
+	return ""
+}
+
+func (x *KeyRecord) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
 type GetRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -133,7 +219,7 @@ type GetRequest struct {
 
 func (x *GetRequest) Reset() {
 	*x = GetRequest{}
-	mi := &file_proto_control_proto_msgTypes[2]
+	mi := &file_proto_control_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -145,7 +231,7 @@ func (x *GetRequest) String() string {
 func (*GetRequest) ProtoMessage() {}
 
 func (x *GetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_control_proto_msgTypes[2]
+	mi := &file_proto_control_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -158,7 +244,7 @@ func (x *GetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRequest.ProtoReflect.Descriptor instead.
 func (*GetRequest) Descriptor() ([]byte, []int) {
-	return file_proto_control_proto_rawDescGZIP(), []int{2}
+	return file_proto_control_proto_rawDescGZIP(), []int{3}
 }
 
 type WatchRequest struct {
@@ -170,7 +256,7 @@ type WatchRequest struct {
 
 func (x *WatchRequest) Reset() {
 	*x = WatchRequest{}
-	mi := &file_proto_control_proto_msgTypes[3]
+	mi := &file_proto_control_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -182,7 +268,7 @@ func (x *WatchRequest) String() string {
 func (*WatchRequest) ProtoMessage() {}
 
 func (x *WatchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_control_proto_msgTypes[3]
+	mi := &file_proto_control_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -195,7 +281,7 @@ func (x *WatchRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchRequest.ProtoReflect.Descriptor instead.
 func (*WatchRequest) Descriptor() ([]byte, []int) {
-	return file_proto_control_proto_rawDescGZIP(), []int{3}
+	return file_proto_control_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *WatchRequest) GetVersion() int64 {
@@ -209,11 +295,13 @@ var File_proto_control_proto protoreflect.FileDescriptor
 
 const file_proto_control_proto_rawDesc = "" +
 	"\n" +
-	"\x13proto/control.proto\x12\acontrol\"\x91\x02\n" +
+	"\x13proto/control.proto\x12\acontrol\"\xca\x02\n" +
 	"\x06Config\x12\x18\n" +
-	"\aversion\x18\x01 \x01(\x03R\aversion\x12-\n" +
-	"\x04keys\x18\x02 \x03(\v2\x19.control.Config.KeysEntryR\x04keys\x123\n" +
-	"\x06routes\x18\x03 \x03(\v2\x1b.control.Config.RoutesEntryR\x06routes\x1a7\n" +
+	"\aversion\x18\x01 \x01(\x03R\aversion\x121\n" +
+	"\x04keys\x18\x02 \x03(\v2\x19.control.Config.KeysEntryB\x02\x18\x01R\x04keys\x123\n" +
+	"\x06routes\x18\x03 \x03(\v2\x1b.control.Config.RoutesEntryR\x06routes\x123\n" +
+	"\vkey_records\x18\x04 \x03(\v2\x12.control.KeyRecordR\n" +
+	"keyRecords\x1a7\n" +
 	"\tKeysEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1aP\n" +
@@ -221,7 +309,14 @@ const file_proto_control_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12+\n" +
 	"\x05value\x18\x02 \x01(\v2\x15.control.ProviderListR\x05value:\x028\x01\",\n" +
 	"\fProviderList\x12\x1c\n" +
-	"\tproviders\x18\x01 \x03(\tR\tproviders\"\f\n" +
+	"\tproviders\x18\x01 \x03(\tR\tproviders\"\x91\x01\n" +
+	"\tKeyRecord\x12\x15\n" +
+	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12\x19\n" +
+	"\bkey_hash\x18\x02 \x01(\tR\akeyHash\x12\x1d\n" +
+	"\n" +
+	"key_prefix\x18\x03 \x01(\tR\tkeyPrefix\x12\x1b\n" +
+	"\ttenant_id\x18\x04 \x01(\tR\btenantId\x12\x16\n" +
+	"\x06status\x18\x05 \x01(\tR\x06status\"\f\n" +
 	"\n" +
 	"GetRequest\"(\n" +
 	"\fWatchRequest\x12\x18\n" +
@@ -242,28 +337,30 @@ func file_proto_control_proto_rawDescGZIP() []byte {
 	return file_proto_control_proto_rawDescData
 }
 
-var file_proto_control_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_proto_control_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_proto_control_proto_goTypes = []any{
 	(*Config)(nil),       // 0: control.Config
 	(*ProviderList)(nil), // 1: control.ProviderList
-	(*GetRequest)(nil),   // 2: control.GetRequest
-	(*WatchRequest)(nil), // 3: control.WatchRequest
-	nil,                  // 4: control.Config.KeysEntry
-	nil,                  // 5: control.Config.RoutesEntry
+	(*KeyRecord)(nil),    // 2: control.KeyRecord
+	(*GetRequest)(nil),   // 3: control.GetRequest
+	(*WatchRequest)(nil), // 4: control.WatchRequest
+	nil,                  // 5: control.Config.KeysEntry
+	nil,                  // 6: control.Config.RoutesEntry
 }
 var file_proto_control_proto_depIdxs = []int32{
-	4, // 0: control.Config.keys:type_name -> control.Config.KeysEntry
-	5, // 1: control.Config.routes:type_name -> control.Config.RoutesEntry
-	1, // 2: control.Config.RoutesEntry.value:type_name -> control.ProviderList
-	2, // 3: control.ConfigService.GetConfig:input_type -> control.GetRequest
-	3, // 4: control.ConfigService.WatchConfig:input_type -> control.WatchRequest
-	0, // 5: control.ConfigService.GetConfig:output_type -> control.Config
-	0, // 6: control.ConfigService.WatchConfig:output_type -> control.Config
-	5, // [5:7] is the sub-list for method output_type
-	3, // [3:5] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	5, // 0: control.Config.keys:type_name -> control.Config.KeysEntry
+	6, // 1: control.Config.routes:type_name -> control.Config.RoutesEntry
+	2, // 2: control.Config.key_records:type_name -> control.KeyRecord
+	1, // 3: control.Config.RoutesEntry.value:type_name -> control.ProviderList
+	3, // 4: control.ConfigService.GetConfig:input_type -> control.GetRequest
+	4, // 5: control.ConfigService.WatchConfig:input_type -> control.WatchRequest
+	0, // 6: control.ConfigService.GetConfig:output_type -> control.Config
+	0, // 7: control.ConfigService.WatchConfig:output_type -> control.Config
+	6, // [6:8] is the sub-list for method output_type
+	4, // [4:6] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_proto_control_proto_init() }
@@ -277,7 +374,7 @@ func file_proto_control_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_control_proto_rawDesc), len(file_proto_control_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

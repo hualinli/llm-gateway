@@ -215,7 +215,7 @@
 
 - `/config` 管理接口没有认证和授权；
 - 本地 Demo 默认使用 insecure credentials；TLS/mTLS 已有可配置实现，生产部署必须提供证书并开启校验；
-- proto 和 PostgreSQL 中保存 raw API key；
+- 新配置已使用 `KeyRecord` 的 hash/metadata，不再写入 raw API key；旧历史配置仍可能包含 raw key，数据库历史 payload 脱敏迁移待做；
 - `/config` GET 已返回 key hash prefix，不再返回明文 API key；
 - watcher channel 现在会保留最新快照，不再简单丢弃后续版本；仍需增加慢连接和生产网络故障注入测试；
 - ApplyConfig 现在串行化版本生成；
@@ -474,9 +474,9 @@ downstream client
 
 - 管理 HTTP API 认证和授权；
 - gRPC TLS/mTLS；
-- proto 和数据库不保存 raw API Key；
-- `/config` 不返回密钥原文；
-- API Key 只保存 hash 或 credential reference；
+- 新配置 proto 和数据库不保存 raw API Key；**KeyRecord hash/metadata 第一阶段已完成，历史 payload 清理仍待做**；
+- `/config` 不返回密钥原文；**已完成**；
+- API Key 只保存 hash 或 credential reference；**当前已完成 hash 版本，credential reference 仍待接入**；
 - `ApplyConfig` 串行生成版本，避免并发写入产生同版本；**已完成**；
 - 已完成 watcher 满时保留最新快照，避免连接保持存活但永久停留旧版本；
 - Gateway 控制面连接已启用 gRPC keepalive；

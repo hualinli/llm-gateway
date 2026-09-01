@@ -84,7 +84,7 @@ func main() {
 	controlSync := control.NewSynchronizer(controlAddr, control.SyncOptions{
 		PollInterval:   durationEnv("CONTROL_CONFIG_POLL_INTERVAL", 30*time.Second),
 		LeaseTimeout:   durationEnv("CONTROL_CONFIG_LEASE", 0),
-		OnLeaseExpired: func() { authStore.Update(map[string]string{}) },
+		OnLeaseExpired: func() { authStore.UpdateRecords(nil) },
 		TLS:            control.TLSConfigFromEnv(),
 	})
 	go func() {
@@ -92,11 +92,11 @@ func main() {
 			log.Printf("control: hot reload to v%d", cfg.Version)
 			if err := registry.UpdateRoutes(control.RoutesFromProto(cfg.Routes)); err != nil {
 				// 路由配置失败时仍优先撤销已删除凭据；新增 key 要等完整配置修复后生效。
-				authStore.RevokeMissing(cfg.Keys)
+				authStore.RevokeMissingRecords(control.KeyRecordsToAuth(cfg.KeyRecords))
 				log.Printf("control: reject config v%d: %v", cfg.Version, err)
 				return err
 			}
-			authStore.Update(cfg.Keys)
+			authStore.UpdateRecords(control.KeyRecordsToAuth(cfg.KeyRecords))
 			return nil
 		})
 		if err != nil && controlCtx.Err() == nil {

@@ -41,6 +41,23 @@ func TestMiddlewareRequiresBearerScheme(t *testing.T) {
 	}
 }
 
+func TestMemoryStoreRecordsUseHashAndStatus(t *testing.T) {
+	record := NewKeyRecord("key-1", "test-key", "tenant-a")
+	store := NewMemoryStoreFromRecords([]KeyRecord{
+		record,
+		{ID: "key-2", Hash: HashKey("revoked-key"), TenantID: "tenant-a", Status: "revoked"},
+	})
+	if tenant, ok := store.Validate("test-key"); !ok || tenant != "tenant-a" {
+		t.Fatalf("record validation = %q, %v", tenant, ok)
+	}
+	if _, ok := store.Validate("revoked-key"); ok {
+		t.Fatal("revoked record was accepted")
+	}
+	if record.Hash == "test-key" {
+		t.Fatalf("record retained raw key as hash: %+v", record)
+	}
+}
+
 func TestMemoryStoreRevokeMissing(t *testing.T) {
 	store := NewMemoryStore(map[string]string{
 		"key-a": "tenant-a",

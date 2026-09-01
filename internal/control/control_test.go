@@ -72,15 +72,18 @@ func TestApplyConfigCopiesCallerOwnedData(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if len(cfg.Keys) != 0 || len(cfg.KeyRecords) != 1 {
+		t.Fatalf("ApplyConfig emitted legacy keys: %+v", cfg)
+	}
 
 	keys["sk-2"] = "tenant-b"
 	routeProviders[0] = "mutated"
-	cfg.Keys["sk-3"] = "tenant-c"
+	cfg.KeyRecords[0].TenantId = "tenant-c"
 	cfg.Routes["default"].Providers[0] = "mutated-again"
 
 	got := srv.CurrentConfig()
-	if len(got.Keys) != 1 || got.Keys["sk-1"] != "tenant-a" {
-		t.Fatalf("stored keys were aliased: %+v", got.Keys)
+	if len(got.KeyRecords) != 1 || got.KeyRecords[0].TenantId != "tenant-a" {
+		t.Fatalf("stored key records were aliased: %+v", got.KeyRecords)
 	}
 	if got.Routes["default"].Providers[0] != "mock-a" {
 		t.Fatalf("stored routes were aliased: %+v", got.Routes)
@@ -170,6 +173,27 @@ func TestApplyConfigPersistenceFailureRollsBack(t *testing.T) {
 }
 
 // 重启恢复：新实例必须从 Store 拿到最高版本，接着递增，而不是回到 1。
+func TestRestoreLegacyRawConfigAsKeyRecords(t *testing.T) {
+	st := NewMemoryStore()
+	if err := st.Save(context.Background(), &pb.Config{
+		Version: 7,
+		Keys:    map[string]string{"legacy-key": "tenant-a"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	srv, err := NewServer(st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := srv.CurrentConfig()
+	if len(cfg.Keys) != 0 || len(cfg.KeyRecords) != 1 {
+		t.Fatalf("legacy config was not normalized: %+v", cfg)
+	}
+	if cfg.KeyRecords[0].KeyHash == "" || cfg.KeyRecords[0].TenantId != "tenant-a" {
+		t.Fatalf("invalid normalized record: %+v", cfg.KeyRecords[0])
+	}
+}
+
 func TestRestoreAfterRestart(t *testing.T) {
 	st := NewMemoryStore()
 	srv, _ := NewServer(st)
@@ -262,7 +286,7 @@ func TestGRPCGetAndWatchOverNetwork(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Version != 1 || got.Keys["sk-1"] != "tenant-a" {
+	if got.Version != 1 || !hasKeyRecord(got.KeyRecords, "tenant-a") {
 		t.Fatalf("unexpected GetConfig response: %+v", got)
 	}
 
@@ -286,7 +310,7 @@ func TestGRPCGetAndWatchOverNetwork(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if second.Version != 2 || second.Keys["sk-2"] != "tenant-b" {
+	if second.Version != 2 || !hasKeyRecord(second.KeyRecords, "tenant-b") {
 		t.Fatalf("update watch response=%+v", second)
 	}
 }
@@ -305,6 +329,15 @@ func TestWatchNoSpuriousInitialSend(t *testing.T) {
 	if n := len(fs.versions()); n != 0 {
 		t.Fatalf("got %d initial sends for up-to-date client, want 0", n)
 	}
+}
+
+func hasKeyRecord(records []*pb.KeyRecord, tenant string) bool {
+	for _, record := range records {
+		if record != nil && record.TenantId == tenant {
+			return true
+		}
+	}
+	return false
 }
 
 func waitFor(t *testing.T, cond func() bool, what string) {

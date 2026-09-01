@@ -2,12 +2,16 @@ package control
 
 import (
 	"context"
+	"encoding/hex"
+	"fmt"
 	"log"
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"llm-gateway/internal/auth"
 	pb "llm-gateway/proto/control"
 
 	"google.golang.org/grpc"
@@ -41,18 +45,33 @@ func NewServer(store Store) (*Server, error) {
 		return nil, err
 	}
 	if latest != nil {
+		latest = normalizeConfig(latest)
+		if err := validateKeyRecords(latest.KeyRecords); err != nil {
+			return nil, fmt.Errorf("invalid restored credentials: %w", err)
+		}
 		s.cfg.Store(latest)
 		log.Printf("control: restored v%d from store", latest.Version)
 	}
 	return s, nil
 }
 
-// ApplyConfig 写入新配置：版本 = 当前 + 1，落盘成功后才对内生效并广播。
+// ApplyConfig is the legacy raw-key compatibility entry point. It hashes the
+// input immediately and persists only KeyRecords in the Config proto.
 func (s *Server) ApplyConfig(keys map[string]string, routes map[string]*pb.ProviderList) (*pb.Config, error) {
+	return s.ApplyKeyRecords(keyRecordsFromLegacy(keys), routes)
+}
+
+// ApplyKeyRecords writes a safe credential snapshot: raw keys are never placed
+// in the Config message, store payload, or Watch broadcast.
+func (s *Server) ApplyKeyRecords(records []*pb.KeyRecord, routes map[string]*pb.ProviderList) (*pb.Config, error) {
+	if err := validateKeyRecords(records); err != nil {
+		return nil, err
+	}
 	s.applyMu.Lock()
 	defer s.applyMu.Unlock()
 
-	next := cloneConfig(&pb.Config{Version: s.CurrentConfig().Version + 1, Keys: keys, Routes: routes})
+	next := cloneConfig(&pb.Config{Version: s.CurrentConfig().Version, KeyRecords: records, Routes: routes})
+	next.Version++
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	if err := s.store.Save(ctx, next); err != nil {
@@ -60,7 +79,7 @@ func (s *Server) ApplyConfig(keys map[string]string, routes map[string]*pb.Provi
 	}
 	s.cfg.Store(next)
 	s.broadcast(next)
-	log.Printf("control: apply version=%d keys=%d routes=%d", next.Version, len(keys), len(routes))
+	log.Printf("control: apply version=%d keys=%d routes=%d", next.Version, len(records), len(routes))
 	return cloneConfig(next), nil
 }
 
@@ -68,7 +87,7 @@ func (s *Server) GetConfig(_ context.Context, _ *pb.GetRequest) (*pb.Config, err
 	if c := s.cfg.Load(); c != nil {
 		return cloneConfig(c), nil
 	}
-	return &pb.Config{Version: 0, Keys: map[string]string{}, Routes: map[string]*pb.ProviderList{}}, nil
+	return &pb.Config{Version: 0, KeyRecords: []*pb.KeyRecord{}, Routes: map[string]*pb.ProviderList{}}, nil
 }
 
 // WatchConfig 真实推送：注册 watcher，先补发req之后已生效的版本，之后每次 ApplyConfig 即时送达。
@@ -147,6 +166,79 @@ func cloneConfig(cfg *pb.Config) *pb.Config {
 		return &pb.Config{Version: 0}
 	}
 	return proto.Clone(cfg).(*pb.Config)
+}
+
+func normalizeConfig(cfg *pb.Config) *pb.Config {
+	out := cloneConfig(cfg)
+	if len(out.KeyRecords) == 0 && len(out.Keys) > 0 {
+		out.KeyRecords = keyRecordsFromLegacy(out.Keys)
+	}
+	// New snapshots never expose or persist the legacy raw-key field.
+	out.Keys = nil
+	return out
+}
+
+func keyRecordsFromLegacy(keys map[string]string) []*pb.KeyRecord {
+	legacy := auth.LegacyRecords(keys)
+	out := make([]*pb.KeyRecord, 0, len(legacy))
+	for _, record := range legacy {
+		out = append(out, &pb.KeyRecord{
+			KeyId:     record.ID,
+			KeyHash:   record.Hash,
+			KeyPrefix: record.Prefix,
+			TenantId:  record.TenantID,
+			Status:    record.Status,
+		})
+	}
+	return out
+}
+
+func validateKeyRecords(records []*pb.KeyRecord) error {
+	ids := make(map[string]struct{}, len(records))
+	hashes := make(map[string]struct{}, len(records))
+	for _, record := range records {
+		if record == nil {
+			return fmt.Errorf("key record is nil")
+		}
+		if strings.TrimSpace(record.KeyId) == "" || strings.TrimSpace(record.TenantId) == "" {
+			return fmt.Errorf("key record requires key_id and tenant_id")
+		}
+		if len(record.KeyHash) != 64 {
+			return fmt.Errorf("key record %q has invalid hash length", record.KeyId)
+		}
+		if _, err := hex.DecodeString(record.KeyHash); err != nil {
+			return fmt.Errorf("key record %q has invalid hash: %w", record.KeyId, err)
+		}
+		if record.Status != "" && record.Status != "active" && record.Status != "revoked" {
+			return fmt.Errorf("key record %q has invalid status %q", record.KeyId, record.Status)
+		}
+		if _, ok := ids[record.KeyId]; ok {
+			return fmt.Errorf("duplicate key_id %q", record.KeyId)
+		}
+		if _, ok := hashes[record.KeyHash]; ok {
+			return fmt.Errorf("duplicate key_hash for key_id %q", record.KeyId)
+		}
+		ids[record.KeyId] = struct{}{}
+		hashes[record.KeyHash] = struct{}{}
+	}
+	return nil
+}
+
+func KeyRecordsToAuth(records []*pb.KeyRecord) []auth.KeyRecord {
+	out := make([]auth.KeyRecord, 0, len(records))
+	for _, record := range records {
+		if record == nil {
+			continue
+		}
+		out = append(out, auth.KeyRecord{
+			ID:       record.KeyId,
+			Hash:     record.KeyHash,
+			Prefix:   record.KeyPrefix,
+			TenantID: record.TenantId,
+			Status:   record.Status,
+		})
+	}
+	return out
 }
 
 // NewGRPCServer 构造控制面 gRPC server，便于进程入口和网络集成测试复用。
