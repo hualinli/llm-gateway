@@ -29,6 +29,15 @@ func redactKeyRecords(records []*pb.KeyRecord) []map[string]string {
 	return out
 }
 
+func flagEnv(name string) bool {
+	value := os.Getenv(name)
+	return value == "1" || value == "true" || value == "yes"
+}
+
+func allowLegacyKeyInput(requireAdminAuth, requirePostgres bool) bool {
+	return !requireAdminAuth && !requirePostgres
+}
+
 func main() {
 	store, err := control.NewStore()
 	if err != nil {
@@ -61,7 +70,9 @@ func main() {
 	// HTTP 管理面 :50052；本地 Demo 可不配置 token，生产必须开启鉴权。
 	mux := http.NewServeMux()
 	adminToken := os.Getenv("CONTROL_ADMIN_TOKEN")
-	requireAdminAuth := os.Getenv("CONTROL_REQUIRE_ADMIN_AUTH") == "1" || os.Getenv("CONTROL_REQUIRE_ADMIN_AUTH") == "true"
+	requireAdminAuth := flagEnv("CONTROL_REQUIRE_ADMIN_AUTH")
+	requirePostgres := flagEnv("CONTROL_REQUIRE_POSTGRES")
+	legacyKeyInputAllowed := allowLegacyKeyInput(requireAdminAuth, requirePostgres)
 	if requireAdminAuth && adminToken == "" {
 		log.Fatal("CONTROL_REQUIRE_ADMIN_AUTH requires CONTROL_ADMIN_TOKEN")
 	}
@@ -83,6 +94,10 @@ func main() {
 			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				http.Error(w, err.Error(), 400)
+				return
+			}
+			if req.Keys != nil && !legacyKeyInputAllowed {
+				http.Error(w, "legacy keys input is disabled; use key_records or the credential service", http.StatusBadRequest)
 				return
 			}
 			old, _ := srv.GetConfig(r.Context(), &pb.GetRequest{})

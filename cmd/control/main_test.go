@@ -6,6 +6,18 @@ import (
 	pb "llm-gateway/proto/control"
 )
 
+func TestAllowLegacyKeyInput(t *testing.T) {
+	if !allowLegacyKeyInput(false, false) {
+		t.Fatal("local demo should allow legacy compatibility input")
+	}
+	if allowLegacyKeyInput(true, false) {
+		t.Fatal("admin-auth mode must reject legacy compatibility input")
+	}
+	if allowLegacyKeyInput(false, true) {
+		t.Fatal("postgres-required mode must reject legacy compatibility input")
+	}
+}
+
 func TestRedactKeyRecords(t *testing.T) {
 	redacted := redactKeyRecords([]*pb.KeyRecord{{
 		KeyId: "key-1", KeyPrefix: "in...", TenantId: "tenant-a", Status: "active",

@@ -639,6 +639,7 @@ CONTROL_ADMIN_TOKEN='' # 管理面 Bearer token；生产配合下方 require 开
 CONTROL_REQUIRE_ADMIN_AUTH=false # 生产建议 true；未配置 token 时拒绝启动
 METERING_SPOOL_DIR='./data/metering-spool' # 可选；Redis 故障时本地持久化计量事件
 CONTROL_REQUIRE_POSTGRES=false # 生产建议 true；PG 不可用时拒绝启动 control
+# 正式模式（开启 CONTROL_REQUIRE_ADMIN_AUTH 或 CONTROL_REQUIRE_POSTGRES）拒绝 /config 的 legacy keys；仅本地 Demo 兼容
 METERING_REQUIRE_POSTGRES=false # 生产建议 true；PG 不可用时拒绝启动 metering
 
 # 可选：注册一个 OpenAI-compatible Provider
@@ -658,7 +659,7 @@ curl -X POST http://localhost:50052/config \
 
 如果只使用内置 Mock，则不设置 `OPENAI_BASE_URL`，默认路由使用 `mock-a` 和 `mock-b`。
 
-注意：`cmd/control` 的 `/config` 默认仍是本地 Demo 模式；生产必须设置 `CONTROL_ADMIN_TOKEN` 并开启 `CONTROL_REQUIRE_ADMIN_AUTH=true`，同时配置 gRPC TLS/mTLS。管理接口返回的是 key hash prefix，不返回 raw API key；当前完整角色/租户授权仍待 Management Service。
+注意：`cmd/control` 的 `/config` 默认仍是本地 Demo 模式；生产必须设置 `CONTROL_ADMIN_TOKEN` 并开启 `CONTROL_REQUIRE_ADMIN_AUTH=true`，同时配置 gRPC TLS/mTLS。管理接口返回的是 key hash prefix，不返回 raw API key；正式模式会拒绝请求体中的 legacy `keys`，应使用 `key_records` 或后续 CredentialService；Service 层 admin/tenant-user 授权核心已完成，正式身份令牌和 HTTP facade 仍待接入。
 
 ### 5.2 测试 SSE
 
