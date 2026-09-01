@@ -80,6 +80,11 @@ func (LogAuditSink) Record(_ context.Context, event AuditEvent) {
 		event.RequestID, event.TraceID, event.ConfigVersion, event.KeyCount)
 }
 
+func logAuditWriteFailure(event AuditEvent, err error) {
+	log.Printf("control audit persistence failed action=%s outcome=%s subject=%s tenant_id=%s key_id=%s request_id=%s trace_id=%s err=%v",
+		event.Action, event.Outcome, event.Subject, event.TenantID, event.KeyID, event.RequestID, event.TraceID, err)
+}
+
 func auditEventFromContext(ctx context.Context, action, outcome string, principal Principal) AuditEvent {
 	return AuditEvent{
 		Time:      time.Now().UTC(),

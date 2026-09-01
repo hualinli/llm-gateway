@@ -29,6 +29,22 @@ func redactKeyRecords(records []*pb.KeyRecord) []map[string]string {
 	return out
 }
 
+func principalSubject(r *http.Request) string {
+	principal, ok := control.PrincipalFromContext(r.Context())
+	if !ok {
+		return "unknown"
+	}
+	return principal.Subject
+}
+
+func principalRole(r *http.Request) control.Role {
+	principal, ok := control.PrincipalFromContext(r.Context())
+	if !ok {
+		return "unknown"
+	}
+	return principal.Role
+}
+
 func flagEnv(name string) bool {
 	value := os.Getenv(name)
 	return value == "1" || value == "true" || value == "yes"
@@ -48,6 +64,15 @@ func main() {
 		log.Fatalf("control init: %v", err)
 	}
 	// 空库启动时种入初始版，和 gateway 的写死版保持一致；有存档则直接恢复
+	auditSink := control.AuditSink(control.LogAuditSink{})
+	if pgStore, ok := store.(*control.PGStore); ok {
+		var auditErr error
+		auditSink, auditErr = control.NewPGAuditSink(pgStore.DB())
+		if auditErr != nil {
+			log.Fatalf("control audit store: %v", auditErr)
+		}
+	}
+
 	if srv.CurrentConfig().Version == 0 {
 		if _, err := srv.ApplyConfig(map[string]string{
 			"sk-demo-123": "tenant-demo",
@@ -121,9 +146,20 @@ func main() {
 				newCfg, applyErr = srv.ApplyConfig(req.Keys, routes)
 			}
 			if applyErr != nil {
+				auditSink.Record(r.Context(), control.AuditEvent{
+					Action: "config.apply", Outcome: "failure",
+					Subject: principalSubject(r), Role: principalRole(r),
+					RequestID: observability.RequestID(r.Context()), TraceID: observability.TraceID(r.Context()),
+				})
 				http.Error(w, "persist config: "+applyErr.Error(), http.StatusInternalServerError)
 				return
 			}
+			auditSink.Record(r.Context(), control.AuditEvent{
+				Action: "config.apply", Outcome: "success",
+				Subject: principalSubject(r), Role: principalRole(r),
+				RequestID: observability.RequestID(r.Context()), TraceID: observability.TraceID(r.Context()),
+				ConfigVersion: newCfg.Version, KeyCount: len(newCfg.KeyRecords),
+			})
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"version": newCfg.Version,
 				"keys":    redactKeyRecords(newCfg.KeyRecords),
