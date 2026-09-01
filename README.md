@@ -14,6 +14,7 @@
 | 限流 | 已完成基础实现 | Redis Lua 令牌桶和有界轮询等待；Redis 故障目前 fail-open |
 | 计量 | 已完成基础链路 | Redis Stream、Consumer Group、PG 唯一约束和基础 DLQ 已有；仍可能丢事件，对账口径也需重做 |
 | 控制面 | 已完成基础热更新 | gRPC Get/Watch、版本持久化和配置广播已有；管理面尚未鉴权，租约和周期性版本校验仍待做 |
+| 管理后台 | 尚未接入主线 | Hertz IDL/生成代码曾在 `wip/management-hertz`，handlers 仍为空；计划实现用户/管理员 CRUD 和安全接线 |
 | 可观测性 | 已完成基础实现 | Prometheus 指标、pprof、基础 Grafana Dashboard 已有 |
 | 压测 | 已完成基础工具 | 能统计 SSE TTFT/总耗时分位数；还没有足够可信的压测报告和完整抖动指标 |
 | 生产安全性 | 待做 | 明文 API Key、insecure gRPC、未鉴权管理面、默认账号密码等问题尚未解决 |
@@ -798,6 +799,8 @@ LIMITER_TEST_REDIS_ADDR=localhost:6379 \
 验收标准：
 
 - 管理 API 有认证授权；
+- 用户和管理员 CRUD 通过 Hertz HTTP facade 接入控制面 service；
+- 用户创建 API Key 只返回一次 raw key，列表仅返回 prefix，删除后优先撤销；
 - gRPC 使用 TLS/mTLS；
 - 数据库和配置下发不含 raw API Key；
 - Watch 丢消息后可以补拉最新版本；
