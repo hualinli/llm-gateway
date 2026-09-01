@@ -473,7 +473,7 @@ downstream client
 
 需要完成：
 
-- 管理 HTTP API 认证和授权；
+- 管理 HTTP API Bearer 认证；`Principal`、admin/tenant-user 租户范围授权和 CredentialService 授权核心已完成，正式身份令牌接入仍待做；
 - gRPC TLS/mTLS；
 - 新配置 proto 和数据库不保存 raw API Key；**KeyRecord hash/metadata 和 PGStore 历史 payload 迁移第一阶段已完成，仍需真实 PG 演练**；
 - `/config` 不返回密钥原文；**已完成**；
@@ -483,6 +483,7 @@ downstream client
 - Gateway 控制面连接已启用 gRPC keepalive；
 - Gateway 同步器已增加周期性 `GetConfig` 版本校验和可选配置租约；仍需增加生产网络故障注入、租约到期策略和慢 watcher 测试；
 - `CredentialService` 已支持 Create/List/Revoke：raw key 只在创建成功时返回一次，列表仅返回 metadata；
+- 已增加可替换的 `AuditSink`，记录安全 metadata 和 request/trace correlation，不记录 raw key/hash；
 - 必要时关闭慢 watcher 连接，强制重连补拉；
 - 配置 map 和 slice 深拷贝；
 - 配置校验通过后再原子发布。
@@ -816,9 +817,9 @@ CONTROL_TEST_POSTGRES_DSN='postgres://gateway:gateway@localhost:5433/llm_gateway
 
 验收标准：
 
-- 管理 API 有认证授权；
+- 管理 API Bearer 认证和 Service 层租户授权核心已完成；正式用户身份令牌仍待接入；
 - 用户和管理员 CRUD 通过 Hertz HTTP facade 接入控制面 service；
-- 用户创建 API Key 只返回一次 raw key，列表仅返回 prefix，删除后优先撤销；
+- 用户创建 API Key 只返回一次 raw key，列表仅返回 prefix，删除后优先撤销；**CredentialService 核心已完成，Hertz facade 待接入**；
 - gRPC 使用 TLS/mTLS；
 - 数据库和配置下发不含 raw API Key；
 - Watch 丢消息后可以补拉最新版本；**已完成基础重连、版本跳跃和 Gateway key 撤销测试**；
