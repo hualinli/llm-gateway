@@ -12,9 +12,10 @@ import (
 )
 
 const (
-	GroupName     = "metering-group"
-	ConsumerName  = "consumer-1"
-	DLQStreamName = StreamName + ":dlq"
+	GroupName            = "metering-group"
+	ConsumerName         = "consumer-1"
+	DLQStreamName        = StreamName + ":dlq"
+	consumerErrorBackoff = 100 * time.Millisecond
 )
 
 // Consumer 从 Stream 拉事件，幂等落台账，成功后 XACK
@@ -91,7 +92,11 @@ func (c *Consumer) Run(ctx context.Context) {
 			Block:    c.block,
 		}).Result()
 		if err != nil && err != redis.Nil {
-			// 超时或空流，继续
+			// Redis 故障时不要 tight-loop；消息仍由 Redis Stream 保留，
+			// 等待退避后重新读取，不改变 pending/ACK 语义。
+			if !waitConsumerRetry(ctx, consumerErrorBackoff) {
+				return
+			}
 			continue
 		}
 		for _, s := range streams {
@@ -99,6 +104,17 @@ func (c *Consumer) Run(ctx context.Context) {
 				c.handle(ctx, m)
 			}
 		}
+	}
+}
+
+func waitConsumerRetry(ctx context.Context, delay time.Duration) bool {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
 	}
 }
 
