@@ -13,7 +13,7 @@
 | Provider | OpenAI-compatible + Mock | Anthropic adapter、控制面 Provider 配置和更完整的真实上游治理仍待做 |
 | 限流 | 已完成基础实现 | Redis Lua 令牌桶和有界轮询等待；Redis 故障目前 fail-open |
 | 计量 | 已完成基础链路 | Redis Stream、Consumer Group、PG 唯一约束和基础 DLQ 已有；仍可能丢事件，对账口径也需重做 |
-| 控制面 | 已完成基础热更新 | gRPC Get/Watch、版本持久化和配置广播已有；管理面尚未鉴权，Watch 还有丢版本问题 |
+| 控制面 | 已完成基础热更新 | gRPC Get/Watch、版本持久化和配置广播已有；管理面尚未鉴权，租约和周期性版本校验仍待做 |
 | 可观测性 | 已完成基础实现 | Prometheus 指标、pprof、基础 Grafana Dashboard 已有 |
 | 压测 | 已完成基础工具 | 能统计 SSE TTFT/总耗时分位数；还没有足够可信的压测报告和完整抖动指标 |
 | 生产安全性 | 待做 | 明文 API Key、insecure gRPC、未鉴权管理面、默认账号密码等问题尚未解决 |
@@ -85,7 +85,7 @@
 
 当前限制：
 
-- 请求体没有大小限制；
+- 请求体已有 4 MiB 上限；messages 数量、单条内容长度和 model 长度校验仍待补充；
 - 只支持流式接口，不支持普通 JSON 响应；
 - OpenAI-compatible adapter 已实现，Anthropic 等其他真实上游尚未实现；
 - 尚无异步 per-connection queue；当前采用 adapter 单 event 有界缓冲、直接背压和每次写入 deadline，完整的可配置 bounded writer 仍待做；
@@ -216,7 +216,7 @@
 - gRPC 使用 insecure credentials，没有 TLS/mTLS；
 - proto 和 PostgreSQL 中保存 raw API key；
 - `/config` GET 会直接返回明文 API key；
-- watcher channel 现在会保留最新快照，不再简单丢弃后续版本；仍需增加版本跳跃和慢连接的专门测试；
+- watcher channel 现在会保留最新快照，不再简单丢弃后续版本；仍需增加版本跳跃、慢连接和断线重连的专门测试；
 - ApplyConfig 现在串行化版本生成；
 - 不存在的 Provider 现在会拒绝整版路由更新；
 - PostgreSQL 失败时回退内存，生产环境可能出现配置重启丢失。
