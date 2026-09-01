@@ -562,14 +562,232 @@ Redis Stream 可能重复投递，Consumer 也可能在写台账成功后、XACK
 
 ### API Key 应该如何处理
 
-当前 Demo 仍有明文 key 的实现问题。目标设计应是：
+当前设计是：
 
 ```text
 控制面/数据库：key_id + hash 或 credential reference
 Gateway 请求：收到 raw key 后只在内存中 hash 比较
 控制面下发：不传 raw key
-管理 API：不返回 raw key
+管理 API：只有 Create 成功响应返回一次 raw key
 ```
+
+本地 bootstrap credential 也只能通过 `LLM_GATEWAY_BOOTSTRAP_API_KEY` 环境变量注入，不写入源码、README 或日志。正式管理模式拒绝 `/config` 请求体中的 legacy `keys` map。
+
+### 核心问题复盘：实现、测试与当前边界
+
+以下问题是当前数据面、控制面和计费链路的核心验收问题。每项都区分了代码已经保证的内容和仍然存在的限制。
+
+#### 1. 上游 SSE 如何透明转发？
+
+当前链路是：
+
+```text
+Provider HTTP response body
+  → internal/provider/sse.Reader 按 SSE event 分帧
+  → OpenAI adapter 解析 usage / [DONE]
+  → 使用 event.Raw 原样写入下游 ResponseWriter
+  → Flush
+```
+
+`Reader` 负责 LF/CRLF、多行 `data`、`event`、`id`、comment 和 event 大小限制；adapter 只解析必要的语义，转发时仍使用 event 的原始字节。因此不会把整个响应缓存在网关内，也不会重新拼接 token。
+
+当前“透明”有边界：这是 OpenAI-compatible JSON SSE adapter，不是任意 SSE 字节代理。非 JSON data event、上游错误 event 或非法 SSE 会被识别为错误；网关仍会保留已经提交给客户端的原始 event 格式。
+
+测试证据：`internal/provider/openai_test.go`、`internal/provider/sse/reader_test.go`、`internal/proxy/proxy_openai_test.go`。
+
+#### 2. 哪一层负责 timeout？
+
+不是一个全局 timeout，而是按阶段负责：
+
+| 阶段 | 负责层 | 当前策略 |
+|---|---|---|
+| 客户端读取请求 | Gateway `http.Server` | `ReadTimeout=5s`，请求体另有限制 |
+| Provider 建连 | OpenAI `http.Transport` | `DialContext` connect timeout |
+| TLS 握手 | OpenAI `Transport` | `TLSHandshakeTimeout` |
+| 等待上游响应头 | OpenAI `Transport` | `ResponseHeaderTimeout` |
+| 首个完整 SSE event | OpenAI adapter | `FirstByteTimeout` |
+| SSE event 间空闲 | OpenAI adapter | `IdleTimeout` |
+| 单次 Provider attempt 总时长 | OpenAI adapter | `AttemptTimeout` |
+| 下游慢客户端写入 | Proxy `ResponseController` | 每次写入 deadline |
+| 限流排队 | Redis limiter | `queueTimeout`，当前 500ms |
+| Metering 批量 flush | Producer | 每批 bounded context，当前 2s |
+
+Gateway 的 `WriteTimeout` 保持为 0，因为全局写超时会错误截断长 SSE；流式写入由 Proxy 的 per-write deadline 和 Provider 的 stream idle/attempt timeout 控制。
+
+测试证据：`TestOpenAIProviderFirstEventTimeout`、`TestOpenAIProviderIdleTimeoutDoesNotHidePartialStream`、`TestOpenAIClientDisconnectCancelsUpstream`。
+
+#### 3. 什么错误可以 retry？
+
+只有“尚未向下游写出任何字节”时才允许切换备用 Provider。
+
+当前按以下规则分类：
+
+```text
+可重试：408、429、5xx、网络错误、连接错误、上游超时
+不可重试：400、401、402、403、404、413、422 等请求/配置终态错误
+```
+
+未知网络类错误默认按可重试处理；明确包装成 `UpstreamError{Retryable:false}` 的错误不会切备。
+
+首 event 之前发生可重试错误：
+
+```text
+继续尝试下一个 Provider
+```
+
+首 event 之后发生错误：
+
+```text
+不重放请求
+直接结束当前流
+```
+
+所有 Provider 都在首 event 前失败时，网关根据错误映射返回 400/408/429/502 等状态；上游 401 不直接伪装成客户端 API Key 失效，通常映射为 502。
+
+测试证据：`internal/provider/errors_test.go`、`TestOpenAIFailoverBeforeFirstEvent`、`TestOpenAIMidStreamFailureDoesNotReplayBackup`、`TestAllRetryable5xxMappedTo502`。
+
+#### 4. 按 API key、user 还是 model 限流？
+
+当前按 **tenant** 限流。
+
+```text
+API Key → tenant_id
+tenant_id → Redis token bucket
+```
+
+因此：
+
+```text
+同一个 tenant 的多个 API key 共享一个 bucket
+不同 tenant 使用不同 bucket
+model 不参与当前 bucket key
+user 概念尚未接入数据面
+```
+
+Redis Lua 脚本原子完成 token refill 和扣减，支持 burst 和有界排队。Redis 故障时当前策略是 fail-open，生产环境需要告警和重新评估。
+
+测试证据：`TestRedisLimiterEnforcesBurstAndRefills`、`TestRedisLimiterTenantKeysAreIndependent`、`TestRedisLimiterBoundedQueueHonorsContext`。
+
+#### 5. Provider 挂了怎么办？
+
+分两种情况：
+
+```text
+Provider 在首 event 前挂掉：
+  如果错误可重试，切换下一个已注册 Provider
+
+Provider 在首 event 后挂掉：
+  不切备用、不重放
+  保留已经发送的内容并结束当前流
+```
+
+如果所有候选 Provider 都在首 event 前失败，返回上游失败；如果已经提交过数据，则不能再修改 HTTP status，只能断流。
+
+未知 Provider 不会静默创建 Mock，Registry 会拒绝无效路由配置。当前 Provider 注册仍主要在 Gateway 启动时完成，控制面只能选择已经注册的 Provider ID；动态 Provider credential/config 尚未完成。
+
+测试证据：真实 OpenAI-compatible `httptest.Server` failover 测试、`TestOpenAIFailoverBeforeFirstEvent`、`TestOpenAIMidStreamFailureDoesNotReplayBackup`、`TestRegistryRejectsUnknownProvider`。
+
+#### 6. 会有重复消费吗？如何保证不会重复扣费？
+
+会有重复消费，当前消息语义是 **at-least-once**。
+
+典型场景：
+
+```text
+Consumer 读取消息
+  → PostgreSQL 入账成功
+  → 进程在 XACK 前崩溃
+  → 消息仍在 pending
+  → XAUTOCLAIM 后再次消费
+```
+
+防重复扣费依赖 PostgreSQL 唯一键：
+
+```text
+request_id = tenant_id:client_request_id
+```
+
+Ledger 使用：
+
+```sql
+ON CONFLICT (request_id) DO NOTHING
+```
+
+所以：
+
+```text
+消息可能重复投递
+台账不会因为同一幂等键重复增加费用
+```
+
+这应当表述为：
+
+```text
+消息投递：at-least-once
+计费效果：effectively-once
+```
+
+不是分布式系统意义上的 exactly-once。若同一幂等键出现不同 payload，Reconcile 会报告 payload mismatch，不能静默认为两次正常计费。
+
+测试证据：`TestRedisMeteringDeliveryAndReconcile`、`TestRedisMeteringPendingIsReclaimed`、`internal/metering/reconcile_test.go`。
+
+#### 7. Stream 中途断开怎么计费？
+
+当前策略是：**只对完整成功并拿到最终 usage 的流生成计费事件**。
+
+```text
+首 event 后上游中途断流：不生成成功计费事件
+客户端中途断开：取消上游，不生成成功计费事件
+完整收到 [DONE] / usage：异步生成计费事件
+```
+
+这样不会根据不完整 token 进行错误扣费，但可能造成部分响应少计费。当前还没有实现：
+
+```text
+按已发送 token 部分计费
+Provider 中途断开时的估算计费
+部分响应的业务补偿规则
+```
+
+这不是技术上自动能够决定的事情，需要产品和 Provider 计费规则明确后实现。当前演示选择“完整成功才计费”的保守策略。
+
+测试证据：`TestOpenAIMidStreamFailureDoesNotReplayBackup`、`TestOpenAIProviderIdleTimeoutDoesNotHidePartialStream`、`TestOpenAIClientDisconnectCancelsUpstream`。
+
+#### 8. 请求成功但是扣费失败怎么办？
+
+请求响应和计费是解耦的，因此 HTTP 成功后，计费仍可能处于异步处理中：
+
+```text
+请求成功
+  → Producer.Enqueue
+  → Redis Stream
+  → Consumer
+  → PostgreSQL Ledger
+```
+
+不同失败阶段的行为：
+
+| 失败位置 | 当前行为 |
+|---|---|
+| Producer channel 满 | 事件丢弃，记录 `metering_events_dropped_total`；当前没有 overflow queue |
+| Redis XADD 临时失败 | 重试；配置 spool 时写入本地 JSONL |
+| Redis Stream 已写入、Consumer 崩溃 | 消息留在 pending，之后 XAUTOCLAIM |
+| PostgreSQL Ledger 失败 | 不 ACK，保留 pending，等待重试 |
+| 非法事件 | 写入 DLQ，成功后 ACK |
+| spool 写入失败/磁盘满 | 记录指标和日志，当前可能丢失事件 |
+
+因此当前不是“扣费失败后回滚用户响应”，因为响应已经发出，无法回滚。正确处理方式是：
+
+```text
+保留原始事件
+重试入账
+Reconcile 检查 Stream-only / pending / DLQ
+告警并支持人工补偿
+```
+
+当前最大的未完成缺口是 Producer channel 满时的持久化 overflow，以及本地 spool 的多进程/跨机器恢复。生产环境不能仅凭当前实现宣称“计费绝不丢失”。
+
+测试证据：`TestProducerClosePersistsFailedBatchToSpool`、Redis Consumer pending/DLQ 测试、`ReconcileStream` 测试；channel 满和 spool 满的完整故障注入测试仍待补充。
 
 ### 当前最重要的诚实限制
 
