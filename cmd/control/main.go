@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"llm-gateway/internal/control"
+	"llm-gateway/internal/observability"
 	pb "llm-gateway/proto/control"
 )
 
@@ -122,7 +123,7 @@ func main() {
 
 	go func() {
 		log.Println("control http listening on :50052")
-		log.Fatal(http.ListenAndServe(":50052", mux))
+		log.Fatal(http.ListenAndServe(":50052", observability.Middleware(mux)))
 	}()
 
 	log.Println("control ready gRPC :50051 http :50052")
