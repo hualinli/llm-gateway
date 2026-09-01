@@ -80,6 +80,18 @@ func (LogAuditSink) Record(_ context.Context, event AuditEvent) {
 		event.RequestID, event.TraceID, event.ConfigVersion, event.KeyCount)
 }
 
+func safeAuditError(value string) string {
+	switch value {
+	case "authorization failed", "request canceled", "key generation failed", "key ID generation failed", "configuration persistence failed", "configuration read failed", "key ID missing", "tenant scope denied", "key not found":
+		return value
+	default:
+		if value == "" {
+			return ""
+		}
+		return "operation failed"
+	}
+}
+
 func logAuditWriteFailure(event AuditEvent, err error) {
 	log.Printf("control audit persistence failed action=%s outcome=%s subject=%s tenant_id=%s key_id=%s request_id=%s trace_id=%s err=%v",
 		event.Action, event.Outcome, event.Subject, event.TenantID, event.KeyID, event.RequestID, event.TraceID, err)

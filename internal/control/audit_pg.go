@@ -57,7 +57,7 @@ INSERT INTO control_audit_events (
 ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
 		event.Time, event.Action, event.Outcome, event.Subject, string(event.Role),
 		event.TenantID, event.KeyID, event.RequestID, event.TraceID,
-		event.ConfigVersion, event.KeyCount, event.Error)
+		event.ConfigVersion, event.KeyCount, safeAuditError(event.Error))
 	if err != nil {
 		// The service operation has already changed the configuration snapshot;
 		// do not turn an audit outage into a misleading failed Create/Revoke.
