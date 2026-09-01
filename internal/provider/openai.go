@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"llm-gateway/internal/observability"
 	"llm-gateway/internal/provider/sse"
 )
 
@@ -134,6 +135,12 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, reqBody []byte, w io.Wr
 	req.Header.Set("Accept", "text/event-stream")
 	if p.apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+p.apiKey)
+	}
+	if requestID := observability.RequestID(ctx); requestID != "" {
+		req.Header.Set("X-Request-ID", requestID)
+	}
+	if traceID := observability.TraceID(ctx); traceID != "" {
+		req.Header.Set("X-Trace-ID", traceID)
 	}
 
 	resp, err := p.client.Do(req)

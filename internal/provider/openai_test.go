@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"llm-gateway/internal/observability"
 )
 
 func TestRewriteOpenAIRequestPreservesUnknownFields(t *testing.T) {
@@ -63,6 +65,12 @@ func TestOpenAIProviderStreamsAndExtractsUsage(t *testing.T) {
 		if got := r.Header.Get("Authorization"); got != "Bearer upstream-secret" {
 			t.Errorf("authorization=%q", got)
 		}
+		if got := r.Header.Get("X-Request-ID"); got != "request-1" {
+			t.Errorf("request ID=%q", got)
+		}
+		if got := r.Header.Get("X-Trace-ID"); got != "trace-1" {
+			t.Errorf("trace ID=%q", got)
+		}
 		var request map[string]json.RawMessage
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 			t.Errorf("decode request: %v", err)
@@ -83,7 +91,8 @@ func TestOpenAIProviderStreamsAndExtractsUsage(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out bytes.Buffer
-	usage, err := p.ChatStream(tContext(), []byte(`{"model":"client","messages":[],"tools":[]}`), &out)
+	ctx := observability.WithTraceID(observability.WithRequestID(tContext(), "request-1"), "trace-1")
+	usage, err := p.ChatStream(ctx, []byte(`{"model":"client","messages":[],"tools":[]}`), &out)
 	if err != nil {
 		t.Fatal(err)
 	}
