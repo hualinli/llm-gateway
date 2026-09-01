@@ -74,60 +74,32 @@ func main() {
 		"sk-test-456": "tenant-test",
 	})
 
-	// 控制面同步：重连后先 GetConfig 补拉断连期间的版本，再 WatchConfig 长订即时热更；
-	// 版本单调，旧版本一律拒绝；流断开则 3s 后重连。
+	// 控制面同步：GetConfig 补拉、Watch 低延迟推送、周期校验和可选租约。
+	// 版本跳跃由同步器接受，Gateway 只拒绝旧版本；租约到期时撤销本地 key。
 	controlAddr := os.Getenv("CONTROL_ADDR")
 	if controlAddr == "" {
 		controlAddr = "localhost:50051"
 	}
+	controlCtx, controlCancel := context.WithCancel(context.Background())
+	controlSync := control.NewSynchronizer(controlAddr, control.SyncOptions{
+		PollInterval:   durationEnv("CONTROL_CONFIG_POLL_INTERVAL", 30*time.Second),
+		LeaseTimeout:   durationEnv("CONTROL_CONFIG_LEASE", 0),
+		OnLeaseExpired: func() { authStore.Update(map[string]string{}) },
+	})
 	go func() {
-		var applied int64
-		apply := func(cfg *pb.Config) {
-			if cfg == nil || cfg.Version <= applied {
-				return
-			}
-			log.Printf("control: hot reload %d -> %d", applied, cfg.Version)
+		err := controlSync.Run(controlCtx, func(cfg *pb.Config) error {
+			log.Printf("control: hot reload to v%d", cfg.Version)
 			if err := registry.UpdateRoutes(control.RoutesFromProto(cfg.Routes)); err != nil {
-				// 路由配置失败时仍优先撤销已删除凭据，避免无效 Provider
-				// 阻塞安全相关的 key deletion；新增 key 要等完整配置修复后生效。
+				// 路由配置失败时仍优先撤销已删除凭据；新增 key 要等完整配置修复后生效。
 				authStore.RevokeMissing(cfg.Keys)
 				log.Printf("control: reject config v%d: %v", cfg.Version, err)
-				return
+				return err
 			}
 			authStore.Update(cfg.Keys)
-			applied = cfg.Version
-		}
-		for {
-			client, err := control.Dial(controlAddr)
-			if err != nil {
-				log.Printf("control dial failed %s: %v", controlAddr, err)
-				time.Sleep(3 * time.Second)
-				continue
-			}
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-			if cfg, err := client.GetConfig(ctx); err == nil {
-				apply(cfg)
-			} else {
-				log.Printf("control getconfig failed: %v", err)
-			}
-			cancel()
-
-			watchCtx, wcancel := context.WithCancel(context.Background())
-			if wc, err := client.WatchConfig(watchCtx, applied); err == nil {
-				for {
-					cfg, err := wc.Recv()
-					if err != nil {
-						log.Printf("control watch ended: %v", err)
-						break
-					}
-					apply(cfg)
-				}
-			} else {
-				log.Printf("control watch open failed: %v", err)
-			}
-			wcancel()
-			client.Close()
-			time.Sleep(3 * time.Second)
+			return nil
+		})
+		if err != nil && controlCtx.Err() == nil {
+			log.Printf("control sync stopped: %v", err)
 		}
 	}()
 
@@ -172,6 +144,7 @@ func main() {
 	<-quit
 	log.Println("shutting down...")
 
+	controlCancel()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
@@ -182,4 +155,17 @@ func main() {
 	}
 	_ = rdb.Close()
 	log.Println("exit")
+}
+
+func durationEnv(name string, fallback time.Duration) time.Duration {
+	value := os.Getenv(name)
+	if value == "" {
+		return fallback
+	}
+	duration, err := time.ParseDuration(value)
+	if err != nil {
+		log.Printf("invalid %s=%q, using %s: %v", name, value, fallback, err)
+		return fallback
+	}
+	return duration
 }

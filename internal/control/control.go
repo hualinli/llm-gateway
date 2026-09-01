@@ -193,6 +193,25 @@ func Dial(addr string) (*Client, error) {
 	return &Client{conn: conn, client: pb.NewConfigServiceClient(conn)}, nil
 }
 
+// DialContext is the bounded, blocking variant used by the synchronizer.
+// Dial keeps the historical non-blocking behavior for callers that only need
+// to construct a client and let gRPC establish the connection asynchronously.
+func DialContext(ctx context.Context, addr string) (*Client, error) {
+	conn, err := grpc.DialContext(ctx, addr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(),
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			Time:                15 * time.Second,
+			Timeout:             5 * time.Second,
+			PermitWithoutStream: true,
+		}),
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &Client{conn: conn, client: pb.NewConfigServiceClient(conn)}, nil
+}
+
 func (c *Client) GetConfig(ctx context.Context) (*pb.Config, error) {
 	return c.client.GetConfig(ctx, &pb.GetRequest{})
 }

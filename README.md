@@ -13,7 +13,7 @@
 | Provider | OpenAI-compatible + Mock | Anthropic adapter、控制面 Provider 配置和更完整的真实上游治理仍待做 |
 | 限流 | 已完成基础实现 | Redis Lua 令牌桶和有界轮询等待；Redis 故障目前 fail-open |
 | 计量 | 已完成基础链路 | Redis Stream、Consumer Group、PG 唯一约束和基础 DLQ 已有；仍可能丢事件，对账口径也需重做 |
-| 控制面 | 已完成基础热更新 | gRPC Get/Watch、版本持久化和配置广播已有；管理面尚未鉴权，租约和周期性版本校验仍待做 |
+| 控制面 | 已完成一致性基础 | gRPC Get/Watch、版本持久化、重连补拉、周期性校验和可选租约已有；管理面尚未鉴权，gRPC 仍未启用 TLS/mTLS |
 | 管理后台 | 尚未接入主线 | Hertz IDL/生成代码曾在 `wip/management-hertz`，handlers 仍为空；计划实现用户/管理员 CRUD 和安全接线 |
 | 可观测性 | 已完成基础实现 | Prometheus 指标、pprof、基础 Grafana Dashboard 已有 |
 | 压测 | 已完成基础工具 | 能统计 SSE TTFT/总耗时分位数；还没有足够可信的压测报告和完整抖动指标 |
@@ -209,7 +209,7 @@
 - Gateway 连接控制面后先补拉再 Watch；
 - Gateway 只应用比本地版本更新的配置；
 - 内存 Store 可供本地 Demo 使用；
-- 已有版本递增、持久化失败、重启恢复、Watch 推送和真实 gRPC 网络调用测试。
+- 已有版本递增、持久化失败、重启恢复、Watch 推送、真实 gRPC 网络调用、断线重连和版本跳跃测试；Gateway 同步器已支持周期性 GetConfig 和可选配置租约。
 
 当前限制：
 
@@ -217,7 +217,7 @@
 - gRPC 使用 insecure credentials，没有 TLS/mTLS；
 - proto 和 PostgreSQL 中保存 raw API key；
 - `/config` GET 会直接返回明文 API key；
-- watcher channel 现在会保留最新快照，不再简单丢弃后续版本；仍需增加版本跳跃、慢连接和断线重连的专门测试；
+- watcher channel 现在会保留最新快照，不再简单丢弃后续版本；仍需增加慢连接和生产网络故障注入测试；
 - ApplyConfig 现在串行化版本生成；
 - 不存在的 Provider 现在会拒绝整版路由更新；
 - PostgreSQL 失败时回退内存，生产环境可能出现配置重启丢失。
@@ -480,7 +480,7 @@ downstream client
 - `ApplyConfig` 串行生成版本，避免并发写入产生同版本；**已完成**；
 - 已完成 watcher 满时保留最新快照，避免连接保持存活但永久停留旧版本；
 - Gateway 控制面连接已启用 gRPC keepalive；
-- 后续仍需增加周期性 `GetConfig` 版本校验、配置租约和慢 watcher 测试；
+- Gateway 同步器已增加周期性 `GetConfig` 版本校验和可选配置租约；仍需增加生产网络故障注入、租约到期策略和慢 watcher 测试；
 - 必要时关闭慢 watcher 连接，强制重连补拉；
 - 配置 map 和 slice 深拷贝；
 - 配置校验通过后再原子发布。
