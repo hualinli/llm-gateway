@@ -13,6 +13,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
+	"google.golang.org/protobuf/proto"
 )
 
 // Server 控制面实现：内存热配置 + PG 持久化 + watch 广播。
@@ -51,7 +52,7 @@ func (s *Server) ApplyConfig(keys map[string]string, routes map[string]*pb.Provi
 	s.applyMu.Lock()
 	defer s.applyMu.Unlock()
 
-	next := &pb.Config{Version: s.CurrentConfig().Version + 1, Keys: keys, Routes: routes}
+	next := cloneConfig(&pb.Config{Version: s.CurrentConfig().Version + 1, Keys: keys, Routes: routes})
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	if err := s.store.Save(ctx, next); err != nil {
@@ -60,12 +61,12 @@ func (s *Server) ApplyConfig(keys map[string]string, routes map[string]*pb.Provi
 	s.cfg.Store(next)
 	s.broadcast(next)
 	log.Printf("control: apply version=%d keys=%d routes=%d", next.Version, len(keys), len(routes))
-	return next, nil
+	return cloneConfig(next), nil
 }
 
 func (s *Server) GetConfig(_ context.Context, _ *pb.GetRequest) (*pb.Config, error) {
 	if c := s.cfg.Load(); c != nil {
-		return c, nil
+		return cloneConfig(c), nil
 	}
 	return &pb.Config{Version: 0, Keys: map[string]string{}, Routes: map[string]*pb.ProviderList{}}, nil
 }
@@ -111,7 +112,7 @@ func (s *Server) broadcast(cfg *pb.Config) {
 	defer s.mu.Unlock()
 	for ch := range s.watchers {
 		select {
-		case ch <- cfg:
+		case ch <- cloneConfig(cfg):
 		default:
 			// Keep the newest snapshot instead of dropping a version while
 			// leaving the stream alive. The watcher will observe the latest
@@ -127,7 +128,7 @@ func (s *Server) broadcast(cfg *pb.Config) {
 				}
 			}
 			select {
-			case ch <- cfg:
+			case ch <- cloneConfig(cfg):
 			default:
 			}
 		}
@@ -136,21 +137,39 @@ func (s *Server) broadcast(cfg *pb.Config) {
 
 func (s *Server) CurrentConfig() *pb.Config {
 	if c := s.cfg.Load(); c != nil {
-		return c
+		return cloneConfig(c)
 	}
 	return &pb.Config{Version: 0}
 }
 
-// Run 启动 gRPC，addr 如 :50051
+func cloneConfig(cfg *pb.Config) *pb.Config {
+	if cfg == nil {
+		return &pb.Config{Version: 0}
+	}
+	return proto.Clone(cfg).(*pb.Config)
+}
+
+// NewGRPCServer 构造控制面 gRPC server，便于进程入口和网络集成测试复用。
+func NewGRPCServer(s *Server) *grpc.Server {
+	gs := grpc.NewServer()
+	pb.RegisterConfigServiceServer(gs, s)
+	return gs
+}
+
+// Serve 在已有 listener 上启动 gRPC。
+func Serve(lis net.Listener, s *Server) error {
+	gs := NewGRPCServer(s)
+	log.Printf("control listening on %s", lis.Addr())
+	return gs.Serve(lis)
+}
+
+// Run 启动 gRPC，addr 如 :50051。
 func Run(addr string, s *Server) error {
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
 		return err
 	}
-	gs := grpc.NewServer()
-	pb.RegisterConfigServiceServer(gs, s)
-	log.Printf("control listening on %s", addr)
-	return gs.Serve(lis)
+	return Serve(lis, s)
 }
 
 // Client 网关侧订阅端

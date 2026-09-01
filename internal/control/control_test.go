@@ -3,12 +3,15 @@ package control
 import (
 	"context"
 	"errors"
+	"net"
 	"sync"
 	"testing"
 	"time"
 
 	pb "llm-gateway/proto/control"
 
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -56,6 +59,33 @@ func routes() map[string]*pb.ProviderList {
 }
 
 // --- tests ---
+
+func TestApplyConfigCopiesCallerOwnedData(t *testing.T) {
+	st := NewMemoryStore()
+	srv, err := NewServer(st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keys := map[string]string{"sk-1": "tenant-a"}
+	routeProviders := []string{"mock-a"}
+	cfg, err := srv.ApplyConfig(keys, RoutesToProto(map[string][]string{"default": routeProviders}))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	keys["sk-2"] = "tenant-b"
+	routeProviders[0] = "mutated"
+	cfg.Keys["sk-3"] = "tenant-c"
+	cfg.Routes["default"].Providers[0] = "mutated-again"
+
+	got := srv.CurrentConfig()
+	if len(got.Keys) != 1 || got.Keys["sk-1"] != "tenant-a" {
+		t.Fatalf("stored keys were aliased: %+v", got.Keys)
+	}
+	if got.Routes["default"].Providers[0] != "mock-a" {
+		t.Fatalf("stored routes were aliased: %+v", got.Routes)
+	}
+}
 
 func TestApplyConfigMonotonicAndPersisted(t *testing.T) {
 	st := NewMemoryStore()
@@ -192,6 +222,75 @@ func TestWatchConfigPushesUpdates(t *testing.T) {
 }
 
 // 客户端已持有最新版的订阅：不应重复推送当前版。
+func TestGRPCGetAndWatchOverNetwork(t *testing.T) {
+	st := NewMemoryStore()
+	srv, err := NewServer(st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := srv.ApplyConfig(map[string]string{"sk-1": "tenant-a"}, routes()); err != nil {
+		t.Fatal(err)
+	}
+
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gs := NewGRPCServer(srv)
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- gs.Serve(lis) }()
+	defer func() {
+		gs.Stop()
+		_ = lis.Close()
+		select {
+		case <-serveErr:
+		case <-time.After(time.Second):
+			t.Error("gRPC server did not stop")
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	conn, err := grpc.DialContext(ctx, lis.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	client := pb.NewConfigServiceClient(conn)
+
+	got, err := client.GetConfig(ctx, &pb.GetRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Version != 1 || got.Keys["sk-1"] != "tenant-a" {
+		t.Fatalf("unexpected GetConfig response: %+v", got)
+	}
+
+	watchCtx, watchCancel := context.WithCancel(context.Background())
+	defer watchCancel()
+	watch, err := client.WatchConfig(watchCtx, &pb.WatchRequest{Version: 0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := watch.Recv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Version != 1 {
+		t.Fatalf("initial watch version=%d, want 1", first.Version)
+	}
+	if _, err := srv.ApplyConfig(map[string]string{"sk-1": "tenant-a", "sk-2": "tenant-b"}, routes()); err != nil {
+		t.Fatal(err)
+	}
+	second, err := watch.Recv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Version != 2 || second.Keys["sk-2"] != "tenant-b" {
+		t.Fatalf("update watch response=%+v", second)
+	}
+}
+
 func TestWatchNoSpuriousInitialSend(t *testing.T) {
 	st := NewMemoryStore()
 	srv, _ := NewServer(st)
