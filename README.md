@@ -220,7 +220,7 @@
 - watcher channel 现在会保留最新快照，不再简单丢弃后续版本；仍需增加慢连接和生产网络故障注入测试；
 - ApplyConfig 现在串行化版本生成；
 - 不存在的 Provider 现在会拒绝整版路由更新；
-- PostgreSQL 失败时回退内存，生产环境可能出现配置重启丢失。
+- `CONTROL_REQUIRE_POSTGRES=true` 时 PostgreSQL 不可用会拒绝启动；默认 Demo 模式仍允许回退内存，生产环境必须开启该选项。
 
 ### 2.7 可观测性和压测工具
 
@@ -635,6 +635,7 @@ CONTROL_TLS_REQUIRE_CLIENT_CERT=false
 CONTROL_ADMIN_TOKEN='' # 管理面 Bearer token；生产配合下方 require 开关
 CONTROL_REQUIRE_ADMIN_AUTH=false # 生产建议 true；未配置 token 时拒绝启动
 METERING_SPOOL_DIR='./data/metering-spool' # 可选；Redis 故障时本地持久化计量事件
+CONTROL_REQUIRE_POSTGRES=false # 生产建议 true；PG 不可用时拒绝启动 control
 METERING_REQUIRE_POSTGRES=false # 生产建议 true；PG 不可用时拒绝启动 metering
 
 # 可选：注册一个 OpenAI-compatible Provider

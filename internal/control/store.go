@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log"
 	"os"
+	"strings"
 	"sync"
 
 	"google.golang.org/protobuf/encoding/protojson"
@@ -60,6 +61,7 @@ func NewPGStore(dsn string) (*PGStore, error) {
 		return nil, err
 	}
 	if err := db.Ping(); err != nil {
+		_ = db.Close()
 		return nil, err
 	}
 	_, err = db.Exec(`
@@ -69,6 +71,7 @@ CREATE TABLE IF NOT EXISTS control_config (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );`)
 	if err != nil {
+		_ = db.Close()
 		return nil, err
 	}
 	return &PGStore{db: db}, nil
@@ -104,17 +107,24 @@ func (p *PGStore) LoadLatest(ctx context.Context) (*pb.Config, error) {
 	return cfg, nil
 }
 
-// NewStore 工厂：优先 PG，失败回退内存（与 metering.NewLedger 同风格）。
-func NewStore() Store {
+// NewStore 工厂：优先 PG；只有非强制模式才允许回退内存。
+func NewStore() (Store, error) {
 	dsn := os.Getenv("POSTGRES_DSN")
 	if dsn == "" {
 		dsn = "postgres://gateway:gateway@localhost:5433/llm_gateway?sslmode=disable"
 	}
 	if pg, err := NewPGStore(dsn); err == nil {
 		log.Printf("control store: postgres dsn=%s", dsn)
-		return pg
+		return pg, nil
+	} else if requireControlPostgres() {
+		return nil, err
 	} else {
 		log.Printf("control store fallback to memory: %v", err)
-		return NewMemoryStore()
+		return NewMemoryStore(), nil
 	}
+}
+
+func requireControlPostgres() bool {
+	value := strings.ToLower(strings.TrimSpace(os.Getenv("CONTROL_REQUIRE_POSTGRES")))
+	return value == "1" || value == "true" || value == "yes"
 }

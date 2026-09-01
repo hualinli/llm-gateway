@@ -24,7 +24,10 @@ func redactKeys(keys map[string]string) map[string]string {
 }
 
 func main() {
-	store := control.NewStore()
+	store, err := control.NewStore()
+	if err != nil {
+		log.Fatalf("control store: %v", err)
+	}
 	srv, err := control.NewServer(store)
 	if err != nil {
 		log.Fatalf("control init: %v", err)
