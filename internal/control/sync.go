@@ -64,7 +64,19 @@ func (s *Synchronizer) Run(ctx context.Context, apply func(*pb.Config) error) er
 	leaseExpired := false
 
 	markApplied := func(cfg *pb.Config) error {
-		if cfg == nil || cfg.Version <= s.applied {
+		if cfg == nil {
+			return nil
+		}
+		if cfg.Version <= s.applied {
+			// A lease expiry may have revoked the local credentials. Re-apply
+			// the same version after control recovers; version equality alone
+			// must not prevent restoring local state.
+			if leaseExpired {
+				if err := apply(cfg); err != nil {
+					return err
+				}
+				leaseExpired = false
+			}
 			if !lastAppliedAt.IsZero() {
 				lastAppliedAt = time.Now()
 			}

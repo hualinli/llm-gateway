@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -110,6 +111,7 @@ func TestSynchronizerLeaseExpiresAfterControlDisconnect(t *testing.T) {
 	go grpcServer.Serve(lis)
 
 	expired := make(chan struct{}, 1)
+	var applyCount atomic.Int32
 	synced := make(chan struct{}, 1)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -124,6 +126,7 @@ func TestSynchronizerLeaseExpiresAfterControlDisconnect(t *testing.T) {
 	runErr := make(chan error, 1)
 	go func() {
 		runErr <- syncer.Run(ctx, func(*pb.Config) error {
+			applyCount.Add(1)
 			select {
 			case synced <- struct{}{}:
 			default:
@@ -137,6 +140,7 @@ func TestSynchronizerLeaseExpiresAfterControlDisconnect(t *testing.T) {
 		t.Fatal("initial config sync did not complete")
 	}
 
+	addr := lis.Addr().String()
 	grpcServer.Stop()
 	_ = lis.Close()
 	select {
@@ -144,6 +148,20 @@ func TestSynchronizerLeaseExpiresAfterControlDisconnect(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("lease did not expire after control disconnect")
 	}
+	beforeRecovery := applyCount.Load()
+
+	lis, err = net.Listen("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	grpcServer = NewGRPCServer(srv)
+	go grpcServer.Serve(lis)
+	defer func() {
+		grpcServer.Stop()
+		_ = lis.Close()
+	}()
+	waitFor(t, func() bool { return applyCount.Load() > beforeRecovery }, "same-version config re-apply after lease recovery")
+
 	cancel()
 	select {
 	case <-runErr:
