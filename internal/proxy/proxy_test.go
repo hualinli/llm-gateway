@@ -7,15 +7,18 @@ import (
 	"strings"
 	"testing"
 
+	"llm-gateway/internal/metering"
 	"llm-gateway/internal/provider"
 )
 
 // fakeProvider 是可编排的假上游：先写 chunks（决定 written 边界），再返回 err。
 type fakeProvider struct {
-	name   string
-	chunks []string
-	err    error
-	called *bool
+	name         string
+	chunks       []string
+	err          error
+	usage        *provider.Usage
+	missingUsage bool
+	called       *bool
 }
 
 func (f *fakeProvider) Name() string { return f.name }
@@ -32,6 +35,12 @@ func (f *fakeProvider) ChatStream(ctx context.Context, reqBody []byte, w io.Writ
 	if f.err != nil {
 		return nil, f.err
 	}
+	if f.missingUsage {
+		return nil, nil
+	}
+	if f.usage != nil {
+		return f.usage, nil
+	}
 	return &provider.Usage{PromptTokens: 1, CompletionTokens: 2, TotalTokens: 3}, nil
 }
 
@@ -46,6 +55,77 @@ func do(t *testing.T, providers []provider.Provider, body string) *httptest.Resp
 }
 
 const streamBody = `{"model":"m1","stream":true,"messages":[]}`
+
+type recordingProducer struct {
+	events []metering.Event
+}
+
+func (p *recordingProducer) Enqueue(e metering.Event) bool {
+	p.events = append(p.events, e)
+	return true
+}
+
+func TestProxyPreservesProviderTotalTokens(t *testing.T) {
+	recorder := &recordingProducer{}
+	p := &fakeProvider{
+		name:   "a",
+		chunks: []string{"data: {\"ok\":true}\n\n"},
+		usage:  &provider.Usage{PromptTokens: 2, CompletionTokens: 3, TotalTokens: 99},
+	}
+	h := NewHandler(provider.NewRegistry(map[string][]provider.Provider{"m1": {p}}), recorder)
+	req := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(streamBody))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 200 || len(recorder.events) != 1 {
+		t.Fatalf("status=%d events=%+v", rec.Code, recorder.events)
+	}
+	if got := recorder.events[0].TotalTokens; got != 99 {
+		t.Fatalf("total_tokens=%d, want provider total 99", got)
+	}
+	if got := recorder.events[0].CostCents; got != 99 {
+		t.Fatalf("cost_cents=%d, want provider total 99", got)
+	}
+}
+
+func TestProxyMarksMissingUsageWithoutChargingZero(t *testing.T) {
+	recorder := &recordingProducer{}
+	p := &fakeProvider{
+		name:         "a",
+		chunks:       []string{"data: {\"ok\":true}\n\n"},
+		missingUsage: true,
+	}
+	h := NewHandler(provider.NewRegistry(map[string][]provider.Provider{"m1": {p}}), recorder)
+	req := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(streamBody))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 200 || len(recorder.events) != 1 {
+		t.Fatalf("status=%d events=%+v", rec.Code, recorder.events)
+	}
+	event := recorder.events[0]
+	if !event.UsageMissing || event.CostCents != 0 {
+		t.Fatalf("event=%+v, want usage_missing with zero cost pending DLQ", event)
+	}
+}
+
+func TestProxyRejectsNegativeUsageForBilling(t *testing.T) {
+	recorder := &recordingProducer{}
+	p := &fakeProvider{
+		name:   "a",
+		chunks: []string{"data: {\"ok\":true}\n\n"},
+		usage:  &provider.Usage{PromptTokens: -1, CompletionTokens: 2, TotalTokens: 1},
+	}
+	h := NewHandler(provider.NewRegistry(map[string][]provider.Provider{"m1": {p}}), recorder)
+	req := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(streamBody))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 200 || len(recorder.events) != 1 {
+		t.Fatalf("status=%d events=%+v", rec.Code, recorder.events)
+	}
+	event := recorder.events[0]
+	if !event.UsageInvalid || event.CostCents != 0 {
+		t.Fatalf("event=%+v, want usage_invalid with zero cost pending DLQ", event)
+	}
+}
 
 func TestRequestIDValidation(t *testing.T) {
 	if got, err := resolveRequestID("client-123"); err != nil || got != "client-123" {

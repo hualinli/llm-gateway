@@ -137,6 +137,8 @@ func eventsEqual(a, b Event) bool {
 		a.PromptTokens == b.PromptTokens &&
 		a.CompletionTokens == b.CompletionTokens &&
 		a.TotalTokens == b.TotalTokens &&
+		a.UsageMissing == b.UsageMissing &&
+		a.UsageInvalid == b.UsageInvalid &&
 		a.CostCents == b.CostCents &&
 		a.CreatedAt.Equal(b.CreatedAt)
 }

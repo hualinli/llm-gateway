@@ -39,6 +39,34 @@ func TestSpoolRoundTripAndRewrite(t *testing.T) {
 	}
 }
 
+func TestProducerOverflowFallsBackToSpool(t *testing.T) {
+	dir := t.TempDir()
+	p := &Producer{
+		ch:           make(chan Event, 1),
+		overflow:     make(chan Event, 1),
+		spoolPath:    filepath.Join(dir, "events.jsonl"),
+		maxSpoolSize: 1 << 20,
+	}
+
+	if !p.Enqueue(Event{RequestID: "hot-queue"}) {
+		t.Fatal("hot queue enqueue failed")
+	}
+	if !p.Enqueue(Event{RequestID: "overflow-queue"}) {
+		t.Fatal("overflow queue enqueue failed")
+	}
+	if !p.Enqueue(Event{RequestID: "durable-overflow"}) {
+		t.Fatal("durable overflow enqueue failed")
+	}
+
+	got, err := readSpool(p.spoolPath)
+	if err != nil {
+		t.Fatalf("read spool: %v", err)
+	}
+	if len(got) != 1 || got[0].RequestID != "durable-overflow" {
+		t.Fatalf("spooled events=%+v", got)
+	}
+}
+
 func TestProducerClosePersistsFailedBatchToSpool(t *testing.T) {
 	dir := t.TempDir()
 	p := NewProducerWithOptions(nil, 4, 10, time.Hour, ProducerOptions{SpoolDir: dir})

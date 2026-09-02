@@ -137,6 +137,18 @@ func (c *Consumer) handle(ctx context.Context, m redis.XMessage) {
 		c.deadLetter(ctx, m, "bad_event: "+err.Error())
 		return
 	}
+	if e.UsageMissing || e.UsageInvalid {
+		// Keep the original event in DLQ for investigation/reconciliation;
+		// never silently record a successful request as a zero-cost charge or
+		// allow invalid usage to create a negative charge.
+		reason := "usage_missing"
+		if e.UsageInvalid {
+			reason = "usage_invalid"
+		}
+		log.Printf("metering: %s id=%s request_id=%s", reason, m.ID, e.RequestID)
+		c.deadLetter(ctx, m, reason)
+		return
+	}
 
 	added, err := c.ledger.Add(e)
 	if err != nil {

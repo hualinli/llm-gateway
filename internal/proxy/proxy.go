@@ -18,15 +18,19 @@ import (
 
 // Handler 是数据面的核心：鉴权/限流之后、真正做透传的地方。
 // 现在只做最小闭环：选主备 Provider，首字节前失败自动切备，边读边 Flush。
+type eventProducer interface {
+	Enqueue(metering.Event) bool
+}
+
 type Handler struct {
 	registry     *provider.Registry
-	producer     *metering.Producer
+	producer     eventProducer
 	writeTimeout time.Duration
 }
 
 const defaultDownstreamWriteTimeout = 30 * time.Second
 
-func NewHandler(r *provider.Registry, p *metering.Producer) *Handler {
+func NewHandler(r *provider.Registry, p eventProducer) *Handler {
 	return &Handler{
 		registry:     r,
 		producer:     p,
@@ -67,6 +71,11 @@ func (c *countingWriter) WriteHeader(code int) {
 }
 
 func (c *countingWriter) Flush() {
+	if c.writeTimeout > 0 {
+		controller := http.NewResponseController(c.ResponseWriter)
+		_ = controller.SetWriteDeadline(time.Now().Add(c.writeTimeout))
+		defer func() { _ = controller.SetWriteDeadline(time.Time{}) }()
+	}
 	if f, ok := c.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
 	}
@@ -157,26 +166,37 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				// request ID across tenants without suppressing another tenant's
 				// charge; the response header still exposes the client-facing ID.
 				reqID := tenant + ":" + requestID
-				prompt := 0
-				comp := 0
-				if usage != nil {
-					prompt = usage.PromptTokens
-					comp = usage.CompletionTokens
+				event := metering.Event{
+					RequestID:       reqID,
+					ClientRequestID: requestID,
+					TraceID:         traceID,
+					TenantID:        tenant,
+					Model:           model,
+					Provider:        p.Name(),
+					CreatedAt:       time.Now(),
 				}
-				total := prompt + comp
-				h.producer.Enqueue(metering.Event{
-					RequestID:        reqID,
-					ClientRequestID:  requestID,
-					TraceID:          traceID,
-					TenantID:         tenant,
-					Model:            model,
-					Provider:         p.Name(),
-					PromptTokens:     prompt,
-					CompletionTokens: comp,
-					TotalTokens:      total,
-					CostCents:        int64(total), // 演示：1 token = 1 分
-					CreatedAt:        time.Now(),
-				})
+				if usage == nil {
+					// Never turn a successful response without usage into a
+					// silently free zero-cost ledger row. Preserve it as an
+					// unresolved event so the consumer can DLQ and alert.
+					event.UsageMissing = true
+					metrics.MeteringUsageMissingTotal.Inc()
+					log.Printf("request_id=%s trace_id=%s provider=%s model=%s completed without usage", requestID, traceID, p.Name(), model)
+				} else if usage.PromptTokens < 0 || usage.CompletionTokens < 0 || usage.TotalTokens < 0 {
+					// Never let malformed provider usage create a negative charge.
+					event.UsageInvalid = true
+					metrics.MeteringUsageInvalidTotal.Inc()
+					log.Printf("request_id=%s trace_id=%s provider=%s model=%s returned invalid usage", requestID, traceID, p.Name(), model)
+				} else {
+					event.PromptTokens = usage.PromptTokens
+					event.CompletionTokens = usage.CompletionTokens
+					event.TotalTokens = usage.TotalTokens
+					if event.TotalTokens == 0 {
+						event.TotalTokens = event.PromptTokens + event.CompletionTokens
+					}
+					event.CostCents = int64(event.TotalTokens) // 演示：1 token = 1 分
+				}
+				h.producer.Enqueue(event)
 			}
 			// 指标：TTFT 取首字节到 start 的差，总延迟取 start 到 now
 			if cw.written && !cw.firstByteAt.IsZero() {
@@ -192,7 +212,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		lastErr = err
 		if r.Context().Err() != nil {
 			// The client went away; do not spend another upstream attempt or
-			// write an error response to a disconnected connection.
+			// write an error response to a disconnected connection. If bytes
+			// were already sent, record the stream as incomplete for operations.
+			if cw.written {
+				metrics.GatewayStreamIncompleteTotal.WithLabelValues(tenant, model).Inc()
+			}
 			return
 		}
 		log.Printf("request_id=%s trace_id=%s provider=%s model=%s failed (attempt %d/%d): %v written=%v", requestID, traceID, p.Name(), model, i+1, len(providers), err, cw.written)
@@ -203,6 +227,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// 已流出字节：既不能重放（客户端会收到重复内容），也无法再改状态码，
 		// 断流处理；客户端携 X-Request-ID 重试可安全重发（计量端幂等）
 		if cw.written {
+			// HTTP 200 is already committed on the wire, but this is not a
+			// complete successful stream. Keep the wire status metric and add
+			// a separate signal for availability and billing analysis.
+			metrics.GatewayStreamIncompleteTotal.WithLabelValues(tenant, model).Inc()
 			metrics.RequestsTotal.WithLabelValues(tenant, model, "200").Inc()
 			return
 		}

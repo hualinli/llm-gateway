@@ -183,7 +183,7 @@
 
 当前限制：
 
-- channel 满时仍然直接丢弃事件；
+- Producer 现在使用 hot channel → overflow channel → 本地 JSONL spool 三级路径；两个内存队列都满时，已配置 spool 就同步持久化，只有 spool 未配置、已满或写入失败时才丢弃；
 - Redis flush 失败时已支持重试，并在配置 `METERING_SPOOL_DIR` 后落本地 JSONL spool；
 - Producer 已支持 `Close(ctx)` 和退出前 flush；
 - 当前 spool 是单进程本地文件，已有大小上限和 `metering_spool_bytes` 指标，尚未实现多进程锁和完整恢复演练；
@@ -193,7 +193,7 @@
 - Ledger 的 Count/Balance 查询错误现在会向上返回，HTTP 接口返回 503；
 - `METERING_REQUIRE_POSTGRES=true` 时 PostgreSQL 不可用会阻止 metering 启动；默认 Demo 模式仍允许回退内存，重启会丢失台账。
 
-因此当前只能说“计量链路骨架和基础幂等已经完成”，不能说“计量事件不丢”或“对账一致率 100%”。
+因此当前可以说“短时突发和 Redis 故障下的计量恢复能力已增强”，但仍不能说“计量事件绝对不丢”或“对账一致率 100%”：进程被强制终止时尚未落盘的内存队列、spool 满盘/写失败以及 Redis Stream retention 仍是边界。
 
 ### 2.6 控制面和配置热更新
 
@@ -769,7 +769,7 @@ Provider 中途断开时的估算计费
 
 | 失败位置 | 当前行为 |
 |---|---|
-| Producer channel 满 | 事件丢弃，记录 `metering_events_dropped_total`；当前没有 overflow queue |
+| Producer channel 满 | 先进入 overflow queue；两个内存队列都满时，已配置 spool 则同步落盘，否则记录 `metering_events_dropped_total` |
 | Redis XADD 临时失败 | 重试；配置 spool 时写入本地 JSONL |
 | Redis Stream 已写入、Consumer 崩溃 | 消息留在 pending，之后 XAUTOCLAIM |
 | PostgreSQL Ledger 失败 | 不 ACK，保留 pending，等待重试 |
@@ -785,9 +785,42 @@ Reconcile 检查 Stream-only / pending / DLQ
 告警并支持人工补偿
 ```
 
-当前最大的未完成缺口是 Producer channel 满时的持久化 overflow，以及本地 spool 的多进程/跨机器恢复。生产环境不能仅凭当前实现宣称“计费绝不丢失”。
+当前最大的未完成缺口是进程被 `kill -9` 时内存队列中尚未落盘的事件，以及本地 spool 的多进程/跨机器恢复。生产环境不能仅凭当前实现宣称“计费绝不丢失”。
 
-测试证据：`TestProducerClosePersistsFailedBatchToSpool`、Redis Consumer pending/DLQ 测试、`ReconcileStream` 测试；channel 满和 spool 满的完整故障注入测试仍待补充。
+测试证据：`TestProducerOverflowFallsBackToSpool`、`TestProducerClosePersistsFailedBatchToSpool`、Redis Consumer pending/DLQ 测试、`ReconcileStream` 测试；spool 满盘和强制终止恢复的完整故障注入测试仍待补充。
+
+#### 9. 本轮计费与数据面可靠性修复记录
+
+本轮复盘发现的计费事件丢失路径和处理方式如下：
+
+| 发现的情况 | 原行为 | 当前处理 | 剩余边界 |
+|---|---|---|---|
+| Producer hot channel 满 | 事件直接丢弃 | 增加 overflow channel；两个内存队列都满后同步写入 JSONL spool | spool 未配置、满盘或写失败仍会丢；同步落盘会产生有限磁盘 I/O |
+| Redis flush 失败 | 重试失败后可落 spool，原有路径保留 | 保留 3 次重试，spool append 使用锁、fsync、临时文件重写；防止 replay 与 overflow append 互相覆盖 | 多进程/多实例不安全；进程被强制终止前仍在内存队列的事件未必落盘 |
+| Provider 成功但 usage 缺失 | 静默生成 0 费用事件 | 生成 `usage_missing` 事件并送入 DLQ，不写入 0 费用 Ledger；增加 `metering_usage_missing_total` | 仍需要人工确认 Provider usage 或补偿计费 |
+| Provider 返回的 `total_tokens` 与 prompt+completion 不同 | 网关无条件重新相加 | 优先使用 Provider 的 `total_tokens`，只有为 0 时才回退相加；负数 usage 送入 `usage_invalid` DLQ，不允许产生负费用 | cached/reasoning token 分类和价格模型尚未接入 |
+| SSE 下游 Flush | Flush 没有应用 per-write deadline | Write 和 Flush 都使用下游写 deadline | 仍需真实慢客户端和连接级故障注入 |
+| 上游首 event 后断流 | HTTP wire status 已是 200，容易只看状态误判成功 | 增加 `gateway_stream_incomplete_total`，保留不重放语义 | 当前完整成功流才计费，部分流的产品计费规则尚未定义 |
+
+这次修复的原则是：
+
+```text
+已进入内存队列的事件：优先 overflow，再 durable spool
+Redis/PG 故障：不 ACK，保留可重试状态
+usage 缺失/非法：不静默免费，不生成零费用或负费用账单，送入 DLQ
+首 event 后断流：不重放，不伪造完整成功
+```
+
+验证新增/覆盖：
+
+```text
+TestProducerOverflowFallsBackToSpool
+go test ./... -count=1
+go test -race ./... -count=1
+go vet ./...
+go build ./...
+git diff --check
+```
 
 ### 当前最重要的诚实限制
 
@@ -1016,7 +1049,7 @@ CONTROL_TEST_POSTGRES_DSN='postgres://gateway:gateway@localhost:5433/llm_gateway
 
 - auth 基础鉴权和 hash record 测试已完成；
 - Redis Lua 高并发和故障注入集成测试；
-- Producer 队列满丢弃、Redis flush 重试、spool 恢复和 Close flush 的完整测试；**基础单元测试已完成，Redis 恢复集成测试已完成第一版**；
+- Producer overflow、Redis flush 重试、spool 恢复和 Close flush 的完整测试；**overflow fallback 基础单元测试已完成，Redis 恢复集成测试已完成第一版，spool 满盘和 kill -9 恢复仍待补充**；
 - Consumer 重复消费、pending reclaim、DLQ 测试；**Redis 集成测试已完成第一版**；
 - PG Ledger 集成测试和生产模式启动失败测试；
 - Control PG 历史 raw-key payload 迁移集成测试已完成第一版；

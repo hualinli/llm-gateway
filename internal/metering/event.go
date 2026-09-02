@@ -13,6 +13,8 @@ type Event struct {
 	PromptTokens     int       `json:"prompt_tokens"`
 	CompletionTokens int       `json:"completion_tokens"`
 	TotalTokens      int       `json:"total_tokens"`
+	UsageMissing     bool      `json:"usage_missing,omitempty"`
+	UsageInvalid     bool      `json:"usage_invalid,omitempty"`
 	CostCents        int64     `json:"cost_cents"` // 整数分，避免浮点
 	CreatedAt        time.Time `json:"created_at"`
 }

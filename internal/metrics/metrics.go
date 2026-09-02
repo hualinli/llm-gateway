@@ -51,6 +51,10 @@ var (
 		Name: "provider_retry_total",
 		Help: "Provider retry count",
 	}, []string{"provider", "model"})
+	GatewayStreamIncompleteTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "gateway_stream_incomplete_total",
+		Help: "Streams that wrote response bytes but ended before a complete provider response",
+	}, []string{"tenant", "model"})
 
 	// 计量
 	MeteringDroppedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
@@ -60,6 +64,14 @@ var (
 	MeteringFlushFailedTotal = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "metering_flush_failed_total",
 		Help: "Metering Redis batch flushes that exhausted retries",
+	})
+	MeteringOverflowQueuedTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "metering_overflow_queued_total",
+		Help: "Metering events placed in the overflow queue after the hot queue filled",
+	})
+	MeteringOverflowSpoolTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "metering_overflow_spool_total",
+		Help: "Metering events durably appended to spool after both in-memory queues filled",
 	})
 	MeteringSpoolWriteFailedTotal = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "metering_spool_write_failed_total",
@@ -76,6 +88,14 @@ var (
 	MeteringLedgerAddFailedTotal = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "metering_ledger_add_failed_total",
 		Help: "Metering events whose ledger write failed and remain pending",
+	})
+	MeteringUsageMissingTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "metering_usage_missing_total",
+		Help: "Completed provider responses that did not contain usage and could not be billed",
+	})
+	MeteringUsageInvalidTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "metering_usage_invalid_total",
+		Help: "Completed provider responses with invalid negative usage values",
 	})
 	MeteringDLQTotal = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "metering_dlq_total",

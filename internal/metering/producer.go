@@ -26,22 +26,29 @@ const (
 
 // ProducerOptions configures the asynchronous metering producer.
 type ProducerOptions struct {
-	// SpoolDir enables a durable JSONL spool used when Redis is unavailable.
-	// Empty means failures retain the historical best-effort behavior.
+	// SpoolDir enables a durable JSONL spool used when Redis is unavailable
+	// or the in-memory queues are full. Empty means the final overflow path
+	// retains best-effort behavior.
 	SpoolDir string
 	// MaxSpoolBytes bounds local disk usage. Zero uses 256 MiB.
 	MaxSpoolBytes int64
+	// OverflowBuffer absorbs bursts after the hot queue is full. Zero uses
+	// the hot queue size, and events beyond both queues fall back to spool.
+	OverflowBuffer int
 }
 
-// Producer 异步批量把 Event 推入 Redis Stream，不阻塞代理热路径。
+// Producer 异步批量把 Event 推入 Redis Stream；正常情况不阻塞代理热路径，
+// 仅在内存队列耗尽时同步落 durable spool 作为最后的计量保护。
 type Producer struct {
 	rdb      *redis.Client
 	ch       chan Event
+	overflow chan Event
 	batch    int
 	interval time.Duration
 
 	spoolPath    string
 	maxSpoolSize int64
+	spoolMu      sync.Mutex
 
 	mu       sync.RWMutex
 	closed   bool
@@ -69,10 +76,14 @@ func NewProducerWithOptions(rdb *redis.Client, buffer int, batch int, interval t
 	if options.MaxSpoolBytes <= 0 {
 		options.MaxSpoolBytes = defaultSpoolMaxSize
 	}
+	if options.OverflowBuffer <= 0 {
+		options.OverflowBuffer = buffer
+	}
 
 	p := &Producer{
 		rdb:          rdb,
 		ch:           make(chan Event, buffer),
+		overflow:     make(chan Event, options.OverflowBuffer),
 		batch:        batch,
 		interval:     interval,
 		maxSpoolSize: options.MaxSpoolBytes,
@@ -87,21 +98,40 @@ func NewProducerWithOptions(rdb *redis.Client, buffer int, batch int, interval t
 	return p
 }
 
-// Enqueue 非阻塞入队，队列满时丢弃并告警。
-// Close 与 Enqueue 通过读写锁协调，避免关闭过程中发生 send/close 竞态。
-func (p *Producer) Enqueue(e Event) {
+// Enqueue 尝试把事件放入内存队列；热队列和 overflow 队列都满时，
+// 如果启用了 spool，则同步追加到本地 durable spool，避免成功请求因为
+// 短时突发而静默丢计费事件。只有 spool 未配置或写入失败时才会丢弃。
+//
+// 返回值表示事件是否已经进入内存队列或 durable spool。Close 与 Enqueue
+// 通过读写锁协调，避免关闭过程中发生 send/close 竞态。
+func (p *Producer) Enqueue(e Event) bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	if p.closed {
 		metrics.MeteringDroppedTotal.WithLabelValues("producer_closed").Inc()
 		log.Printf("metering producer closed, request_id=%s client_request_id=%s trace_id=%s", e.RequestID, e.ClientRequestID, e.TraceID)
-		return
+		return false
 	}
 	select {
 	case p.ch <- e:
+		return true
 	default:
-		metrics.MeteringDroppedTotal.WithLabelValues("queue_full").Inc()
-		log.Printf("metering queue full, request_id=%s client_request_id=%s trace_id=%s", e.RequestID, e.ClientRequestID, e.TraceID)
+	}
+	select {
+	case p.overflow <- e:
+		metrics.MeteringOverflowQueuedTotal.Inc()
+		return true
+	default:
+	}
+	if err := p.appendSpool([]Event{e}); err == nil {
+		metrics.MeteringOverflowSpoolTotal.Inc()
+		log.Printf("metering queues full, persisted event to spool request_id=%s client_request_id=%s trace_id=%s", e.RequestID, e.ClientRequestID, e.TraceID)
+		return true
+	} else {
+		metrics.MeteringSpoolWriteFailedTotal.Inc()
+		metrics.MeteringDroppedTotal.WithLabelValues("overflow_spool_failed").Inc()
+		log.Printf("metering queues full, spool fallback failed request_id=%s client_request_id=%s trace_id=%s err=%v", e.RequestID, e.ClientRequestID, e.TraceID, err)
+		return false
 	}
 }
 
@@ -184,11 +214,23 @@ func (p *Producer) loop() {
 			}
 			cancel()
 			buf = buf[:0]
+		case e := <-p.overflow:
+			buf = append(buf, e)
+			if len(buf) >= p.batch {
+				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+				if err := flush(ctx, buf); err != nil {
+					log.Printf("metering overflow batch flush completed with error: %v", err)
+				}
+				cancel()
+				buf = buf[:0]
+			}
 		case <-p.stop:
-			// stop 不关闭 ch；先把已经入队的事件全部取出，再 flush。
+			// stop 不关闭输入 channels；先把已经入队的事件全部取出，再 flush。
 			for {
 				select {
 				case e := <-p.ch:
+					buf = append(buf, e)
+				case e := <-p.overflow:
 					buf = append(buf, e)
 				default:
 					p.mu.RLock()
@@ -246,6 +288,12 @@ func (p *Producer) flushBatch(ctx context.Context, events []Event) error {
 }
 
 func (p *Producer) appendSpool(events []Event) error {
+	p.spoolMu.Lock()
+	defer p.spoolMu.Unlock()
+	return p.appendSpoolLocked(events)
+}
+
+func (p *Producer) appendSpoolLocked(events []Event) error {
 	if len(events) == 0 || p.spoolPath == "" {
 		if len(events) == 0 {
 			return nil
@@ -292,6 +340,11 @@ func (p *Producer) replaySpool(ctx context.Context) error {
 	if p.spoolPath == "" {
 		return nil
 	}
+	// Keep the lock across read -> Redis replay -> rewrite. Otherwise an
+	// overflow Enqueue could append a new event while replay is in progress,
+	// and the later rewrite could overwrite that event.
+	p.spoolMu.Lock()
+	defer p.spoolMu.Unlock()
 	events, err := readSpool(p.spoolPath)
 	if err != nil {
 		return err
