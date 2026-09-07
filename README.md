@@ -87,6 +87,7 @@
 当前限制：
 
 - 请求体已有 4 MiB 上限；messages 数量、单条内容长度和 model 长度校验仍待补充；
+- 模型选择的协议层基础已有（请求体 `model` 字段 → `Registry.ProvidersFor` 路由），但错误语义、模型发现和按租户授权仍待补齐：未知模型返回 502、无 `/v1/models` 目录接口、无按租户的模型白名单（详见 P1 待做项）；
 - 只支持流式接口，不支持普通 JSON 响应；
 - OpenAI-compatible adapter 已实现，Anthropic 等其他真实上游尚未实现；
 - 尚无异步 per-connection queue；当前采用 adapter 单 event 有界缓冲、直接背压和每次写入 deadline，完整的可配置 bounded writer 仍待做；
@@ -492,6 +493,23 @@ downstream client
 
 配置面一旦丢版本或泄露密钥，数据面的行为会和控制面认知不一致。控制面故障通常比单次请求失败影响范围更大，因此需要比普通管理 API 更严格的版本和安全语义。
 
+### P1：模型选择与模型目录（用户可选模型补齐）
+
+**当前基础**："让用户选择模型"在协议层已经实现——`internal/proxy/proxy.go` 从请求体 JSON 提取 `model` 字段，经 `Registry.ProvidersFor(model)` 按模型查路由表，控制面可通过 gRPC 热更 `model → Provider 有序列表`。缺的不是架构，而是错误语义、模型发现和按租户授权三块外围能力。
+
+应包含：
+
+- **未知模型的错误码语义**：当前 `len(providers) == 0` 时统一返回 `502 no provider available`，把"客户端传了网关不认识的 model"（客户端/配置问题）和"模型已配置但上游全挂"（上游故障）混为一谈。应区分两种情况：路由表中不存在该 model 时返回 `404`（附可用模型提示或指向 `/v1/models`），模型存在但所有 Provider 失败时才返回 `502`。注意 Prometheus `RequestsTotal` 的 status label 也要同步区分，避免压测告警口径失真；
+- **`GET /v1/models` 模型目录接口**：从 Registry 只读快照已配置的 model 列表，按 OpenAI 兼容格式返回 `{"object":"list","data":[{"id":...,"object":"model",...}]}`；必须走现有 API Key 鉴权；如果做了按租户白名单（见下），只返回该租户可用的模型。实现上 `Registry` 目前只有 `ProvidersFor(model)`，需要新增一个返回全部 model 名的只读方法，注意与控制面热更（`UpdateRoutes`）的并发安全，现有 `RWMutex` 已够用；
+- **按租户的模型白名单**：当前路由表是全局的，无法表达"租户 A 只能用低价模型、租户 B 可用全部模型"。方案：控制面配置增加 `tenant → allowed models`，随现有 gRPC Get/Watch 下发；数据面在鉴权/路由阶段校验，越权返回 `403`；模型目录接口按白名单过滤。注意与限流、计量中已有的 tenant 维度对齐，避免出现三处租户配置口径不一致；
+- **`model` 为空的显式策略**：当前 `proxy.go` 中 model 为空时静默 fallback 到 `"default"`，会掩盖客户端 bug 且让路由行为不可预测。二选一：要么要求 `model` 必填（缺失返回 400），要么把默认模型作为控制面可配置项并显式记录到日志/指标（区分 "client-provided" 和 "defaulted"）；
+- **请求体 model 字段校验**：限制 `model` 字符串长度和字符集（防止把任意字符串灌进 Prometheus label 造成高基数，与 P1 业务校验项中的 "model 长度" 合并处理）；
+- **测试**：未知模型 404、模型存在但上游全挂 502、无白名单/越权 403、空 model 策略、`/v1/models` 鉴权与过滤，各补一个 handler 级测试。
+
+**为什么做**：
+
+模型选择是 OpenAI 兼容协议的核心入口行为，也是多租户计费的前提（按 model 计价已有 P0 项）。当前"能选但体验错误"——选错了只看到 502，选对了也不知道有哪些可选；补齐这三块后，模型选择能力才对真实客户端可用，也才能支撑按租户差异化定价和配额。
+
 ### P1：业务校验和故障治理
 
 - 使用 `http.MaxBytesReader` 限制请求体大小；Gateway 数据面（4 MiB）与管理面 `/keys`（64 KiB）、`/config`（4 MiB）已完成；
@@ -650,6 +668,32 @@ Gateway 的 `WriteTimeout` 保持为 0，因为全局写超时会错误截断长
 所有 Provider 都在首 event 前失败时，网关根据错误映射返回 400/408/429/502 等状态；上游 401 不直接伪装成客户端 API Key 失效，通常映射为 502。
 
 测试证据：`internal/provider/errors_test.go`、`TestOpenAIFailoverBeforeFirstEvent`、`TestOpenAIMidStreamFailureDoesNotReplayBackup`、`TestAllRetryable5xxMappedTo502`。
+
+#### 3.1 要不要做 hedging（请求对冲）？
+
+**结论先行：当前阶段不做。** hedging 是把“串行切备”升级成“主备同时打，谁先吐出首个 event 就用谁、取消另一个”的策略，本质是用成本买 TTFT 尾延迟。当前网关的串行切备已经覆盖了“上游死了”的可用性问题，hedging 额外解决的只是“上游活着但慢”的延迟问题，而后者当前没有实测数据支撑其优先级。
+
+**用的理由（什么场景下值得）：**
+
+- TTFT 尾延迟是产品硬指标（如实时对话），冷启动/长 prompt 导致的 P99 首字节延迟只有并行能压住——串行切备的最坏等待是所有 attempt 的 FirstByteTimeout 之和，并行把它压成单次 max；
+- 与现有“首字节前可切备”纪律兼容：hedging 只在首字节窗口内竞争，赢家用谁、输家取消，不引入重放问题；
+- 可以做成概率性 hedging（只对 P95 以上的慢请求触发第二发），成本可控。
+
+**不用的理由（当前阶段的实际代价）：**
+
+- **双倍上游成本且无法回收**：输家那个 attempt 在被取消前往往已经开始生成，上游可能仍按完整 completion 计费；网关侧既要付这笔钱，还不能把它算进用户账单——计费归属立刻变模糊。
+- **计量语义冲突**：当前幂等键是 request_id，天然假设“一个请求一份 usage”。hedging 产生两份 usage，需要引入 attempt 级子 ID 和“只采赢家 usage”的选择策略，metering 的去重和 DLQ 语义都要重做。
+- **限流放大**：双发请求双倍消耗上游配额，429 概率上升，反而伤可用性；与租户限流、上游配额治理叠加后行为难以预测。
+- **收益依赖前置条件**：FirstByteTimeout 目前是写死的默认值，不可按 Provider/model 配置；没有 per-request 延迟预算和慢请求识别，hedging 会退化成“无条件双发”，成本直接翻倍。
+
+**如果未来要做，前置清单：**
+
+1. FirstByteTimeout 按模型/Provider 可配（本身已在 P0 清单里）；
+2. 请求级 TTFT 预算与触发条件（超 P95 才对冲，而非全量双发）；
+3. metering 引入 attempt 维度：usage 归属策略（只计赢家/失败方不落台账）+ 幂等键扩展；
+4. 指标：hedge 触发率、赢家/输家分布、对冲带来的上游成本增量。
+
+**面试可用的一句话**：串行切备解决可用性，hedging 解决尾延迟；前者是首字节前的正确性机制，后者是首字节前的成本机制，两者共享同一个提交点（countingWriter 的 written 判定），但计费和限流语义完全不同，不能混为一谈。
 
 #### 4. 按 API key、user 还是 model 限流？
 
