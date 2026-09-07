@@ -494,7 +494,7 @@ downstream client
 
 ### P1：业务校验和故障治理
 
-- 使用 `http.MaxBytesReader` 限制请求体大小；
+- 使用 `http.MaxBytesReader` 限制请求体大小；Gateway 数据面（4 MiB）与管理面 `/keys`（64 KiB）、`/config`（4 MiB）已完成；
 - 限制 messages 数量、单条内容长度和 model 长度；
 - 严格解析 `Authorization: Bearer ...`，不接受任意前缀；**已完成**；
 - pprof 仅允许内部访问或单独保护；
@@ -504,6 +504,11 @@ downstream client
 - Provider 恢复探测；
 - Provider 被摘除时停止新请求、等待在途流自然排水；
 - 支持按 Provider/model 配置真实价格，使用整数最小货币单位计算。
+- 计量 `Producer.replaySpool` 当前在 `spoolMu` 持锁期间执行 Redis 重放（受 2s flush 超时约束）；队列满时 `Enqueue` 的 spool 兜底路径会被同步阻塞，把计量故障传导为请求延迟毛刺。需要缩小持锁范围或把重放改为独立后台流程。
+- 计量 Consumer 名固定为 `consumer-1`。多实例部署时共享同名 consumer，会退化为共享 PEL + XAUTOCLAIM 打捞的伪并行消费，且不报错。需要改为实例级 consumer name（如 hostname+pid），并补多实例并行消费测试。
+- 增加故障组合演练：Redis 故障（限流 fail-open）+ 突发流量叠加时，验证计量队列满、spool 溢出后计费事件的实际丢失量级；fail-open 期间限流保护与计费正确性会同时失效，不能仅按“超额流量”评估。
+- `control.writeServiceError` 用错误文案 `strings.Contains(err.Error(), "required")` 映射状态码，内部错误文案变化会误报为 400。改为 sentinel error + `errors.Is`，与项目其余错误处理风格保持一致。
+- 清理 `internal/proxy` 中定义后未使用的 `resolveRequestID` 死代码。
 
 ### P2：工程化、压测和交付材料
 

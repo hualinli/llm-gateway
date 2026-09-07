@@ -14,6 +14,11 @@ import (
 	pb "llm-gateway/proto/control"
 )
 
+// maxConfigBody bounds the /config admin payload, mirroring the data-plane
+// request body limit. Without it, an unauthenticated demo-mode client can
+// force an unbounded allocation through JSON decoding.
+const maxConfigBody = 4 << 20
+
 func redactKeyRecords(records []*pb.KeyRecord) []map[string]string {
 	out := make([]map[string]string, 0, len(records))
 	for _, record := range records {
@@ -134,6 +139,7 @@ func main() {
 				"routes":  control.RoutesFromProto(cfg.Routes),
 			})
 		case http.MethodPost:
+			r.Body = http.MaxBytesReader(w, r.Body, maxConfigBody)
 			var req struct {
 				Keys       map[string]string   `json:"keys"` // legacy input; converted to hashes before persistence
 				KeyRecords []*pb.KeyRecord     `json:"key_records"`
