@@ -19,6 +19,7 @@ import (
 	"llm-gateway/internal/observability"
 	"llm-gateway/internal/provider"
 	"llm-gateway/internal/proxy"
+	"llm-gateway/migrations"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -57,6 +58,9 @@ func integrationDependencies(t *testing.T, legacy ...bool) (*metering.PGLedger, 
 	query := u.Query()
 	query.Set("search_path", schema)
 	u.RawQuery = query.Encode()
+	if err := migrations.Up(u.String()); err != nil {
+		t.Fatal(err)
+	}
 	ledger, err := metering.NewPGLedger(u.String())
 	if err != nil {
 		t.Fatal(err)
@@ -69,7 +73,18 @@ func integrationDependencies(t *testing.T, legacy ...bool) (*metering.PGLedger, 
 		if err := ledger.Close(); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := db.Exec(`ALTER TABLE ` + schema + `.metering_events RENAME COLUMN event_id TO request_id`); err != nil {
+		m, err := migrations.Open(u.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := m.Steps(-1); err != nil {
+			t.Fatal(err)
+		}
+		a, b := m.Close()
+		if a != nil || b != nil {
+			t.Fatalf("close: %v %v", a, b)
+		}
+		if err := migrations.Up(u.String()); err != nil {
 			t.Fatal(err)
 		}
 		ledger, err = metering.NewPGLedger(u.String())

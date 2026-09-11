@@ -39,3 +39,15 @@ integration-test: test-up
 		CONTROL_TEST_POSTGRES_DSN='$(TEST_POSTGRES_DSN)' \
 		METERING_TEST_POSTGRES_DSN='$(TEST_POSTGRES_DSN)' \
 		go test $(TEST_FLAGS) $(TEST_PACKAGES) -run '$(TEST_RUN)' -count=1 -timeout=120s
+
+# Explicit schema changes; export POSTGRES_DSN for the intended database.
+.PHONY: migrate-up migrate-version migrate-down-one
+migrate-up:
+	go run ./cmd/migrate up
+
+migrate-version:
+	go run ./cmd/migrate version
+
+# Rolls back one version. Review its down.sql before use.
+migrate-down-one:
+	go run ./cmd/migrate down-one

@@ -2,6 +2,8 @@ package metering
 
 import (
 	"database/sql"
+	_ "embed"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -9,6 +11,8 @@ import (
 	"sync"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
+
+	"llm-gateway/migrations"
 )
 
 // Ledger 台账接口，内存和 PG 实现通用
@@ -75,31 +79,7 @@ func NewPGLedger(dsn string) (*PGLedger, error) {
 		_ = db.Close()
 		return nil, err
 	}
-	// 建表
-	_, err = db.Exec(`
-CREATE TABLE IF NOT EXISTS metering_events (
-  event_id TEXT PRIMARY KEY,
-  tenant_id TEXT NOT NULL,
-  model TEXT NOT NULL,
-  provider TEXT NOT NULL,
-  prompt_tokens INT NOT NULL,
-  completion_tokens INT NOT NULL,
-  total_tokens INT NOT NULL,
-  cost_cents BIGINT NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL
-);
--- Rename the existing column without changing identities or deleting rows.
-DO $$
-BEGIN
-  IF EXISTS (SELECT 1 FROM pg_attribute
-    WHERE attrelid = 'metering_events'::regclass
-      AND attname = 'request_id' AND NOT attisdropped) THEN
-    ALTER TABLE metering_events RENAME COLUMN request_id TO event_id;
-  END IF;
-END $$;
-CREATE INDEX IF NOT EXISTS idx_tenant ON metering_events(tenant_id);
-`)
-	if err != nil {
+	if err := migrations.Check(db); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
@@ -110,9 +90,7 @@ CREATE INDEX IF NOT EXISTS idx_tenant ON metering_events(tenant_id);
 func (p *PGLedger) Close() error { return p.db.Close() }
 
 func (p *PGLedger) Add(e Event) (bool, error) {
-	res, err := p.db.Exec(`
-INSERT INTO metering_events (event_id, tenant_id, model, provider, prompt_tokens, completion_tokens, total_tokens, cost_cents, created_at)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (event_id) DO NOTHING`,
+	res, err := p.db.Exec(queryInsertEvent,
 		e.EventID, e.TenantID, e.Model, e.Provider, e.PromptTokens, e.CompletionTokens, e.TotalTokens, e.CostCents, e.CreatedAt)
 	if err != nil {
 		return false, err
@@ -122,16 +100,14 @@ VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (event_id) DO NOTHING`,
 }
 func (p *PGLedger) Count() (int, error) {
 	var n int
-	if err := p.db.QueryRow(`SELECT COUNT(*) FROM metering_events`).Scan(&n); err != nil {
+	if err := p.db.QueryRow(queryCountEvents).Scan(&n); err != nil {
 		return 0, err
 	}
 	return n, nil
 }
 
 func (p *PGLedger) Snapshot() (map[string]Event, error) {
-	rows, err := p.db.Query(`
-SELECT event_id, tenant_id, model, provider, prompt_tokens, completion_tokens, total_tokens, cost_cents, created_at
-FROM metering_events`)
+	rows, err := p.db.Query(querySnapshotEvents)
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +128,7 @@ FROM metering_events`)
 }
 func (p *PGLedger) Balance(tenantID string) (int64, error) {
 	var v int64
-	if err := p.db.QueryRow(`SELECT COALESCE(SUM(cost_cents),0) FROM metering_events WHERE tenant_id=$1`, tenantID).Scan(&v); err != nil {
+	if err := p.db.QueryRow(queryTenantBalance, tenantID).Scan(&v); err != nil {
 		return 0, err
 	}
 	return v, nil
@@ -166,7 +142,7 @@ func NewLedger() (Ledger, error) {
 	}
 	if pg, err := NewPGLedger(dsn); err == nil {
 		return pg, nil
-	} else if requirePostgres() {
+	} else if errors.Is(err, migrations.ErrSchema) || requirePostgres() {
 		return nil, fmt.Errorf("postgres ledger required: %w", err)
 	} else {
 		log.Printf("pg ledger fallback to memory: %v", err)
@@ -178,3 +154,15 @@ func requirePostgres() bool {
 	value := strings.ToLower(strings.TrimSpace(os.Getenv("METERING_REQUIRE_POSTGRES")))
 	return value == "1" || value == "true" || value == "yes"
 }
+
+//go:embed queries/insert_event.sql
+var queryInsertEvent string
+
+//go:embed queries/count_events.sql
+var queryCountEvents string
+
+//go:embed queries/snapshot_events.sql
+var querySnapshotEvents string
+
+//go:embed queries/tenant_balance.sql
+var queryTenantBalance string

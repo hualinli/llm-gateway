@@ -1,0 +1,30 @@
+docker compose -f docker-compose.test.yml up -d --wait
+ Container llm-gateway-tests-redis-1 Running 
+ Container llm-gateway-tests-postgres-1 Running 
+ Container llm-gateway-tests-redis-1 Waiting 
+ Container llm-gateway-tests-postgres-1 Waiting 
+ Container llm-gateway-tests-postgres-1 Healthy 
+ Container llm-gateway-tests-redis-1 Healthy 
+env -u OPENAI_BASE_URL -u OPENAI_API_KEY -u OPENAI_MODEL \
+		METERING_TEST_REDIS_ADDR='127.0.0.1:16379' \
+		LIMITER_TEST_REDIS_ADDR='127.0.0.1:16379' \
+		CONTROL_TEST_POSTGRES_DSN='postgres://gateway_test:test_only_local@127.0.0.1:15433/gateway_test?sslmode=disable' \
+		METERING_TEST_POSTGRES_DSN='postgres://gateway_test:test_only_local@127.0.0.1:15433/gateway_test?sslmode=disable' \
+		go test -race ./... -run '.' -count=1 -timeout=120s
+ok  	llm-gateway/cmd/control	2.096s
+ok  	llm-gateway/cmd/gateway	2.287s
+?   	llm-gateway/cmd/loadtest	[no test files]
+?   	llm-gateway/cmd/metering	[no test files]
+?   	llm-gateway/cmd/migrate	[no test files]
+ok  	llm-gateway/internal/auth	1.359s
+ok  	llm-gateway/internal/control	3.039s
+ok  	llm-gateway/internal/limiter	2.420s
+ok  	llm-gateway/internal/loadtest	2.515s
+ok  	llm-gateway/internal/metering	2.455s
+?   	llm-gateway/internal/metrics	[no test files]
+ok  	llm-gateway/internal/observability	1.408s
+ok  	llm-gateway/internal/provider	2.088s
+ok  	llm-gateway/internal/provider/sse	2.177s
+ok  	llm-gateway/internal/proxy	1.659s
+ok  	llm-gateway/migrations	1.883s
+?   	llm-gateway/proto/control	[no test files]

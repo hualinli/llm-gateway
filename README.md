@@ -191,7 +191,7 @@
 - Producer 已支持 `Close(ctx)` 和退出前 flush；
 - 当前 spool 是单进程本地文件，已有大小上限和 `metering_spool_bytes` 指标，尚未实现多进程锁和完整恢复演练；
 - 网关为每次执行生成独立 `evt_` ID，使用 `EventID` / `event_id` 标识计量事件；客户端 ID 单独保存在 `client_request_id`，重复调用分别计费，事件重投递去重；
-- 升级计量字段时应先停止旧版 Gateway/Consumer，再启动新版；新版自动将 PG 台账列 `request_id` 重命名为 `event_id`，保留原 ID 和账单。旧 Redis/spool JSON 仅在读取入口接受 `request_id`，新写入统一为 `event_id`；不支持新旧程序混跑。缺失或冲突 ID 会拒绝解析，Consumer 转入死信队列，spool 隔离原始记录。
+- 升级计量字段时应先停止旧版 Gateway/Consumer，再启动新版；先执行 `make migrate-up` 将 PG 台账列 `request_id` 重命名为 `event_id`，然后启动新版服务，保留原 ID 和账单。旧 Redis/spool JSON 仅在读取入口接受 `request_id`，新写入统一为 `event_id`；不支持新旧程序混跑。缺失或冲突 ID 会拒绝解析，Consumer 转入死信队列，spool 隔离原始记录。
 - `X-Request-ID` 现在会校验长度和字符集；未提供时由 Gateway 生成，并通过响应头返回；Gateway 同时返回 `X-Trace-ID` 并解析 W3C `traceparent`；
 - `Reconcile` 已改为事件级比较并报告 duplicate/pending/DLQ/具体差异；仍未覆盖历史归档、超大 Stream 分页和完整 PG 集成场景；
 - Ledger 的 Count/Balance 查询错误现在会向上返回，HTTP 接口返回 503；
@@ -898,6 +898,16 @@ docker compose up -d
 - PostgreSQL：`localhost:5433`
 - Prometheus：`localhost:9090`
 - Grafana：`localhost:3000`
+
+先显式执行数据库迁移（连接地址须与服务使用的 `POSTGRES_DSN` 一致）：
+
+```bash
+export POSTGRES_DSN='postgres://gateway:gateway@localhost:5433/llm_gateway?sslmode=disable'
+make migrate-up
+make migrate-version
+```
+
+迁移采用 golang-migrate，SQL 位于 [migrations](migrations/README.md)。服务只检查 schema 版本，不自动建表/改表；缺少迁移或 dirty 状态会阻止 PG 服务启动，不会因 schema 错误回退内存。业务查询 SQL 位于 `internal/control/queries/` 和 `internal/metering/queries/`，通过 `go:embed` 打包，不依赖运行目录。
 
 Gateway、Control、Metering 当前需要单独启动。建议按以下顺序在三个终端启动：
 

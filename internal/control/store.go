@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"database/sql"
+	_ "embed"
 	"errors"
 	"fmt"
 	"log"
@@ -17,6 +18,8 @@ import (
 	pb "llm-gateway/proto/control"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
+
+	"llm-gateway/migrations"
 )
 
 // Store 是配置持久化抽象：版本号必须落盘单调，控制面重启不回退。
@@ -66,13 +69,7 @@ func NewPGStore(dsn string) (*PGStore, error) {
 		_ = db.Close()
 		return nil, err
 	}
-	_, err = db.Exec(`
-CREATE TABLE IF NOT EXISTS control_config (
-  version BIGINT PRIMARY KEY,
-  payload JSONB NOT NULL,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);`)
-	if err != nil {
+	if err := migrations.Check(db); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
@@ -93,7 +90,7 @@ func (p *PGStore) Save(ctx context.Context, cfg *pb.Config) error {
 	}
 	// 主键冲突 = 版本竞态，报错拒绝而不是覆盖，防止旧版回写
 	_, err = p.db.ExecContext(ctx,
-		`INSERT INTO control_config (version, payload) VALUES ($1, $2)`,
+		querySaveConfig,
 		cfg.Version, string(b))
 	return err
 }
@@ -101,7 +98,7 @@ func (p *PGStore) Save(ctx context.Context, cfg *pb.Config) error {
 func (p *PGStore) LoadLatest(ctx context.Context) (*pb.Config, error) {
 	var raw string
 	err := p.db.QueryRowContext(ctx,
-		`SELECT payload::text FROM control_config ORDER BY version DESC LIMIT 1`).Scan(&raw)
+		queryLatestConfig).Scan(&raw)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -130,7 +127,7 @@ func (p *PGStore) MigrateLegacyPayloads(ctx context.Context) error {
 		version int64
 		payload string
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT version, payload::text FROM control_config ORDER BY version`)
+	rows, err := tx.QueryContext(ctx, queryLegacyConfigs)
 	if err != nil {
 		return err
 	}
@@ -166,7 +163,7 @@ func (p *PGStore) MigrateLegacyPayloads(ctx context.Context) error {
 		return err
 	}
 	for _, update := range updates {
-		if _, err := tx.ExecContext(ctx, `UPDATE control_config SET payload=$1 WHERE version=$2`, update.payload, update.version); err != nil {
+		if _, err := tx.ExecContext(ctx, queryUpdateConfig, update.payload, update.version); err != nil {
 			return fmt.Errorf("version %d: %w", update.version, err)
 		}
 	}
@@ -182,7 +179,7 @@ func NewStore() (Store, error) {
 	if pg, err := NewPGStore(dsn); err == nil {
 		log.Print("control store: postgres connected")
 		return pg, nil
-	} else if requireControlPostgres() {
+	} else if errors.Is(err, migrations.ErrSchema) || requireControlPostgres() {
 		return nil, err
 	} else {
 		log.Printf("control store fallback to memory: %v", err)
@@ -194,3 +191,15 @@ func requireControlPostgres() bool {
 	value := strings.ToLower(strings.TrimSpace(os.Getenv("CONTROL_REQUIRE_POSTGRES")))
 	return value == "1" || value == "true" || value == "yes"
 }
+
+//go:embed queries/save_config.sql
+var querySaveConfig string
+
+//go:embed queries/latest_config.sql
+var queryLatestConfig string
+
+//go:embed queries/legacy_configs.sql
+var queryLegacyConfigs string
+
+//go:embed queries/update_config.sql
+var queryUpdateConfig string

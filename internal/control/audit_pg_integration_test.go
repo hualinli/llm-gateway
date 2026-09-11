@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"database/sql"
+	"llm-gateway/migrations"
 	"os"
 	"testing"
 	"time"
@@ -14,6 +15,9 @@ func TestPostgresAuditSinkPersistsSafeEvent(t *testing.T) {
 	dsn := os.Getenv("CONTROL_TEST_POSTGRES_DSN")
 	if dsn == "" {
 		t.Skip("set CONTROL_TEST_POSTGRES_DSN to run PostgreSQL integration tests")
+	}
+	if err := migrations.Up(dsn); err != nil {
+		t.Fatal(err)
 	}
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
