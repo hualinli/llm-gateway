@@ -1,0 +1,21 @@
+=== RUN   TestRepeatedClientRequestIDCreatesDistinctBillingEvents
+2026/09/11 09:25:31 request_id=same-client-id trace_id=61b4f018672cadce1f94140d7f2941db provider=a model=m1 usage={PromptTokens:1 CompletionTokens:2 TotalTokens:3}
+2026/09/11 09:25:31 request_id=same-client-id trace_id=b778a177c326e7e22bbd51d4b292a94c provider=a model=m1 usage={PromptTokens:1 CompletionTokens:2 TotalTokens:3}
+--- PASS: TestRepeatedClientRequestIDCreatesDistinctBillingEvents (0.00s)
+PASS
+ok  	llm-gateway/internal/proxy	1.026s
+=== RUN   TestPostgresLedgerRoundTripReconcile
+2026/09/11 09:25:32 pg ledger connected
+--- PASS: TestPostgresLedgerRoundTripReconcile (0.02s)
+=== RUN   TestGatewayRedisPostgresRepeatedIDAndRedelivery
+2026/09/11 09:25:32 pg ledger connected
+2026/09/11 09:25:32 request_id=same-client-id trace_id=234747ac7c7c2a5f08a70dfeb75440c9 provider=test-upstream model=m usage={PromptTokens:1 CompletionTokens:2 TotalTokens:3}
+2026/09/11 09:25:32 request_id=same-client-id trace_id=75562234dd0c0b92ee8c67cd5964a4ff provider=test-upstream model=m usage={PromptTokens:1 CompletionTokens:2 TotalTokens:3}
+2026/09/11 09:25:32 metering consumer group=metering-group consumer=consumer-1 stream=usage:events
+2026/09/11 09:25:32 ledger add request_id=evt_b23bd42a2a1507ca85b4987b398404e3 client_request_id=same-client-id trace_id=234747ac7c7c2a5f08a70dfeb75440c9 tenant=tenant-a cost=3
+2026/09/11 09:25:32 ledger add request_id=evt_c3dd573f1dcb176ea49fa62d30a52683 client_request_id=same-client-id trace_id=75562234dd0c0b92ee8c67cd5964a4ff tenant=tenant-a cost=3
+2026/09/11 09:25:32 ledger dedup request_id=evt_b23bd42a2a1507ca85b4987b398404e3 client_request_id=same-client-id trace_id=234747ac7c7c2a5f08a70dfeb75440c9
+    ledger_integration_test.go:185: upstream_calls=2 stream_messages=3 ledger_rows=2 duplicate_deliveries=1 charge=6 reconcile=consistent
+--- PASS: TestGatewayRedisPostgresRepeatedIDAndRedelivery (0.14s)
+PASS
+ok  	llm-gateway/internal/metering	1.610s

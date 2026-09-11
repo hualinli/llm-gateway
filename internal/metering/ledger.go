@@ -72,6 +72,7 @@ func NewPGLedger(dsn string) (*PGLedger, error) {
 		return nil, err
 	}
 	if err := db.Ping(); err != nil {
+		_ = db.Close()
 		return nil, err
 	}
 	// 建表
@@ -90,11 +91,14 @@ CREATE TABLE IF NOT EXISTS metering_events (
 CREATE INDEX IF NOT EXISTS idx_tenant ON metering_events(tenant_id);
 `)
 	if err != nil {
+		_ = db.Close()
 		return nil, err
 	}
-	log.Printf("pg ledger connected dsn=%s", dsn)
+	log.Print("pg ledger connected")
 	return &PGLedger{db: db}, nil
 }
+
+func (p *PGLedger) Close() error { return p.db.Close() }
 
 func (p *PGLedger) Add(e Event) (bool, error) {
 	res, err := p.db.Exec(`

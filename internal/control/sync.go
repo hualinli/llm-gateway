@@ -2,6 +2,7 @@ package control
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"time"
 
@@ -68,7 +69,12 @@ func (s *Synchronizer) Run(ctx context.Context, apply func(*pb.Config) error) er
 		if cfg == nil {
 			return nil
 		}
-		if cfg.Version <= s.applied {
+		if cfg.Version < s.applied {
+			// A reachable but stale control instance must neither restore old
+			// credentials nor extend the lease on a newer local snapshot.
+			return fmt.Errorf("stale control config v%d, already applied v%d", cfg.Version, s.applied)
+		}
+		if cfg.Version == s.applied {
 			// A lease expiry may have revoked the local credentials. Re-apply
 			// the same version after control recovers; version equality alone
 			// must not prevent restoring local state.

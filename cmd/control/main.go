@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -128,7 +129,27 @@ func main() {
 	if err != nil {
 		log.Fatalf("control credential HTTP: %v", err)
 	}
-	configHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	configHandler := newConfigHandler(srv, auditSink, legacyKeyInputAllowed)
+	mux.Handle("/config", control.AdminAuth(configHandler, adminToken, requireAdminAuth))
+	keysAuth := control.IdentityAuth(credentialHandler, identityVerifier, true)
+	mux.Handle("/keys", keysAuth)
+	mux.Handle("/keys/", keysAuth)
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok\n")) })
+
+	go func() {
+		log.Println("control http listening on :50052")
+		log.Fatal(http.ListenAndServe(":50052", observability.Middleware(mux)))
+	}()
+
+	log.Println("control ready gRPC :50051 http :50052")
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	log.Println("control exit")
+}
+
+func newConfigHandler(srv *control.Server, auditSink control.AuditSink, legacyKeyInputAllowed bool) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			cfg, _ := srv.GetConfig(r.Context(), &pb.GetRequest{})
@@ -141,9 +162,10 @@ func main() {
 		case http.MethodPost:
 			r.Body = http.MaxBytesReader(w, r.Body, maxConfigBody)
 			var req struct {
-				Keys       map[string]string   `json:"keys"` // legacy input; converted to hashes before persistence
-				KeyRecords []*pb.KeyRecord     `json:"key_records"`
-				Routes     map[string][]string `json:"routes"`
+				Keys            map[string]string   `json:"keys"` // legacy input; converted to hashes before persistence
+				KeyRecords      []*pb.KeyRecord     `json:"key_records"`
+				Routes          map[string][]string `json:"routes"`
+				ExpectedVersion *int64              `json:"expected_version"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				http.Error(w, err.Error(), 400)
@@ -153,33 +175,26 @@ func main() {
 				http.Error(w, "legacy keys input is disabled; use key_records or the credential service", http.StatusBadRequest)
 				return
 			}
-			old, _ := srv.GetConfig(r.Context(), &pb.GetRequest{})
-			// 兜底：空则保留旧值。Legacy keys 只在请求边界转换，新的
-			// Config/Store/Watch 路径只保存 KeyRecords。
-			records, routes := req.KeyRecords, control.RoutesToProto(req.Routes)
-			if records == nil && req.Keys == nil {
-				records = old.KeyRecords
+			if req.Keys != nil && req.KeyRecords != nil {
+				http.Error(w, "keys and key_records cannot be set together", http.StatusBadRequest)
+				return
 			}
-			if req.Routes == nil {
-				routes = old.Routes
+			patch := control.ConfigPatch{KeyRecords: req.KeyRecords, LegacyKeys: req.Keys, ExpectedVersion: req.ExpectedVersion}
+			if req.Routes != nil {
+				patch.Routes = control.RoutesToProto(req.Routes)
 			}
-			var (
-				newCfg   *pb.Config
-				applyErr error
-			)
-			if records != nil {
-				newCfg, applyErr = srv.ApplyKeyRecords(records, routes)
-			} else {
-				// Compatibility for the local demo; ApplyConfig hashes immediately.
-				newCfg, applyErr = srv.ApplyConfig(req.Keys, routes)
-			}
+			newCfg, applyErr := srv.PatchConfig(patch)
 			if applyErr != nil {
 				auditSink.Record(r.Context(), control.AuditEvent{
 					Action: "config.apply", Outcome: "failure",
 					Subject: principalSubject(r), Role: principalRole(r),
 					RequestID: observability.RequestID(r.Context()), TraceID: observability.TraceID(r.Context()),
 				})
-				http.Error(w, "persist config: "+applyErr.Error(), http.StatusInternalServerError)
+				status := http.StatusInternalServerError
+				if errors.Is(applyErr, control.ErrConfigVersionConflict) {
+					status = http.StatusConflict
+				}
+				http.Error(w, "persist config: "+applyErr.Error(), status)
 				return
 			}
 			auditSink.Record(r.Context(), control.AuditEvent{
@@ -197,20 +212,4 @@ func main() {
 			http.Error(w, "method not allowed", 405)
 		}
 	})
-	mux.Handle("/config", control.AdminAuth(configHandler, adminToken, requireAdminAuth))
-	keysAuth := control.IdentityAuth(credentialHandler, identityVerifier, true)
-	mux.Handle("/keys", keysAuth)
-	mux.Handle("/keys/", keysAuth)
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok\n")) })
-
-	go func() {
-		log.Println("control http listening on :50052")
-		log.Fatal(http.ListenAndServe(":50052", observability.Middleware(mux)))
-	}()
-
-	log.Println("control ready gRPC :50051 http :50052")
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-	log.Println("control exit")
 }

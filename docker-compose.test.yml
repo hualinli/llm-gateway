@@ -1,0 +1,32 @@
+# Disposable integration-test dependencies. No production or demo volumes.
+name: llm-gateway-tests
+
+services:
+  redis:
+    image: redis:7
+    ports:
+      - "127.0.0.1:16379:6379"
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    tmpfs:
+      - /data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 1s
+      timeout: 1s
+      retries: 30
+
+  postgres:
+    image: postgres:16
+    ports:
+      - "127.0.0.1:15433:5432"
+    environment:
+      POSTGRES_DB: gateway_test
+      POSTGRES_USER: gateway_test
+      POSTGRES_PASSWORD: test_only_local
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gateway_test -d gateway_test"]
+      interval: 1s
+      timeout: 1s
+      retries: 30

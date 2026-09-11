@@ -1,0 +1,100 @@
+=== RUN   TestConfigPatchSerializesWithCredentialChanges
+2026/09/11 09:29:00 control: apply version=1 keys=1 routes=0
+2026/09/11 09:29:00 control: apply version=2 keys=1 routes=1
+2026/09/11 09:29:00 control: apply version=3 keys=2 routes=1
+2026/09/11 09:29:00 control: apply version=4 keys=3 routes=1
+2026/09/11 09:29:00 control: apply version=5 keys=3 routes=1
+2026/09/11 09:29:00 control: apply version=6 keys=4 routes=1
+2026/09/11 09:29:00 control: apply version=7 keys=4 routes=1
+2026/09/11 09:29:00 control: apply version=8 keys=5 routes=1
+2026/09/11 09:29:00 control: apply version=9 keys=5 routes=1
+2026/09/11 09:29:00 control: apply version=10 keys=5 routes=1
+2026/09/11 09:29:00 control: apply version=11 keys=5 routes=1
+2026/09/11 09:29:00 control: apply version=12 keys=6 routes=1
+2026/09/11 09:29:00 control: apply version=13 keys=6 routes=1
+2026/09/11 09:29:00 control: apply version=14 keys=7 routes=1
+2026/09/11 09:29:00 control: apply version=15 keys=7 routes=1
+2026/09/11 09:29:00 control: apply version=16 keys=8 routes=1
+2026/09/11 09:29:00 control: apply version=17 keys=8 routes=1
+2026/09/11 09:29:00 control: apply version=18 keys=9 routes=1
+2026/09/11 09:29:00 control: apply version=19 keys=9 routes=1
+2026/09/11 09:29:00 control: apply version=20 keys=10 routes=1
+2026/09/11 09:29:00 control: apply version=21 keys=10 routes=1
+2026/09/11 09:29:00 control: apply version=22 keys=11 routes=1
+2026/09/11 09:29:00 control: apply version=23 keys=11 routes=1
+2026/09/11 09:29:00 control: apply version=24 keys=12 routes=1
+2026/09/11 09:29:00 control: apply version=25 keys=12 routes=1
+2026/09/11 09:29:00 control: apply version=26 keys=13 routes=1
+2026/09/11 09:29:00 control: apply version=27 keys=13 routes=1
+2026/09/11 09:29:00 control: apply version=28 keys=14 routes=1
+2026/09/11 09:29:00 control: apply version=29 keys=15 routes=1
+2026/09/11 09:29:00 control: apply version=30 keys=15 routes=1
+2026/09/11 09:29:00 control: apply version=31 keys=16 routes=1
+2026/09/11 09:29:00 control: apply version=32 keys=16 routes=1
+2026/09/11 09:29:00 control: apply version=33 keys=16 routes=1
+2026/09/11 09:29:00 control: apply version=34 keys=17 routes=1
+2026/09/11 09:29:00 control: apply version=35 keys=17 routes=1
+2026/09/11 09:29:00 control: apply version=36 keys=18 routes=1
+2026/09/11 09:29:00 control: apply version=37 keys=18 routes=1
+2026/09/11 09:29:00 control: apply version=38 keys=19 routes=1
+2026/09/11 09:29:00 control: apply version=39 keys=19 routes=1
+2026/09/11 09:29:00 control: apply version=40 keys=19 routes=1
+2026/09/11 09:29:00 control: apply version=41 keys=20 routes=1
+2026/09/11 09:29:00 control: apply version=42 keys=21 routes=1
+--- PASS: TestConfigPatchSerializesWithCredentialChanges (0.00s)
+=== RUN   TestConfigPatchPreservesOmittedFieldsAndClearsExplicitEmpty
+2026/09/11 09:29:00 control: apply version=1 keys=1 routes=1
+2026/09/11 09:29:00 control: apply version=2 keys=1 routes=0
+2026/09/11 09:29:00 control: apply version=3 keys=0 routes=0
+--- PASS: TestConfigPatchPreservesOmittedFieldsAndClearsExplicitEmpty (0.00s)
+=== RUN   TestSynchronizerStaleConfigCannotRenewLease
+2026/09/11 09:29:00 control: apply version=1 keys=1 routes=1
+2026/09/11 09:29:00 control: apply version=2 keys=0 routes=1
+2026/09/11 09:29:01 control sync ended: stale control config v1, already applied v2
+2026/09/11 09:29:01 control sync ended: stale control config v1, already applied v2
+2026/09/11 09:29:01 control sync ended: stale control config v1, already applied v2
+2026/09/11 09:29:01 control sync ended: stale control config v1, already applied v2
+2026/09/11 09:29:01 control sync ended: stale control config v1, already applied v2
+2026/09/11 09:29:01 control sync ended: stale control config v1, already applied v2
+2026/09/11 09:29:01 control sync ended: stale control config v1, already applied v2
+2026/09/11 09:29:01 control sync ended: stale control config v1, already applied v2
+--- PASS: TestSynchronizerStaleConfigCannotRenewLease (0.11s)
+=== RUN   TestSynchronizerExpiredLeaseRejectsOlderConfigAndRecoversSameVersion
+2026/09/11 09:29:01 control: apply version=1 keys=1 routes=1
+2026/09/11 09:29:01 control: apply version=2 keys=0 routes=1
+2026/09/11 09:29:01 control sync ended: rpc error: code = Unavailable desc = error reading from server: read tcp 127.0.0.1:60902->127.0.0.1:60901: read: connection reset by peer
+2026/09/11 09:29:01 control sync dial failed 127.0.0.1:60901: context deadline exceeded
+2026/09/11 09:29:01 control sync dial failed 127.0.0.1:60901: context deadline exceeded
+2026/09/11 09:29:01 control sync ended: stale control config v1, already applied v2
+2026/09/11 09:29:01 control sync ended: stale control config v1, already applied v2
+2026/09/11 09:29:01 control sync ended: stale control config v1, already applied v2
+2026/09/11 09:29:01 control sync ended: stale control config v1, already applied v2
+2026/09/11 09:29:01 control sync ended: stale control config v1, already applied v2
+2026/09/11 09:29:01 control sync ended: stale control config v1, already applied v2
+2026/09/11 09:29:01 control sync ended: stale control config v1, already applied v2
+2026/09/11 09:29:01 control sync ended: stale control config v1, already applied v2
+2026/09/11 09:29:01 control sync ended: stale control config v1, already applied v2
+2026/09/11 09:29:01 control sync ended: stale control config v1, already applied v2
+2026/09/11 09:29:01 control sync ended: stale control config v1, already applied v2
+2026/09/11 09:29:01 control sync ended: stale control config v1, already applied v2
+--- PASS: TestSynchronizerExpiredLeaseRejectsOlderConfigAndRecoversSameVersion (0.26s)
+=== RUN   TestSynchronizerReconnectsAndAcceptsVersionJump
+2026/09/11 09:29:01 control: apply version=1 keys=1 routes=1
+2026/09/11 09:29:01 control: apply version=2 keys=2 routes=1
+2026/09/11 09:29:01 control: apply version=3 keys=1 routes=1
+2026/09/11 09:29:01 control sync ended: rpc error: code = Unavailable desc = error reading from server: EOF
+--- PASS: TestSynchronizerReconnectsAndAcceptsVersionJump (0.03s)
+=== RUN   TestSynchronizerLeaseExpiresAfterControlDisconnect
+2026/09/11 09:29:01 control: apply version=1 keys=1 routes=1
+2026/09/11 09:29:01 control sync ended: rpc error: code = Unavailable desc = error reading from server: read tcp 127.0.0.1:60923->127.0.0.1:60922: read: connection reset by peer
+2026/09/11 09:29:01 control sync dial failed 127.0.0.1:60922: context deadline exceeded
+2026/09/11 09:29:01 control sync dial failed 127.0.0.1:60922: context deadline exceeded
+--- PASS: TestSynchronizerLeaseExpiresAfterControlDisconnect (0.14s)
+PASS
+ok  	llm-gateway/internal/control	2.089s
+=== RUN   TestConfigRejectsStaleExpectedVersion
+2026/09/11 09:29:00 control: apply version=1 keys=1 routes=0
+2026/09/11 09:29:00 control: apply version=2 keys=1 routes=0
+--- PASS: TestConfigRejectsStaleExpectedVersion (0.00s)
+PASS
+ok  	llm-gateway/cmd/control	0.958s

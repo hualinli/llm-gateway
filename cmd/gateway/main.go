@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"net"
 	"net/http"
 	"net/http/pprof"
 	"os"
@@ -131,9 +132,13 @@ func main() {
 	})
 	mux.Handle("/v1/chat/completions", authedLimitedProxy)
 
+	requestsCtx, cancelRequests := context.WithCancel(context.Background())
+	defer cancelRequests()
+	drain := newRequestDrain()
 	srv := &http.Server{
 		Addr:         ":8090",
-		Handler:      observability.Middleware(mux),
+		Handler:      drain.middleware(observability.Middleware(mux)),
+		BaseContext:  func(net.Listener) context.Context { return requestsCtx },
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 0, // SSE 长连接不能设写超时，由 handler 的 context 控制
 		IdleTimeout:  60 * time.Second,
@@ -153,13 +158,12 @@ func main() {
 	log.Println("shutting down...")
 
 	controlCancel()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatalf("shutdown: %v", err)
-	}
-	if err := meterProducer.Close(ctx); err != nil {
-		log.Printf("metering producer close: %v", err)
+	if err := shutdownGateway(srv, drain, cancelRequests, meterProducer, shutdownOptions{
+		GracePeriod:  10 * time.Second,
+		CancelPeriod: 5 * time.Second,
+		FlushPeriod:  5 * time.Second,
+	}); err != nil {
+		log.Printf("shutdown completed with errors: %v", err)
 	}
 	_ = rdb.Close()
 	log.Println("exit")

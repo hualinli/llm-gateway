@@ -1,0 +1,24 @@
+=== RUN   TestRepeatedClientRequestIDCreatesDistinctBillingEvents
+2026/09/11 09:24:22 request_id=same-client-id trace_id=9ce83ef04f094dd460640636cc0381bc provider=a model=m1 usage={PromptTokens:1 CompletionTokens:2 TotalTokens:3}
+2026/09/11 09:24:22 request_id=same-client-id trace_id=90b7306c8992c122dcbf7f677c475ba1 provider=a model=m1 usage={PromptTokens:1 CompletionTokens:2 TotalTokens:3}
+    proxy_test.go:100: two real upstream calls: ledger_rows=1 charge=3, want rows=2 charge=6
+--- FAIL: TestRepeatedClientRequestIDCreatesDistinctBillingEvents (0.00s)
+FAIL
+FAIL	llm-gateway/internal/proxy	0.988s
+=== RUN   TestPostgresLedgerRoundTripReconcile
+2026/09/11 09:24:23 pg ledger connected dsn=postgres://gateway_test:test_only_local@127.0.0.1:15433/gateway_test?search_path=gateway_test_16b43eb7b10d0bb4dfd2bcee3454e9d8&sslmode=disable
+    ledger_integration_test.go:102: unchanged event after PostgreSQL round-trip: report={StreamMessages:1 UniqueEvents:1 InvalidEvents:0 DuplicateEvents:0 PendingMessages:0 DLQMessages:0 LedgerRows:1 Valid:0 DuplicateKeys:[] StreamOnly:[] LedgerOnly:[] PayloadMismatch:[tenant-a:execution-1]} err=<nil>
+--- FAIL: TestPostgresLedgerRoundTripReconcile (0.04s)
+=== RUN   TestGatewayRedisPostgresRepeatedIDAndRedelivery
+2026/09/11 09:24:23 pg ledger connected dsn=postgres://gateway_test:test_only_local@127.0.0.1:15433/gateway_test?search_path=gateway_test_a67cb3c1f856803f775e12de8143db04&sslmode=disable
+2026/09/11 09:24:23 request_id=same-client-id trace_id=53b5d36a7a3e6ae099149732e9a747a6 provider=test-upstream model=m usage={PromptTokens:1 CompletionTokens:2 TotalTokens:3}
+2026/09/11 09:24:23 request_id=same-client-id trace_id=f9828988ccdbf01276f49534ce3c3a6a provider=test-upstream model=m usage={PromptTokens:1 CompletionTokens:2 TotalTokens:3}
+2026/09/11 09:24:23 metering consumer group=metering-group consumer=consumer-1 stream=usage:events
+2026/09/11 09:24:23 ledger add request_id=tenant-a:same-client-id client_request_id=same-client-id trace_id=53b5d36a7a3e6ae099149732e9a747a6 tenant=tenant-a cost=3
+2026/09/11 09:24:23 ledger dedup request_id=tenant-a:same-client-id client_request_id=same-client-id trace_id=f9828988ccdbf01276f49534ce3c3a6a
+2026/09/11 09:24:23 ledger dedup request_id=tenant-a:same-client-id client_request_id=same-client-id trace_id=53b5d36a7a3e6ae099149732e9a747a6
+    ledger_integration_test.go:157: two real upstream calls should be billed separately: report={StreamMessages:3 UniqueEvents:1 InvalidEvents:0 DuplicateEvents:2 PendingMessages:0 DLQMessages:0 LedgerRows:1 Valid:1 DuplicateKeys:[tenant-a:tenant-a:same-client-id] StreamOnly:[] LedgerOnly:[] PayloadMismatch:[]} err=<nil>
+--- FAIL: TestGatewayRedisPostgresRepeatedIDAndRedelivery (3.13s)
+FAIL
+FAIL	llm-gateway/internal/metering	4.637s
+FAIL

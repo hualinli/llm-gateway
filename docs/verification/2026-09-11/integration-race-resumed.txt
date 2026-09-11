@@ -1,0 +1,47 @@
+docker compose -f docker-compose.test.yml up -d --wait
+ Container llm-gateway-tests-postgres-1 Running 
+ Container llm-gateway-tests-redis-1 Running 
+ Container llm-gateway-tests-redis-1 Waiting 
+ Container llm-gateway-tests-postgres-1 Waiting 
+ Container llm-gateway-tests-postgres-1 Healthy 
+ Container llm-gateway-tests-redis-1 Healthy 
+env -u OPENAI_BASE_URL -u OPENAI_API_KEY -u OPENAI_MODEL \
+		METERING_TEST_REDIS_ADDR='127.0.0.1:16379' \
+		LIMITER_TEST_REDIS_ADDR='127.0.0.1:16379' \
+		CONTROL_TEST_POSTGRES_DSN='postgres://gateway_test:test_only_local@127.0.0.1:15433/gateway_test?sslmode=disable' \
+		METERING_TEST_POSTGRES_DSN='postgres://gateway_test:test_only_local@127.0.0.1:15433/gateway_test?sslmode=disable' \
+		go test -race ./... -run '.' -count=1 -timeout=120s
+go: downloading github.com/prometheus/client_golang v1.24.1
+go: downloading github.com/redis/go-redis/v9 v9.22.0
+go: downloading github.com/jackc/pgx/v5 v5.10.0
+go: downloading google.golang.org/grpc v1.83.2
+go: downloading google.golang.org/protobuf v1.36.11
+go: downloading github.com/prometheus/common v0.70.1
+go: downloading github.com/beorn7/perks v1.0.1
+go: downloading github.com/prometheus/client_model v0.6.2
+go: downloading github.com/cespare/xxhash/v2 v2.3.0
+go: downloading golang.org/x/sys v0.47.0
+go: downloading golang.org/x/net v0.58.0
+go: downloading google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa
+go: downloading github.com/jackc/pgpassfile v1.0.0
+go: downloading github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761
+go: downloading golang.org/x/text v0.41.0
+go: downloading github.com/jackc/puddle/v2 v2.2.2
+go: downloading go.uber.org/atomic v1.11.0
+go: downloading github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822
+go: downloading golang.org/x/sync v0.22.0
+ok  	llm-gateway/cmd/control	2.002s
+ok  	llm-gateway/cmd/gateway	2.069s
+?   	llm-gateway/cmd/loadtest	[no test files]
+?   	llm-gateway/cmd/metering	[no test files]
+ok  	llm-gateway/internal/auth	1.336s
+ok  	llm-gateway/internal/control	3.004s
+ok  	llm-gateway/internal/limiter	2.300s
+ok  	llm-gateway/internal/loadtest	1.964s
+ok  	llm-gateway/internal/metering	2.299s
+?   	llm-gateway/internal/metrics	[no test files]
+ok  	llm-gateway/internal/observability	1.835s
+ok  	llm-gateway/internal/provider	2.084s
+ok  	llm-gateway/internal/provider/sse	1.602s
+ok  	llm-gateway/internal/proxy	2.364s
+?   	llm-gateway/proto/control	[no test files]

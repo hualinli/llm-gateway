@@ -1,4 +1,10 @@
-.PHONY: tidy up down run vet test
+.PHONY: tidy up down run vet test test-up test-down integration-test
+
+TEST_REDIS_ADDR ?= 127.0.0.1:16379
+TEST_POSTGRES_DSN ?= postgres://gateway_test:test_only_local@127.0.0.1:15433/gateway_test?sslmode=disable
+TEST_PACKAGES ?= ./...
+TEST_RUN ?= .
+TEST_FLAGS ?= -race
 
 tidy:
 	go mod tidy
@@ -17,3 +23,19 @@ vet:
 
 test:
 	go test ./... -count=1
+
+# Dedicated disposable dependencies; never reuse the demo/production volumes.
+test-up:
+	docker compose -f docker-compose.test.yml up -d --wait
+
+test-down:
+	docker compose -f docker-compose.test.yml down
+
+# Live provider calls are always opt-in through a separate command.
+integration-test: test-up
+	env -u OPENAI_BASE_URL -u OPENAI_API_KEY -u OPENAI_MODEL \
+		METERING_TEST_REDIS_ADDR='$(TEST_REDIS_ADDR)' \
+		LIMITER_TEST_REDIS_ADDR='$(TEST_REDIS_ADDR)' \
+		CONTROL_TEST_POSTGRES_DSN='$(TEST_POSTGRES_DSN)' \
+		METERING_TEST_POSTGRES_DSN='$(TEST_POSTGRES_DSN)' \
+		go test $(TEST_FLAGS) $(TEST_PACKAGES) -run '$(TEST_RUN)' -count=1 -timeout=120s

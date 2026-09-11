@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -68,9 +69,12 @@ func ReconcileStream(ctx context.Context, rdb *redis.Client, ledger Ledger) (Rec
 			continue
 		}
 		key := eventKey(event)
-		if _, exists := unique[key]; exists {
+		if first, exists := unique[key]; exists {
 			report.DuplicateEvents++
 			report.DuplicateKeys = appendUnique(report.DuplicateKeys, displayEventKey(event))
+			if !eventsEqual(first, event) {
+				report.PayloadMismatch = appendUnique(report.PayloadMismatch, displayEventKey(event))
+			}
 			continue
 		}
 		unique[key] = event
@@ -105,7 +109,7 @@ func compareReconcileEvents(report *ReconcileReport, stream, ledger map[string]E
 			continue
 		}
 		if !eventsEqual(streamEvent, ledgerEvent) {
-			report.PayloadMismatch = append(report.PayloadMismatch, displayEventKey(streamEvent))
+			report.PayloadMismatch = appendUnique(report.PayloadMismatch, displayEventKey(streamEvent))
 			continue
 		}
 		report.Valid++
@@ -140,7 +144,9 @@ func eventsEqual(a, b Event) bool {
 		a.UsageMissing == b.UsageMissing &&
 		a.UsageInvalid == b.UsageInvalid &&
 		a.CostCents == b.CostCents &&
-		a.CreatedAt.Equal(b.CreatedAt)
+		// PostgreSQL timestamptz stores microseconds. Also normalize legacy
+		// events on comparison, since their Redis JSON may retain nanoseconds.
+		a.CreatedAt.Truncate(time.Microsecond).Equal(b.CreatedAt.Truncate(time.Microsecond))
 }
 
 func appendUnique(values []string, value string) []string {

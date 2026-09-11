@@ -77,6 +77,10 @@ var (
 		Name: "metering_spool_write_failed_total",
 		Help: "Metering batches that could not be persisted to local spool",
 	})
+	MeteringSpoolCorruptRecordsTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "metering_spool_corrupt_records_total",
+		Help: "Malformed local spool records durably quarantined during repair",
+	})
 	MeteringSpoolReplayTotal = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "metering_spool_replay_total",
 		Help: "Metering batches successfully replayed from local spool",

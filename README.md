@@ -2,6 +2,8 @@
 
 一个面向 LLM 推理服务的 **生产导向网关原型**：支持流式 SSE 代理、多 Provider 路由、首字节前故障切换、按租户限流、异步计量和控制面热配置。
 
+> 2026-09-11 正确性修复与验证见 [修复复盘](docs/verification/2026-09-11/REPAIR-REPORT.md)，原始架构评估见 [评估报告](ASSESSMENT-2026-09-11.md)。
+
 > **项目当前定位**：架构骨架和本地 Demo 已经可运行，但还不是生产级多 Provider 网关。本文将“已完成”“当前限制”和“待做项”明确分开，所有性能和可靠性结论都以实际测试数据为准，不以设计目标冒充实现结果。
 
 ## 项目状态概览
@@ -121,7 +123,7 @@
 
 - Provider 通用的响应 header 提交状态抽象；
 - 首字节后的错误事件协议；
-- 客户端带 `X-Request-ID` 重试时与计量恢复链路结合的端到端幂等测试。
+- 已验证重复客户端 `X-Request-ID` 的两次调用分别入账，同一执行的重复投递只入账一次；该请求头只用于关联，不提供请求幂等。
 
 ### 2.3 Provider 抽象与 OpenAI-compatible adapter
 
@@ -188,7 +190,7 @@
 - Redis flush 失败时已支持重试，并在配置 `METERING_SPOOL_DIR` 后落本地 JSONL spool；
 - Producer 已支持 `Close(ctx)` 和退出前 flush；
 - 当前 spool 是单进程本地文件，已有大小上限和 `metering_spool_bytes` 指标，尚未实现多进程锁和完整恢复演练；
-- 当前账单唯一键使用 `tenant_id:request_id`，已避免不同租户之间因为相同客户端 ID 互相去重；计量事件现在单独记录 client request ID 和 trace ID，内部 event ID 仍待补充；
+- 网关为每次执行生成独立 `evt_` ID，沿用事件 `request_id` 字段存储；客户端 ID 单独保存在 `client_request_id`，重复调用分别计费，事件重投递去重；
 - `X-Request-ID` 现在会校验长度和字符集；未提供时由 Gateway 生成，并通过响应头返回；Gateway 同时返回 `X-Trace-ID` 并解析 W3C `traceparent`；
 - `Reconcile` 已改为事件级比较并报告 duplicate/pending/DLQ/具体差异；仍未覆盖历史归档、超大 Stream 分页和完整 PG 集成场景；
 - Ledger 的 Count/Balance 查询错误现在会向上返回，HTTP 接口返回 503；
@@ -458,9 +460,8 @@ downstream client
 - Redis flush 失败后的指数退避重试；
 - 本地 WAL/spool，Redis 恢复后补投；
 - 队列丢弃、flush 失败、spool 深度指标；
-- 已完成 tenant-scoped request ID 基础修复：校验客户端 `X-Request-ID`，无 ID 时生成，并使用 `tenant_id:request_id` 作为当前台账幂等键；
-- 后续仍应把 client request ID 和内部 event ID 拆成独立字段，并检测同一幂等键 payload 不一致；
-- 检测相同幂等键但 payload 不一致的情况；
+- 已拆分客户端关联 ID 与网关执行 ID，并通过真实 Redis/PostgreSQL 验证重复调用和重复投递的区别；
+- 对账已检测相同事件 ID 的 payload 冲突，并按 PostgreSQL 微秒精度比较时间；
 - 对账按 request ID 聚合，而不是比较 `XLEN` 和 ledger count；
 - 输出 valid、duplicate、pending、DLQ、missing ledger 的差异明细；
 - PG 查询错误必须返回 error；
@@ -753,7 +754,8 @@ Consumer 读取消息
 防重复扣费依赖 PostgreSQL 唯一键：
 
 ```text
-request_id = tenant_id:client_request_id
+request_id = evt_<网关生成的独立执行 ID>
+client_request_id = <客户端关联 ID，可重复>
 ```
 
 Ledger 使用：

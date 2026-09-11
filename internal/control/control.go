@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -66,6 +67,43 @@ func (s *Server) ApplyConfig(keys map[string]string, routes map[string]*pb.Provi
 func (s *Server) ApplyKeyRecords(records []*pb.KeyRecord, routes map[string]*pb.ProviderList) (*pb.Config, error) {
 	s.applyMu.Lock()
 	defer s.applyMu.Unlock()
+	return s.applyKeyRecordsLocked(records, routes)
+}
+
+var ErrConfigVersionConflict = errors.New("config version conflict")
+
+// ConfigPatch uses nil to preserve a field and an explicit empty collection
+// to clear it. ExpectedVersion enables optimistic concurrency for admin edits.
+type ConfigPatch struct {
+	KeyRecords      []*pb.KeyRecord
+	Routes          map[string]*pb.ProviderList
+	ExpectedVersion *int64
+	LegacyKeys      map[string]string // local-demo compatibility; immediately hashed
+}
+
+// PatchConfig serializes the entire read/merge/persist operation with
+// credential Create/Revoke. Reading defaults in the HTTP handler would let a
+// route-only write accidentally restore an older credential snapshot.
+func (s *Server) PatchConfig(patch ConfigPatch) (*pb.Config, error) {
+	s.applyMu.Lock()
+	defer s.applyMu.Unlock()
+	current := s.CurrentConfig()
+	if patch.ExpectedVersion != nil && *patch.ExpectedVersion != current.Version {
+		return nil, fmt.Errorf("%w: expected %d, current %d", ErrConfigVersionConflict, *patch.ExpectedVersion, current.Version)
+	}
+	if patch.LegacyKeys != nil && patch.KeyRecords != nil {
+		return nil, errors.New("keys and key_records cannot be set together")
+	}
+	records := patch.KeyRecords
+	if patch.LegacyKeys != nil {
+		records = keyRecordsFromLegacy(patch.LegacyKeys)
+	} else if records == nil {
+		records = current.KeyRecords
+	}
+	routes := patch.Routes
+	if routes == nil {
+		routes = current.Routes
+	}
 	return s.applyKeyRecordsLocked(records, routes)
 }
 

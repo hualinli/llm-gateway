@@ -2,11 +2,105 @@ package metering
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
+
+func TestProducerRepairsCorruptSpoolBeforeAppend(t *testing.T) {
+	for _, middle := range []bool{false, true} {
+		name := "torn-tail"
+		if middle {
+			name = "bad-middle-record"
+		}
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "events.jsonl")
+			first, _ := json.Marshal(Event{RequestID: "valid-first"})
+			data := string(first) + "\n" + `{"request_id":`
+			want := 2
+			if middle {
+				last, _ := json.Marshal(Event{RequestID: "valid-last"})
+				data += "\n" + string(last) + "\n"
+				want++
+			}
+			if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+				t.Fatal(err)
+			}
+			p := &Producer{spoolPath: path, maxSpoolSize: 1 << 20}
+			if err := p.appendSpool([]Event{{RequestID: "new-after-restart"}}); err != nil {
+				t.Fatal(err)
+			}
+			events, err := readSpool(path)
+			if err != nil || len(events) != want {
+				t.Fatalf("valid events must survive repair and append: got=%d want=%d err=%v", len(events), want, err)
+			}
+			if events[0].RequestID != "valid-first" || events[len(events)-1].RequestID != "new-after-restart" {
+				t.Fatalf("events reordered or lost: %+v", events)
+			}
+			files, err := filepath.Glob(path + ".corrupt-*")
+			if err != nil || len(files) != 1 {
+				t.Fatalf("corrupt bytes must be quarantined: files=%v err=%v", files, err)
+			}
+			raw, err := os.ReadFile(files[0])
+			if err != nil || !strings.Contains(string(raw), `{"request_id":`) {
+				t.Fatalf("missing quarantined data: %q %v", raw, err)
+			}
+		})
+	}
+}
+
+func TestProducerRepairsMissingSpoolDelimiter(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "events.jsonl")
+	if err := os.WriteFile(path, []byte(`{"request_id":"complete-without-newline"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	p := &Producer{spoolPath: path, maxSpoolSize: 1 << 20}
+	if err := p.appendSpool([]Event{{RequestID: "next"}}); err != nil {
+		t.Fatal(err)
+	}
+	events, err := readSpool(path)
+	if err != nil || len(events) != 2 {
+		t.Fatalf("valid terminal JSON must remain separate: %+v %v", events, err)
+	}
+}
+
+func TestProducerSpoolLimitIncludesQuarantine(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "events.jsonl")
+	if err := os.WriteFile(path+".corrupt-existing", make([]byte, 1000), 0600); err != nil {
+		t.Fatal(err)
+	}
+	p := &Producer{spoolPath: path, maxSpoolSize: 1000}
+	if err := p.appendSpool([]Event{{RequestID: "over-limit"}}); err == nil {
+		t.Fatal("quarantine bypassed the spool capacity limit")
+	}
+}
+
+func TestProducerDoesNotRewriteWhenQuarantineCannotBeSaved(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "events.jsonl")
+	corrupt := []byte(`{"request_id":`)
+	original := append([]byte("{\"request_id\":\"valid\"}\n"), corrupt...)
+	if err := os.WriteFile(path, original, 0600); err != nil {
+		t.Fatal(err)
+	}
+	// Force a deterministic filesystem failure at the quarantine destination.
+	blocked := fmt.Sprintf("%s.corrupt-%x", path, sha256.Sum256(corrupt))
+	if err := os.Mkdir(blocked, 0700); err != nil {
+		t.Fatal(err)
+	}
+	p := &Producer{spoolPath: path, maxSpoolSize: 1 << 20}
+	if err := p.appendSpool([]Event{{RequestID: "new"}}); err == nil {
+		t.Fatal("repair ignored quarantine failure")
+	}
+	got, err := os.ReadFile(path)
+	if err != nil || string(got) != string(original) {
+		t.Fatalf("original spool modified after quarantine failure: %q %v", got, err)
+	}
+}
 
 func TestSpoolRoundTripAndRewrite(t *testing.T) {
 	dir := t.TempDir()

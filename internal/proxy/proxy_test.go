@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"llm-gateway/internal/auth"
 	"llm-gateway/internal/metering"
 	"llm-gateway/internal/provider"
 )
@@ -63,6 +64,44 @@ type recordingProducer struct {
 func (p *recordingProducer) Enqueue(e metering.Event) bool {
 	p.events = append(p.events, e)
 	return true
+}
+
+func TestRepeatedClientRequestIDCreatesDistinctBillingEvents(t *testing.T) {
+	producer := &recordingProducer{}
+	called := false
+	p := &fakeProvider{name: "a", called: &called, chunks: []string{"data: [DONE]\n\n"}}
+	h := NewHandler(provider.NewRegistry(map[string][]provider.Provider{"m1": {p}}), producer)
+	for i := 0; i < 2; i++ {
+		called = false
+		req := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(streamBody))
+		req.Header.Set("X-Request-ID", "same-client-id")
+		req = req.WithContext(context.WithValue(req.Context(), auth.TenantKey, "tenant-a"))
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != 200 || !called || rec.Header().Get("X-Request-ID") != "same-client-id" {
+			t.Fatalf("request %d: status=%d upstream_called=%v headers=%v", i, rec.Code, called, rec.Header())
+		}
+	}
+	if len(producer.events) != 2 {
+		t.Fatalf("events=%d, want two completed executions", len(producer.events))
+	}
+	ledger := metering.NewMemoryLedger()
+	for _, event := range producer.events {
+		if event.ClientRequestID != "same-client-id" || event.RequestID == "" {
+			t.Fatalf("missing execution/correlation identity: %+v", event)
+		}
+		if _, err := ledger.Add(event); err != nil {
+			t.Fatal(err)
+		}
+	}
+	count, _ := ledger.Count()
+	balance, _ := ledger.Balance("tenant-a")
+	if count != 2 || balance != 6 {
+		t.Fatalf("two real upstream calls: ledger_rows=%d charge=%d, want rows=2 charge=6", count, balance)
+	}
+	if added, err := ledger.Add(producer.events[0]); err != nil || added {
+		t.Fatalf("redelivery must remain idempotent: added=%v err=%v", added, err)
+	}
 }
 
 func TestProxyPreservesProviderTotalTokens(t *testing.T) {

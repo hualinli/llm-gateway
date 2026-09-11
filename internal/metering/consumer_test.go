@@ -5,12 +5,85 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 )
+
+func TestRedisProducerReplaysRepairedSpoolWithoutNewRequests(t *testing.T) {
+	rdb := newRedisIntegrationClient(t)
+	defer rdb.Close()
+	resetMeteringStreams(t, rdb)
+	defer resetMeteringStreams(t, rdb)
+	dir := t.TempDir()
+	event := integrationEvent("recovered-execution", "tenant-a", 9)
+	payload, err := json.Marshal(event)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "events.jsonl")
+	if err := os.WriteFile(path, append(append(payload, '\n'), []byte(`{"request_id":`)...), 0600); err != nil {
+		t.Fatal(err)
+	}
+	producer := NewProducerWithOptions(rdb, 4, 10, 10*time.Millisecond, ProducerOptions{SpoolDir: dir})
+	defer func() {
+		if err := producer.Close(context.Background()); err != nil {
+			t.Error(err)
+		}
+	}()
+	waitFor(t, 2*time.Second, func() bool {
+		count, _ := rdb.XLen(context.Background(), StreamName).Result()
+		return count == 1
+	})
+	messages, err := rdb.XRange(context.Background(), StreamName, "-", "+").Result()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var recovered Event
+	if err := json.Unmarshal([]byte(messages[0].Values["data"].(string)), &recovered); err != nil {
+		t.Fatal(err)
+	}
+	if recovered.RequestID != event.RequestID || recovered.CostCents != event.CostCents {
+		t.Fatalf("wrong recovered event: %+v", recovered)
+	}
+	waitFor(t, time.Second, func() bool { _, err := os.Stat(path); return os.IsNotExist(err) })
+	quarantined, _ := filepath.Glob(path + ".corrupt-*")
+	if len(quarantined) != 1 {
+		t.Fatalf("corrupt tail was not retained: %v", quarantined)
+	}
+}
+
+func TestRedisReconcileRejectsConflictingDuplicatePayload(t *testing.T) {
+	rdb := newRedisIntegrationClient(t)
+	defer rdb.Close()
+	resetMeteringStreams(t, rdb)
+	defer resetMeteringStreams(t, rdb)
+	event := integrationEvent("same-event", "tenant-a", 7)
+	ledger := NewMemoryLedger()
+	if _, err := ledger.Add(event); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		payload, err := json.Marshal(event)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := rdb.XAdd(context.Background(), &redis.XAddArgs{Stream: StreamName, Values: map[string]any{"data": string(payload)}}).Err(); err != nil {
+			t.Fatal(err)
+		}
+		event.CostCents++
+	}
+	report, err := ReconcileStream(context.Background(), rdb, ledger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Consistent() || len(report.PayloadMismatch) != 1 || report.DuplicateEvents != 1 {
+		t.Fatalf("different payload was silently classified as safe redelivery: %+v", report)
+	}
+}
 
 func TestRedisMeteringDeliveryAndReconcile(t *testing.T) {
 	rdb := newRedisIntegrationClient(t)

@@ -140,6 +140,15 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no provider available", http.StatusBadGateway)
 		return
 	}
+	// A correlation ID may be supplied or reused by the client. Billing must
+	// identify this execution independently; only redelivery of its event is
+	// deduplicated. Generate the identity before spending upstream resources.
+	executionID, err := observability.ResolveRequestID("")
+	if err != nil {
+		http.Error(w, "could not allocate execution identity", http.StatusInternalServerError)
+		return
+	}
+	executionID = "evt_" + executionID
 
 	// SSE 响应头，首字节前不主动 WriteHeader，靠第一次 Write 触发发送
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -162,18 +171,17 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				log.Printf("request_id=%s trace_id=%s provider=%s model=%s usage=%+v", requestID, traceID, p.Name(), model, *usage)
 			}
 			if h.producer != nil {
-				// The ledger key is tenant-scoped. A client may reuse its
-				// request ID across tenants without suppressing another tenant's
-				// charge; the response header still exposes the client-facing ID.
-				reqID := tenant + ":" + requestID
+				// Preserve the existing event wire/storage field name so queued
+				// legacy events remain replayable. Its value now identifies an
+				// execution, independently of the client correlation header.
 				event := metering.Event{
-					RequestID:       reqID,
+					RequestID:       executionID,
 					ClientRequestID: requestID,
 					TraceID:         traceID,
 					TenantID:        tenant,
 					Model:           model,
 					Provider:        p.Name(),
-					CreatedAt:       time.Now(),
+					CreatedAt:       time.Now().UTC().Truncate(time.Microsecond),
 				}
 				if usage == nil {
 					// Never turn a successful response without usage into a
@@ -225,7 +233,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// 已流出字节：既不能重放（客户端会收到重复内容），也无法再改状态码，
-		// 断流处理；客户端携 X-Request-ID 重试可安全重发（计量端幂等）
+		// 客户端再次发起请求是新执行；X-Request-ID 仅用于关联，不提供请求幂等。
 		if cw.written {
 			// HTTP 200 is already committed on the wire, but this is not a
 			// complete successful stream. Keep the wire status metric and add

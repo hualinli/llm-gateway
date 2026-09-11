@@ -180,7 +180,7 @@ func NewStore() (Store, error) {
 		dsn = "postgres://gateway:gateway@localhost:5433/llm_gateway?sslmode=disable"
 	}
 	if pg, err := NewPGStore(dsn); err == nil {
-		log.Printf("control store: postgres dsn=%s", dsn)
+		log.Print("control store: postgres connected")
 		return pg, nil
 	} else if requireControlPostgres() {
 		return nil, err

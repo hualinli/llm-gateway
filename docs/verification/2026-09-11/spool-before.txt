@@ -1,0 +1,11 @@
+=== RUN   TestProducerRepairsCorruptSpoolBeforeAppend
+=== RUN   TestProducerRepairsCorruptSpoolBeforeAppend/torn-tail
+    producer_test.go:38: valid events must survive repair and append: got=0 want=2 err=unexpected EOF
+=== RUN   TestProducerRepairsCorruptSpoolBeforeAppend/bad-middle-record
+    producer_test.go:38: valid events must survive repair and append: got=0 want=3 err=invalid character '{' after object key:value pair
+--- FAIL: TestProducerRepairsCorruptSpoolBeforeAppend (0.01s)
+    --- FAIL: TestProducerRepairsCorruptSpoolBeforeAppend/torn-tail (0.01s)
+    --- FAIL: TestProducerRepairsCorruptSpoolBeforeAppend/bad-middle-record (0.00s)
+FAIL
+FAIL	llm-gateway/internal/metering	1.062s
+FAIL
