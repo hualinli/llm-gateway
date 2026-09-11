@@ -25,7 +25,7 @@ import (
 
 // Each test owns a new PostgreSQL schema; Redis DB 9 is reserved in the
 // disposable test container. Never point the test environment at business data.
-func integrationDependencies(t *testing.T) (*metering.PGLedger, *redis.Client) {
+func integrationDependencies(t *testing.T, legacy ...bool) (*metering.PGLedger, *redis.Client) {
 	t.Helper()
 	dsn := os.Getenv("METERING_TEST_POSTGRES_DSN")
 	addr := os.Getenv("METERING_TEST_REDIS_ADDR")
@@ -61,6 +61,22 @@ func integrationDependencies(t *testing.T) (*metering.PGLedger, *redis.Client) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if len(legacy) > 0 && legacy[0] {
+		event := metering.Event{EventID: "legacy-event", TenantID: "tenant-a", Model: "m", Provider: "p", TotalTokens: 3, CostCents: 3, CreatedAt: time.Now()}
+		if _, err := ledger.Add(event); err != nil {
+			t.Fatal(err)
+		}
+		if err := ledger.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(`ALTER TABLE ` + schema + `.metering_events RENAME COLUMN event_id TO request_id`); err != nil {
+			t.Fatal(err)
+		}
+		ledger, err = metering.NewPGLedger(u.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
 	t.Cleanup(func() { _ = ledger.Close() })
 	rdb := redis.NewClient(&redis.Options{Addr: addr, DB: 9})
 	t.Cleanup(func() { _ = rdb.Close() })
@@ -81,7 +97,7 @@ func TestPostgresLedgerRoundTripReconcile(t *testing.T) {
 	ledger, rdb := integrationDependencies(t)
 	ctx := context.Background()
 	event := metering.Event{
-		RequestID: "execution-1", ClientRequestID: "client-1", TraceID: "trace-1",
+		EventID: "execution-1", ClientRequestID: "client-1", TraceID: "trace-1",
 		TenantID: "tenant-a", Model: "m", Provider: "p", TotalTokens: 3, CostCents: 3,
 		CreatedAt: time.Date(2026, 9, 11, 1, 2, 3, 123456789, time.UTC),
 	}
@@ -183,4 +199,20 @@ func TestGatewayRedisPostgresRepeatedIDAndRedelivery(t *testing.T) {
 		t.Fatalf("two calls + one redelivery: report=%+v err=%v", report, err)
 	}
 	t.Logf("upstream_calls=%d stream_messages=%d ledger_rows=%d duplicate_deliveries=%d charge=%d reconcile=consistent", upstreamCalls.Load(), report.StreamMessages, report.LedgerRows, report.DuplicateEvents, balance)
+}
+
+func TestPostgresLegacyEventIDMigrationPreservesDedup(t *testing.T) {
+	ledger, _ := integrationDependencies(t, true)
+	added, err := ledger.Add(metering.Event{EventID: "legacy-event", TenantID: "tenant-a", Model: "m", Provider: "p", CreatedAt: time.Now(), CostCents: 3})
+	if err != nil || added {
+		t.Fatalf("legacy event billed again: added=%v err=%v", added, err)
+	}
+	rows, err := ledger.Snapshot()
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("migrated rows=%v err=%v", rows, err)
+	}
+	balance, err := ledger.Balance("tenant-a")
+	if err != nil || balance != 3 {
+		t.Fatalf("balance=%d err=%v", balance, err)
+	}
 }

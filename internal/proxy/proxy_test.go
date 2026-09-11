@@ -87,7 +87,7 @@ func TestRepeatedClientRequestIDCreatesDistinctBillingEvents(t *testing.T) {
 	}
 	ledger := metering.NewMemoryLedger()
 	for _, event := range producer.events {
-		if event.ClientRequestID != "same-client-id" || event.RequestID == "" {
+		if event.ClientRequestID != "same-client-id" || event.EventID == "" {
 			t.Fatalf("missing execution/correlation identity: %+v", event)
 		}
 		if _, err := ledger.Add(event); err != nil {

@@ -145,7 +145,7 @@ func (c *Consumer) handle(ctx context.Context, m redis.XMessage) {
 		if e.UsageInvalid {
 			reason = "usage_invalid"
 		}
-		log.Printf("metering: %s id=%s request_id=%s", reason, m.ID, e.RequestID)
+		log.Printf("metering: %s id=%s event_id=%s", reason, m.ID, e.EventID)
 		c.deadLetter(ctx, m, reason)
 		return
 	}
@@ -154,13 +154,13 @@ func (c *Consumer) handle(ctx context.Context, m redis.XMessage) {
 	if err != nil {
 		// 写入失败:不 ack,保留在 PEL 等待重投
 		metrics.MeteringLedgerAddFailedTotal.Inc()
-		log.Printf("metering: ledger add failed request_id=%s err=%v", e.RequestID, err)
+		log.Printf("metering: ledger add failed event_id=%s err=%v", e.EventID, err)
 		return
 	}
 	if added {
-		log.Printf("ledger add request_id=%s client_request_id=%s trace_id=%s tenant=%s cost=%d", e.RequestID, e.ClientRequestID, e.TraceID, e.TenantID, e.CostCents)
+		log.Printf("ledger add event_id=%s client_request_id=%s trace_id=%s tenant=%s cost=%d", e.EventID, e.ClientRequestID, e.TraceID, e.TenantID, e.CostCents)
 	} else {
-		log.Printf("ledger dedup request_id=%s client_request_id=%s trace_id=%s", e.RequestID, e.ClientRequestID, e.TraceID)
+		log.Printf("ledger dedup event_id=%s client_request_id=%s trace_id=%s", e.EventID, e.ClientRequestID, e.TraceID)
 	}
 	if err := c.rdb.XAck(ctx, StreamName, GroupName, m.ID).Err(); err != nil {
 		log.Printf("metering: xack failed id=%s err=%v", m.ID, err)

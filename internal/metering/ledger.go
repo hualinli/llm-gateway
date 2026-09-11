@@ -61,7 +61,7 @@ func (l *MemoryLedger) Snapshot() (map[string]Event, error) {
 	return out, nil
 }
 
-// PGLedger 生产用 PG 版，UNIQUE(request_id) 兜底幂等
+// PGLedger 生产用 PG 版，UNIQUE(event_id) 兜底幂等
 type PGLedger struct {
 	db *sql.DB
 }
@@ -78,7 +78,7 @@ func NewPGLedger(dsn string) (*PGLedger, error) {
 	// 建表
 	_, err = db.Exec(`
 CREATE TABLE IF NOT EXISTS metering_events (
-  request_id TEXT PRIMARY KEY,
+  event_id TEXT PRIMARY KEY,
   tenant_id TEXT NOT NULL,
   model TEXT NOT NULL,
   provider TEXT NOT NULL,
@@ -88,6 +88,15 @@ CREATE TABLE IF NOT EXISTS metering_events (
   cost_cents BIGINT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL
 );
+-- Rename the existing column without changing identities or deleting rows.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_attribute
+    WHERE attrelid = 'metering_events'::regclass
+      AND attname = 'request_id' AND NOT attisdropped) THEN
+    ALTER TABLE metering_events RENAME COLUMN request_id TO event_id;
+  END IF;
+END $$;
 CREATE INDEX IF NOT EXISTS idx_tenant ON metering_events(tenant_id);
 `)
 	if err != nil {
@@ -102,9 +111,9 @@ func (p *PGLedger) Close() error { return p.db.Close() }
 
 func (p *PGLedger) Add(e Event) (bool, error) {
 	res, err := p.db.Exec(`
-INSERT INTO metering_events (request_id, tenant_id, model, provider, prompt_tokens, completion_tokens, total_tokens, cost_cents, created_at)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (request_id) DO NOTHING`,
-		e.RequestID, e.TenantID, e.Model, e.Provider, e.PromptTokens, e.CompletionTokens, e.TotalTokens, e.CostCents, e.CreatedAt)
+INSERT INTO metering_events (event_id, tenant_id, model, provider, prompt_tokens, completion_tokens, total_tokens, cost_cents, created_at)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (event_id) DO NOTHING`,
+		e.EventID, e.TenantID, e.Model, e.Provider, e.PromptTokens, e.CompletionTokens, e.TotalTokens, e.CostCents, e.CreatedAt)
 	if err != nil {
 		return false, err
 	}
@@ -121,7 +130,7 @@ func (p *PGLedger) Count() (int, error) {
 
 func (p *PGLedger) Snapshot() (map[string]Event, error) {
 	rows, err := p.db.Query(`
-SELECT request_id, tenant_id, model, provider, prompt_tokens, completion_tokens, total_tokens, cost_cents, created_at
+SELECT event_id, tenant_id, model, provider, prompt_tokens, completion_tokens, total_tokens, cost_cents, created_at
 FROM metering_events`)
 	if err != nil {
 		return nil, err
@@ -131,7 +140,7 @@ FROM metering_events`)
 	out := make(map[string]Event)
 	for rows.Next() {
 		var e Event
-		if err := rows.Scan(&e.RequestID, &e.TenantID, &e.Model, &e.Provider, &e.PromptTokens, &e.CompletionTokens, &e.TotalTokens, &e.CostCents, &e.CreatedAt); err != nil {
+		if err := rows.Scan(&e.EventID, &e.TenantID, &e.Model, &e.Provider, &e.PromptTokens, &e.CompletionTokens, &e.TotalTokens, &e.CostCents, &e.CreatedAt); err != nil {
 			return nil, err
 		}
 		out[eventKey(e)] = e

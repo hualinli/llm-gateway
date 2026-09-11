@@ -143,12 +143,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// A correlation ID may be supplied or reused by the client. Billing must
 	// identify this execution independently; only redelivery of its event is
 	// deduplicated. Generate the identity before spending upstream resources.
-	executionID, err := observability.ResolveRequestID("")
+	eventID, err := observability.ResolveRequestID("")
 	if err != nil {
 		http.Error(w, "could not allocate execution identity", http.StatusInternalServerError)
 		return
 	}
-	executionID = "evt_" + executionID
+	eventID = "evt_" + eventID
 
 	// SSE 响应头，首字节前不主动 WriteHeader，靠第一次 Write 触发发送
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -171,11 +171,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				log.Printf("request_id=%s trace_id=%s provider=%s model=%s usage=%+v", requestID, traceID, p.Name(), model, *usage)
 			}
 			if h.producer != nil {
-				// Preserve the existing event wire/storage field name so queued
-				// legacy events remain replayable. Its value now identifies an
-				// execution, independently of the client correlation header.
+				// Event identity is independent of the client correlation header.
 				event := metering.Event{
-					RequestID:       executionID,
+					EventID:         eventID,
 					ClientRequestID: requestID,
 					TraceID:         traceID,
 					TenantID:        tenant,

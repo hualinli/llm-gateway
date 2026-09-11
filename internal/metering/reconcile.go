@@ -126,15 +126,15 @@ func compareReconcileEvents(report *ReconcileReport, stream, ledger map[string]E
 }
 
 func eventKey(e Event) string {
-	return e.TenantID + "\x00" + e.RequestID
+	return e.TenantID + "\x00" + e.EventID
 }
 
 func displayEventKey(e Event) string {
-	return e.TenantID + ":" + e.RequestID
+	return e.TenantID + ":" + e.EventID
 }
 
 func eventsEqual(a, b Event) bool {
-	return a.RequestID == b.RequestID &&
+	return a.EventID == b.EventID &&
 		a.TenantID == b.TenantID &&
 		a.Model == b.Model &&
 		a.Provider == b.Provider &&
@@ -162,7 +162,7 @@ func unmarshalEvent(raw string, event *Event) error {
 	if err := json.Unmarshal([]byte(raw), event); err != nil {
 		return err
 	}
-	if event.RequestID == "" || event.TenantID == "" || event.CreatedAt.IsZero() {
+	if event.EventID == "" || event.TenantID == "" || event.CreatedAt.IsZero() {
 		return errors.New("missing required event fields")
 	}
 	return nil

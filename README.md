@@ -190,7 +190,8 @@
 - Redis flush 失败时已支持重试，并在配置 `METERING_SPOOL_DIR` 后落本地 JSONL spool；
 - Producer 已支持 `Close(ctx)` 和退出前 flush；
 - 当前 spool 是单进程本地文件，已有大小上限和 `metering_spool_bytes` 指标，尚未实现多进程锁和完整恢复演练；
-- 网关为每次执行生成独立 `evt_` ID，沿用事件 `request_id` 字段存储；客户端 ID 单独保存在 `client_request_id`，重复调用分别计费，事件重投递去重；
+- 网关为每次执行生成独立 `evt_` ID，使用 `EventID` / `event_id` 标识计量事件；客户端 ID 单独保存在 `client_request_id`，重复调用分别计费，事件重投递去重；
+- 升级计量字段时应先停止旧版 Gateway/Consumer，再启动新版；新版自动将 PG 台账列 `request_id` 重命名为 `event_id`，保留原 ID 和账单。旧 Redis/spool JSON 仅在读取入口接受 `request_id`，新写入统一为 `event_id`；不支持新旧程序混跑。缺失或冲突 ID 会拒绝解析，Consumer 转入死信队列，spool 隔离原始记录。
 - `X-Request-ID` 现在会校验长度和字符集；未提供时由 Gateway 生成，并通过响应头返回；Gateway 同时返回 `X-Trace-ID` 并解析 W3C `traceparent`；
 - `Reconcile` 已改为事件级比较并报告 duplicate/pending/DLQ/具体差异；仍未覆盖历史归档、超大 Stream 分页和完整 PG 集成场景；
 - Ledger 的 Count/Balance 查询错误现在会向上返回，HTTP 接口返回 503；
@@ -683,7 +684,7 @@ Gateway 的 `WriteTimeout` 保持为 0，因为全局写超时会错误截断长
 **不用的理由（当前阶段的实际代价）：**
 
 - **双倍上游成本且无法回收**：输家那个 attempt 在被取消前往往已经开始生成，上游可能仍按完整 completion 计费；网关侧既要付这笔钱，还不能把它算进用户账单——计费归属立刻变模糊。
-- **计量语义冲突**：当前幂等键是 request_id，天然假设“一个请求一份 usage”。hedging 产生两份 usage，需要引入 attempt 级子 ID 和“只采赢家 usage”的选择策略，metering 的去重和 DLQ 语义都要重做。
+- **计量语义冲突**：当前计量幂等键是 event_id，天然假设“一个请求一份 usage”。hedging 产生两份 usage，需要引入 attempt 级子 ID 和“只采赢家 usage”的选择策略，metering 的去重和 DLQ 语义都要重做。
 - **限流放大**：双发请求双倍消耗上游配额，429 概率上升，反而伤可用性；与租户限流、上游配额治理叠加后行为难以预测。
 - **收益依赖前置条件**：FirstByteTimeout 目前是写死的默认值，不可按 Provider/model 配置；没有 per-request 延迟预算和慢请求识别，hedging 会退化成“无条件双发”，成本直接翻倍。
 
@@ -754,14 +755,14 @@ Consumer 读取消息
 防重复扣费依赖 PostgreSQL 唯一键：
 
 ```text
-request_id = evt_<网关生成的独立执行 ID>
+event_id = evt_<网关生成的独立计量事件 ID>
 client_request_id = <客户端关联 ID，可重复>
 ```
 
 Ledger 使用：
 
 ```sql
-ON CONFLICT (request_id) DO NOTHING
+ON CONFLICT (event_id) DO NOTHING
 ```
 
 所以：

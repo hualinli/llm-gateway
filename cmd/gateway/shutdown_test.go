@@ -19,14 +19,14 @@ import (
 func TestGatewayShutdownFlushesAfterCancelingLongStream(t *testing.T) {
 	dir := t.TempDir()
 	producer := metering.NewProducerWithOptions(nil, 4, 10, time.Hour, metering.ProducerOptions{SpoolDir: dir})
-	producer.Enqueue(metering.Event{RequestID: "already-completed"})
+	producer.Enqueue(metering.Event{EventID: "already-completed"})
 	requests, cancelRequests := context.WithCancel(context.Background())
 	drain := newRequestDrain()
 	started := make(chan struct{})
 	server := httptest.NewUnstartedServer(drain.middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		close(started)
 		<-r.Context().Done()
-		producer.Enqueue(metering.Event{RequestID: "handler-finished-on-cancel"})
+		producer.Enqueue(metering.Event{EventID: "handler-finished-on-cancel"})
 	})))
 	server.Config.BaseContext = func(net.Listener) context.Context { return requests }
 	server.Start()
@@ -69,7 +69,7 @@ func TestGatewayShutdownFlushesAfterCancelingLongStream(t *testing.T) {
 		} else if err != nil {
 			t.Fatal(err)
 		}
-		ids[event.RequestID] = true
+		ids[event.EventID] = true
 	}
 	if !ids["already-completed"] || !ids["handler-finished-on-cancel"] || len(ids) != 2 {
 		t.Fatalf("metering closed before request cleanup completed: %v", ids)

@@ -25,7 +25,7 @@ func TestRedisProducerReplaysRepairedSpoolWithoutNewRequests(t *testing.T) {
 		t.Fatal(err)
 	}
 	path := filepath.Join(dir, "events.jsonl")
-	if err := os.WriteFile(path, append(append(payload, '\n'), []byte(`{"request_id":`)...), 0600); err != nil {
+	if err := os.WriteFile(path, append(append(payload, '\n'), []byte(`{"event_id":`)...), 0600); err != nil {
 		t.Fatal(err)
 	}
 	producer := NewProducerWithOptions(rdb, 4, 10, 10*time.Millisecond, ProducerOptions{SpoolDir: dir})
@@ -46,7 +46,7 @@ func TestRedisProducerReplaysRepairedSpoolWithoutNewRequests(t *testing.T) {
 	if err := json.Unmarshal([]byte(messages[0].Values["data"].(string)), &recovered); err != nil {
 		t.Fatal(err)
 	}
-	if recovered.RequestID != event.RequestID || recovered.CostCents != event.CostCents {
+	if recovered.EventID != event.EventID || recovered.CostCents != event.CostCents {
 		t.Fatalf("wrong recovered event: %+v", recovered)
 	}
 	waitFor(t, time.Second, func() bool { _, err := os.Stat(path); return os.IsNotExist(err) })
@@ -202,7 +202,7 @@ func resetMeteringStreams(t *testing.T, rdb *redis.Client) {
 
 func integrationEvent(requestID, tenant string, cost int64) Event {
 	return Event{
-		RequestID: requestID,
+		EventID:   requestID,
 		TenantID:  tenant,
 		CostCents: cost,
 		CreatedAt: time.Now().UTC(),

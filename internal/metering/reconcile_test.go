@@ -7,12 +7,12 @@ import (
 
 func TestCompareReconcileEventsReportsConcreteDiffs(t *testing.T) {
 	now := time.Unix(100, 0).UTC()
-	valid := Event{RequestID: "valid", TenantID: "tenant-a", Model: "m", Provider: "p", TotalTokens: 1, CreatedAt: now}
-	streamOnly := Event{RequestID: "missing-ledger", TenantID: "tenant-a", CreatedAt: now}
-	mismatch := Event{RequestID: "mismatch", TenantID: "tenant-a", Model: "m", CreatedAt: now, CostCents: 1}
+	valid := Event{EventID: "valid", TenantID: "tenant-a", Model: "m", Provider: "p", TotalTokens: 1, CreatedAt: now}
+	streamOnly := Event{EventID: "missing-ledger", TenantID: "tenant-a", CreatedAt: now}
+	mismatch := Event{EventID: "mismatch", TenantID: "tenant-a", Model: "m", CreatedAt: now, CostCents: 1}
 	ledgerMismatch := mismatch
 	ledgerMismatch.CostCents = 2
-	ledgerOnly := Event{RequestID: "missing-stream", TenantID: "tenant-b", CreatedAt: now}
+	ledgerOnly := Event{EventID: "missing-stream", TenantID: "tenant-b", CreatedAt: now}
 
 	report := ReconcileReport{}
 	compareReconcileEvents(&report,
@@ -45,8 +45,8 @@ func TestCompareReconcileEventsReportsConcreteDiffs(t *testing.T) {
 }
 
 func TestReconcileKeysAreTenantScoped(t *testing.T) {
-	a := Event{RequestID: "same", TenantID: "tenant-a"}
-	b := Event{RequestID: "same", TenantID: "tenant-b"}
+	a := Event{EventID: "same", TenantID: "tenant-a"}
+	b := Event{EventID: "same", TenantID: "tenant-b"}
 	if eventKey(a) == eventKey(b) {
 		t.Fatal("events from different tenants share a reconcile key")
 	}
@@ -54,7 +54,7 @@ func TestReconcileKeysAreTenantScoped(t *testing.T) {
 
 func TestUnmarshalEventRejectsMissingIdentity(t *testing.T) {
 	var event Event
-	if err := unmarshalEvent(`{"request_id":"r","created_at":"2026-01-01T00:00:00Z"}`, &event); err == nil {
+	if err := unmarshalEvent(`{"event_id":"r","created_at":"2026-01-01T00:00:00Z"}`, &event); err == nil {
 		t.Fatal("event without tenant_id was accepted")
 	}
 }

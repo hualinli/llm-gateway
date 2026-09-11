@@ -111,7 +111,7 @@ func (p *Producer) Enqueue(e Event) bool {
 	defer p.mu.RUnlock()
 	if p.closed {
 		metrics.MeteringDroppedTotal.WithLabelValues("producer_closed").Inc()
-		log.Printf("metering producer closed, request_id=%s client_request_id=%s trace_id=%s", e.RequestID, e.ClientRequestID, e.TraceID)
+		log.Printf("metering producer closed, event_id=%s client_request_id=%s trace_id=%s", e.EventID, e.ClientRequestID, e.TraceID)
 		return false
 	}
 	select {
@@ -127,12 +127,12 @@ func (p *Producer) Enqueue(e Event) bool {
 	}
 	if err := p.appendSpool([]Event{e}); err == nil {
 		metrics.MeteringOverflowSpoolTotal.Inc()
-		log.Printf("metering queues full, persisted event to spool request_id=%s client_request_id=%s trace_id=%s", e.RequestID, e.ClientRequestID, e.TraceID)
+		log.Printf("metering queues full, persisted event to spool event_id=%s client_request_id=%s trace_id=%s", e.EventID, e.ClientRequestID, e.TraceID)
 		return true
 	} else {
 		metrics.MeteringSpoolWriteFailedTotal.Inc()
 		metrics.MeteringDroppedTotal.WithLabelValues("overflow_spool_failed").Inc()
-		log.Printf("metering queues full, spool fallback failed request_id=%s client_request_id=%s trace_id=%s err=%v", e.RequestID, e.ClientRequestID, e.TraceID, err)
+		log.Printf("metering queues full, spool fallback failed event_id=%s client_request_id=%s trace_id=%s err=%v", e.EventID, e.ClientRequestID, e.TraceID, err)
 		return false
 	}
 }
