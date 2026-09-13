@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -50,6 +51,7 @@ func (h *CredentialHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 
 type createKeyRequest struct {
 	TenantID string `json:"tenant_id"`
+	UserID   string `json:"user_id,omitempty"`
 }
 
 type keyResponse struct {
@@ -57,6 +59,7 @@ type keyResponse struct {
 	Prefix   string `json:"key_prefix"`
 	TenantID string `json:"tenant_id"`
 	Status   string `json:"status"`
+	UserID   string `json:"user_id,omitempty"`
 }
 
 type createdKeyResponse struct {
@@ -82,7 +85,16 @@ func (h *CredentialHTTPHandler) create(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
-	created, err := h.service.CreateAs(r.Context(), principal, request.TenantID)
+	var userID int64
+	if request.UserID != "" {
+		var parseErr error
+		userID, parseErr = strconv.ParseInt(request.UserID, 10, 64)
+		if parseErr != nil || userID <= 0 {
+			http.Error(w, "valid user_id required", http.StatusBadRequest)
+			return
+		}
+	}
+	created, err := h.service.CreateForUserAs(r.Context(), principal, request.TenantID, userID)
 	if err != nil {
 		writeServiceError(w, err)
 		return
@@ -91,7 +103,7 @@ func (h *CredentialHTTPHandler) create(w http.ResponseWriter, r *http.Request) {
 		RawKey: created.RawKey,
 		Key: keyResponse{
 			KeyID: created.Metadata.KeyID, Prefix: created.Metadata.Prefix,
-			TenantID: created.Metadata.TenantID, Status: created.Metadata.Status,
+			TenantID: created.Metadata.TenantID, Status: created.Metadata.Status, UserID: formatUserID(created.Metadata.UserID),
 		},
 	})
 }
@@ -110,10 +122,17 @@ func (h *CredentialHTTPHandler) list(w http.ResponseWriter, r *http.Request) {
 	response := make([]keyResponse, 0, len(keys))
 	for _, key := range keys {
 		response = append(response, keyResponse{
-			KeyID: key.KeyID, Prefix: key.Prefix, TenantID: key.TenantID, Status: key.Status,
+			KeyID: key.KeyID, Prefix: key.Prefix, TenantID: key.TenantID, Status: key.Status, UserID: formatUserID(key.UserID),
 		})
 	}
 	writeJSON(w, http.StatusOK, response)
+}
+
+func formatUserID(id int64) string {
+	if id <= 0 {
+		return ""
+	}
+	return strconv.FormatInt(id, 10)
 }
 
 func (h *CredentialHTTPHandler) revoke(w http.ResponseWriter, r *http.Request, keyID string) {

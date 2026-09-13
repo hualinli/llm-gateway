@@ -25,9 +25,13 @@ type Principal struct {
 	Subject  string
 	Role     Role
 	TenantID string
+	UserID   int64
 }
 
 func (p Principal) valid() bool {
+	if p.UserID < 0 {
+		return false
+	}
 	switch p.Role {
 	case RoleAdmin:
 		return strings.TrimSpace(p.Subject) != ""

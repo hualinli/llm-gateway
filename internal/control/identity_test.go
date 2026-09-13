@@ -19,7 +19,7 @@ func TestIdentityVerifierAcceptsAdminAndTenantUser(t *testing.T) {
 	if err != nil || admin.Role != RoleAdmin || admin.Subject != "admin-token" {
 		t.Fatalf("admin=%+v err=%v", admin, err)
 	}
-	user := Principal{Subject: "user-a", Role: RoleTenantUser, TenantID: "tenant-a"}
+	user := Principal{Subject: "user-a", Role: RoleTenantUser, TenantID: "tenant-a", UserID: 42}
 	token, err := signIdentityToken(secret, user, time.Now().Add(time.Hour))
 	if err != nil {
 		t.Fatal(err)

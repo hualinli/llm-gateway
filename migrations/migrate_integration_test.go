@@ -6,7 +6,9 @@ import (
 	"net/url"
 	"os"
 	"testing"
+	"time"
 
+	"llm-gateway/internal/control"
 	"llm-gateway/internal/metering"
 	"llm-gateway/internal/observability"
 	"llm-gateway/migrations"
@@ -68,7 +70,7 @@ func TestFreshSchemaRequiresExplicitMigration(t *testing.T) {
 	if err := migrations.Check(db); err != nil {
 		t.Fatal(err)
 	}
-	for _, table := range []string{"metering_events", "control_config", "control_audit_events"} {
+	for _, table := range []string{"metering_events", "control_config", "control_audit_events", "users", "tenants", "tenant_memberships"} {
 		var name sql.NullString
 		if err := db.QueryRow(`SELECT to_regclass($1)::text`, table).Scan(&name); err != nil || !name.Valid {
 			t.Fatalf("missing %s: %v", table, err)
@@ -82,6 +84,68 @@ func TestFreshSchemaRequiresExplicitMigration(t *testing.T) {
 	}
 	if err := migrations.Up(dsn); err == nil {
 		t.Fatal("migration ignored dirty state")
+	}
+}
+
+func TestDirectoryAndMemberLedgerPersist(t *testing.T) {
+	dsn, db := isolatedDB(t)
+	if err := migrations.Up(dsn); err != nil {
+		t.Fatal(err)
+	}
+	ctx := t.Context()
+	directory := control.NewPGDirectory(db)
+	owner, personal, err := directory.CreateUser(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	member, _, err := directory.CreateUser(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if owner == member || owner <= 0 || member <= 0 {
+		t.Fatalf("invalid user IDs: %d %d", owner, member)
+	}
+	enterprise, err := directory.CreateEnterprise(ctx, owner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := directory.AddMember(ctx, enterprise, member, control.MembershipMember); err != nil {
+		t.Fatal(err)
+	}
+	if err := directory.AddMember(ctx, enterprise, owner, control.MembershipMember); err == nil {
+		t.Fatal("enterprise owner was demoted")
+	}
+	if err := directory.AddMember(ctx, personal, member, control.MembershipMember); err == nil {
+		t.Fatal("personal tenant accepted member")
+	}
+	ledger, err := metering.NewPGLedger(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ledger.Close()
+	for _, event := range []metering.Event{
+		{EventID: "enterprise-one", TenantID: enterprise, UserID: member, KeyID: "key-one", CostCents: 3, CreatedAt: time.Now()},
+		{EventID: "enterprise-two", TenantID: enterprise, UserID: member, KeyID: "key-two", CostCents: 4, CreatedAt: time.Now()},
+		{EventID: "personal-one", TenantID: personal, UserID: owner, CostCents: 2, CreatedAt: time.Now()},
+		{EventID: "legacy", TenantID: enterprise, CostCents: 5, CreatedAt: time.Now()},
+	} {
+		if _, err := ledger.Add(event); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if total, err := ledger.Balance(enterprise); err != nil || total != 12 {
+		t.Fatalf("enterprise total %d %v", total, err)
+	}
+	if total, err := ledger.MemberBalance(enterprise, member); err != nil || total != 7 {
+		t.Fatalf("member total %d %v", total, err)
+	}
+	bills, err := ledger.MemberBills(enterprise)
+	if err != nil || len(bills) != 1 || bills[0].UserID != member || bills[0].CostCents != 7 {
+		t.Fatalf("member bills %+v %v", bills, err)
+	}
+	snapshot, err := ledger.Snapshot()
+	if err != nil || snapshot[enterprise+"\x00enterprise-one"].KeyID != "key-one" {
+		t.Fatalf("snapshot %+v %v", snapshot, err)
 	}
 }
 
@@ -128,7 +192,7 @@ func TestAdoptUnversionedSchemaAndRollback(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := m.Steps(-1); err != nil {
+			if err := m.Steps(-2); err != nil {
 				t.Fatal(err)
 			}
 			a, b = m.Close()

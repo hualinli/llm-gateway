@@ -136,6 +136,8 @@ func displayEventKey(e Event) string {
 func eventsEqual(a, b Event) bool {
 	return a.EventID == b.EventID &&
 		a.TenantID == b.TenantID &&
+		a.UserID == b.UserID &&
+		a.KeyID == b.KeyID &&
 		a.Model == b.Model &&
 		a.Provider == b.Provider &&
 		a.PromptTokens == b.PromptTokens &&

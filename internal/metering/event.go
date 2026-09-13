@@ -13,6 +13,8 @@ type Event struct {
 	ClientRequestID  string    `json:"client_request_id,omitempty"`
 	TraceID          string    `json:"trace_id,omitempty"`
 	TenantID         string    `json:"tenant_id"`
+	UserID           int64     `json:"user_id,omitempty"`
+	KeyID            string    `json:"key_id,omitempty"`
 	Model            string    `json:"model"`
 	Provider         string    `json:"provider"`
 	PromptTokens     int       `json:"prompt_tokens"`

@@ -177,6 +177,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					ClientRequestID: requestID,
 					TraceID:         traceID,
 					TenantID:        tenant,
+					UserID:          auth.IdentityFromContext(r.Context()).UserID,
+					KeyID:           auth.IdentityFromContext(r.Context()).KeyID,
 					Model:           model,
 					Provider:        p.Name(),
 					CreatedAt:       time.Now().UTC().Truncate(time.Microsecond),

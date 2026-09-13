@@ -14,47 +14,62 @@ type contextKey string
 
 const TenantKey contextKey = "tenant_id"
 
+type identityContextKey struct{}
+
+// Identity attributes one API-key execution. TenantID is the charge owner;
+// UserID is the human owner and KeyID identifies the credential.
+type Identity struct {
+	TenantID string
+	UserID   int64
+	KeyID    string
+}
+
 // Store 抽象 Key 的来源：现在是内存 map，后续控制面 gRPC 推配置时原子替换整个 Store
 type Store interface {
-	Validate(rawKey string) (tenantID string, ok bool)
+	Resolve(rawKey string) (Identity, bool)
 }
 
 // MemoryStore 内存实现，只存哈希，不存明文，支持热更
 type MemoryStore struct {
 	mu sync.RWMutex
-	// hash -> tenantID
-	keys map[string]string
+	// hash -> execution identity
+	keys map[string]Identity
 }
 
 func NewMemoryStore(keys map[string]string) *MemoryStore {
 	// Legacy compatibility constructor. New control-plane paths should use
 	// NewMemoryStoreFromRecords so raw keys never cross the config boundary.
-	m := &MemoryStore{keys: make(map[string]string, len(keys))}
+	m := &MemoryStore{keys: make(map[string]Identity, len(keys))}
 	for k, tenant := range keys {
-		m.keys[hash(k)] = tenant
+		m.keys[hash(k)] = Identity{TenantID: tenant}
 	}
 	return m
 }
 
 func NewMemoryStoreFromRecords(records []KeyRecord) *MemoryStore {
-	m := &MemoryStore{keys: make(map[string]string, len(records))}
+	m := &MemoryStore{keys: make(map[string]Identity, len(records))}
 	m.UpdateRecords(records)
 	return m
 }
 
 func (m *MemoryStore) Validate(rawKey string) (string, bool) {
+	identity, ok := m.Resolve(rawKey)
+	return identity.TenantID, ok
+}
+
+func (m *MemoryStore) Resolve(rawKey string) (Identity, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	tenant, ok := m.keys[hash(rawKey)]
-	return tenant, ok
+	identity, ok := m.keys[hash(rawKey)]
+	return identity, ok
 }
 
 // Update 热更全量 Keys（控制面推送时调用），原子替换。
 func (m *MemoryStore) Update(keys map[string]string) {
 	// Legacy compatibility path. It hashes before replacing the snapshot.
-	newKeys := make(map[string]string, len(keys))
+	newKeys := make(map[string]Identity, len(keys))
 	for k, tenant := range keys {
-		newKeys[hash(k)] = tenant
+		newKeys[hash(k)] = Identity{TenantID: tenant}
 	}
 	m.mu.Lock()
 	m.keys = newKeys
@@ -62,12 +77,12 @@ func (m *MemoryStore) Update(keys map[string]string) {
 }
 
 func (m *MemoryStore) UpdateRecords(records []KeyRecord) {
-	newKeys := make(map[string]string, len(records))
+	newKeys := make(map[string]Identity, len(records))
 	for _, record := range records {
 		if record.Hash == "" || record.TenantID == "" || (record.Status != "" && record.Status != "active") {
 			continue
 		}
-		newKeys[record.Hash] = record.TenantID
+		newKeys[record.Hash] = Identity{TenantID: record.TenantID, UserID: record.UserID, KeyID: record.ID}
 	}
 	m.mu.Lock()
 	m.keys = newKeys
@@ -129,16 +144,24 @@ func Middleware(store Store) func(http.Handler) http.Handler {
 				return
 			}
 
-			tenantID, ok := store.Validate(rawKey)
+			identity, ok := store.Resolve(rawKey)
 			if !ok {
 				http.Error(w, "invalid api key", http.StatusUnauthorized)
 				return
 			}
 
-			ctx := context.WithValue(r.Context(), TenantKey, tenantID)
+			ctx := context.WithValue(r.Context(), TenantKey, identity.TenantID)
+			ctx = context.WithValue(ctx, identityContextKey{}, identity)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+func IdentityFromContext(ctx context.Context) Identity {
+	if identity, ok := ctx.Value(identityContextKey{}).(Identity); ok {
+		return identity
+	}
+	return Identity{TenantID: TenantFromContext(ctx)}
 }
 
 // TenantFromContext 供 proxy/limiter/metering 读取租户

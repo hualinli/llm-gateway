@@ -125,6 +125,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("control credentials: %v", err)
 	}
+	var directory control.Directory = control.NewMemoryDirectory()
+	if pgStore, ok := store.(*control.PGStore); ok {
+		directory = control.NewPGDirectory(pgStore.DB())
+	}
+	credentialService.SetDirectory(directory)
 	credentialHandler, err := control.NewCredentialHTTPHandler(credentialService)
 	if err != nil {
 		log.Fatalf("control credential HTTP: %v", err)
@@ -134,6 +139,10 @@ func main() {
 	keysAuth := control.IdentityAuth(credentialHandler, identityVerifier, true)
 	mux.Handle("/keys", keysAuth)
 	mux.Handle("/keys/", keysAuth)
+	directoryHandler := control.AdminAuth(control.NewDirectoryHTTPHandler(directory), adminToken, true)
+	mux.Handle("/users", directoryHandler)
+	mux.Handle("/enterprises", directoryHandler)
+	mux.Handle("/enterprises/", directoryHandler)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok\n")) })
 
 	go func() {
@@ -172,7 +181,11 @@ func newConfigHandler(srv *control.Server, auditSink control.AuditSink, legacyKe
 				return
 			}
 			if req.Keys != nil && !legacyKeyInputAllowed {
-				http.Error(w, "legacy keys input is disabled; use key_records or the credential service", http.StatusBadRequest)
+				http.Error(w, "legacy keys input is disabled; use the credential service", http.StatusBadRequest)
+				return
+			}
+			if req.KeyRecords != nil && !legacyKeyInputAllowed {
+				http.Error(w, "direct key_records input is disabled; use the credential service", http.StatusBadRequest)
 				return
 			}
 			if req.Keys != nil && req.KeyRecords != nil {

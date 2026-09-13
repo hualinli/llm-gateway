@@ -951,11 +951,12 @@ CONTROL_TLS_REQUIRE_CLIENT_CERT=false
 CONTROL_ADMIN_TOKEN='' # 管理面 admin Bearer token；生产配合下方 require 开关
 CONTROL_REQUIRE_ADMIN_AUTH=false # 生产建议 true；未配置 token 时拒绝启动
 CONTROL_IDENTITY_SIGNING_SECRET='' # 可选；>=32 字节，用于 tenant-user signed identity token
+METERING_ADMIN_TOKEN='' # 成员账单查询必须配置；正式计量模式也保护 ledger/reconcile 查询
 LLM_GATEWAY_BOOTSTRAP_API_KEY='' # 可选；本地 Demo bootstrap credential，禁止写入源码/日志
 LLM_GATEWAY_BOOTSTRAP_TENANT_ID='tenant-demo'
 METERING_SPOOL_DIR='./data/metering-spool' # 可选；Redis 故障时本地持久化计量事件
 CONTROL_REQUIRE_POSTGRES=false # 生产建议 true；PG 不可用时拒绝启动 control
-# 正式模式（开启 CONTROL_REQUIRE_ADMIN_AUTH 或 CONTROL_REQUIRE_POSTGRES）拒绝 /config 的 legacy keys；仅本地 Demo 兼容
+# 正式模式（开启 CONTROL_REQUIRE_ADMIN_AUTH 或 CONTROL_REQUIRE_POSTGRES）拒绝 /config 的 keys/key_records 直写；仅本地 Demo 兼容
 METERING_REQUIRE_POSTGRES=false # 生产建议 true；PG 不可用时拒绝启动 metering
 
 # 可选：注册一个 OpenAI-compatible Provider
@@ -975,7 +976,7 @@ curl -X POST http://localhost:50052/config \
 
 如果只使用内置 Mock，则不设置 `OPENAI_BASE_URL`，默认路由使用 `mock-a` 和 `mock-b`。
 
-注意：`cmd/control` 的 `/config` 默认仍是本地 Demo 模式；生产必须设置 `CONTROL_ADMIN_TOKEN` 并开启 `CONTROL_REQUIRE_ADMIN_AUTH=true`，同时配置 gRPC TLS/mTLS。管理接口返回的是 key hash prefix，不返回 raw API key；正式模式会拒绝请求体中的 legacy `keys`，应使用 `key_records` 或 CredentialService。
+注意：`cmd/control` 的 `/config` 默认仍是本地 Demo 模式；生产必须设置 `CONTROL_ADMIN_TOKEN` 并开启 `CONTROL_REQUIRE_ADMIN_AUTH=true`，同时配置 gRPC TLS/mTLS。正式模式 `/config` 只接受路由变更，Key 必须走 `/keys`，防止绕过成员归属校验。
 
 CredentialService 已通过 `/keys` HTTP facade 暴露：
 
@@ -984,7 +985,7 @@ CredentialService 已通过 `/keys` HTTP facade 暴露：
 curl -X POST http://localhost:50052/keys \
   -H "Authorization: Bearer $CONTROL_ADMIN_TOKEN" \
   -H 'Content-Type: application/json' \
-  -d '{"tenant_id":"tenant-a"}'
+  -d '{"tenant_id":"personal-1","user_id":"1"}'
 
 curl 'http://localhost:50052/keys?tenant_id=tenant-a' \
   -H "Authorization: Bearer $CONTROL_ADMIN_TOKEN"
@@ -993,7 +994,9 @@ curl -X DELETE http://localhost:50052/keys/<key_id> \
   -H "Authorization: Bearer $CONTROL_ADMIN_TOKEN"
 ```
 
-Service 层 admin/tenant-user 授权核心和 HMAC identity token verifier 已完成；tenant-user 使用签名身份 token 后只能访问自身 tenant。配置操作和 CredentialService 操作会产生审计事件，PG 模式写入 `control_audit_events`。
+管理 token 可调用 `POST /users` 创建全局 User ID 和个人 Tenant；`POST /enterprises`（`{"owner_user_id":"1"}`）创建企业 Tenant；`POST /enterprises/{tenant_id}/members`（`{"user_id":"2","role":"member"}`）添加成员。以上是供未来登录注册服务调用的可信配置接口，目前没有公共注册/登录。`/keys` 创建时 admin 必须指定该 Tenant 的成员 `user_id`；签名身份 token 的 `user_id` 由服务端认定，客户端传入的值不能改写归属。企业 owner/admin 可查看或撤销本 Tenant 成员的 Key，普通成员只能管理自己的 Key；成员资格每次操作实时校验。Key 原文仅创建响应返回一次，配置操作和 Key 操作会产生审计事件。
+
+计量事件携带 `tenant_id`、`user_id` 和 `key_id`；总费用始终归 Tenant，`GET /ledger/members?tenant_id=...` 返回成员账单和旧事件的未归属金额，单人可加 `user_id=...`。该接口必须设置 `METERING_ADMIN_TOKEN` 并使用 Bearer token。当前仍是演示计价，不涉及余额、充值、预扣或退款；登录注册、企业管理员的成员管理 API、成员移除后的 Key 全面撤销也尚未实现。
 
 ### 5.2 测试 SSE
 

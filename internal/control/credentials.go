@@ -25,6 +25,7 @@ type KeyMetadata struct {
 	Prefix   string
 	TenantID string
 	Status   string
+	UserID   int64
 }
 
 // CreatedKey contains the raw key only for the successful Create call. The
@@ -37,9 +38,12 @@ type CreatedKey struct {
 // CredentialService owns API-key lifecycle operations over the control-plane
 // snapshot. HTTP facades should call this service instead of mutating Config.
 type CredentialService struct {
-	server *Server
-	audit  AuditSink
+	server    *Server
+	audit     AuditSink
+	directory Directory
 }
+
+func (s *CredentialService) SetDirectory(directory Directory) { s.directory = directory }
 
 func NewCredentialService(server *Server) (*CredentialService, error) {
 	return NewCredentialServiceWithAudit(server, nil)
@@ -62,12 +66,44 @@ func (s *CredentialService) Create(ctx context.Context, tenantID string) (Create
 }
 
 func (s *CredentialService) CreateAs(ctx context.Context, principal Principal, tenantID string) (CreatedKey, error) {
+	return s.CreateForUserAs(ctx, principal, tenantID, principal.UserID)
+}
+
+func (s *CredentialService) CreateForUserAs(ctx context.Context, principal Principal, tenantID string, userID int64) (CreatedKey, error) {
 	audit := auditEventFromContext(ctx, "credential.create", "denied", principal)
 	resolvedTenant, err := principal.AuthorizedTenant(tenantID, false)
 	if err != nil {
 		audit.Error = "authorization failed"
 		s.audit.Record(ctx, audit)
 		return CreatedKey{}, err
+	}
+	if s.directory != nil {
+		if principal.Role != RoleAdmin {
+			userID = principal.UserID
+		}
+		if userID <= 0 {
+			audit.Error = "user ID missing"
+			s.audit.Record(ctx, audit)
+			return CreatedKey{}, errors.New("user_id is required")
+		}
+		if _, err := s.directory.Membership(ctx, resolvedTenant, userID); err != nil {
+			audit.Error = "key owner membership unavailable"
+			s.audit.Record(ctx, audit)
+			if errors.Is(err, ErrMembership) {
+				return CreatedKey{}, ErrTenantForbidden
+			}
+			return CreatedKey{}, err
+		}
+		if principal.Role != RoleAdmin {
+			if _, err := s.directory.Membership(ctx, resolvedTenant, principal.UserID); err != nil {
+				audit.Error = "caller membership unavailable"
+				s.audit.Record(ctx, audit)
+				if errors.Is(err, ErrMembership) {
+					return CreatedKey{}, ErrTenantForbidden
+				}
+				return CreatedKey{}, err
+			}
+		}
 	}
 	if err := ctx.Err(); err != nil {
 		audit.Error = "request canceled"
@@ -86,7 +122,7 @@ func (s *CredentialService) CreateAs(ctx context.Context, principal Principal, t
 		s.audit.Record(ctx, audit)
 		return CreatedKey{}, err
 	}
-	key := auth.NewKeyRecord(keyID, rawKey, resolvedTenant)
+	key := auth.NewOwnedKeyRecord(keyID, rawKey, resolvedTenant, userID)
 
 	s.server.applyMu.Lock()
 	defer s.server.applyMu.Unlock()
@@ -97,6 +133,7 @@ func (s *CredentialService) CreateAs(ctx context.Context, principal Principal, t
 		KeyHash:   key.Hash,
 		KeyPrefix: key.Prefix,
 		TenantId:  key.TenantID,
+		UserId:    key.UserID,
 		Status:    key.Status,
 	})
 	newConfig, err := s.server.applyKeyRecordsLocked(records, current.Routes)
@@ -114,7 +151,7 @@ func (s *CredentialService) CreateAs(ctx context.Context, principal Principal, t
 	return CreatedKey{
 		RawKey: rawKey,
 		Metadata: KeyMetadata{
-			KeyID: key.ID, Prefix: key.Prefix, TenantID: key.TenantID, Status: key.Status,
+			KeyID: key.ID, Prefix: key.Prefix, TenantID: key.TenantID, Status: key.Status, UserID: key.UserID,
 		},
 	}, nil
 }
@@ -132,6 +169,12 @@ func (s *CredentialService) ListAs(ctx context.Context, principal Principal, ten
 		s.audit.Record(ctx, audit)
 		return nil, err
 	}
+	memberRole, err := s.memberRole(ctx, principal, resolvedTenant)
+	if err != nil {
+		audit.Error = "caller membership unavailable"
+		s.audit.Record(ctx, audit)
+		return nil, err
+	}
 	cfg, err := s.server.GetConfig(ctx, &pb.GetRequest{})
 	if err != nil {
 		audit.Error = "configuration read failed"
@@ -143,7 +186,10 @@ func (s *CredentialService) ListAs(ctx context.Context, principal Principal, ten
 		if record == nil || (resolvedTenant != "" && record.TenantId != resolvedTenant) {
 			continue
 		}
-		out = append(out, KeyMetadata{KeyID: record.KeyId, Prefix: record.KeyPrefix, TenantID: record.TenantId, Status: record.Status})
+		if principal.Role != RoleAdmin && memberRole != MembershipOwner && memberRole != MembershipAdmin && record.UserId != principal.UserID {
+			continue
+		}
+		out = append(out, KeyMetadata{KeyID: record.KeyId, Prefix: record.KeyPrefix, TenantID: record.TenantId, Status: record.Status, UserID: record.UserId})
 	}
 	audit.Outcome = "success"
 	audit.TenantID = resolvedTenant
@@ -163,6 +209,12 @@ func (s *CredentialService) RevokeAs(ctx context.Context, principal Principal, k
 	resolvedTenant, err := principal.AuthorizedTenant(tenantID, true)
 	if err != nil {
 		audit.Error = "authorization failed"
+		s.audit.Record(ctx, audit)
+		return err
+	}
+	memberRole, err := s.memberRole(ctx, principal, resolvedTenant)
+	if err != nil {
+		audit.Error = "caller membership unavailable"
 		s.audit.Record(ctx, audit)
 		return err
 	}
@@ -197,6 +249,11 @@ func (s *CredentialService) RevokeAs(ctx context.Context, principal Principal, k
 			s.audit.Record(ctx, audit)
 			return ErrTenantForbidden
 		}
+		if principal.Role != RoleAdmin && memberRole != MembershipOwner && memberRole != MembershipAdmin && record.UserId != principal.UserID {
+			audit.Error = "key owner scope denied"
+			s.audit.Record(ctx, audit)
+			return ErrTenantForbidden
+		}
 		records[i].Status = "revoked"
 		audit.TenantID = record.TenantId
 	}
@@ -217,6 +274,23 @@ func (s *CredentialService) RevokeAs(ctx context.Context, principal Principal, k
 	audit.KeyCount = len(newConfig.KeyRecords)
 	s.audit.Record(ctx, audit)
 	return nil
+}
+
+func (s *CredentialService) memberRole(ctx context.Context, principal Principal, tenantID string) (MembershipRole, error) {
+	if principal.Role == RoleAdmin || s.directory == nil {
+		return "", nil
+	}
+	if principal.UserID <= 0 {
+		return "", ErrTenantForbidden
+	}
+	role, err := s.directory.Membership(ctx, tenantID, principal.UserID)
+	if err != nil {
+		if errors.Is(err, ErrMembership) {
+			return "", ErrTenantForbidden
+		}
+		return "", err
+	}
+	return role, nil
 }
 
 func generateAPIKey() (string, error) {

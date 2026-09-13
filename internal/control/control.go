@@ -228,6 +228,7 @@ func keyRecordsFromLegacy(keys map[string]string) []*pb.KeyRecord {
 			KeyHash:   record.Hash,
 			KeyPrefix: record.Prefix,
 			TenantId:  record.TenantID,
+			UserId:    record.UserID,
 			Status:    record.Status,
 		})
 	}
@@ -243,6 +244,9 @@ func validateKeyRecords(records []*pb.KeyRecord) error {
 		}
 		if strings.TrimSpace(record.KeyId) == "" || strings.TrimSpace(record.TenantId) == "" {
 			return fmt.Errorf("key record requires key_id and tenant_id")
+		}
+		if record.UserId < 0 {
+			return fmt.Errorf("key record %q has invalid user_id", record.KeyId)
 		}
 		if len(record.KeyHash) != 64 {
 			return fmt.Errorf("key record %q has invalid hash length", record.KeyId)
@@ -276,6 +280,7 @@ func KeyRecordsToAuth(records []*pb.KeyRecord) []auth.KeyRecord {
 			Hash:     record.KeyHash,
 			Prefix:   record.KeyPrefix,
 			TenantID: record.TenantId,
+			UserID:   record.UserId,
 			Status:   record.Status,
 		})
 	}

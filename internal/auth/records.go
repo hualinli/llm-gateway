@@ -8,6 +8,7 @@ type KeyRecord struct {
 	Hash     string
 	Prefix   string
 	TenantID string
+	UserID   int64
 	Status   string
 }
 
@@ -20,6 +21,12 @@ func NewKeyRecord(id, rawKey, tenantID string) KeyRecord {
 		TenantID: tenantID,
 		Status:   "active",
 	}
+}
+
+func NewOwnedKeyRecord(id, rawKey, tenantID string, userID int64) KeyRecord {
+	record := NewKeyRecord(id, rawKey, tenantID)
+	record.UserID = userID
+	return record
 }
 
 // LegacyRecords converts the old raw-key map at a compatibility boundary.

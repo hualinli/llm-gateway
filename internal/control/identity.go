@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -31,6 +32,7 @@ type identityClaims struct {
 	Subject  string `json:"sub"`
 	Role     Role   `json:"role"`
 	TenantID string `json:"tenant_id,omitempty"`
+	UserID   string `json:"user_id,omitempty"`
 	Expires  int64  `json:"exp"`
 }
 
@@ -91,7 +93,14 @@ func (v *IdentityVerifier) verifySigned(token string) (Principal, error) {
 	if claims.Subject == "" || claims.Expires <= 0 || !v.now().Before(time.Unix(claims.Expires, 0)) {
 		return Principal{}, errors.New("identity token is expired or missing claims")
 	}
-	principal := Principal{Subject: claims.Subject, Role: claims.Role, TenantID: claims.TenantID}
+	var userID int64
+	if claims.UserID != "" {
+		userID, err = strconv.ParseInt(claims.UserID, 10, 64)
+		if err != nil || userID <= 0 {
+			return Principal{}, errors.New("invalid identity token user_id")
+		}
+	}
+	principal := Principal{Subject: claims.Subject, Role: claims.Role, TenantID: claims.TenantID, UserID: userID}
 	if !principal.valid() {
 		return Principal{}, ErrInvalidPrincipal
 	}
@@ -134,7 +143,7 @@ func signIdentityToken(secret string, principal Principal, expiry time.Time) (st
 		return "", ErrInvalidPrincipal
 	}
 	claims, err := json.Marshal(identityClaims{
-		Subject: principal.Subject, Role: principal.Role, TenantID: principal.TenantID, Expires: expiry.Unix(),
+		Subject: principal.Subject, Role: principal.Role, TenantID: principal.TenantID, UserID: formatUserID(principal.UserID), Expires: expiry.Unix(),
 	})
 	if err != nil {
 		return "", err

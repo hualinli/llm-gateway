@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"syscall"
 
 	"llm-gateway/internal/metering"
@@ -60,6 +63,51 @@ func main() {
 			"balance_cents": balance,
 		})
 	})
+	mux.HandleFunc("/ledger/members", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		reader, ok := ledger.(metering.MemberBillingReader)
+		if !ok {
+			http.Error(w, "member billing unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		tenant := r.URL.Query().Get("tenant_id")
+		if tenant == "" {
+			http.Error(w, "tenant_id required", http.StatusBadRequest)
+			return
+		}
+		if rawUser := r.URL.Query().Get("user_id"); rawUser != "" {
+			userID, err := strconv.ParseInt(rawUser, 10, 64)
+			if err != nil || userID <= 0 {
+				http.Error(w, "valid user_id required", http.StatusBadRequest)
+				return
+			}
+			cost, err := reader.MemberBalance(tenant, userID)
+			if err != nil {
+				http.Error(w, "ledger unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"tenant_id": tenant, "user_id": rawUser, "cost_cents": cost})
+			return
+		}
+		bills, err := reader.MemberBills(tenant)
+		if err != nil {
+			http.Error(w, "ledger unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		tenantTotal, err := ledger.Balance(tenant)
+		if err != nil {
+			http.Error(w, "ledger unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		var attributed int64
+		for _, bill := range bills {
+			attributed += bill.CostCents
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"tenant_id": tenant, "cost_cents": tenantTotal, "unattributed_cost_cents": tenantTotal - attributed, "members": bills})
+	})
 	// 事件级对账：区分重复、pending、DLQ，以及 Stream/Ledger 两侧的具体差异。
 	mux.HandleFunc("/reconcile", func(w http.ResponseWriter, r *http.Request) {
 		report, err := metering.ReconcileStream(r.Context(), rdb, ledger)
@@ -82,7 +130,21 @@ func main() {
 		})
 	})
 
-	srv := &http.Server{Addr: ":8091", Handler: observability.Middleware(mux)}
+	adminToken := os.Getenv("METERING_ADMIN_TOKEN")
+	if meteringProductionMode() && adminToken == "" {
+		log.Fatal("METERING_ADMIN_TOKEN required in production mode")
+	}
+	authed := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/healthz" && (adminToken != "" || r.URL.Path == "/ledger/members") {
+			provided := r.Header.Get("Authorization")
+			if adminToken == "" || subtle.ConstantTimeCompare([]byte(provided), []byte("Bearer "+adminToken)) != 1 {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+		}
+		mux.ServeHTTP(w, r)
+	})
+	srv := &http.Server{Addr: ":8091", Handler: observability.Middleware(authed)}
 	go func() {
 		log.Printf("metering listening on :8091 ledger in-memory")
 		log.Printf("metering consumer group=%s stream=%s", metering.GroupName, metering.StreamName)
@@ -97,4 +159,13 @@ func main() {
 	log.Println("shutting down metering...")
 	cancel()
 	_ = srv.Shutdown(context.Background())
+}
+
+func meteringProductionMode() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("METERING_REQUIRE_POSTGRES"))) {
+	case "1", "true", "yes":
+		return true
+	default:
+		return false
+	}
 }
