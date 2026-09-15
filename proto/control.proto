@@ -16,6 +16,7 @@ message Config {
   map<string, string> keys = 2 [deprecated = true]; // legacy rawKey -> tenant; do not populate in new configs
   map<string, ProviderList> routes = 3;       // model -> providers
   repeated KeyRecord key_records = 4;         // hash-based credentials for new configs
+  map<string, ProviderConfig> providers = 5;  // provider id -> immutable provider settings
 }
 
 message ProviderList {
@@ -28,6 +29,35 @@ message KeyRecord {
   string key_prefix = 3;
   string tenant_id = 4;
   string status = 5;
+}
+
+// ProviderConfig contains non-secret provider settings. Secrets are referred
+// to by credential_ref and resolved by the Gateway's local credential store.
+message ProviderConfig {
+  string id = 1;
+  string protocol = 2;       // openai-compatible or mock
+  string url = 3;            // base URL for HTTP providers
+  string credential_ref = 4; // opaque reference; never a raw secret
+  string model = 5;          // optional upstream model override
+  ProviderTimeouts timeouts = 6;
+  bool enabled = 7;
+  int64 mock_delay_ms = 8;
+  map<string, string> model_mapping = 9;
+  // Compatibility aliases used by the HTTP control API and earlier design
+  // docs. Gateways accept either spelling and normalize to one runtime spec.
+  string type = 10;
+  string base_url = 11;
+  ProviderTimeouts timeout = 12;
+}
+
+message ProviderTimeouts {
+  int64 connect_timeout_ms = 1;
+  int64 tls_handshake_timeout_ms = 2;
+  int64 response_header_timeout_ms = 3;
+  int64 first_byte_timeout_ms = 4;
+  int64 idle_timeout_ms = 5;
+  int64 attempt_timeout_ms = 6;
+  int32 max_event_bytes = 7;
 }
 
 message GetRequest {}

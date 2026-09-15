@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -46,10 +47,13 @@ func NewServer(store Store) (*Server, error) {
 		return nil, err
 	}
 	if latest != nil {
-		latest = normalizeConfig(latest)
 		if err := validateKeyRecords(latest.KeyRecords); err != nil {
 			return nil, fmt.Errorf("invalid restored credentials: %w", err)
 		}
+		if err := validateProviderConfigs(latest.Providers); err != nil {
+			return nil, fmt.Errorf("invalid restored providers: %w", err)
+		}
+		latest = normalizeConfig(latest)
 		s.cfg.Store(latest)
 		log.Printf("control: restored v%d from store", latest.Version)
 	}
@@ -59,15 +63,23 @@ func NewServer(store Store) (*Server, error) {
 // ApplyConfig is the legacy raw-key compatibility entry point. It hashes the
 // input immediately and persists only KeyRecords in the Config proto.
 func (s *Server) ApplyConfig(keys map[string]string, routes map[string]*pb.ProviderList) (*pb.Config, error) {
-	return s.ApplyKeyRecords(keyRecordsFromLegacy(keys), routes)
+	return s.ApplyKeyRecordsAndProviders(keyRecordsFromLegacy(keys), routes, nil)
 }
 
 // ApplyKeyRecords writes a safe credential snapshot: raw keys are never placed
 // in the Config message, store payload, or Watch broadcast.
 func (s *Server) ApplyKeyRecords(records []*pb.KeyRecord, routes map[string]*pb.ProviderList) (*pb.Config, error) {
+	return s.ApplyKeyRecordsAndProviders(records, routes, nil)
+}
+
+// ApplyKeyRecordsAndProviders writes a complete versioned snapshot, including
+// provider settings. Raw upstream credentials are never accepted in this
+// message; ProviderConfig.CredentialRef is an opaque reference resolved by the
+// Gateway locally.
+func (s *Server) ApplyKeyRecordsAndProviders(records []*pb.KeyRecord, routes map[string]*pb.ProviderList, providers map[string]*pb.ProviderConfig) (*pb.Config, error) {
 	s.applyMu.Lock()
 	defer s.applyMu.Unlock()
-	return s.applyKeyRecordsLocked(records, routes)
+	return s.applyKeyRecordsLocked(records, routes, providers)
 }
 
 var ErrConfigVersionConflict = errors.New("config version conflict")
@@ -77,6 +89,7 @@ var ErrConfigVersionConflict = errors.New("config version conflict")
 type ConfigPatch struct {
 	KeyRecords      []*pb.KeyRecord
 	Routes          map[string]*pb.ProviderList
+	Providers       map[string]*pb.ProviderConfig
 	ExpectedVersion *int64
 	LegacyKeys      map[string]string // local-demo compatibility; immediately hashed
 }
@@ -104,14 +117,21 @@ func (s *Server) PatchConfig(patch ConfigPatch) (*pb.Config, error) {
 	if routes == nil {
 		routes = current.Routes
 	}
-	return s.applyKeyRecordsLocked(records, routes)
+	providers := patch.Providers
+	if providers == nil {
+		providers = current.Providers
+	}
+	return s.applyKeyRecordsLocked(records, routes, providers)
 }
 
-func (s *Server) applyKeyRecordsLocked(records []*pb.KeyRecord, routes map[string]*pb.ProviderList) (*pb.Config, error) {
+func (s *Server) applyKeyRecordsLocked(records []*pb.KeyRecord, routes map[string]*pb.ProviderList, providers map[string]*pb.ProviderConfig) (*pb.Config, error) {
 	if err := validateKeyRecords(records); err != nil {
 		return nil, err
 	}
-	next := cloneConfig(&pb.Config{Version: s.CurrentConfig().Version, KeyRecords: records, Routes: routes})
+	if err := validateProviderConfigs(providers); err != nil {
+		return nil, err
+	}
+	next := cloneConfig(&pb.Config{Version: s.CurrentConfig().Version, KeyRecords: records, Routes: routes, Providers: normalizeProviderConfigSnapshot(providers)})
 	next.Version++
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -120,7 +140,7 @@ func (s *Server) applyKeyRecordsLocked(records []*pb.KeyRecord, routes map[strin
 	}
 	s.cfg.Store(next)
 	s.broadcast(next)
-	log.Printf("control: apply version=%d keys=%d routes=%d", next.Version, len(records), len(routes))
+	log.Printf("control: apply version=%d keys=%d routes=%d providers=%d", next.Version, len(records), len(routes), len(providers))
 	return cloneConfig(next), nil
 }
 
@@ -128,7 +148,7 @@ func (s *Server) GetConfig(_ context.Context, _ *pb.GetRequest) (*pb.Config, err
 	if c := s.cfg.Load(); c != nil {
 		return cloneConfig(c), nil
 	}
-	return &pb.Config{Version: 0, KeyRecords: []*pb.KeyRecord{}, Routes: map[string]*pb.ProviderList{}}, nil
+	return &pb.Config{Version: 0, KeyRecords: []*pb.KeyRecord{}, Routes: map[string]*pb.ProviderList{}, Providers: map[string]*pb.ProviderConfig{}}, nil
 }
 
 // WatchConfig 真实推送：注册 watcher，先补发req之后已生效的版本，之后每次 ApplyConfig 即时送达。
@@ -199,7 +219,7 @@ func (s *Server) CurrentConfig() *pb.Config {
 	if c := s.cfg.Load(); c != nil {
 		return cloneConfig(c)
 	}
-	return &pb.Config{Version: 0}
+	return &pb.Config{Version: 0, KeyRecords: []*pb.KeyRecord{}, Routes: map[string]*pb.ProviderList{}, Providers: map[string]*pb.ProviderConfig{}}
 }
 
 func cloneConfig(cfg *pb.Config) *pb.Config {
@@ -214,8 +234,39 @@ func normalizeConfig(cfg *pb.Config) *pb.Config {
 	if len(out.KeyRecords) == 0 && len(out.Keys) > 0 {
 		out.KeyRecords = keyRecordsFromLegacy(out.Keys)
 	}
+	out.Providers = normalizeProviderConfigSnapshot(out.Providers)
 	// New snapshots never expose or persist the legacy raw-key field.
 	out.Keys = nil
+	return out
+}
+
+func normalizeProviderConfigSnapshot(configs map[string]*pb.ProviderConfig) map[string]*pb.ProviderConfig {
+	out := make(map[string]*pb.ProviderConfig, len(configs))
+	for id, cfg := range configs {
+		if cfg == nil {
+			out[id] = nil
+			continue
+		}
+		copyCfg := proto.Clone(cfg).(*pb.ProviderConfig)
+		if copyCfg.Id == "" {
+			copyCfg.Id = id
+		}
+		if copyCfg.Protocol == "" {
+			copyCfg.Protocol = copyCfg.Type
+		}
+		if copyCfg.Url == "" {
+			copyCfg.Url = copyCfg.BaseUrl
+		}
+		if copyCfg.Timeouts == nil {
+			copyCfg.Timeouts = copyCfg.Timeout
+		}
+		// Persist one canonical spelling so every Gateway generation observes
+		// the same semantic snapshot and aliases cannot drift independently.
+		copyCfg.Type = ""
+		copyCfg.BaseUrl = ""
+		copyCfg.Timeout = nil
+		out[id] = copyCfg
+	}
 	return out
 }
 
@@ -263,6 +314,105 @@ func validateKeyRecords(records []*pb.KeyRecord) error {
 		hashes[record.KeyHash] = struct{}{}
 	}
 	return nil
+}
+
+// ValidateProviderConfigs checks the control-plane portion of a provider
+// snapshot without resolving local credentials. Secret material must remain
+// behind CredentialRef and is intentionally not represented in this proto.
+func ValidateProviderConfigs(configs map[string]*pb.ProviderConfig) error {
+	return validateProviderConfigs(configs)
+}
+
+func validateProviderConfigs(configs map[string]*pb.ProviderConfig) error {
+	seenIDs := make(map[string]struct{}, len(configs))
+	for rawID, cfg := range configs {
+		id := strings.TrimSpace(rawID)
+		if id == "" {
+			return fmt.Errorf("provider id is empty")
+		}
+		if id != rawID {
+			return fmt.Errorf("provider id %q contains surrounding whitespace", rawID)
+		}
+		if _, exists := seenIDs[id]; exists {
+			return fmt.Errorf("duplicate provider id %q", id)
+		}
+		seenIDs[id] = struct{}{}
+		if cfg == nil {
+			return fmt.Errorf("provider %q config is nil", id)
+		}
+		if cfg.Id != "" && strings.TrimSpace(cfg.Id) != id {
+			return fmt.Errorf("provider %q has mismatched id %q", id, cfg.Id)
+		}
+		protocol := strings.ToLower(strings.TrimSpace(cfg.Protocol))
+		aliasProtocol := strings.ToLower(strings.TrimSpace(cfg.Type))
+		if protocol != "" && aliasProtocol != "" && normalizeProviderProtocol(protocol) != normalizeProviderProtocol(aliasProtocol) {
+			return fmt.Errorf("provider %q has conflicting protocol/type", id)
+		}
+		if protocol == "" {
+			protocol = aliasProtocol
+		}
+		protocol = normalizeProviderProtocol(protocol)
+		switch protocol {
+		case "mock":
+			if cfg.CredentialRef != "" {
+				return fmt.Errorf("provider %q mock cannot use credential_ref", id)
+			}
+		case "openai", "openai_compatible", "openai-compatible":
+			providerURL := strings.TrimSpace(cfg.Url)
+			if providerURL == "" {
+				providerURL = strings.TrimSpace(cfg.BaseUrl)
+			}
+			if providerURL == "" {
+				return fmt.Errorf("provider %q url is required", id)
+			}
+			parsed, err := url.Parse(providerURL)
+			if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+				return fmt.Errorf("provider %q has invalid url", id)
+			}
+		default:
+			return fmt.Errorf("provider %q has unsupported protocol %q", id, cfg.Protocol)
+		}
+		if strings.ContainsAny(cfg.CredentialRef, "\r\n") {
+			return fmt.Errorf("provider %q credential_ref contains newline", id)
+		}
+		if strings.ContainsAny(cfg.Model, "\r\n") {
+			return fmt.Errorf("provider %q model contains newline", id)
+		}
+		for source, target := range cfg.ModelMapping {
+			if strings.TrimSpace(source) == "" || strings.TrimSpace(target) == "" {
+				return fmt.Errorf("provider %q model_mapping contains empty key or value", id)
+			}
+		}
+		if cfg.MockDelayMs < 0 {
+			return fmt.Errorf("provider %q mock_delay_ms must be non-negative", id)
+		}
+		timeouts := cfg.Timeouts
+		if cfg.Timeouts != nil && cfg.Timeout != nil && !proto.Equal(cfg.Timeouts, cfg.Timeout) {
+			return fmt.Errorf("provider %q has conflicting timeout/timeouts", id)
+		}
+		if timeouts == nil {
+			timeouts = cfg.Timeout
+		}
+		if timeouts == nil {
+			continue
+		}
+		if timeouts.ConnectTimeoutMs < 0 || timeouts.TlsHandshakeTimeoutMs < 0 || timeouts.ResponseHeaderTimeoutMs < 0 || timeouts.FirstByteTimeoutMs < 0 || timeouts.IdleTimeoutMs < 0 || timeouts.AttemptTimeoutMs < 0 {
+			return fmt.Errorf("provider %q timeout must be non-negative", id)
+		}
+		if timeouts.MaxEventBytes < 0 {
+			return fmt.Errorf("provider %q max_event_bytes must be non-negative", id)
+		}
+	}
+	return nil
+}
+
+func normalizeProviderProtocol(protocol string) string {
+	switch protocol {
+	case "openai", "openai_compatible", "openai-compatible":
+		return "openai-compatible"
+	default:
+		return protocol
+	}
 }
 
 func KeyRecordsToAuth(records []*pb.KeyRecord) []auth.KeyRecord {
@@ -403,7 +553,7 @@ func (c *Client) Close() { _ = c.conn.Close() }
 func RoutesToProto(m map[string][]string) map[string]*pb.ProviderList {
 	out := make(map[string]*pb.ProviderList, len(m))
 	for k, v := range m {
-		out[k] = &pb.ProviderList{Providers: v}
+		out[k] = &pb.ProviderList{Providers: append([]string(nil), v...)}
 	}
 	return out
 }
@@ -412,7 +562,7 @@ func RoutesFromProto(m map[string]*pb.ProviderList) map[string][]string {
 	out := make(map[string][]string, len(m))
 	for k, v := range m {
 		if v != nil {
-			out[k] = v.Providers
+			out[k] = append([]string(nil), v.Providers...)
 		}
 	}
 	return out

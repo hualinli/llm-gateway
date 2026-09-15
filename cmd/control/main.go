@@ -36,6 +36,34 @@ func redactKeyRecords(records []*pb.KeyRecord) []map[string]string {
 	return out
 }
 
+func redactProviderConfigs(configs map[string]*pb.ProviderConfig) map[string]map[string]interface{} {
+	out := make(map[string]map[string]interface{}, len(configs))
+	for id, cfg := range configs {
+		if cfg == nil {
+			out[id] = nil
+			continue
+		}
+		// ProviderConfig intentionally has no raw secret field. Returning only
+		// its opaque credential reference keeps the control API useful without
+		// disclosing the locally resolved upstream key.
+		entry := map[string]interface{}{
+			"id":             cfg.Id,
+			"protocol":       cfg.Protocol,
+			"url":            cfg.Url,
+			"credential_ref": cfg.CredentialRef,
+			"model":          cfg.Model,
+			"enabled":        cfg.Enabled,
+			"mock_delay_ms":  cfg.MockDelayMs,
+			"model_mapping":  cfg.ModelMapping,
+		}
+		if cfg.Timeouts != nil {
+			entry["timeouts"] = cfg.Timeouts
+		}
+		out[id] = entry
+	}
+	return out
+}
+
 func principalSubject(r *http.Request) string {
 	principal, ok := control.PrincipalFromContext(r.Context())
 	if !ok {
@@ -155,17 +183,19 @@ func newConfigHandler(srv *control.Server, auditSink control.AuditSink, legacyKe
 			cfg, _ := srv.GetConfig(r.Context(), &pb.GetRequest{})
 			// 转成便于 curl 看的 JSON 形态
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"version": cfg.Version,
-				"keys":    redactKeyRecords(cfg.KeyRecords),
-				"routes":  control.RoutesFromProto(cfg.Routes),
+				"version":   cfg.Version,
+				"keys":      redactKeyRecords(cfg.KeyRecords),
+				"routes":    control.RoutesFromProto(cfg.Routes),
+				"providers": redactProviderConfigs(cfg.Providers),
 			})
 		case http.MethodPost:
 			r.Body = http.MaxBytesReader(w, r.Body, maxConfigBody)
 			var req struct {
-				Keys            map[string]string   `json:"keys"` // legacy input; converted to hashes before persistence
-				KeyRecords      []*pb.KeyRecord     `json:"key_records"`
-				Routes          map[string][]string `json:"routes"`
-				ExpectedVersion *int64              `json:"expected_version"`
+				Keys            map[string]string             `json:"keys"` // legacy input; converted to hashes before persistence
+				KeyRecords      []*pb.KeyRecord               `json:"key_records"`
+				Routes          map[string][]string           `json:"routes"`
+				Providers       map[string]*pb.ProviderConfig `json:"providers"`
+				ExpectedVersion *int64                        `json:"expected_version"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				http.Error(w, err.Error(), 400)
@@ -182,6 +212,9 @@ func newConfigHandler(srv *control.Server, auditSink control.AuditSink, legacyKe
 			patch := control.ConfigPatch{KeyRecords: req.KeyRecords, LegacyKeys: req.Keys, ExpectedVersion: req.ExpectedVersion}
 			if req.Routes != nil {
 				patch.Routes = control.RoutesToProto(req.Routes)
+			}
+			if req.Providers != nil {
+				patch.Providers = req.Providers
 			}
 			newCfg, applyErr := srv.PatchConfig(patch)
 			if applyErr != nil {
@@ -204,9 +237,10 @@ func newConfigHandler(srv *control.Server, auditSink control.AuditSink, legacyKe
 				ConfigVersion: newCfg.Version, KeyCount: len(newCfg.KeyRecords),
 			})
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"version": newCfg.Version,
-				"keys":    redactKeyRecords(newCfg.KeyRecords),
-				"routes":  control.RoutesFromProto(newCfg.Routes),
+				"version":   newCfg.Version,
+				"keys":      redactKeyRecords(newCfg.KeyRecords),
+				"routes":    control.RoutesFromProto(newCfg.Routes),
+				"providers": redactProviderConfigs(newCfg.Providers),
 			})
 		default:
 			http.Error(w, "method not allowed", 405)

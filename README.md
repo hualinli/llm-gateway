@@ -224,6 +224,9 @@
 - watcher channel 现在会保留最新快照，不再简单丢弃后续版本；仍需增加慢连接和生产网络故障注入测试；
 - ApplyConfig 现在串行化版本生成；
 - 不存在的 Provider 现在会拒绝整版路由更新；
+- Provider 配置现在随版本化快照下发：`providers` 按 ID 保存 `protocol`（`openai-compatible` 或 `mock`）、URL、`credential_ref`、模型映射和连接/首块/空闲/尝试超时；`routes` 仍保持 `model -> ordered provider IDs`；
+- Gateway 收到快照后会先校验并构建完整 Provider/路由快照，再一次性发布。任意 Provider 配置无效时保留旧快照；同 ID 且配置未变的实例复用，配置变化会重建，旧 OpenAI transport 只关闭空闲连接，因此在途 SSE 继续使用旧实例；
+- 第一版上游凭据只支持本地 `credential_ref` 解析（默认 `env://ENV_NAME` / `env:ENV_NAME`，也可注入部署侧 resolver），控制面不接收或持久化原始密钥；
 - `CONTROL_REQUIRE_POSTGRES=true` 时 PostgreSQL 不可用会拒绝启动；默认 Demo 模式仍允许回退内存，生产环境必须开启该选项。
 
 ### 2.7 可观测性和压测工具
@@ -734,7 +737,7 @@ Provider 在首 event 后挂掉：
 
 如果所有候选 Provider 都在首 event 前失败，返回上游失败；如果已经提交过数据，则不能再修改 HTTP status，只能断流。
 
-未知 Provider 不会静默创建 Mock，Registry 会拒绝无效路由配置。当前 Provider 注册仍主要在 Gateway 启动时完成，控制面只能选择已经注册的 Provider ID；动态 Provider credential/config 尚未完成。
+未知 Provider 不会静默创建 Mock，Registry 会拒绝无效路由配置。控制面现在可以随版本化快照下发 `openai-compatible` 和 `mock` 的 Provider 配置；Gateway 会在发布前构建完整快照，配置失败保留上一版。
 
 测试证据：真实 OpenAI-compatible `httptest.Server` failover 测试、`TestOpenAIFailoverBeforeFirstEvent`、`TestOpenAIMidStreamFailureDoesNotReplayBackup`、`TestRegistryRejectsUnknownProvider`。
 
@@ -965,13 +968,15 @@ OPENAI_PROVIDER_ID='openai'
 OPENAI_MODEL='' # 可选；为空时保留客户端 model
 ```
 
-设置 `OPENAI_BASE_URL` 后，Gateway 会显式注册一个名为 `OPENAI_PROVIDER_ID` 的 Provider。然后可以让控制面把路由切到它：
+设置 `OPENAI_BASE_URL` 后，Gateway 会显式注册一个名为 `OPENAI_PROVIDER_ID` 的兼容 Provider。也可以直接通过控制面配置动态创建 Provider；上游密钥使用 Gateway 本地的 `credential_ref` 解析，不放进控制面配置：
 
 ```bash
 curl -X POST http://localhost:50052/config \
   -H 'Content-Type: application/json' \
-  -d '{"routes":{"default":["openai"]}}'
+  -d '{"providers":{"openai":{"id":"openai","protocol":"openai-compatible","url":"https://api.openai.com","credential_ref":"env://OPENAI_API_KEY"}},"routes":{"default":["openai"]}}'
 ```
+
+`credential_ref` 默认支持 `env://ENV_NAME` 和 `env:ENV_NAME`；部署侧可以向 `NewRegistryWithCredentialResolver` 注入 Vault/KMS 等本地解析器。Provider 配置还支持 `model_mapping`、`mock_delay_ms` 和 `timeouts`（各阶段毫秒值：`connect_timeout_ms`、`tls_handshake_timeout_ms`、`response_header_timeout_ms`、`first_byte_timeout_ms`、`idle_timeout_ms`、`attempt_timeout_ms`、`max_event_bytes`）。
 
 如果只使用内置 Mock，则不设置 `OPENAI_BASE_URL`，默认路由使用 `mock-a` 和 `mock-b`。
 

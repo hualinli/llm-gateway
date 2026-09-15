@@ -25,6 +25,9 @@ type OpenAIConfig struct {
 	BaseURL string
 	APIKey  string
 	Model   string // optional upstream model override
+	// ModelMapping optionally maps the gateway model name to the upstream
+	// model name. A direct Model override takes precedence.
+	ModelMapping map[string]string
 
 	ConnectTimeout        time.Duration
 	TLSHandshakeTimeout   time.Duration
@@ -66,7 +69,7 @@ func NewOpenAIProvider(cfg OpenAIConfig) (*OpenAIProvider, error) {
 		return nil, fmt.Errorf("openai provider name is empty")
 	}
 	base, err := url.Parse(strings.TrimSpace(cfg.BaseURL))
-	if err != nil || base.Scheme == "" || base.Host == "" {
+	if err != nil || (base.Scheme != "http" && base.Scheme != "https") || base.Host == "" || base.User != nil || base.RawQuery != "" || base.Fragment != "" {
 		return nil, fmt.Errorf("invalid openai base URL %q", cfg.BaseURL)
 	}
 	if cfg.ConnectTimeout <= 0 {
@@ -90,6 +93,7 @@ func NewOpenAIProvider(cfg OpenAIConfig) (*OpenAIProvider, error) {
 	if cfg.MaxEventBytes <= 0 {
 		cfg.MaxEventBytes = 4 << 20
 	}
+	cfg.ModelMapping = cloneStringMap(cfg.ModelMapping)
 
 	transport := &http.Transport{}
 	if defaultTransport, ok := http.DefaultTransport.(*http.Transport); ok {
@@ -119,8 +123,29 @@ func NewOpenAIProvider(cfg OpenAIConfig) (*OpenAIProvider, error) {
 
 func (p *OpenAIProvider) Name() string { return p.name }
 
+// CloseIdleConnections releases keep-alive sockets when a dynamic snapshot
+// retires this provider. Active SSE requests retain their response body and
+// continue until their own context completes.
+func (p *OpenAIProvider) CloseIdleConnections() {
+	if p == nil || p.client == nil || p.client.Transport == nil {
+		return
+	}
+	if closer, ok := p.client.Transport.(interface{ CloseIdleConnections() }); ok {
+		closer.CloseIdleConnections()
+	}
+}
+
 func (p *OpenAIProvider) ChatStream(ctx context.Context, reqBody []byte, w io.Writer) (*Usage, error) {
-	body, err := rewriteOpenAIRequest(reqBody, p.model)
+	modelOverride := p.model
+	if modelOverride == "" && len(p.cfg.ModelMapping) > 0 {
+		var request struct {
+			Model string `json:"model"`
+		}
+		if err := json.Unmarshal(reqBody, &request); err == nil {
+			modelOverride = p.cfg.ModelMapping[request.Model]
+		}
+	}
+	body, err := rewriteOpenAIRequest(reqBody, modelOverride)
 	if err != nil {
 		return nil, &UpstreamError{Status: http.StatusBadRequest, Message: "rewrite request: " + err.Error(), Retryable: false}
 	}

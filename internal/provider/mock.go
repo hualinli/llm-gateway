@@ -20,6 +20,11 @@ func NewMockProvider(name string, delay time.Duration) *MockProvider {
 
 func (m *MockProvider) Name() string { return m.name }
 
+// CloseIdleConnections keeps MockProvider interchangeable with network
+// providers in the registry lifecycle. It intentionally has no state to
+// release.
+func (m *MockProvider) CloseIdleConnections() {}
+
 func (m *MockProvider) ChatStream(ctx context.Context, reqBody []byte, w io.Writer) (*Usage, error) {
 	// 模拟上游 SSE：先等一小段再发首块（放大“首字节”便于观察重试边界）
 	select {

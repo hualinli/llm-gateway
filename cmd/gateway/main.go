@@ -33,9 +33,9 @@ func main() {
 			provider.NewMockProvider("mock-b", 80*time.Millisecond),
 		},
 	})
-	// Real Provider registration is explicit. A control-plane route can only
-	// reference a provider that has been registered here (or by another
-	// deployment-specific bootstrap path); unknown names are rejected.
+	// Real Provider registration is explicit for bootstrap factories. A
+	// control-plane snapshot may also construct the built-in provider protocols
+	// dynamically; unknown route IDs are still rejected atomically.
 	if baseURL := os.Getenv("OPENAI_BASE_URL"); baseURL != "" {
 		name := os.Getenv("OPENAI_PROVIDER_ID")
 		if name == "" {
@@ -98,7 +98,7 @@ func main() {
 	go func() {
 		err := controlSync.Run(controlCtx, func(cfg *pb.Config) error {
 			log.Printf("control: hot reload to v%d", cfg.Version)
-			if err := registry.UpdateRoutes(control.RoutesFromProto(cfg.Routes)); err != nil {
+			if err := registry.ApplyConfig(control.RoutesFromProto(cfg.Routes), provider.ProviderConfigsFromProto(cfg.Providers)); err != nil {
 				// 路由配置失败时仍优先撤销已删除凭据；新增 key 要等完整配置修复后生效。
 				authStore.RevokeMissingRecords(control.KeyRecordsToAuth(cfg.KeyRecords))
 				log.Printf("control: reject config v%d: %v", cfg.Version, err)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 // --- test doubles ---
@@ -87,6 +89,79 @@ func TestApplyConfigCopiesCallerOwnedData(t *testing.T) {
 	}
 	if got.Routes["default"].Providers[0] != "mock-a" {
 		t.Fatalf("stored routes were aliased: %+v", got.Routes)
+	}
+}
+
+func TestApplyProviderConfigCopiesAndPersistsSnapshot(t *testing.T) {
+	st := NewMemoryStore()
+	srv, err := NewServer(st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	providers := map[string]*pb.ProviderConfig{
+		"openai": {
+			Id:            "openai",
+			Protocol:      "openai-compatible",
+			Url:           "https://provider.example",
+			CredentialRef: "env://OPENAI_KEY",
+			Timeouts:      &pb.ProviderTimeouts{FirstByteTimeoutMs: 1200},
+		},
+	}
+	cfg, err := srv.ApplyKeyRecordsAndProviders(nil, RoutesToProto(map[string][]string{"m": {"openai"}}), providers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	providers["openai"].Url = "https://mutated.example"
+	providers["openai"].Timeouts.FirstByteTimeoutMs = 9999
+	if cfg.Providers["openai"].Url != "https://provider.example" {
+		t.Fatal("returned config aliased caller provider map")
+	}
+	stored, err := st.LoadLatest(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored == nil || stored.Version != 1 || stored.Providers["openai"].CredentialRef != "env://OPENAI_KEY" {
+		t.Fatalf("stored provider snapshot=%+v", stored)
+	}
+	encoded, err := protojson.Marshal(stored)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(encoded), "OPENAI_KEY") {
+		t.Fatal("credential reference should remain observable for local resolution")
+	}
+}
+
+func TestProviderConfigValidationRejectsInvalidEntries(t *testing.T) {
+	for name, cfg := range map[string]*pb.ProviderConfig{
+		"bad-protocol": {Protocol: "anthropic", Url: "https://provider.example"},
+		"bad-url":      {Protocol: "openai-compatible", Url: "file:///tmp/model"},
+		"bad-mock-ref": {Protocol: "mock", CredentialRef: "env://MOCK_KEY"},
+	} {
+		if err := ValidateProviderConfigs(map[string]*pb.ProviderConfig{name: cfg}); err == nil {
+			t.Fatalf("%s: invalid provider config was accepted", name)
+		}
+	}
+}
+
+func TestProviderConfigAliasesAreCanonicalized(t *testing.T) {
+	srv, err := NewServer(NewMemoryStore())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := srv.ApplyKeyRecordsAndProviders(nil, RoutesToProto(map[string][]string{"m": {"mock"}}), map[string]*pb.ProviderConfig{
+		"mock": {
+			Type:    "mock",
+			Timeout: &pb.ProviderTimeouts{IdleTimeoutMs: 250},
+			Enabled: true,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	providerCfg := cfg.Providers["mock"]
+	if providerCfg == nil || providerCfg.Protocol != "mock" || providerCfg.Type != "" || providerCfg.Timeout != nil || providerCfg.Timeouts == nil || providerCfg.Timeouts.IdleTimeoutMs != 250 {
+		t.Fatalf("aliases not canonicalized: %+v", providerCfg)
 	}
 }
 
