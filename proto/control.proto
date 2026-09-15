@@ -40,14 +40,9 @@ message ProviderConfig {
   string credential_ref = 4; // opaque reference; never a raw secret
   string model = 5;          // optional upstream model override
   ProviderTimeouts timeouts = 6;
-  bool enabled = 7;
+  reserved 7;
   int64 mock_delay_ms = 8;
   map<string, string> model_mapping = 9;
-  // Compatibility aliases used by the HTTP control API and earlier design
-  // docs. Gateways accept either spelling and normalize to one runtime spec.
-  string type = 10;
-  string base_url = 11;
-  ProviderTimeouts timeout = 12;
 }
 
 message ProviderTimeouts {

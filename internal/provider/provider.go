@@ -107,39 +107,23 @@ type ProviderTimeouts struct {
 	MaxEventBytes         int
 }
 
-// TimeoutConfig is a convenient alias for integrations that use a singular
-// timeout name in their configuration model.
-type TimeoutConfig = ProviderTimeouts
-
 // ProviderConfig describes one provider instance. The map key in the control
 // snapshot is authoritative for ID; ID is optional but, when present, must
-// match it. Enabled defaults to true for backwards-compatible proto3 config.
+// match it.
 type ProviderConfig struct {
-	ID string
-	// Type/BaseURL/Timeout are the names used by the control-plane API. The
-	// Protocol/URL/Timeouts aliases keep programmatic callers compatible with
-	// the original adapter vocabulary; normalization rejects conflicts.
-	Type          string
-	BaseURL       string
-	Timeout       ProviderTimeouts
+	ID            string
 	Protocol      string
 	URL           string
 	CredentialRef string
 	Model         string
 	ModelMapping  map[string]string
 	Timeouts      ProviderTimeouts
-	Enabled       bool
 	MockDelay     time.Duration
 }
 
-// Config is kept as a short alias for embedding the runtime provider spec in
-// deployment-specific configuration code.
-type Config = ProviderConfig
-
 // RegistryOptions controls dynamic provider construction.
 type RegistryOptions struct {
-	Credentials        CredentialResolver
-	CredentialResolver CredentialResolver
+	Credentials CredentialResolver
 }
 
 // ProviderConfigFromProto converts the versioned control-plane representation
@@ -155,15 +139,8 @@ func ProviderConfigFromProto(id string, cfg *pb.ProviderConfig) ProviderConfig {
 		URL:           cfg.Url,
 		CredentialRef: cfg.CredentialRef,
 		Model:         cfg.Model,
-		Enabled:       cfg.Enabled,
 		MockDelay:     time.Duration(cfg.MockDelayMs) * time.Millisecond,
 		ModelMapping:  cloneStringMap(cfg.ModelMapping),
-	}
-	if cfg.Type != "" {
-		out.Type = cfg.Type
-	}
-	if cfg.BaseUrl != "" {
-		out.BaseURL = cfg.BaseUrl
 	}
 	if cfg.Timeouts != nil {
 		out.Timeouts = ProviderTimeouts{
@@ -174,25 +151,6 @@ func ProviderConfigFromProto(id string, cfg *pb.ProviderConfig) ProviderConfig {
 			IdleTimeout:           milliseconds(cfg.Timeouts.IdleTimeoutMs),
 			AttemptTimeout:        milliseconds(cfg.Timeouts.AttemptTimeoutMs),
 			MaxEventBytes:         int(cfg.Timeouts.MaxEventBytes),
-		}
-	}
-	if cfg.Timeout != nil {
-		alias := ProviderTimeouts{
-			ConnectTimeout:        milliseconds(cfg.Timeout.ConnectTimeoutMs),
-			TLSHandshakeTimeout:   milliseconds(cfg.Timeout.TlsHandshakeTimeoutMs),
-			ResponseHeaderTimeout: milliseconds(cfg.Timeout.ResponseHeaderTimeoutMs),
-			FirstByteTimeout:      milliseconds(cfg.Timeout.FirstByteTimeoutMs),
-			IdleTimeout:           milliseconds(cfg.Timeout.IdleTimeoutMs),
-			AttemptTimeout:        milliseconds(cfg.Timeout.AttemptTimeoutMs),
-			MaxEventBytes:         int(cfg.Timeout.MaxEventBytes),
-		}
-		if out.Timeouts != (ProviderTimeouts{}) && out.Timeouts != alias {
-			// Keep both values so normalizeProviderConfigs can return a precise
-			// conflict error rather than silently choosing one spelling.
-			out.Timeout = alias
-		} else {
-			out.Timeouts = alias
-			out.Timeout = ProviderTimeouts{}
 		}
 	}
 	return out
@@ -206,16 +164,6 @@ func ProviderConfigsFromProto(configs map[string]*pb.ProviderConfig) map[string]
 		out[id] = ProviderConfigFromProto(id, cfg)
 	}
 	return out
-}
-
-// ConfigFromProto/ConfigsFromProto are short aliases for integrations that
-// treat the control message as their source configuration.
-func ConfigFromProto(id string, cfg *pb.ProviderConfig) ProviderConfig {
-	return ProviderConfigFromProto(id, cfg)
-}
-
-func ConfigsFromProto(configs map[string]*pb.ProviderConfig) map[string]ProviderConfig {
-	return ProviderConfigsFromProto(configs)
 }
 
 func milliseconds(value int64) time.Duration {
@@ -258,17 +206,7 @@ func NewRegistry(routes map[string][]Provider) *Registry {
 	return NewRegistryWithOptions(routes, RegistryOptions{})
 }
 
-// NewRegistryWithCredentialResolver is a convenience constructor for a
-// Gateway that resolves credential_ref from a deployment-specific secret
-// manager.
-func NewRegistryWithCredentialResolver(routes map[string][]Provider, resolver CredentialResolver) *Registry {
-	return NewRegistryWithOptions(routes, RegistryOptions{Credentials: resolver})
-}
-
 func NewRegistryWithOptions(routes map[string][]Provider, options RegistryOptions) *Registry {
-	if options.Credentials == nil {
-		options.Credentials = options.CredentialResolver
-	}
 	if options.Credentials == nil {
 		options.Credentials = EnvCredentialResolver{}
 	}
@@ -434,36 +372,6 @@ func (r *Registry) applyConfig(routes map[string][]string, configs map[string]Pr
 	return nil
 }
 
-// UpdateProviderConfig is a descriptive alias for callers that prefer the
-// update terminology used by the control-plane Watch path.
-func (r *Registry) UpdateProviderConfig(routes map[string][]string, configs map[string]ProviderConfig) error {
-	return r.ApplyConfig(routes, configs)
-}
-
-// UpdateProviderConfigs is the plural spelling used by control-plane
-// integration code; it has the same atomic semantics as ApplyConfig.
-func (r *Registry) UpdateProviderConfigs(routes map[string][]string, configs map[string]ProviderConfig) error {
-	return r.ApplyConfig(routes, configs)
-}
-
-// ApplySnapshot is an alias used by integration code to make the atomic
-// snapshot boundary explicit.
-func (r *Registry) ApplySnapshot(routes map[string][]string, configs map[string]ProviderConfig) error {
-	return r.ApplyConfig(routes, configs)
-}
-
-// ApplyProtoConfig is the protobuf-facing convenience wrapper used by
-// control-plane consumers that do not need an intermediate map conversion.
-func (r *Registry) ApplyProtoConfig(routes map[string][]string, configs map[string]*pb.ProviderConfig) error {
-	return r.ApplyConfig(routes, ProviderConfigsFromProto(configs))
-}
-
-// ApplyProviderConfigs accepts the natural config-first argument order for
-// callers assembling a control-plane snapshot.
-func (r *Registry) ApplyProviderConfigs(configs map[string]ProviderConfig, routes map[string][]string) error {
-	return r.ApplyConfig(routes, configs)
-}
-
 // CloseIdleConnections retires idle sockets held by all current instances.
 // It is safe to call during graceful process shutdown.
 func (r *Registry) CloseIdleConnections() {
@@ -579,36 +487,14 @@ func normalizeProviderConfigs(configs map[string]ProviderConfig) (map[string]Pro
 			return nil, fmt.Errorf("provider %q has mismatched id %q", id, cfg.ID)
 		}
 		protocol := strings.TrimSpace(cfg.Protocol)
-		aliasProtocol := strings.TrimSpace(cfg.Type)
-		if protocol != "" && aliasProtocol != "" && normalizeProtocol(protocol) != normalizeProtocol(aliasProtocol) {
-			return nil, fmt.Errorf("provider %q has conflicting protocol/type", id)
-		}
-		if protocol == "" {
-			protocol = aliasProtocol
-		}
 		if protocol == "" {
 			return nil, fmt.Errorf("provider %q protocol is required", id)
 		}
 		cfg.Protocol = normalizeProtocol(protocol)
-		cfg.Type = ""
 		if cfg.Protocol != "mock" && cfg.Protocol != "openai-compatible" {
 			return nil, fmt.Errorf("provider %q has unsupported protocol %q", id, cfg.Protocol)
 		}
-		if cfg.URL != "" && cfg.BaseURL != "" && strings.TrimSpace(cfg.URL) != strings.TrimSpace(cfg.BaseURL) {
-			return nil, fmt.Errorf("provider %q has conflicting url/base_url", id)
-		}
-		if cfg.URL == "" {
-			cfg.URL = cfg.BaseURL
-		}
 		cfg.URL = strings.TrimSpace(cfg.URL)
-		cfg.BaseURL = ""
-		if cfg.Timeouts != (ProviderTimeouts{}) && cfg.Timeout != (ProviderTimeouts{}) && cfg.Timeouts != cfg.Timeout {
-			return nil, fmt.Errorf("provider %q has conflicting timeout/timeouts", id)
-		}
-		if cfg.Timeouts == (ProviderTimeouts{}) {
-			cfg.Timeouts = cfg.Timeout
-		}
-		cfg.Timeout = ProviderTimeouts{}
 		if cfg.CredentialRef != "" && strings.ContainsAny(cfg.CredentialRef, "\r\n") {
 			return nil, fmt.Errorf("provider %q credential_ref contains newline", id)
 		}
@@ -648,7 +534,7 @@ func normalizeProviderConfigs(configs map[string]ProviderConfig) (map[string]Pro
 }
 
 func providerConfigEqual(a, b ProviderConfig) bool {
-	if a.ID != b.ID || normalizeProtocol(a.Protocol) != normalizeProtocol(b.Protocol) || a.URL != b.URL || a.CredentialRef != b.CredentialRef || a.Model != b.Model || a.Enabled != b.Enabled || a.MockDelay != b.MockDelay || a.Timeouts != b.Timeouts {
+	if a.ID != b.ID || normalizeProtocol(a.Protocol) != normalizeProtocol(b.Protocol) || a.URL != b.URL || a.CredentialRef != b.CredentialRef || a.Model != b.Model || a.MockDelay != b.MockDelay || a.Timeouts != b.Timeouts {
 		return false
 	}
 	if len(a.ModelMapping) != len(b.ModelMapping) {

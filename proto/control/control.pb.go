@@ -225,12 +225,8 @@ type ProviderConfig struct {
 	CredentialRef string                 `protobuf:"bytes,4,opt,name=credential_ref,json=credentialRef,proto3" json:"credential_ref,omitempty"`
 	Model         string                 `protobuf:"bytes,5,opt,name=model,proto3" json:"model,omitempty"`
 	Timeouts      *ProviderTimeouts      `protobuf:"bytes,6,opt,name=timeouts,proto3" json:"timeouts,omitempty"`
-	Enabled       bool                   `protobuf:"varint,7,opt,name=enabled,proto3" json:"enabled,omitempty"`
 	MockDelayMs   int64                  `protobuf:"varint,8,opt,name=mock_delay_ms,json=mockDelayMs,proto3" json:"mock_delay_ms,omitempty"`
 	ModelMapping  map[string]string      `protobuf:"bytes,9,rep,name=model_mapping,json=modelMapping,proto3" json:"model_mapping,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	Type          string                 `protobuf:"bytes,10,opt,name=type,proto3" json:"type,omitempty"`
-	BaseUrl       string                 `protobuf:"bytes,11,opt,name=base_url,json=baseUrl,proto3" json:"base_url,omitempty"`
-	Timeout       *ProviderTimeouts      `protobuf:"bytes,12,opt,name=timeout,proto3" json:"timeout,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -307,13 +303,6 @@ func (x *ProviderConfig) GetTimeouts() *ProviderTimeouts {
 	return nil
 }
 
-func (x *ProviderConfig) GetEnabled() bool {
-	if x != nil {
-		return x.Enabled
-	}
-	return false
-}
-
 func (x *ProviderConfig) GetMockDelayMs() int64 {
 	if x != nil {
 		return x.MockDelayMs
@@ -324,27 +313,6 @@ func (x *ProviderConfig) GetMockDelayMs() int64 {
 func (x *ProviderConfig) GetModelMapping() map[string]string {
 	if x != nil {
 		return x.ModelMapping
-	}
-	return nil
-}
-
-func (x *ProviderConfig) GetType() string {
-	if x != nil {
-		return x.Type
-	}
-	return ""
-}
-
-func (x *ProviderConfig) GetBaseUrl() string {
-	if x != nil {
-		return x.BaseUrl
-	}
-	return ""
-}
-
-func (x *ProviderConfig) GetTimeout() *ProviderTimeouts {
-	if x != nil {
-		return x.Timeout
 	}
 	return nil
 }
@@ -440,13 +408,6 @@ func (x *ProviderTimeouts) GetMaxEventBytes() int32 {
 	}
 	return 0
 }
-
-// ProviderTimeout and Timeout are source-compatible aliases for callers that
-// use the singular spelling from the control HTTP API.
-type ProviderTimeout = ProviderTimeouts
-type Timeout = ProviderTimeouts
-type TimeoutConfig = ProviderTimeouts
-type Provider = ProviderConfig
 
 type GetRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -556,7 +517,7 @@ const file_proto_control_proto_rawDesc = "" +
 	"\n" +
 	"key_prefix\x18\x03 \x01(\t\x12\x11\n" +
 	"\ttenant_id\x18\x04 \x01(\t\x12\x0e\n" +
-	"\x06status\x18\x05 \x01(\t\"\xfa\x02\n" +
+	"\x06status\x18\x05 \x01(\t\"\xa3\x02\n" +
 	"\x0eProviderConfig\x12\n" +
 	"\n" +
 	"\x02id\x18\x01 \x01(\t\x12\x10\n" +
@@ -564,17 +525,12 @@ const file_proto_control_proto_rawDesc = "" +
 	"\x03url\x18\x03 \x01(\t\x12\x16\n" +
 	"\x0ecredential_ref\x18\x04 \x01(\t\x12\r\n" +
 	"\x05model\x18\x05 \x01(\t\x12+\n" +
-	"\btimeouts\x18\x06 \x01(\v2\x19.control.ProviderTimeouts\x12\x0f\n" +
-	"\aenabled\x18\a \x01(\b\x12\x15\n" +
+	"\btimeouts\x18\x06 \x01(\v2\x19.control.ProviderTimeouts\x12\x15\n" +
 	"\rmock_delay_ms\x18\b \x01(\x03\x12@\n" +
-	"\rmodel_mapping\x18\t \x03(\v2).control.ProviderConfig.ModelMappingEntry\x12\f\n" +
-	"\x04type\x18\n" +
-	" \x01(\t\x12\x10\n" +
-	"\bbase_url\x18\v \x01(\t\x12*\n" +
-	"\atimeout\x18\f \x01(\v2\x19.control.ProviderTimeouts\x1a3\n" +
+	"\rmodel_mapping\x18\t \x03(\v2).control.ProviderConfig.ModelMappingEntry\x1a3\n" +
 	"\x11ModelMappingEntry\x12\v\n" +
 	"\x03key\x18\x01 \x01(\t\x12\r\n" +
-	"\x05value\x18\x02 \x01(\t:\x028\x01\"\xe1\x01\n" +
+	"\x05value\x18\x02 \x01(\t:\x028\x01J\x04\b\a\x10\b\"\xe1\x01\n" +
 	"\x10ProviderTimeouts\x12\x1a\n" +
 	"\x12connect_timeout_ms\x18\x01 \x01(\x03\x12 \n" +
 	"\x18tls_handshake_timeout_ms\x18\x02 \x01(\x03\x12\"\n" +
@@ -624,18 +580,17 @@ var file_proto_control_proto_depIdxs = []int32{
 	9,  // 3: control.Config.providers:type_name -> control.Config.ProvidersEntry
 	4,  // 4: control.ProviderConfig.timeouts:type_name -> control.ProviderTimeouts
 	10, // 5: control.ProviderConfig.model_mapping:type_name -> control.ProviderConfig.ModelMappingEntry
-	4,  // 6: control.ProviderConfig.timeout:type_name -> control.ProviderTimeouts
-	1,  // 7: control.Config.RoutesEntry.value:type_name -> control.ProviderList
-	3,  // 8: control.Config.ProvidersEntry.value:type_name -> control.ProviderConfig
-	5,  // 9: control.ConfigService.GetConfig:input_type -> control.GetRequest
-	6,  // 10: control.ConfigService.WatchConfig:input_type -> control.WatchRequest
-	0,  // 11: control.ConfigService.GetConfig:output_type -> control.Config
-	0,  // 12: control.ConfigService.WatchConfig:output_type -> control.Config
-	11, // [11:13] is the sub-list for method output_type
-	9,  // [9:11] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	1,  // 6: control.Config.RoutesEntry.value:type_name -> control.ProviderList
+	3,  // 7: control.Config.ProvidersEntry.value:type_name -> control.ProviderConfig
+	5,  // 8: control.ConfigService.GetConfig:input_type -> control.GetRequest
+	6,  // 9: control.ConfigService.WatchConfig:input_type -> control.WatchRequest
+	0,  // 10: control.ConfigService.GetConfig:output_type -> control.Config
+	0,  // 11: control.ConfigService.WatchConfig:output_type -> control.Config
+	10, // [10:12] is the sub-list for method output_type
+	8,  // [8:10] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_proto_control_proto_init() }

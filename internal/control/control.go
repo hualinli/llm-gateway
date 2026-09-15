@@ -251,20 +251,6 @@ func normalizeProviderConfigSnapshot(configs map[string]*pb.ProviderConfig) map[
 		if copyCfg.Id == "" {
 			copyCfg.Id = id
 		}
-		if copyCfg.Protocol == "" {
-			copyCfg.Protocol = copyCfg.Type
-		}
-		if copyCfg.Url == "" {
-			copyCfg.Url = copyCfg.BaseUrl
-		}
-		if copyCfg.Timeouts == nil {
-			copyCfg.Timeouts = copyCfg.Timeout
-		}
-		// Persist one canonical spelling so every Gateway generation observes
-		// the same semantic snapshot and aliases cannot drift independently.
-		copyCfg.Type = ""
-		copyCfg.BaseUrl = ""
-		copyCfg.Timeout = nil
 		out[id] = copyCfg
 	}
 	return out
@@ -343,25 +329,14 @@ func validateProviderConfigs(configs map[string]*pb.ProviderConfig) error {
 		if cfg.Id != "" && strings.TrimSpace(cfg.Id) != id {
 			return fmt.Errorf("provider %q has mismatched id %q", id, cfg.Id)
 		}
-		protocol := strings.ToLower(strings.TrimSpace(cfg.Protocol))
-		aliasProtocol := strings.ToLower(strings.TrimSpace(cfg.Type))
-		if protocol != "" && aliasProtocol != "" && normalizeProviderProtocol(protocol) != normalizeProviderProtocol(aliasProtocol) {
-			return fmt.Errorf("provider %q has conflicting protocol/type", id)
-		}
-		if protocol == "" {
-			protocol = aliasProtocol
-		}
-		protocol = normalizeProviderProtocol(protocol)
+		protocol := normalizeProviderProtocol(cfg.Protocol)
 		switch protocol {
 		case "mock":
 			if cfg.CredentialRef != "" {
 				return fmt.Errorf("provider %q mock cannot use credential_ref", id)
 			}
-		case "openai", "openai_compatible", "openai-compatible":
+		case "openai-compatible":
 			providerURL := strings.TrimSpace(cfg.Url)
-			if providerURL == "" {
-				providerURL = strings.TrimSpace(cfg.BaseUrl)
-			}
 			if providerURL == "" {
 				return fmt.Errorf("provider %q url is required", id)
 			}
@@ -387,12 +362,6 @@ func validateProviderConfigs(configs map[string]*pb.ProviderConfig) error {
 			return fmt.Errorf("provider %q mock_delay_ms must be non-negative", id)
 		}
 		timeouts := cfg.Timeouts
-		if cfg.Timeouts != nil && cfg.Timeout != nil && !proto.Equal(cfg.Timeouts, cfg.Timeout) {
-			return fmt.Errorf("provider %q has conflicting timeout/timeouts", id)
-		}
-		if timeouts == nil {
-			timeouts = cfg.Timeout
-		}
 		if timeouts == nil {
 			continue
 		}
@@ -407,7 +376,7 @@ func validateProviderConfigs(configs map[string]*pb.ProviderConfig) error {
 }
 
 func normalizeProviderProtocol(protocol string) string {
-	switch protocol {
+	switch strings.ToLower(strings.TrimSpace(protocol)) {
 	case "openai", "openai_compatible", "openai-compatible":
 		return "openai-compatible"
 	default:

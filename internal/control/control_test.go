@@ -144,27 +144,6 @@ func TestProviderConfigValidationRejectsInvalidEntries(t *testing.T) {
 	}
 }
 
-func TestProviderConfigAliasesAreCanonicalized(t *testing.T) {
-	srv, err := NewServer(NewMemoryStore())
-	if err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := srv.ApplyKeyRecordsAndProviders(nil, RoutesToProto(map[string][]string{"m": {"mock"}}), map[string]*pb.ProviderConfig{
-		"mock": {
-			Type:    "mock",
-			Timeout: &pb.ProviderTimeouts{IdleTimeoutMs: 250},
-			Enabled: true,
-		},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	providerCfg := cfg.Providers["mock"]
-	if providerCfg == nil || providerCfg.Protocol != "mock" || providerCfg.Type != "" || providerCfg.Timeout != nil || providerCfg.Timeouts == nil || providerCfg.Timeouts.IdleTimeoutMs != 250 {
-		t.Fatalf("aliases not canonicalized: %+v", providerCfg)
-	}
-}
-
 func TestApplyConfigMonotonicAndPersisted(t *testing.T) {
 	st := NewMemoryStore()
 	srv, err := NewServer(st)

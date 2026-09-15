@@ -1,8 +1,13 @@
 package provider
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"io"
+	"net/http"
+	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -13,7 +18,7 @@ func TestRegistryDynamicConfigReusesAndRebuildsByID(t *testing.T) {
 	routes := map[string][]string{"m": {"p1", "p2"}}
 	configs := map[string]ProviderConfig{
 		"p1": {ID: "p1", Protocol: "mock", MockDelay: time.Millisecond},
-		"p2": {ID: "p2", Type: "mock"},
+		"p2": {ID: "p2", Protocol: "mock"},
 	}
 	if err := registry.ApplyConfig(routes, configs); err != nil {
 		t.Fatal(err)
@@ -63,13 +68,13 @@ func TestRegistryDynamicConfigFailureKeepsOldSnapshot(t *testing.T) {
 
 func TestRegistryCredentialRefUsesLocalResolver(t *testing.T) {
 	var resolved atomic.Int32
-	registry := NewRegistryWithCredentialResolver(nil, CredentialResolverFunc(func(ref string) (string, error) {
+	registry := NewRegistryWithOptions(nil, RegistryOptions{Credentials: CredentialResolverFunc(func(ref string) (string, error) {
 		if ref != "secret/openai" {
 			t.Fatalf("ref=%q", ref)
 		}
 		resolved.Add(1)
 		return "local-secret", nil
-	}))
+	})})
 	if err := registry.ApplyConfig(map[string][]string{"m": {"openai"}}, map[string]ProviderConfig{
 		"openai": {
 			ID:            "openai",
@@ -86,6 +91,142 @@ func TestRegistryCredentialRefUsesLocalResolver(t *testing.T) {
 	p, ok := registry.ProvidersFor("m")[0].(*OpenAIProvider)
 	if !ok || p.apiKey != "local-secret" {
 		t.Fatalf("resolved key was not passed to provider: %#v", p)
+	}
+}
+
+func TestRegistryCredentialRefChangeRebuildsAndUsesNewKey(t *testing.T) {
+	authHeaders := make(chan string, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeaders <- r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, "data: {\"choices\":[]}\n\ndata: [DONE]\n\n")
+	}))
+	defer server.Close()
+
+	registry := NewRegistryWithOptions(nil, RegistryOptions{
+		Credentials: CredentialResolverFunc(func(ref string) (string, error) {
+			switch ref {
+			case "secret/old":
+				return "old-key", nil
+			case "secret/new":
+				return "new-key", nil
+			default:
+				return "", errors.New("unexpected credential reference")
+			}
+		}),
+	})
+	firstConfig := ProviderConfig{
+		ID:            "openai",
+		Protocol:      "openai-compatible",
+		URL:           server.URL,
+		CredentialRef: "secret/old",
+	}
+	routes := map[string][]string{"m": {"openai"}}
+	if err := registry.ApplyConfig(routes, map[string]ProviderConfig{"openai": firstConfig}); err != nil {
+		t.Fatal(err)
+	}
+	first, ok := registry.ProvidersFor("m")[0].(*OpenAIProvider)
+	if !ok {
+		t.Fatalf("provider type=%T, want *OpenAIProvider", registry.ProvidersFor("m")[0])
+	}
+	if _, err := first.ChatStream(context.Background(), []byte(`{"model":"client","messages":[]}`), &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := <-authHeaders; got != "Bearer old-key" {
+		t.Fatalf("first authorization=%q, want old key", got)
+	}
+
+	secondConfig := firstConfig
+	secondConfig.CredentialRef = "secret/new"
+	if err := registry.ApplyConfig(routes, map[string]ProviderConfig{"openai": secondConfig}); err != nil {
+		t.Fatal(err)
+	}
+	second, ok := registry.ProvidersFor("m")[0].(*OpenAIProvider)
+	if !ok || sameProvider(first, second) {
+		t.Fatalf("credential_ref change reused provider: old=%p new=%p", first, second)
+	}
+	if second.apiKey != "new-key" {
+		t.Fatalf("rebuilt provider key=%q, want new key", second.apiKey)
+	}
+	if _, err := second.ChatStream(context.Background(), []byte(`{"model":"client","messages":[]}`), &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := <-authHeaders; got != "Bearer new-key" {
+		t.Fatalf("second authorization=%q, want new key", got)
+	}
+}
+
+func TestRegistrySwapKeepsInFlightProviderAndRoutesNewRequests(t *testing.T) {
+	old := newBlockingProvider("old")
+	newProvider := newBlockingProvider("new")
+	registry := NewRegistry(map[string][]Provider{"m": {old}})
+	if err := registry.RegisterFactory("new", func() (Provider, error) { return newProvider, nil }); err != nil {
+		t.Fatal(err)
+	}
+
+	acquiredOld := registry.ProvidersFor("m")[0]
+	oldDone := make(chan error, 1)
+	go func() {
+		_, err := acquiredOld.ChatStream(context.Background(), nil, io.Discard)
+		oldDone <- err
+	}()
+	waitBlockingProviderStarted(t, old)
+
+	if err := registry.ApplyConfig(map[string][]string{"m": {"new"}}, nil); err != nil {
+		t.Fatal(err)
+	}
+	routed := registry.ProvidersFor("m")
+	if len(routed) != 1 || !sameProvider(routed[0], newProvider) {
+		t.Fatalf("new requests use %#v, want new provider", routed)
+	}
+	if old.closed.Load() != 1 {
+		t.Fatalf("retired old provider close calls=%d, want 1", old.closed.Load())
+	}
+
+	close(newProvider.release)
+	if _, err := routed[0].ChatStream(context.Background(), nil, io.Discard); err != nil {
+		t.Fatalf("new provider request: %v", err)
+	}
+	close(old.release)
+	select {
+	case err := <-oldDone:
+		if err != nil {
+			t.Fatalf("in-flight old request: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("in-flight old request did not complete after release")
+	}
+}
+
+func TestRegistryDeleteKeepsInFlightProviderAlive(t *testing.T) {
+	old := newBlockingProvider("old")
+	registry := NewRegistry(map[string][]Provider{"m": {old}})
+	acquiredOld := registry.ProvidersFor("m")[0]
+	done := make(chan error, 1)
+	go func() {
+		_, err := acquiredOld.ChatStream(context.Background(), nil, io.Discard)
+		done <- err
+	}()
+	waitBlockingProviderStarted(t, old)
+
+	if err := registry.ApplyConfig(map[string][]string{}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := registry.ProvidersFor("m"); len(got) != 0 {
+		t.Fatalf("deleted route still has providers: %#v", got)
+	}
+	if old.closed.Load() != 1 {
+		t.Fatalf("deleted provider close calls=%d, want 1", old.closed.Load())
+	}
+
+	close(old.release)
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("in-flight deleted request: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("in-flight deleted request did not complete after release")
 	}
 }
 
@@ -143,3 +284,42 @@ func (p *closingProvider) ChatStream(context.Context, []byte, io.Writer) (*Usage
 }
 
 func (p *closingProvider) CloseIdleConnections() { p.closed.Add(1) }
+
+type blockingProvider struct {
+	name    string
+	started chan struct{}
+	release chan struct{}
+	once    sync.Once
+	closed  atomic.Int32
+}
+
+func newBlockingProvider(name string) *blockingProvider {
+	return &blockingProvider{
+		name:    name,
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+}
+
+func (p *blockingProvider) Name() string { return p.name }
+
+func (p *blockingProvider) ChatStream(ctx context.Context, _ []byte, _ io.Writer) (*Usage, error) {
+	p.once.Do(func() { close(p.started) })
+	select {
+	case <-p.release:
+		return &Usage{}, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+func (p *blockingProvider) CloseIdleConnections() { p.closed.Add(1) }
+
+func waitBlockingProviderStarted(t *testing.T, p *blockingProvider) {
+	t.Helper()
+	select {
+	case <-p.started:
+	case <-time.After(time.Second):
+		t.Fatal("blocking provider request did not start")
+	}
+}

@@ -52,7 +52,6 @@ func redactProviderConfigs(configs map[string]*pb.ProviderConfig) map[string]map
 			"url":            cfg.Url,
 			"credential_ref": cfg.CredentialRef,
 			"model":          cfg.Model,
-			"enabled":        cfg.Enabled,
 			"mock_delay_ms":  cfg.MockDelayMs,
 			"model_mapping":  cfg.ModelMapping,
 		}

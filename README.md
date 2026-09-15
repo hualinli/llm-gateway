@@ -401,12 +401,13 @@ anthropic           NewAnthropicProvider
 ```text
 ProviderConfig:
 - id
-- type
-- base_url
+- protocol
+- url
 - credential_ref
+- model
 - model_mapping
-- timeout
-- enabled
+- timeouts
+- mock_delay_ms
 ```
 
 更新路由时应：
@@ -976,7 +977,7 @@ curl -X POST http://localhost:50052/config \
   -d '{"providers":{"openai":{"id":"openai","protocol":"openai-compatible","url":"https://api.openai.com","credential_ref":"env://OPENAI_API_KEY"}},"routes":{"default":["openai"]}}'
 ```
 
-`credential_ref` 默认支持 `env://ENV_NAME` 和 `env:ENV_NAME`；部署侧可以向 `NewRegistryWithCredentialResolver` 注入 Vault/KMS 等本地解析器。Provider 配置还支持 `model_mapping`、`mock_delay_ms` 和 `timeouts`（各阶段毫秒值：`connect_timeout_ms`、`tls_handshake_timeout_ms`、`response_header_timeout_ms`、`first_byte_timeout_ms`、`idle_timeout_ms`、`attempt_timeout_ms`、`max_event_bytes`）。
+`credential_ref` 默认支持 `env://ENV_NAME` 和 `env:ENV_NAME`；部署侧可以通过 `NewRegistryWithOptions` 注入 Vault/KMS 等本地解析器。Provider 配置还支持 `model_mapping`、`mock_delay_ms` 和 `timeouts`（各阶段毫秒值：`connect_timeout_ms`、`tls_handshake_timeout_ms`、`response_header_timeout_ms`、`first_byte_timeout_ms`、`idle_timeout_ms`、`attempt_timeout_ms`、`max_event_bytes`）。
 
 如果只使用内置 Mock，则不设置 `OPENAI_BASE_URL`，默认路由使用 `mock-a` 和 `mock-b`。
 
