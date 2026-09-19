@@ -981,6 +981,19 @@ curl -X POST http://localhost:50052/config \
 
 `credential_ref` 默认支持 `env://ENV_NAME` 和 `env:ENV_NAME`；部署侧可以通过 `NewRegistryWithOptions` 注入 Vault/KMS 等本地解析器。Provider 配置还支持 `model_mapping`、`mock_delay_ms` 和 `timeouts`（各阶段毫秒值：`connect_timeout_ms`、`tls_handshake_timeout_ms`、`response_header_timeout_ms`、`first_byte_timeout_ms`、`idle_timeout_ms`、`attempt_timeout_ms`、`max_event_bytes`）。
 
+本地调试也可以把控制面指到进程外假上游，而不是内嵌 `protocol: mock`。假上游讲真实的 OpenAI-compatible SSE，TTFT、出字间隔、故障都在它自己的进程上调：
+
+```bash
+make mock-primary   # :18080，TTFT 20ms
+make mock-backup    # :18081，TTFT 80ms
+
+curl -X POST http://localhost:50052/config \
+  -H 'Content-Type: application/json' \
+  -d '{"providers":{"primary":{"id":"primary","protocol":"openai-compatible","url":"http://127.0.0.1:18080"},"backup":{"id":"backup","protocol":"openai-compatible","url":"http://127.0.0.1:18081"}},"routes":{"default":["primary","backup"]}}'
+```
+
+`cmd/upstream-mock` 支持 `-ttft`、`-token-interval`、`-tokens`、`-status`、`-hang`、`-fail-after`、`-max-inflight`。Gateway 把它当成普通 HTTP Provider。
+
 如果只使用内置 Mock，则不设置 `OPENAI_BASE_URL`。控制面空库启动会种入 `mock-a` / `mock-b`，Gateway 本地也保留同名 bootstrap 实例，便于控制面未连上时跑 Demo。
 
 注意：`cmd/control` 的 `/config` 默认仍是本地 Demo 模式；生产必须设置 `CONTROL_ADMIN_TOKEN` 并开启 `CONTROL_REQUIRE_ADMIN_AUTH=true`，同时配置 gRPC TLS/mTLS。管理接口返回的是 key hash prefix，不返回 raw API key；正式模式会拒绝请求体中的 legacy `keys`，应使用 `key_records` 或 CredentialService。
@@ -1218,6 +1231,18 @@ cmd/
   control/          # 控制面入口
   metering/         # 计量消费入口
   loadtest/         # SSE 压测入口
+  upstream-mock/    # 进程外 OpenAI-compatible 假上游
+
+internal/
+  auth/             # API Key 鉴权
+  control/          # gRPC 配置服务、版本和 Store
+  limiter/          # Redis Lua 令牌桶
+  metering/         # Event、Producer、Consumer、Ledger
+  metrics/          # Prometheus 指标
+  provider/         # Provider 抽象、Mock、错误分类
+  proxy/            # Gateway SSE 代理
+  loadtest/         # SSE worker 和统计器
+  upstreammock/     # 假上游 HTTP/SSE 实现
 
 internal/
   auth/             # API Key 鉴权

@@ -1,4 +1,4 @@
-.PHONY: tidy up down run vet test test-up test-down integration-test
+.PHONY: tidy up down run vet test test-up test-down integration-test mock-primary mock-backup
 
 TEST_REDIS_ADDR ?= 127.0.0.1:16379
 TEST_POSTGRES_DSN ?= postgres://gateway_test:test_only_local@127.0.0.1:15433/gateway_test?sslmode=disable
@@ -17,6 +17,13 @@ down:
 
 run:
 	go run ./cmd/gateway
+
+# Local OpenAI-compatible fakes. Gateway treats these as real HTTP providers.
+mock-primary:
+	go run ./cmd/upstream-mock -listen :18080 -name primary -ttft 20ms -token-interval 15ms
+
+mock-backup:
+	go run ./cmd/upstream-mock -listen :18081 -name backup -ttft 80ms -token-interval 15ms
 
 vet:
 	go vet ./...
