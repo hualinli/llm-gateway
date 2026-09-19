@@ -228,7 +228,7 @@
 - Gateway 收到快照后会先校验并构建完整 Provider/路由快照，再一次性发布。任意 Provider 配置无效时保留旧快照；同 ID 且配置未变的实例复用，配置变化会重建，旧 OpenAI transport 只关闭空闲连接，因此在途 SSE 继续使用旧实例；
 - 第一版上游凭据只支持本地 `credential_ref` 解析（默认 `env://ENV_NAME` / `env:ENV_NAME`，也可注入部署侧 resolver），控制面不接收或持久化原始密钥；形如 `sk-` 的引用会被拒绝；
 - `/config` 对非法 Provider/凭据快照返回 400；版本冲突返回 409；
-- 空库启动时会种入 `mock-a` / `mock-b` 的 Provider 配置，与默认路由一致；
+- 空库启动时会种入 `primary` / `backup`，默认指向本机 `cmd/upstream-mock`（`:18080` / `:18081`）；Gateway 不再预置内嵌 mock 实例；
 - `CONTROL_REQUIRE_POSTGRES=true` 时 PostgreSQL 不可用会拒绝启动；默认 Demo 模式仍允许回退内存，生产环境必须开启该选项。
 
 ### 2.7 可观测性和压测工具
@@ -915,16 +915,20 @@ make migrate-version
 
 迁移采用 golang-migrate，SQL 位于 [migrations](migrations/README.md)。服务只检查 schema 版本，不自动建表/改表；缺少迁移或 dirty 状态会阻止 PG 服务启动，不会因 schema 错误回退内存。业务查询 SQL 位于 `internal/control/queries/` 和 `internal/metering/queries/`，通过 `go:embed` 打包，不依赖运行目录。
 
-Gateway、Control、Metering 当前需要单独启动。建议按以下顺序在三个终端启动：
+Gateway、Control、Metering 和假上游当前需要单独启动。建议按以下顺序：
 
 ```bash
-# terminal 1
-go run ./cmd/control
-
-# terminal 2
-go run ./cmd/metering
+# terminal 1-2: OpenAI-compatible fake upstreams
+make mock-primary
+make mock-backup
 
 # terminal 3
+go run ./cmd/control
+
+# terminal 4
+go run ./cmd/metering
+
+# terminal 5
 go run ./cmd/gateway
 ```
 
@@ -936,6 +940,8 @@ go run ./cmd/gateway
 | Metering | `localhost:8091` |
 | Control gRPC | `localhost:50051` |
 | Control HTTP demo admin | `localhost:50052` |
+| Fake upstream primary | `localhost:18080` |
+| Fake upstream backup | `localhost:18081` |
 | Prometheus | `localhost:9090` |
 | Grafana | `localhost:3000` |
 
@@ -963,6 +969,8 @@ METERING_SPOOL_DIR='./data/metering-spool' # 可选；Redis 故障时本地持�
 CONTROL_REQUIRE_POSTGRES=false # 生产建议 true；PG 不可用时拒绝启动 control
 # 正式模式（开启 CONTROL_REQUIRE_ADMIN_AUTH 或 CONTROL_REQUIRE_POSTGRES）拒绝 /config 的 legacy keys；仅本地 Demo 兼容
 METERING_REQUIRE_POSTGRES=false # 生产建议 true；PG 不可用时拒绝启动 metering
+UPSTREAM_PRIMARY_URL='http://127.0.0.1:18080' # 控制面空库种入的主上游
+UPSTREAM_BACKUP_URL='http://127.0.0.1:18081' # 控制面空库种入的备上游
 
 # 可选：注册一个 OpenAI-compatible Provider
 OPENAI_BASE_URL='https://api.openai.com'
@@ -992,9 +1000,9 @@ curl -X POST http://localhost:50052/config \
   -d '{"providers":{"primary":{"id":"primary","protocol":"openai-compatible","url":"http://127.0.0.1:18080"},"backup":{"id":"backup","protocol":"openai-compatible","url":"http://127.0.0.1:18081"}},"routes":{"default":["primary","backup"]}}'
 ```
 
-`cmd/upstream-mock` 支持 `-ttft`、`-token-interval`、`-tokens`、`-status`、`-hang`、`-fail-after`、`-max-inflight`。Gateway 把它当成普通 HTTP Provider。
+`cmd/upstream-mock` 支持 `-ttft`、`-token-interval`、`-tokens`、`-status`、`-hang`、`-fail-after`、`-max-inflight`。Gateway 把它当成普通 HTTP Provider。控制面空库默认种入 `primary`/`backup` 指向这两端口；Gateway 启动时不再预置内嵌 mock 实例，未同步到控制面前没有上游。
 
-如果只使用内置 Mock，则不设置 `OPENAI_BASE_URL`。控制面空库启动会种入 `mock-a` / `mock-b`，Gateway 本地也保留同名 bootstrap 实例，便于控制面未连上时跑 Demo。
+进程内 `MockProvider` 仍用于单测和显式 `protocol: mock` 快照，不再作为默认 Demo 上游。
 
 注意：`cmd/control` 的 `/config` 默认仍是本地 Demo 模式；生产必须设置 `CONTROL_ADMIN_TOKEN` 并开启 `CONTROL_REQUIRE_ADMIN_AUTH=true`，同时配置 gRPC TLS/mTLS。管理接口返回的是 key hash prefix，不返回 raw API key；正式模式会拒绝请求体中的 legacy `keys`，应使用 `key_records` 或 CredentialService。
 
@@ -1031,7 +1039,7 @@ curl -N \
   http://localhost:8090/v1/chat/completions
 ```
 
-预期会看到来自 `mock-a` 的 SSE 内容和：
+预期会看到来自 `primary` 假上游的 SSE 内容和：
 
 ```text
 data: [DONE]

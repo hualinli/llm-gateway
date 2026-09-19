@@ -26,13 +26,10 @@ import (
 )
 
 func main() {
-	// 本地演示用两个 mock，上线后由控制面通过 gRPC 热替这张表
-	registry := provider.NewRegistry(map[string][]provider.Provider{
-		"default": {
-			provider.NewMockProvider("mock-a", 80*time.Millisecond),
-			provider.NewMockProvider("mock-b", 80*time.Millisecond),
-		},
-	})
+	// Routes and providers come from the control-plane snapshot. Local demo
+	// seed points at cmd/upstream-mock; OPENAI_BASE_URL still registers a
+	// bootstrap factory for a named provider.
+	registry := provider.NewRegistry(nil)
 	// Real Provider registration is explicit for bootstrap factories. A
 	// control-plane snapshot may also construct the built-in provider protocols
 	// dynamically; unknown route IDs are still rejected atomically.

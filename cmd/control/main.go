@@ -120,11 +120,19 @@ func main() {
 				TenantId: record.TenantID, Status: record.Status,
 			}}
 		}
+		primaryURL := os.Getenv("UPSTREAM_PRIMARY_URL")
+		if primaryURL == "" {
+			primaryURL = "http://127.0.0.1:18080"
+		}
+		backupURL := os.Getenv("UPSTREAM_BACKUP_URL")
+		if backupURL == "" {
+			backupURL = "http://127.0.0.1:18081"
+		}
 		if _, err := srv.ApplyKeyRecordsAndProviders(bootstrapRecords, control.RoutesToProto(map[string][]string{
-			"default": {"mock-a", "mock-b"},
+			"default": {"primary", "backup"},
 		}), map[string]*pb.ProviderConfig{
-			"mock-a": {Id: "mock-a", Protocol: "mock", MockDelayMs: 80},
-			"mock-b": {Id: "mock-b", Protocol: "mock", MockDelayMs: 80},
+			"primary": {Id: "primary", Protocol: "openai-compatible", Url: primaryURL},
+			"backup":  {Id: "backup", Protocol: "openai-compatible", Url: backupURL},
 		}); err != nil {
 			log.Fatalf("control seed: %v", err)
 		}
