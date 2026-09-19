@@ -84,6 +84,10 @@ func (s *Server) ApplyKeyRecordsAndProviders(records []*pb.KeyRecord, routes map
 
 var ErrConfigVersionConflict = errors.New("config version conflict")
 
+// ErrInvalidConfig marks a caller-fixable snapshot (keys, routes, providers)
+// so the HTTP admin API can return 400 instead of 500.
+var ErrInvalidConfig = errors.New("invalid control config")
+
 // ConfigPatch uses nil to preserve a field and an explicit empty collection
 // to clear it. ExpectedVersion enables optimistic concurrency for admin edits.
 type ConfigPatch struct {
@@ -105,7 +109,7 @@ func (s *Server) PatchConfig(patch ConfigPatch) (*pb.Config, error) {
 		return nil, fmt.Errorf("%w: expected %d, current %d", ErrConfigVersionConflict, *patch.ExpectedVersion, current.Version)
 	}
 	if patch.LegacyKeys != nil && patch.KeyRecords != nil {
-		return nil, errors.New("keys and key_records cannot be set together")
+		return nil, fmt.Errorf("%w: keys and key_records cannot be set together", ErrInvalidConfig)
 	}
 	records := patch.KeyRecords
 	if patch.LegacyKeys != nil {
@@ -126,10 +130,10 @@ func (s *Server) PatchConfig(patch ConfigPatch) (*pb.Config, error) {
 
 func (s *Server) applyKeyRecordsLocked(records []*pb.KeyRecord, routes map[string]*pb.ProviderList, providers map[string]*pb.ProviderConfig) (*pb.Config, error) {
 	if err := validateKeyRecords(records); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", ErrInvalidConfig, err)
 	}
 	if err := validateProviderConfigs(providers); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", ErrInvalidConfig, err)
 	}
 	next := cloneConfig(&pb.Config{Version: s.CurrentConfig().Version, KeyRecords: records, Routes: routes, Providers: normalizeProviderConfigSnapshot(providers)})
 	next.Version++
@@ -350,6 +354,9 @@ func validateProviderConfigs(configs map[string]*pb.ProviderConfig) error {
 		if strings.ContainsAny(cfg.CredentialRef, "\r\n") {
 			return fmt.Errorf("provider %q credential_ref contains newline", id)
 		}
+		if strings.HasPrefix(strings.TrimSpace(cfg.CredentialRef), "sk-") {
+			return fmt.Errorf("provider %q credential_ref looks like a raw secret", id)
+		}
 		if strings.ContainsAny(cfg.Model, "\r\n") {
 			return fmt.Errorf("provider %q model contains newline", id)
 		}
@@ -379,8 +386,10 @@ func normalizeProviderProtocol(protocol string) string {
 	switch strings.ToLower(strings.TrimSpace(protocol)) {
 	case "openai", "openai_compatible", "openai-compatible":
 		return "openai-compatible"
+	case "mock":
+		return "mock"
 	default:
-		return protocol
+		return strings.ToLower(strings.TrimSpace(protocol))
 	}
 }
 

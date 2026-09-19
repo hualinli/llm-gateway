@@ -226,7 +226,9 @@
 - 不存在的 Provider 现在会拒绝整版路由更新；
 - Provider 配置现在随版本化快照下发：`providers` 按 ID 保存 `protocol`（`openai-compatible` 或 `mock`）、URL、`credential_ref`、模型映射和连接/首块/空闲/尝试超时；`routes` 仍保持 `model -> ordered provider IDs`；
 - Gateway 收到快照后会先校验并构建完整 Provider/路由快照，再一次性发布。任意 Provider 配置无效时保留旧快照；同 ID 且配置未变的实例复用，配置变化会重建，旧 OpenAI transport 只关闭空闲连接，因此在途 SSE 继续使用旧实例；
-- 第一版上游凭据只支持本地 `credential_ref` 解析（默认 `env://ENV_NAME` / `env:ENV_NAME`，也可注入部署侧 resolver），控制面不接收或持久化原始密钥；
+- 第一版上游凭据只支持本地 `credential_ref` 解析（默认 `env://ENV_NAME` / `env:ENV_NAME`，也可注入部署侧 resolver），控制面不接收或持久化原始密钥；形如 `sk-` 的引用会被拒绝；
+- `/config` 对非法 Provider/凭据快照返回 400；版本冲突返回 409；
+- 空库启动时会种入 `mock-a` / `mock-b` 的 Provider 配置，与默认路由一致；
 - `CONTROL_REQUIRE_POSTGRES=true` 时 PostgreSQL 不可用会拒绝启动；默认 Demo 模式仍允许回退内存，生产环境必须开启该选项。
 
 ### 2.7 可观测性和压测工具
@@ -273,7 +275,7 @@
 - 已完成 OpenAI usage 流尾解析；
 - 已完成上游错误解析和 Retryable 分类；
 - 已完成基于 `httptest.Server` 的基础契约测试；
-- 待做 Provider 配置从控制面下发、Anthropic adapter 和凭据引用。
+- 待做 Anthropic adapter。Provider 配置从控制面下发、凭据引用已完成第一版。
 
 **为什么做**：
 
@@ -740,7 +742,7 @@ Provider 在首 event 后挂掉：
 
 未知 Provider 不会静默创建 Mock，Registry 会拒绝无效路由配置。控制面现在可以随版本化快照下发 `openai-compatible` 和 `mock` 的 Provider 配置；Gateway 会在发布前构建完整快照，配置失败保留上一版。
 
-测试证据：真实 OpenAI-compatible `httptest.Server` failover 测试、`TestOpenAIFailoverBeforeFirstEvent`、`TestOpenAIMidStreamFailureDoesNotReplayBackup`、`TestRegistryRejectsUnknownProvider`。
+测试证据：真实 OpenAI-compatible `httptest.Server` failover 测试、`TestOpenAIFailoverBeforeFirstEvent`、`TestOpenAIMidStreamFailureDoesNotReplayBackup`、`TestRegistryRejectsUnknownProvider`、`TestGatewayAppliesDynamicProviderFromControl`。
 
 #### 6. 会有重复消费吗？如何保证不会重复扣费？
 
@@ -979,7 +981,7 @@ curl -X POST http://localhost:50052/config \
 
 `credential_ref` 默认支持 `env://ENV_NAME` 和 `env:ENV_NAME`；部署侧可以通过 `NewRegistryWithOptions` 注入 Vault/KMS 等本地解析器。Provider 配置还支持 `model_mapping`、`mock_delay_ms` 和 `timeouts`（各阶段毫秒值：`connect_timeout_ms`、`tls_handshake_timeout_ms`、`response_header_timeout_ms`、`first_byte_timeout_ms`、`idle_timeout_ms`、`attempt_timeout_ms`、`max_event_bytes`）。
 
-如果只使用内置 Mock，则不设置 `OPENAI_BASE_URL`，默认路由使用 `mock-a` 和 `mock-b`。
+如果只使用内置 Mock，则不设置 `OPENAI_BASE_URL`。控制面空库启动会种入 `mock-a` / `mock-b`，Gateway 本地也保留同名 bootstrap 实例，便于控制面未连上时跑 Demo。
 
 注意：`cmd/control` 的 `/config` 默认仍是本地 Demo 模式；生产必须设置 `CONTROL_ADMIN_TOKEN` 并开启 `CONTROL_REQUIRE_ADMIN_AUTH=true`，同时配置 gRPC TLS/mTLS。管理接口返回的是 key hash prefix，不返回 raw API key；正式模式会拒绝请求体中的 legacy `keys`，应使用 `key_records` 或 CredentialService。
 

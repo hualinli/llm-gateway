@@ -90,3 +90,32 @@ func TestConfigPatchPreservesOmittedFieldsAndClearsExplicitEmpty(t *testing.T) {
 		t.Fatal("conflict advanced version")
 	}
 }
+
+func TestConfigPatchPreservesAndClearsProviders(t *testing.T) {
+	srv, err := NewServer(NewMemoryStore())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := srv.ApplyKeyRecordsAndProviders(nil, routes(), map[string]*pb.ProviderConfig{
+		"mock-a": {Id: "mock-a", Protocol: "mock", MockDelayMs: 5},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := srv.PatchConfig(ConfigPatch{Routes: RoutesToProto(map[string][]string{"other": {"mock-a"}})})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Providers["mock-a"] == nil || cfg.Providers["mock-a"].MockDelayMs != 5 {
+		t.Fatalf("omitted providers were dropped: %+v", cfg.Providers)
+	}
+	if _, ok := cfg.Routes["other"]; !ok {
+		t.Fatalf("route patch missing: %+v", cfg.Routes)
+	}
+	cfg, err = srv.PatchConfig(ConfigPatch{Providers: map[string]*pb.ProviderConfig{}})
+	if err != nil || len(cfg.Providers) != 0 {
+		t.Fatalf("explicit empty providers: %+v %v", cfg, err)
+	}
+	if len(cfg.Routes) != 1 {
+		t.Fatal("clearing providers dropped routes")
+	}
+}

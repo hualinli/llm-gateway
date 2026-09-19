@@ -40,6 +40,51 @@ func TestConfigRejectsStaleExpectedVersion(t *testing.T) {
 	}
 }
 
+func TestConfigRejectsInvalidProviderWithBadRequest(t *testing.T) {
+	srv, err := control.NewServer(control.NewMemoryStore())
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := newConfigHandler(srv, control.NopAuditSink{}, false)
+	req := httptest.NewRequest("POST", "/config", strings.NewReader(`{"providers":{"x":{"protocol":"nope","url":"https://x.example"}}}`))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 400 {
+		t.Fatalf("invalid provider: status=%d body=%s, want 400", rec.Code, rec.Body)
+	}
+}
+
+func TestConfigAppliesProvidersAndReturnsThemOnGet(t *testing.T) {
+	srv, err := control.NewServer(control.NewMemoryStore())
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := newConfigHandler(srv, control.NopAuditSink{}, false)
+	req := httptest.NewRequest("POST", "/config", strings.NewReader(`{"providers":{"openai":{"id":"openai","protocol":"openai-compatible","url":"https://api.openai.com","credential_ref":"env://OPENAI_API_KEY"}},"routes":{"default":["openai"]}}`))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("apply providers: status=%d body=%s", rec.Code, rec.Body)
+	}
+	if !strings.Contains(rec.Body.String(), `"credential_ref":"env://OPENAI_API_KEY"`) {
+		t.Fatalf("POST response missing credential_ref: %s", rec.Body)
+	}
+
+	getReq := httptest.NewRequest("GET", "/config", nil)
+	getRec := httptest.NewRecorder()
+	h.ServeHTTP(getRec, getReq)
+	if getRec.Code != 200 {
+		t.Fatalf("GET config: status=%d body=%s", getRec.Code, getRec.Body)
+	}
+	body := getRec.Body.String()
+	if !strings.Contains(body, `"openai"`) || !strings.Contains(body, "env://OPENAI_API_KEY") {
+		t.Fatalf("GET missing provider snapshot: %s", body)
+	}
+	if strings.Contains(body, "sk-") {
+		t.Fatalf("GET leaked a raw-looking secret: %s", body)
+	}
+}
+
 func TestAllowLegacyKeyInput(t *testing.T) {
 	if !allowLegacyKeyInput(false, false) {
 		t.Fatal("local demo should allow legacy compatibility input")

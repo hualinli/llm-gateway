@@ -98,7 +98,7 @@ func main() {
 	go func() {
 		err := controlSync.Run(controlCtx, func(cfg *pb.Config) error {
 			log.Printf("control: hot reload to v%d", cfg.Version)
-			if err := registry.ApplyConfig(control.RoutesFromProto(cfg.Routes), provider.ProviderConfigsFromProto(cfg.Providers)); err != nil {
+			if err := registry.ApplyConfig(control.RoutesFromProto(cfg.Routes), control.ProviderConfigsFromProto(cfg.Providers)); err != nil {
 				// 路由配置失败时仍优先撤销已删除凭据；新增 key 要等完整配置修复后生效。
 				authStore.RevokeMissingRecords(control.KeyRecordsToAuth(cfg.KeyRecords))
 				log.Printf("control: reject config v%d: %v", cfg.Version, err)

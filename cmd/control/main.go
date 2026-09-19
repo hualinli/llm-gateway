@@ -120,9 +120,12 @@ func main() {
 				TenantId: record.TenantID, Status: record.Status,
 			}}
 		}
-		if _, err := srv.ApplyKeyRecords(bootstrapRecords, control.RoutesToProto(map[string][]string{
+		if _, err := srv.ApplyKeyRecordsAndProviders(bootstrapRecords, control.RoutesToProto(map[string][]string{
 			"default": {"mock-a", "mock-b"},
-		})); err != nil {
+		}), map[string]*pb.ProviderConfig{
+			"mock-a": {Id: "mock-a", Protocol: "mock", MockDelayMs: 80},
+			"mock-b": {Id: "mock-b", Protocol: "mock", MockDelayMs: 80},
+		}); err != nil {
 			log.Fatalf("control seed: %v", err)
 		}
 	}
@@ -223,8 +226,11 @@ func newConfigHandler(srv *control.Server, auditSink control.AuditSink, legacyKe
 					RequestID: observability.RequestID(r.Context()), TraceID: observability.TraceID(r.Context()),
 				})
 				status := http.StatusInternalServerError
-				if errors.Is(applyErr, control.ErrConfigVersionConflict) {
+				switch {
+				case errors.Is(applyErr, control.ErrConfigVersionConflict):
 					status = http.StatusConflict
+				case errors.Is(applyErr, control.ErrInvalidConfig):
+					status = http.StatusBadRequest
 				}
 				http.Error(w, "persist config: "+applyErr.Error(), status)
 				return

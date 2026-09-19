@@ -9,8 +9,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	pb "llm-gateway/proto/control"
 )
 
 // Usage 是归一化后的计费口径，屏蔽 OpenAI/Anthropic 的差异。
@@ -56,30 +54,23 @@ type EnvCredentialResolver struct{}
 
 func (EnvCredentialResolver) Resolve(ref string) (string, error) {
 	ref = strings.TrimSpace(ref)
-	const envPrefix = "env://"
-	if strings.HasPrefix(ref, envPrefix) {
-		name := strings.TrimPrefix(ref, envPrefix)
-		if !validCredentialEnvName(name) {
-			return "", fmt.Errorf("invalid credential_ref %q", ref)
-		}
-		value, ok := os.LookupEnv(name)
-		if !ok || value == "" {
-			return "", fmt.Errorf("credential environment variable %q is not set", name)
-		}
-		return value, nil
+	var name string
+	switch {
+	case strings.HasPrefix(ref, "env://"):
+		name = strings.TrimPrefix(ref, "env://")
+	case strings.HasPrefix(ref, "env:"):
+		name = strings.TrimPrefix(ref, "env:")
+	default:
+		return "", fmt.Errorf("credential_ref %q must use env:// or a configured resolver", ref)
 	}
-	if strings.HasPrefix(ref, "env:") {
-		name := strings.TrimPrefix(ref, "env:")
-		if !validCredentialEnvName(name) {
-			return "", fmt.Errorf("invalid credential_ref %q", ref)
-		}
-		value, ok := os.LookupEnv(name)
-		if !ok || value == "" {
-			return "", fmt.Errorf("credential environment variable %q is not set", name)
-		}
-		return value, nil
+	if !validCredentialEnvName(name) {
+		return "", fmt.Errorf("invalid credential_ref %q", ref)
 	}
-	return "", fmt.Errorf("credential_ref %q must use env:// or a configured resolver", ref)
+	value, ok := os.LookupEnv(name)
+	if !ok || value == "" {
+		return "", fmt.Errorf("credential environment variable %q is not set", name)
+	}
+	return value, nil
 }
 
 func validCredentialEnvName(name string) bool {
@@ -124,53 +115,6 @@ type ProviderConfig struct {
 // RegistryOptions controls dynamic provider construction.
 type RegistryOptions struct {
 	Credentials CredentialResolver
-}
-
-// ProviderConfigFromProto converts the versioned control-plane representation
-// into the runtime representation. It copies all maps so a received protobuf
-// snapshot can safely be released after the update callback returns.
-func ProviderConfigFromProto(id string, cfg *pb.ProviderConfig) ProviderConfig {
-	if cfg == nil {
-		return ProviderConfig{ID: id}
-	}
-	out := ProviderConfig{
-		ID:            id,
-		Protocol:      cfg.Protocol,
-		URL:           cfg.Url,
-		CredentialRef: cfg.CredentialRef,
-		Model:         cfg.Model,
-		MockDelay:     time.Duration(cfg.MockDelayMs) * time.Millisecond,
-		ModelMapping:  cloneStringMap(cfg.ModelMapping),
-	}
-	if cfg.Timeouts != nil {
-		out.Timeouts = ProviderTimeouts{
-			ConnectTimeout:        milliseconds(cfg.Timeouts.ConnectTimeoutMs),
-			TLSHandshakeTimeout:   milliseconds(cfg.Timeouts.TlsHandshakeTimeoutMs),
-			ResponseHeaderTimeout: milliseconds(cfg.Timeouts.ResponseHeaderTimeoutMs),
-			FirstByteTimeout:      milliseconds(cfg.Timeouts.FirstByteTimeoutMs),
-			IdleTimeout:           milliseconds(cfg.Timeouts.IdleTimeoutMs),
-			AttemptTimeout:        milliseconds(cfg.Timeouts.AttemptTimeoutMs),
-			MaxEventBytes:         int(cfg.Timeouts.MaxEventBytes),
-		}
-	}
-	return out
-}
-
-// ProviderConfigsFromProto converts a complete provider map. Nil values are
-// preserved as entries so validation can report the exact broken provider ID.
-func ProviderConfigsFromProto(configs map[string]*pb.ProviderConfig) map[string]ProviderConfig {
-	out := make(map[string]ProviderConfig, len(configs))
-	for id, cfg := range configs {
-		out[id] = ProviderConfigFromProto(id, cfg)
-	}
-	return out
-}
-
-func milliseconds(value int64) time.Duration {
-	if value <= 0 {
-		return 0
-	}
-	return time.Duration(value) * time.Millisecond
 }
 
 func cloneStringMap(in map[string]string) map[string]string {

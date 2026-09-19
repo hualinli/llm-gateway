@@ -123,6 +123,9 @@ func TestApplyProviderConfigCopiesAndPersistsSnapshot(t *testing.T) {
 	if stored == nil || stored.Version != 1 || stored.Providers["openai"].CredentialRef != "env://OPENAI_KEY" {
 		t.Fatalf("stored provider snapshot=%+v", stored)
 	}
+	if stored.Providers["openai"].Timeouts == nil || stored.Providers["openai"].Timeouts.FirstByteTimeoutMs != 1200 {
+		t.Fatalf("stored timeouts were not cloned: %+v", stored.Providers["openai"].Timeouts)
+	}
 	encoded, err := protojson.Marshal(stored)
 	if err != nil {
 		t.Fatal(err)
@@ -136,11 +139,47 @@ func TestProviderConfigValidationRejectsInvalidEntries(t *testing.T) {
 	for name, cfg := range map[string]*pb.ProviderConfig{
 		"bad-protocol": {Protocol: "anthropic", Url: "https://provider.example"},
 		"bad-url":      {Protocol: "openai-compatible", Url: "file:///tmp/model"},
+		"userinfo-url": {Protocol: "openai-compatible", Url: "https://user:pass@provider.example"},
+		"query-url":    {Protocol: "openai-compatible", Url: "https://provider.example?token=1"},
 		"bad-mock-ref": {Protocol: "mock", CredentialRef: "env://MOCK_KEY"},
+		"raw-secret":   {Protocol: "openai-compatible", Url: "https://provider.example", CredentialRef: "sk-live-secret"},
 	} {
 		if err := ValidateProviderConfigs(map[string]*pb.ProviderConfig{name: cfg}); err == nil {
 			t.Fatalf("%s: invalid provider config was accepted", name)
 		}
+	}
+	if err := ValidateProviderConfigs(map[string]*pb.ProviderConfig{
+		"mock": {Protocol: "MOCK"},
+	}); err != nil {
+		t.Fatalf("mock protocol should be case-insensitive: %v", err)
+	}
+}
+
+func TestApplyProviderConfigWrapsValidationError(t *testing.T) {
+	srv, err := NewServer(NewMemoryStore())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = srv.ApplyKeyRecordsAndProviders(nil, routes(), map[string]*pb.ProviderConfig{
+		"openai": {Protocol: "openai-compatible", Url: "https://user:pass@provider.example"},
+	})
+	if !errors.Is(err, ErrInvalidConfig) {
+		t.Fatalf("validation error=%v, want ErrInvalidConfig", err)
+	}
+}
+
+func TestRestoreRejectsInvalidProviderSnapshot(t *testing.T) {
+	st := NewMemoryStore()
+	if err := st.Save(context.Background(), &pb.Config{
+		Version: 1,
+		Providers: map[string]*pb.ProviderConfig{
+			"openai": {Protocol: "openai-compatible", Url: "file:///tmp/model"},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewServer(st); err == nil {
+		t.Fatal("invalid restored providers must fail startup")
 	}
 }
 

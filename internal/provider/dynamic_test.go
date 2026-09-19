@@ -265,6 +265,18 @@ func TestEnvCredentialResolverRejectsBareSecret(t *testing.T) {
 	}
 }
 
+func TestEnvCredentialResolverReadsEnvAliases(t *testing.T) {
+	t.Setenv("GATEWAY_UPSTREAM_KEY", "from-env")
+	got, err := (EnvCredentialResolver{}).Resolve("env://GATEWAY_UPSTREAM_KEY")
+	if err != nil || got != "from-env" {
+		t.Fatalf("env:// resolve: got=%q err=%v", got, err)
+	}
+	got, err = (EnvCredentialResolver{}).Resolve("env:GATEWAY_UPSTREAM_KEY")
+	if err != nil || got != "from-env" {
+		t.Fatalf("env: resolve: got=%q err=%v", got, err)
+	}
+}
+
 // compile-time guard for the lifecycle contract: every built-in provider can
 // be retired without extending the Provider request interface.
 func TestProvidersImplementLifecycleCloser(t *testing.T) {
