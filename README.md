@@ -12,7 +12,7 @@
 |---|---|---|
 | Gateway 基础链路 | 已完成基础闭环 | 鉴权 → 限流 → SSE 代理 → 异步计量可以本地跑通 |
 | SSE 故障切换边界 | 已完成基础实现 | 首事件前可切备，首事件后不重放；OpenAI adapter 已有首事件/流式超时，Proxy 级背压仍待做 |
-| Provider | OpenAI-compatible + Mock | Anthropic adapter、控制面 Provider 配置和更完整的真实上游治理仍待做 |
+| Provider | OpenAI-compatible；Demo 走进程外 mock | 控制面已下发 protocol/url/credential_ref；`cmd/upstream-mock` 已进 main；Anthropic 和更完整治理仍待做 |
 | 限流 | 已完成基础实现 | Redis Lua 令牌桶和有界轮询等待；Redis 故障目前 fail-open |
 | 计量 | 已完成基础链路 | Redis Stream、Consumer Group、PG 唯一约束和基础 DLQ 已有；仍可能丢事件，对账口径也需重做 |
 | 控制面 | 已完成一致性基础 | gRPC Get/Watch、版本持久化、重连补拉、周期性校验和可选租约已有；TLS/mTLS 已支持配置，管理面鉴权仍待做 |
@@ -264,7 +264,7 @@
 
 ### P0：补齐真实 Provider adapter 与 Provider 配置
 
-**当前进度**：OpenAI-compatible HTTP adapter 的第一版已完成；下一步是补齐配置治理、Anthropic adapter 和更多契约测试。
+**当前进度**：OpenAI-compatible HTTP adapter、控制面动态 Provider 配置、进程外 `cmd/upstream-mock`（默认循环串，可选 `-echo`）已进 main。下一步是运行时正确性（未知 model 404、`GET /v1/models`、限流 fail 策略可配、活跃流上限、metering 实例级 consumer 和 `/metrics`），不要先做 Anthropic 或成员账单。
 
 应包含：
 
@@ -279,7 +279,7 @@
 
 **为什么做**：
 
-当前已经有一条真实 OpenAI-compatible HTTP 链路，但还需要把 adapter 从 Gateway 启动时的环境变量注册方式提升为可治理的 Provider 配置，并补齐第二种 Provider，才能证明抽象确实支持多家上游。
+当前已经有一条真实 OpenAI-compatible HTTP 链路，以及控制面下发的 Provider 配置。第二种协议 adapter 仍然能证明抽象可扩展，但不是下一期阻断项；先把未知模型和依赖故障行为做清楚。
 
 ### P0：Adapter 的三段超时（OpenAI 第一版已完成）
 
