@@ -1000,7 +1000,7 @@ curl -X POST http://localhost:50052/config \
   -d '{"providers":{"primary":{"id":"primary","protocol":"openai-compatible","url":"http://127.0.0.1:18080"},"backup":{"id":"backup","protocol":"openai-compatible","url":"http://127.0.0.1:18081"}},"routes":{"default":["primary","backup"]}}'
 ```
 
-`cmd/upstream-mock` 支持 `-ttft`、`-token-interval`、`-tokens`、`-status`、`-hang`、`-fail-after`、`-max-inflight`。Gateway 把它当成普通 HTTP Provider。控制面空库默认种入 `primary`/`backup` 指向这两端口；Gateway 启动时不再预置内嵌 mock 实例，未同步到控制面前没有上游。
+`cmd/upstream-mock` 支持 `-ttft`、`-token-interval`、`-tokens`、`-status`、`-hang`、`-fail-after`、`-max-inflight`、`-echo`。默认丢弃请求正文，按 `-name` 循环吐假 token。`-echo` 则先写 `{name} sha256=<raw body>`，再把 `messages` 文本按 `-tokens` 切开回放，用来核对网关有没有把请求完整转到上游。Gateway 把它当成普通 HTTP Provider。控制面空库默认种入 `primary`/`backup` 指向这两端口；Gateway 启动时不再预置内嵌 mock 实例，未同步到控制面前没有上游。
 
 进程内 `MockProvider` 仍用于单测和显式 `protocol: mock` 快照，不再作为默认 Demo 上游。
 

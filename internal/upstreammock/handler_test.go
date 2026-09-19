@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -151,6 +153,61 @@ func TestHandlerLimitsInflight(t *testing.T) {
 	}
 }
 
+func TestHandlerEchoesBodyChecksumAndMessages(t *testing.T) {
+	srv := httptest.NewServer(NewHandler(Config{Name: "primary", Echo: true, CompletionTokens: 8}))
+	defer srv.Close()
+
+	body := `{"model":"m","stream":true,"messages":[{"role":"user","content":"hello 你好"},{"role":"assistant","content":[{"type":"text","text":"see this"},{"type":"image_url","image_url":{"url":"http://x"}}]}],"tools":[{"type":"function"}]}`
+	resp := postStream(t, srv.URL, body)
+	defer resp.Body.Close()
+	events, done := readSSE(t, resp.Body)
+	if !done {
+		t.Fatal("stream missing [DONE]")
+	}
+	got := contentFromEvents(t, events)
+	sum := sha256.Sum256([]byte(body))
+	wantPrefix := fmt.Sprintf("primary sha256=%x\n", sum)
+	if !strings.HasPrefix(got, wantPrefix) {
+		t.Fatalf("echo %q, want prefix %q", got, wantPrefix)
+	}
+	if !strings.Contains(got, "user: hello 你好\n") || !strings.Contains(got, "assistant: see this\n") {
+		t.Fatalf("echo missing messages: %q", got)
+	}
+	if strings.Contains(got, "http://x") || strings.Contains(got, "function") {
+		t.Fatalf("readable echo should not dump non-text fields: %q", got)
+	}
+}
+
+func TestHandlerDefaultDoesNotEchoRequest(t *testing.T) {
+	srv := httptest.NewServer(NewHandler(Config{Name: "primary", CompletionTokens: 3}))
+	defer srv.Close()
+	body := `{"model":"m","stream":true,"messages":[{"role":"user","content":"echo-should-not-appear"}]}`
+	resp := postStream(t, srv.URL, body)
+	defer resp.Body.Close()
+	events, _ := readSSE(t, resp.Body)
+	got := contentFromEvents(t, events)
+	if strings.Contains(got, "echo-should-not-appear") {
+		t.Fatalf("default stream echoed request: %q", got)
+	}
+	if !strings.Contains(got, "primary") {
+		t.Fatalf("default stream missing name: %q", got)
+	}
+}
+
+func TestHandlerEchoFailAfterOmitsDone(t *testing.T) {
+	srv := httptest.NewServer(NewHandler(Config{Name: "cut", Echo: true, CompletionTokens: 8, FailAfter: 2}))
+	defer srv.Close()
+	resp := postStream(t, srv.URL, `{"stream":true,"messages":[{"role":"user","content":"abcdef"}]}`)
+	defer resp.Body.Close()
+	events, done := readSSE(t, resp.Body)
+	if done {
+		t.Fatal("truncated stream should not send [DONE]")
+	}
+	if len(events) != 2 {
+		t.Fatalf("events=%d, want 2", len(events))
+	}
+}
+
 func TestOpenAIAdapterConsumesMockStream(t *testing.T) {
 	srv := httptest.NewServer(NewHandler(Config{
 		Name: "adapter", PromptTokens: 9, CompletionTokens: 2,
@@ -171,6 +228,27 @@ func TestOpenAIAdapterConsumesMockStream(t *testing.T) {
 	if !strings.Contains(out.String(), "adapter") || !strings.Contains(out.String(), "[DONE]") {
 		t.Fatalf("body=%q", out.String())
 	}
+}
+
+func contentFromEvents(t *testing.T, events []json.RawMessage) string {
+	t.Helper()
+	var b strings.Builder
+	for _, ev := range events {
+		var chunk struct {
+			Choices []struct {
+				Delta struct {
+					Content string `json:"content"`
+				} `json:"delta"`
+			} `json:"choices"`
+		}
+		if err := json.Unmarshal(ev, &chunk); err != nil {
+			t.Fatalf("event=%s err=%v", ev, err)
+		}
+		if len(chunk.Choices) > 0 {
+			b.WriteString(chunk.Choices[0].Delta.Content)
+		}
+	}
+	return b.String()
 }
 
 func postStream(t *testing.T, base, body string) *http.Response {

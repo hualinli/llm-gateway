@@ -24,6 +24,7 @@ func main() {
 		hang          = flag.Bool("hang", false, "write SSE headers then block until the client cancels")
 		failAfter     = flag.Int("fail-after", 0, "close after N content events without [DONE]; 0 completes")
 		maxInflight   = flag.Int("max-inflight", 0, "concurrent stream limit; extra requests get 429; 0 unlimited")
+		echo          = flag.Bool("echo", false, "stream body sha256 plus messages; default keeps the synthetic name loop")
 	)
 	flag.Parse()
 
@@ -37,6 +38,7 @@ func main() {
 		Hang:             *hang,
 		FailAfter:        *failAfter,
 		MaxInflight:      *maxInflight,
+		Echo:             *echo,
 	})
 	srv := &http.Server{
 		Addr:              *listen,
@@ -44,8 +46,8 @@ func main() {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	go func() {
-		log.Printf("upstream-mock %s listening on %s ttft=%s token-interval=%s tokens=%d status=%d hang=%v fail-after=%d max-inflight=%d",
-			*name, *listen, *ttft, *tokenInterval, *tokens, *status, *hang, *failAfter, *maxInflight)
+		log.Printf("upstream-mock %s listening on %s ttft=%s token-interval=%s tokens=%d status=%d hang=%v fail-after=%d max-inflight=%d echo=%v",
+			*name, *listen, *ttft, *tokenInterval, *tokens, *status, *hang, *failAfter, *maxInflight, *echo)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatal(err)
 		}

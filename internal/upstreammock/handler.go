@@ -2,13 +2,18 @@ package upstreammock
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"sync/atomic"
 	"time"
 )
+
+const maxBodyBytes = 4 << 20
 
 // Config is the process-level behavior of a fake OpenAI-compatible upstream.
 // Gateway talks to it as a normal HTTP provider; knobs stay on this process.
@@ -28,6 +33,9 @@ type Config struct {
 	// MaxInflight limits concurrent streams. Zero means unlimited.
 	// Extra requests receive HTTP 429.
 	MaxInflight int
+	// Echo streams a checksum of the raw body plus message text.
+	// Default is a name-prefixed synthetic loop; use Echo only to verify forwarding.
+	Echo bool
 }
 
 // Handler serves POST /v1/chat/completions and GET /healthz.
@@ -83,19 +91,9 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 	h.inflight.Add(1)
 	defer h.inflight.Add(-1)
 
-	if r.Body != nil {
-		defer r.Body.Close()
-		var req struct {
-			Stream *bool `json:"stream"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeJSONError(w, http.StatusBadRequest, "invalid json")
-			return
-		}
-		if req.Stream == nil || !*req.Stream {
-			writeJSONError(w, http.StatusBadRequest, `only streaming requests are supported (set "stream": true)`)
-			return
-		}
+	raw, req, ok := readChatRequest(w, r)
+	if !ok {
+		return
 	}
 
 	if h.cfg.Status < 200 || h.cfg.Status >= 300 {
@@ -124,15 +122,12 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id := fmt.Sprintf("chatcmpl-mock-%s", h.cfg.Name)
-	limit := h.cfg.CompletionTokens
+	chunks := h.contentChunks(raw, req)
+	limit := len(chunks)
 	if h.cfg.FailAfter > 0 && h.cfg.FailAfter < limit {
 		limit = h.cfg.FailAfter
 	}
 	for i := 0; i < limit; i++ {
-		content := fmt.Sprintf("%s-%d ", h.cfg.Name, i)
-		if i == 0 {
-			content = h.cfg.Name + " "
-		}
 		if err := writeSSE(w, map[string]any{
 			"id":     id,
 			"object": "chat.completion.chunk",
@@ -140,7 +135,7 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 				"index": 0,
 				"delta": map[string]any{
 					"role":    "assistant",
-					"content": content,
+					"content": chunks[i],
 				},
 				"finish_reason": nil,
 			}},
@@ -180,6 +175,136 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	flush()
+}
+
+type chatRequest struct {
+	Stream   *bool         `json:"stream"`
+	Messages []chatMessage `json:"messages"`
+}
+
+type chatMessage struct {
+	Role    string          `json:"role"`
+	Content json.RawMessage `json:"content"`
+}
+
+func readChatRequest(w http.ResponseWriter, r *http.Request) ([]byte, chatRequest, bool) {
+	var raw []byte
+	if r.Body != nil {
+		limited := http.MaxBytesReader(w, r.Body, maxBodyBytes)
+		defer limited.Close()
+		var err error
+		raw, err = io.ReadAll(limited)
+		if err != nil {
+			status := http.StatusBadRequest
+			msg := "invalid json"
+			var maxErr *http.MaxBytesError
+			if errors.As(err, &maxErr) {
+				status = http.StatusRequestEntityTooLarge
+				msg = "request body too large"
+			}
+			writeJSONError(w, status, msg)
+			return nil, chatRequest{}, false
+		}
+	}
+	var req chatRequest
+	if err := json.Unmarshal(raw, &req); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid json")
+		return nil, chatRequest{}, false
+	}
+	if req.Stream == nil || !*req.Stream {
+		writeJSONError(w, http.StatusBadRequest, `only streaming requests are supported (set "stream": true)`)
+		return nil, chatRequest{}, false
+	}
+	return raw, req, true
+}
+
+func (h *Handler) contentChunks(raw []byte, req chatRequest) []string {
+	if h.cfg.Echo {
+		return splitRunes(echoText(h.cfg.Name, raw, req.Messages), h.cfg.CompletionTokens)
+	}
+	chunks := make([]string, h.cfg.CompletionTokens)
+	for i := range chunks {
+		if i == 0 {
+			chunks[i] = h.cfg.Name + " "
+			continue
+		}
+		chunks[i] = fmt.Sprintf("%s-%d ", h.cfg.Name, i)
+	}
+	return chunks
+}
+
+func echoText(name string, raw []byte, messages []chatMessage) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s sha256=%x\n", name, sha256.Sum256(raw))
+	for _, msg := range messages {
+		text := strings.TrimSpace(messageText(msg.Content))
+		if text == "" {
+			continue
+		}
+		role := msg.Role
+		if role == "" {
+			role = "unknown"
+		}
+		fmt.Fprintf(&b, "%s: %s\n", role, text)
+	}
+	return b.String()
+}
+
+func messageText(content json.RawMessage) string {
+	if len(content) == 0 {
+		return ""
+	}
+	var s string
+	if err := json.Unmarshal(content, &s); err == nil {
+		return s
+	}
+	var parts []struct {
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal(content, &parts); err != nil {
+		return ""
+	}
+	var b strings.Builder
+	for _, part := range parts {
+		if strings.TrimSpace(part.Text) == "" {
+			continue
+		}
+		if b.Len() > 0 {
+			b.WriteByte(' ')
+		}
+		b.WriteString(part.Text)
+	}
+	return b.String()
+}
+
+func splitRunes(s string, n int) []string {
+	if s == "" {
+		return nil
+	}
+	if n <= 1 {
+		return []string{s}
+	}
+	rs := []rune(s)
+	if len(rs) <= n {
+		out := make([]string, len(rs))
+		for i, r := range rs {
+			out[i] = string(r)
+		}
+		return out
+	}
+	out := make([]string, n)
+	base := len(rs) / n
+	extra := len(rs) % n
+	i := 0
+	for c := 0; c < n; c++ {
+		size := base
+		if c < extra {
+			size++
+		}
+		out[c] = string(rs[i : i+size])
+		i += size
+	}
+	return out
 }
 
 func writeSSE(w http.ResponseWriter, payload any) error {
