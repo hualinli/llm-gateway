@@ -35,11 +35,20 @@ type Server struct {
 	applyMu  sync.Mutex
 	mu       sync.Mutex
 	watchers map[chan *pb.Config]struct{} // 每个 WatchConfig 流一个 latest-snapshot 投递口
+
+	// reports are observations from Gateway processes. They are not part of
+	// the persisted desired snapshot and are lost when this process restarts.
+	reportsMu sync.RWMutex
+	reports   map[string]GatewayReport
 }
 
 // NewServer 创建并尝试从 Store 恢复最新配置；恢复失败视为启动期致命错误。
 func NewServer(store Store) (*Server, error) {
-	s := &Server{store: store, watchers: make(map[chan *pb.Config]struct{})}
+	s := &Server{
+		store:    store,
+		watchers: make(map[chan *pb.Config]struct{}),
+		reports:  make(map[string]GatewayReport),
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	latest, err := store.LoadLatest(ctx)
@@ -523,6 +532,10 @@ func (c *Client) GetConfig(ctx context.Context) (*pb.Config, error) {
 
 func (c *Client) WatchConfig(ctx context.Context, version int64) (pb.ConfigService_WatchConfigClient, error) {
 	return c.client.WatchConfig(ctx, &pb.WatchRequest{Version: version})
+}
+
+func (c *Client) ReportGatewayStatus(ctx context.Context, req *pb.ReportGatewayStatusRequest) (*pb.ReportGatewayStatusResponse, error) {
+	return c.client.ReportGatewayStatus(ctx, req)
 }
 
 func (c *Client) Close() { _ = c.conn.Close() }

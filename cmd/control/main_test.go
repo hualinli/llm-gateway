@@ -66,8 +66,8 @@ func TestConfigAppliesProvidersAndReturnsThemOnGet(t *testing.T) {
 	if rec.Code != 200 {
 		t.Fatalf("apply providers: status=%d body=%s", rec.Code, rec.Body)
 	}
-	if !strings.Contains(rec.Body.String(), `"credential_ref":"env://OPENAI_API_KEY"`) {
-		t.Fatalf("POST response missing credential_ref: %s", rec.Body)
+	if !strings.Contains(rec.Body.String(), `"credential_ref":"env://OPENAI_API_KEY"`) || !strings.Contains(rec.Body.String(), `"result":"persisted"`) {
+		t.Fatalf("POST response missing persisted provider snapshot: %s", rec.Body)
 	}
 
 	getReq := httptest.NewRequest("GET", "/config", nil)

@@ -169,6 +169,7 @@ func main() {
 	}
 	configHandler := newConfigHandler(srv, auditSink, legacyKeyInputAllowed)
 	mux.Handle("/config", control.AdminAuth(configHandler, adminToken, requireAdminAuth))
+	mux.Handle("/gateways", control.AdminAuth(newGatewayStatusHandler(srv), adminToken, requireAdminAuth))
 	keysAuth := control.IdentityAuth(credentialHandler, identityVerifier, true)
 	mux.Handle("/keys", keysAuth)
 	mux.Handle("/keys/", keysAuth)
@@ -193,10 +194,12 @@ func newConfigHandler(srv *control.Server, auditSink control.AuditSink, legacyKe
 			cfg, _ := srv.GetConfig(r.Context(), &pb.GetRequest{})
 			// 转成便于 curl 看的 JSON 形态
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"version":   cfg.Version,
-				"keys":      redactKeyRecords(cfg.KeyRecords),
-				"routes":    control.RoutesFromProto(cfg.Routes),
-				"providers": redactProviderConfigs(cfg.Providers),
+				"result":          "persisted",
+				"desired_version": cfg.Version,
+				"version":         cfg.Version,
+				"keys":            redactKeyRecords(cfg.KeyRecords),
+				"routes":          control.RoutesFromProto(cfg.Routes),
+				"providers":       redactProviderConfigs(cfg.Providers),
 			})
 		case http.MethodPost:
 			r.Body = http.MaxBytesReader(w, r.Body, maxConfigBody)
@@ -250,13 +253,29 @@ func newConfigHandler(srv *control.Server, auditSink control.AuditSink, legacyKe
 				ConfigVersion: newCfg.Version, KeyCount: len(newCfg.KeyRecords),
 			})
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"version":   newCfg.Version,
-				"keys":      redactKeyRecords(newCfg.KeyRecords),
-				"routes":    control.RoutesFromProto(newCfg.Routes),
-				"providers": redactProviderConfigs(newCfg.Providers),
+				"result":          "persisted",
+				"desired_version": newCfg.Version,
+				"version":         newCfg.Version,
+				"keys":            redactKeyRecords(newCfg.KeyRecords),
+				"routes":          control.RoutesFromProto(newCfg.Routes),
+				"providers":       redactProviderConfigs(newCfg.Providers),
 			})
 		default:
 			http.Error(w, "method not allowed", 405)
 		}
+	})
+}
+
+func newGatewayStatusHandler(srv *control.Server) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"desired_version": srv.CurrentConfig().GetVersion(),
+			"gateways":        srv.GatewayReports(),
+		})
 	})
 }

@@ -231,6 +231,7 @@
 - Gateway 收到快照后会先校验并构建完整 Provider/路由快照，再一次性发布。任意 Provider 配置无效时保留旧快照；同 ID 且配置未变的实例复用，配置变化会重建，旧 OpenAI transport 只关闭空闲连接，因此在途 SSE 继续使用旧实例；
 - 第一版上游凭据只支持本地 `credential_ref` 解析（默认 `env://ENV_NAME` / `env:ENV_NAME`，也可注入部署侧 resolver），控制面不接收或持久化原始密钥；形如 `sk-` 的引用会被拒绝；
 - `/config` 对非法 Provider/凭据快照返回 400；版本冲突返回 409；
+- `/config` 返回的 `result=persisted` 只表示控制面已记下 desired 版本，不表示任何 Gateway 已经应用；各实例的 applied/rejected 由 Gateway 通过 `ReportGatewayStatus` 回报，`GET /gateways` 可查看。这份回报在控制面进程内存里，重启后要等 Gateway 再次上报；
 - 空库启动时会种入 `primary` / `backup`，默认指向本机 `cmd/upstream-mock`（`:18080` / `:18081`）；Gateway 不再预置内嵌 mock 实例；
 - `CONTROL_REQUIRE_POSTGRES=true` 时 PostgreSQL 不可用会拒绝启动；默认 Demo 模式仍允许回退内存，生产环境必须开启该选项。
 

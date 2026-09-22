@@ -9,6 +9,9 @@ option go_package = "llm-gateway/proto/control;control";
 service ConfigService {
   rpc GetConfig(GetRequest) returns (Config);
   rpc WatchConfig(WatchRequest) returns (stream Config);
+  // ReportGatewayStatus records whether one Gateway applied or rejected the
+  // desired snapshot. Persisting a config does not imply this RPC succeeded.
+  rpc ReportGatewayStatus(ReportGatewayStatusRequest) returns (ReportGatewayStatusResponse);
 }
 
 message Config {
@@ -59,4 +62,19 @@ message GetRequest {}
 
 message WatchRequest {
   int64 version = 1;
+}
+
+// ReportGatewayStatusRequest is one Gateway instance's view of the desired
+// snapshot. applied_version is the last snapshot that instance is serving.
+// rejected_version is set only when the latest attempt failed.
+message ReportGatewayStatusRequest {
+  string instance_id = 1;
+  int64 applied_version = 2;
+  int64 rejected_version = 3;
+  string reject_reason = 4;
+  string state = 5; // applied or rejected
+}
+
+message ReportGatewayStatusResponse {
+  int64 desired_version = 1;
 }

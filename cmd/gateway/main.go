@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -98,11 +99,14 @@ func main() {
 		controlAddr = "localhost:50051"
 	}
 	controlCtx, controlCancel := context.WithCancel(context.Background())
+	instanceID := gatewayInstanceID()
+	log.Printf("gateway instance=%s", instanceID)
 	controlSync := control.NewSynchronizer(controlAddr, control.SyncOptions{
 		PollInterval:   durationEnv("CONTROL_CONFIG_POLL_INTERVAL", 30*time.Second),
 		LeaseTimeout:   durationEnv("CONTROL_CONFIG_LEASE", 0),
 		OnLeaseExpired: func() { authStore.UpdateRecords(nil) },
 		TLS:            control.TLSConfigFromEnv(),
+		InstanceID:     instanceID,
 	})
 	go func() {
 		err := controlSync.Run(controlCtx, func(cfg *pb.Config) error {
@@ -179,6 +183,17 @@ func main() {
 	}
 	_ = rdb.Close()
 	log.Println("exit")
+}
+
+func gatewayInstanceID() string {
+	if id := strings.TrimSpace(os.Getenv("GATEWAY_INSTANCE_ID")); id != "" {
+		return id
+	}
+	host, err := os.Hostname()
+	if err != nil || strings.TrimSpace(host) == "" {
+		host = "gateway"
+	}
+	return host + "-" + strconv.Itoa(os.Getpid())
 }
 
 func intEnv(name string, fallback int) int {

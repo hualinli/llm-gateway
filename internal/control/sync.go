@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	pb "llm-gateway/proto/control"
@@ -18,6 +19,9 @@ type SyncOptions struct {
 	LeaseTimeout     time.Duration
 	OnLeaseExpired   func()
 	TLS              *TLSConfig
+	// InstanceID identifies this Gateway in control-plane status reports.
+	// Empty disables reporting so tests can sync without observing status.
+	InstanceID string
 }
 
 func (o SyncOptions) withDefaults() SyncOptions {
@@ -126,9 +130,14 @@ func (s *Synchronizer) Run(ctx context.Context, apply func(*pb.Config) error) er
 		}
 
 		watchCtx, watchCancel := context.WithCancel(ctx)
-		watch, watchErr := s.openWatch(watchCtx, client, markApplied, options)
+		applyAndReport := func(cfg *pb.Config) error {
+			err := markApplied(cfg)
+			s.report(client, cfg, err)
+			return err
+		}
+		watch, watchErr := s.openWatch(watchCtx, client, applyAndReport, options)
 		if watchErr == nil {
-			watchErr = s.watchLoop(ctx, client, watchCtx, watch, markApplied, checkLease, options)
+			watchErr = s.watchLoop(ctx, client, watchCtx, watch, applyAndReport, checkLease, options)
 		}
 		watchCancel()
 		client.Close()
@@ -210,6 +219,27 @@ func (s *Synchronizer) watchLoop(ctx context.Context, client *Client, watchCtx c
 			return ctx.Err()
 		}
 		checkLease()
+	}
+}
+
+func (s *Synchronizer) report(client *Client, cfg *pb.Config, applyErr error) {
+	if client == nil || cfg == nil || strings.TrimSpace(s.options.InstanceID) == "" {
+		return
+	}
+	req := &pb.ReportGatewayStatusRequest{
+		InstanceId:     s.options.InstanceID,
+		AppliedVersion: s.applied,
+		State:          "applied",
+	}
+	if applyErr != nil {
+		req.State = "rejected"
+		req.RejectedVersion = cfg.GetVersion()
+		req.RejectReason = applyErr.Error()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), s.options.GetConfigTimeout)
+	defer cancel()
+	if _, err := client.ReportGatewayStatus(ctx, req); err != nil {
+		log.Printf("control sync status report failed instance=%s: %v", s.options.InstanceID, err)
 	}
 }
 
