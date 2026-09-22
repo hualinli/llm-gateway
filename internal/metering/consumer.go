@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"llm-gateway/internal/metrics"
@@ -12,7 +15,9 @@ import (
 )
 
 const (
-	GroupName            = "metering-group"
+	GroupName = "metering-group"
+	// ConsumerName is the historical fixed name. New processes use
+	// InstanceConsumerName unless ConsumerOptions.Name is set.
 	ConsumerName         = "consumer-1"
 	DLQStreamName        = StreamName + ":dlq"
 	consumerErrorBackoff = 100 * time.Millisecond
@@ -22,6 +27,7 @@ const (
 type Consumer struct {
 	rdb    *redis.Client
 	ledger Ledger
+	name   string
 	block  time.Duration
 	count  int64
 	claim  time.Duration
@@ -29,6 +35,9 @@ type Consumer struct {
 }
 
 type ConsumerOptions struct {
+	// Name is this process's consumer identity inside the group.
+	// Empty uses InstanceConsumerName so two processes do not share a PEL.
+	Name           string
 	ReadBlock      time.Duration
 	ReadCount      int64
 	ReclaimEvery   time.Duration
@@ -52,14 +61,46 @@ func NewConsumerWithOptions(rdb *redis.Client, ledger Ledger, options ConsumerOp
 	if options.PendingMinIdle <= 0 {
 		options.PendingMinIdle = 30 * time.Second
 	}
+	name := strings.TrimSpace(options.Name)
+	if name == "" {
+		name = InstanceConsumerName()
+	}
 	return &Consumer{
 		rdb:    rdb,
 		ledger: ledger,
+		name:   name,
 		block:  options.ReadBlock,
 		count:  options.ReadCount,
 		claim:  options.ReclaimEvery,
 		idle:   options.PendingMinIdle,
 	}
+}
+
+// Name is the Redis consumer-group member used for reads and claims.
+func (c *Consumer) Name() string {
+	return c.name
+}
+
+// InstanceConsumerName identifies one OS process. Two processes on the same
+// host get different names because the pid differs.
+func InstanceConsumerName() string {
+	host, err := os.Hostname()
+	if err != nil {
+		host = ""
+	}
+	host = strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '.', r == '_', r == '-':
+			return r
+		default:
+			return '-'
+		}
+	}, host)
+	host = strings.Trim(host, "-")
+	if host == "" {
+		host = "unknown"
+	}
+	return host + "-" + strconv.Itoa(os.Getpid())
 }
 
 // EnsureGroup 启动时建组，已存在则忽略
@@ -71,7 +112,7 @@ func (c *Consumer) EnsureGroup(ctx context.Context) {
 // Run 阻塞消费，ctx 取消即退出
 func (c *Consumer) Run(ctx context.Context) {
 	c.EnsureGroup(ctx)
-	log.Printf("metering consumer group=%s consumer=%s stream=%s", GroupName, ConsumerName, StreamName)
+	log.Printf("metering consumer group=%s consumer=%s stream=%s", GroupName, c.name, StreamName)
 
 	// 后台定期认领 pending（崩溃后重放）
 	go c.reclaimLoop(ctx)
@@ -86,7 +127,7 @@ func (c *Consumer) Run(ctx context.Context) {
 		// XREADGROUP 阻塞 2s，无消息则继续
 		streams, err := c.rdb.XReadGroup(ctx, &redis.XReadGroupArgs{
 			Group:    GroupName,
-			Consumer: ConsumerName,
+			Consumer: c.name,
 			Streams:  []string{StreamName, ">"},
 			Count:    c.count,
 			Block:    c.block,
@@ -201,7 +242,7 @@ func (c *Consumer) reclaimLoop(ctx context.Context) {
 			msgs, _, err := c.rdb.XAutoClaim(ctx, &redis.XAutoClaimArgs{
 				Stream:   StreamName,
 				Group:    GroupName,
-				Consumer: ConsumerName,
+				Consumer: c.name,
 				MinIdle:  c.idle,
 				Start:    "0-0",
 				Count:    c.count,

@@ -6,12 +6,64 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 )
+
+func TestConsumerNamesArePerProcess(t *testing.T) {
+	name := InstanceConsumerName()
+	if name == ConsumerName || !strings.HasSuffix(name, "-"+strconv.Itoa(os.Getpid())) {
+		t.Fatalf("name=%q", name)
+	}
+	a := NewConsumerWithOptions(nil, nil, ConsumerOptions{Name: "meter-a"})
+	b := NewConsumerWithOptions(nil, nil, ConsumerOptions{Name: "meter-b"})
+	if a.Name() == b.Name() {
+		t.Fatal("explicit consumer names collapsed")
+	}
+	if got := NewConsumer(nil, nil).Name(); got != name {
+		t.Fatalf("default name=%q, want %q", got, name)
+	}
+}
+
+func TestTwoNamedConsumersSplitAGroup(t *testing.T) {
+	rdb := newRedisIntegrationClient(t)
+	defer rdb.Close()
+	resetMeteringStreams(t, rdb)
+	defer resetMeteringStreams(t, rdb)
+
+	ledger := NewMemoryLedger()
+	opts := ConsumerOptions{ReadBlock: 50 * time.Millisecond, ReadCount: 1, ReclaimEvery: time.Hour}
+	opts.Name = "meter-a"
+	a := NewConsumerWithOptions(rdb, ledger, opts)
+	opts.Name = "meter-b"
+	b := NewConsumerWithOptions(rdb, ledger, opts)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go a.Run(ctx)
+	go b.Run(ctx)
+
+	for _, id := range []string{"evt-a", "evt-b"} {
+		payload, err := json.Marshal(integrationEvent(id, "tenant-a", 1))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := rdb.XAdd(context.Background(), &redis.XAddArgs{
+			Stream: StreamName,
+			Values: map[string]any{"data": string(payload)},
+		}).Err(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	waitFor(t, 3*time.Second, func() bool {
+		count, err := ledger.Count()
+		return err == nil && count == 2
+	})
+}
 
 func TestRedisProducerReplaysRepairedSpoolWithoutNewRequests(t *testing.T) {
 	rdb := newRedisIntegrationClient(t)

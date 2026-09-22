@@ -2,10 +2,14 @@ package proxy
 
 import (
 	"context"
+	"encoding/json"
 	"io"
+	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"llm-gateway/internal/auth"
 	"llm-gateway/internal/metering"
@@ -20,6 +24,7 @@ type fakeProvider struct {
 	usage        *provider.Usage
 	missingUsage bool
 	called       *bool
+	onCall       func(context.Context)
 }
 
 func (f *fakeProvider) Name() string { return f.name }
@@ -27,6 +32,9 @@ func (f *fakeProvider) Name() string { return f.name }
 func (f *fakeProvider) ChatStream(ctx context.Context, reqBody []byte, w io.Writer) (*provider.Usage, error) {
 	if f.called != nil {
 		*f.called = true
+	}
+	if f.onCall != nil {
+		f.onCall(ctx)
 	}
 	for _, c := range f.chunks {
 		if _, err := io.WriteString(w, c); err != nil {
@@ -256,5 +264,97 @@ func TestUpstreamAuthErrorMappedTo502(t *testing.T) {
 	rec := do(t, []provider.Provider{p1}, streamBody)
 	if rec.Code != 502 {
 		t.Fatalf("upstream 401 want 502, got %d", rec.Code)
+	}
+}
+
+func TestUnknownModelIsNotFound(t *testing.T) {
+	rec := do(t, []provider.Provider{&fakeProvider{name: "a"}}, `{"model":"nope","stream":true}`)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "/v1/models") {
+		t.Fatalf("body=%s", rec.Body.String())
+	}
+}
+
+func TestKnownModelWithNoProviderIsBadGateway(t *testing.T) {
+	reg := provider.NewRegistry(map[string][]provider.Provider{"m1": {}})
+	h := NewHandler(reg, nil)
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(streamBody))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestModelsListsAuthenticatedRegistry(t *testing.T) {
+	reg := provider.NewRegistry(map[string][]provider.Provider{
+		"zeta":  {&fakeProvider{name: "p"}},
+		"alpha": {&fakeProvider{name: "q"}},
+	})
+	h := auth.Middleware(auth.NewMemoryStore(map[string]string{"sk-test": "tenant-a"}))(NewModelsHandler(reg))
+
+	unauth := httptest.NewRecorder()
+	h.ServeHTTP(unauth, httptest.NewRequest(http.MethodGet, "/v1/models", nil))
+	if unauth.Code != http.StatusUnauthorized {
+		t.Fatalf("unauth status=%d", unauth.Code)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	req.Header.Set("Authorization", "Bearer sk-test")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		Object string `json:"object"`
+		Data   []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Object != "list" || len(body.Data) != 2 || body.Data[0].ID != "alpha" || body.Data[1].ID != "zeta" {
+		t.Fatalf("body=%s", rec.Body.String())
+	}
+}
+
+func TestMaxActiveStreamsRejectsBeforeUpstream(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var once sync.Once
+	var calls int
+	var mu sync.Mutex
+	p := &fakeProvider{name: "a", onCall: func(context.Context) {
+		mu.Lock()
+		calls++
+		mu.Unlock()
+		once.Do(func() { close(started) })
+		<-release
+	}}
+	h := NewHandler(provider.NewRegistry(map[string][]provider.Provider{"m1": {p}}), nil)
+	h.SetMaxActiveStreams(1)
+	go func() {
+		req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(streamBody))
+		h.ServeHTTP(httptest.NewRecorder(), req)
+	}()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("first stream did not start")
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(streamBody)))
+	close(release)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if calls != 1 {
+		t.Fatalf("upstream calls=%d, want 1", calls)
 	}
 }

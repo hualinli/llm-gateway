@@ -8,6 +8,7 @@ import (
 	"net/http/pprof"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"llm-gateway/internal/observability"
 	"llm-gateway/internal/provider"
 	"llm-gateway/internal/proxy"
+	"llm-gateway/internal/ready"
 	pb "llm-gateway/proto/control"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -55,7 +57,14 @@ func main() {
 	}
 	rdb := redis.NewClient(&redis.Options{Addr: redisAddr})
 	lim := limiter.New(rdb, 20, 40, 500*time.Millisecond)
-	log.Printf("limiter: redis=%s rate=20 burst=40 queue=500ms", redisAddr)
+	limiterPolicy := os.Getenv("LIMITER_ON_REDIS_ERROR")
+	if limiterPolicy == "" {
+		limiterPolicy = "open"
+	}
+	if err := lim.SetOnRedisError(limiterPolicy); err != nil {
+		log.Fatalf("limiter: %v", err)
+	}
+	log.Printf("limiter: redis=%s rate=20 burst=40 queue=500ms on-redis-error=%s", redisAddr, limiterPolicy)
 
 	// 计量生产：批量 XADD，不阻塞热路径；Redis 故障时落本地 JSONL spool。
 	spoolDir := os.Getenv("METERING_SPOOL_DIR")
@@ -66,6 +75,9 @@ func main() {
 		SpoolDir: spoolDir,
 	})
 	proxyHandler := proxy.NewHandler(registry, meterProducer)
+	maxStreams := intEnv("GATEWAY_MAX_ACTIVE_STREAMS", 0)
+	proxyHandler.SetMaxActiveStreams(maxStreams)
+	log.Printf("gateway max active streams=%d (0 means unlimited)", maxStreams)
 
 	// 本地 bootstrap key 仅通过环境变量注入，生产应由控制面下发；内存 Store 只保存 hash。
 	var bootstrapRecords []auth.KeyRecord
@@ -122,12 +134,15 @@ func main() {
 	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 	mux.Handle("/metrics", promhttp.Handler())
 	_ = metrics.ActiveStreams // 触发 metrics 包 init 注册
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok\n"))
+	mux.HandleFunc("/healthz", ready.Live)
+	mux.HandleFunc("/livez", ready.Live)
+	mux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), 200*time.Millisecond)
+		defer cancel()
+		ready.Write(w, ready.Gateway(len(registry.Models()), rdb.Ping(ctx).Err(), lim.FailClosed()))
 	})
 	mux.Handle("/v1/chat/completions", authedLimitedProxy)
+	mux.Handle("/v1/models", auth.Middleware(authStore)(limiter.Middleware(lim)(proxy.NewModelsHandler(registry))))
 
 	requestsCtx, cancelRequests := context.WithCancel(context.Background())
 	defer cancelRequests()
@@ -164,6 +179,19 @@ func main() {
 	}
 	_ = rdb.Close()
 	log.Println("exit")
+}
+
+func intEnv(name string, fallback int) int {
+	value := os.Getenv(name)
+	if value == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(value)
+	if err != nil || n < 0 {
+		log.Printf("invalid %s=%q, using %d", name, value, fallback)
+		return fallback
+	}
+	return n
 }
 
 func durationEnv(name string, fallback time.Duration) time.Duration {

@@ -4,6 +4,8 @@
 
 > 2026-09-11 正确性修复与验证见 [修复复盘](docs/verification/2026-09-11/REPAIR-REPORT.md)，原始架构评估见 [评估报告](ASSESSMENT-2026-09-11.md)。
 
+> 后续工作的统一优先级、阶段目标、系统不变量和 Agent 协作方式见 [项目演进路线图](docs/PROJECT-ROADMAP.md)。
+
 > **项目当前定位**：架构骨架和本地 Demo 已经可运行，但还不是生产级多 Provider 网关。本文将“已完成”“当前限制”和“待做项”明确分开，所有性能和可靠性结论都以实际测试数据为准，不以设计目标冒充实现结果。
 
 ## 项目状态概览
@@ -13,7 +15,7 @@
 | Gateway 基础链路 | 已完成基础闭环 | 鉴权 → 限流 → SSE 代理 → 异步计量可以本地跑通 |
 | SSE 故障切换边界 | 已完成基础实现 | 首事件前可切备，首事件后不重放；OpenAI adapter 已有首事件/流式超时，Proxy 级背压仍待做 |
 | Provider | OpenAI-compatible；Demo 走进程外 mock | 控制面已下发 protocol/url/credential_ref；`cmd/upstream-mock` 已进 main；Anthropic 和更完整治理仍待做 |
-| 限流 | 已完成基础实现 | Redis Lua 令牌桶和有界轮询等待；Redis 故障目前 fail-open |
+| 限流 | 已完成基础实现 | Redis Lua 令牌桶和有界轮询等待；Redis 故障默认 fail-open，可用 `LIMITER_ON_REDIS_ERROR=closed` 改为拒绝 |
 | 计量 | 已完成基础链路 | Redis Stream、Consumer Group、PG 唯一约束和基础 DLQ 已有；仍可能丢事件，对账口径也需重做 |
 | 控制面 | 已完成一致性基础 | gRPC Get/Watch、版本持久化、重连补拉、周期性校验和可选租约已有；TLS/mTLS 已支持配置，管理面鉴权仍待做 |
 | 管理后台 | 尚未接入主线 | Hertz IDL/生成代码曾在 `wip/management-hertz`，handlers 仍为空；计划实现用户/管理员 CRUD 和安全接线 |
@@ -88,8 +90,9 @@
 
 当前限制：
 
-- 请求体已有 4 MiB 上限；messages 数量、单条内容长度和 model 长度校验仍待补充；
-- 模型选择的协议层基础已有（请求体 `model` 字段 → `Registry.ProvidersFor` 路由），但错误语义、模型发现和按租户授权仍待补齐：未知模型返回 502、无 `/v1/models` 目录接口、无按租户的模型白名单（详见 P1 待做项）；
+- 请求体已有 4 MiB 上限；`model` 超过 128 字节或含控制字符返回 400；messages 数量和单条内容长度校验仍待补充；
+- 未知模型返回 404，并指向 `GET /v1/models`；模型已配置但没有可用 Provider 时返回 502。`GET /v1/models` 走现有 API Key 鉴权，列出 Registry 当前路由。按租户的模型白名单仍待做；
+- `GATEWAY_MAX_ACTIVE_STREAMS` 限制同时进行的 chat 流，`0` 表示不限制；超出返回 503，且不会把请求交给上游；
 - 只支持流式接口，不支持普通 JSON 响应；
 - OpenAI-compatible adapter 已实现，Anthropic 等其他真实上游尚未实现；
 - 尚无异步 per-connection queue；当前采用 adapter 单 event 有界缓冲、直接背压和每次写入 deadline，完整的可配置 bounded writer 仍待做；
@@ -159,13 +162,13 @@
 - 支持 burst；
 - 超过 burst 后支持最多等待一段时间再轮询；
 - 限流允许、拒绝、排队等待都有 Prometheus 指标；
-- Redis 不可用时当前默认 fail-open，保证 Demo 可继续工作。
+- Redis 不可用时默认 fail-open，保证 Demo 可继续工作；`LIMITER_ON_REDIS_ERROR=closed` 时改为 503，不再把依赖故障伪装成放行。
 
 当前限制：
 
 - rate、burst 目前是进程启动时的固定值，尚未由控制面动态下发；
 - Lua 现在使用 Redis `TIME`，避免多 Gateway 实例之间的应用时钟偏差；
-- Redis 故障 fail-open 可能造成超额流量，生产环境必须显式配置并告警；
+- 默认 fail-open 在 Redis 故障时可能造成超额流量；生产环境应设 `LIMITER_ON_REDIS_ERROR=closed`，并看 `limiter_dependency_total`；
 - Redis/Lua 集成测试已完成第一版，仍需补充高并发和故障注入测试。
 
 ### 2.5 异步计量基础链路
@@ -264,7 +267,7 @@
 
 ### P0：补齐真实 Provider adapter 与 Provider 配置
 
-**当前进度**：OpenAI-compatible HTTP adapter、控制面动态 Provider 配置、进程外 `cmd/upstream-mock`（默认循环串，可选 `-echo`）已进 main。下一步是运行时正确性（未知 model 404、`GET /v1/models`、限流 fail 策略可配、活跃流上限、metering 实例级 consumer 和 `/metrics`），不要先做 Anthropic 或成员账单。
+**当前进度**：OpenAI-compatible HTTP adapter、控制面动态 Provider 配置、进程外 `cmd/upstream-mock` 已进 main。运行时这一刀也已落地：未知模型 404、`GET /v1/models`、限流 Redis 故障策略、Gateway 活跃流上限、metering 实例级 consumer、`/livez` 与 `/readyz`。下一步是证据（CI、一份 mock 压测记录、Redis 短断后的 spool 恢复），不要先做 Anthropic、按租户模型白名单或成员账单。
 
 应包含：
 
@@ -507,8 +510,8 @@ downstream client
 
 应包含：
 
-- **未知模型的错误码语义**：当前 `len(providers) == 0` 时统一返回 `502 no provider available`，把"客户端传了网关不认识的 model"（客户端/配置问题）和"模型已配置但上游全挂"（上游故障）混为一谈。应区分两种情况：路由表中不存在该 model 时返回 `404`（附可用模型提示或指向 `/v1/models`），模型存在但所有 Provider 失败时才返回 `502`。注意 Prometheus `RequestsTotal` 的 status label 也要同步区分，避免压测告警口径失真；
-- **`GET /v1/models` 模型目录接口**：从 Registry 只读快照已配置的 model 列表，按 OpenAI 兼容格式返回 `{"object":"list","data":[{"id":...,"object":"model",...}]}`；必须走现有 API Key 鉴权；如果做了按租户白名单（见下），只返回该租户可用的模型。实现上 `Registry` 目前只有 `ProvidersFor(model)`，需要新增一个返回全部 model 名的只读方法，注意与控制面热更（`UpdateRoutes`）的并发安全，现有 `RWMutex` 已够用；
+- **未知模型的错误码语义**：路由表中不存在该 model 时返回 `404`（正文指向 `GET /v1/models`）；模型存在但没有可用 Provider，或所有 Provider 在首字节前失败时返回 `502`。Prometheus `gateway_requests_total` 的 status label 使用对应状态码；
+- **`GET /v1/models` 模型目录接口**：从 Registry 只读快照已配置的 model 列表，按 OpenAI 兼容格式返回 `{"object":"list","data":[{"id":...,"object":"model","owned_by":"llm-gateway"}]}`，并走现有 API Key 鉴权；
 - **按租户的模型白名单**：当前路由表是全局的，无法表达"租户 A 只能用低价模型、租户 B 可用全部模型"。方案：控制面配置增加 `tenant → allowed models`，随现有 gRPC Get/Watch 下发；数据面在鉴权/路由阶段校验，越权返回 `403`；模型目录接口按白名单过滤。注意与限流、计量中已有的 tenant 维度对齐，避免出现三处租户配置口径不一致；
 - **`model` 为空的显式策略**：当前 `proxy.go` 中 model 为空时静默 fallback 到 `"default"`，会掩盖客户端 bug 且让路由行为不可预测。二选一：要么要求 `model` 必填（缺失返回 400），要么把默认模型作为控制面可配置项并显式记录到日志/指标（区分 "client-provided" 和 "defaulted"）；
 - **请求体 model 字段校验**：限制 `model` 字符串长度和字符集（防止把任意字符串灌进 Prometheus label 造成高基数，与 P1 业务校验项中的 "model 长度" 合并处理）；
@@ -524,14 +527,14 @@ downstream client
 - 限制 messages 数量、单条内容长度和 model 长度；
 - 严格解析 `Authorization: Bearer ...`，不接受任意前缀；**已完成**；
 - pprof 仅允许内部访问或单独保护；
-- 增加 `/livez` 和 `/readyz`，分别表示进程存活和依赖可用；
+- 增加 `/livez` 和 `/readyz`：Gateway 与 metering 的 `/livez`（以及原 `/healthz`）表示进程存活；Gateway `/readyz` 在没有路由时返回 503，限流 fail-closed 且 Redis 不可达时同样 503，fail-open 时 Redis 故障仍就绪并在正文标明 degraded；metering `/readyz` 要求 Redis 与 ledger 都可用，并已暴露 `/metrics`；
 - Redis、PG 故障策略显式配置并暴露指标；
 - Provider 被动健康探测、滑动窗口错误率和熔断；
 - Provider 恢复探测；
 - Provider 被摘除时停止新请求、等待在途流自然排水；
 - 支持按 Provider/model 配置真实价格，使用整数最小货币单位计算。
 - 计量 `Producer.replaySpool` 当前在 `spoolMu` 持锁期间执行 Redis 重放（受 2s flush 超时约束）；队列满时 `Enqueue` 的 spool 兜底路径会被同步阻塞，把计量故障传导为请求延迟毛刺。需要缩小持锁范围或把重放改为独立后台流程。
-- 计量 Consumer 名固定为 `consumer-1`。多实例部署时共享同名 consumer，会退化为共享 PEL + XAUTOCLAIM 打捞的伪并行消费，且不报错。需要改为实例级 consumer name（如 hostname+pid），并补多实例并行消费测试。
+- 计量 Consumer 名默认为 `hostname-pid`，也可用 `METERING_CONSUMER_NAME` 覆盖。同组内不同进程不再共享固定名 `consumer-1`。
 - 增加故障组合演练：Redis 故障（限流 fail-open）+ 突发流量叠加时，验证计量队列满、spool 溢出后计费事件的实际丢失量级；fail-open 期间限流保护与计费正确性会同时失效，不能仅按“超额流量”评估。
 - `control.writeServiceError` 用错误文案 `strings.Contains(err.Error(), "required")` 映射状态码，内部错误文案变化会误报为 400。改为 sentinel error + `errors.Is`，与项目其余错误处理风格保持一致。
 - 清理 `internal/proxy` 中定义后未使用的 `resolveRequestID` 死代码。

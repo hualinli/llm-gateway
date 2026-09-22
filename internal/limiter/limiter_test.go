@@ -2,10 +2,14 @@ package limiter
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
 	"time"
+
+	"llm-gateway/internal/auth"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -19,6 +23,34 @@ func TestLimiterFailOpenWithoutRedisButRejectsCanceledContext(t *testing.T) {
 	cancel()
 	if l.Allow(ctx, "test") {
 		t.Fatal("canceled request must not be allowed")
+	}
+}
+
+func TestFailClosedWithoutRedisRejectsImmediately(t *testing.T) {
+	l := New(nil, 10, 10, time.Second)
+	if err := l.SetOnRedisError("fail-closed"); err != nil {
+		t.Fatal(err)
+	}
+	if err := New(nil, 1, 1, 0).SetOnRedisError("sometimes"); err == nil {
+		t.Fatal("invalid policy was accepted")
+	}
+	start := time.Now()
+	allowed, unavailable := l.Decide(context.Background(), "k")
+	if allowed || !unavailable {
+		t.Fatalf("allowed=%v unavailable=%v", allowed, unavailable)
+	}
+	if time.Since(start) > 100*time.Millisecond {
+		t.Fatal("fail-closed waited in the limiter queue")
+	}
+	h := Middleware(l)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Fatal("downstream handler ran while the limiter was unavailable")
+	}))
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	req = req.WithContext(context.WithValue(req.Context(), auth.TenantKey, "tenant-a"))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
 

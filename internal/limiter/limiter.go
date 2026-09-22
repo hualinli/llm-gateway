@@ -2,8 +2,10 @@ package limiter
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"llm-gateway/internal/auth"
@@ -19,7 +21,16 @@ type Limiter struct {
 	burst int // 桶容量
 	// 等待上限：Burst 内超限时最多等多久，0 表示直接 429（蓝图里的有界排队）
 	queueTimeout time.Duration
+	// onRedisError is "open" or "closed". Open keeps Demo available when Redis
+	// is down; closed rejects the request so a production gateway cannot exceed
+	// its configured rate while the limiter is blind.
+	onRedisError string
 }
+
+const (
+	redisFailOpen   = "open"
+	redisFailClosed = "closed"
+)
 
 // New 创建限流器，rate/burst 按租户配；queueTimeout 建议 0 或 300-500ms
 func New(rdb *redis.Client, rate, burst int, queueTimeout time.Duration) *Limiter {
@@ -32,7 +43,26 @@ func New(rdb *redis.Client, rate, burst int, queueTimeout time.Duration) *Limite
 	if queueTimeout < 0 {
 		queueTimeout = 0
 	}
-	return &Limiter{rdb: rdb, rate: rate, burst: burst, queueTimeout: queueTimeout}
+	return &Limiter{rdb: rdb, rate: rate, burst: burst, queueTimeout: queueTimeout, onRedisError: redisFailOpen}
+}
+
+// SetOnRedisError selects what happens when Redis cannot answer.
+// Accepted values: open, fail-open, closed, fail-closed. Empty means open.
+func (l *Limiter) SetOnRedisError(policy string) error {
+	switch strings.ToLower(strings.TrimSpace(policy)) {
+	case "", "open", "fail-open":
+		l.onRedisError = redisFailOpen
+	case "closed", "fail-closed":
+		l.onRedisError = redisFailClosed
+	default:
+		return fmt.Errorf("invalid limiter redis policy %q", policy)
+	}
+	return nil
+}
+
+// FailClosed reports whether a Redis failure must reject traffic.
+func (l *Limiter) FailClosed() bool {
+	return l.onRedisError == redisFailClosed
 }
 
 // Lua：原子地 补充 + 尝试扣 1 个令牌
@@ -58,48 +88,84 @@ else
 end
 `
 
-func (l *Limiter) allowOnce(ctx context.Context, key string) (bool, error) {
+type decision int
+
+const (
+	decisionAllow decision = iota
+	decisionLimit
+	decisionUnavailable
+)
+
+func (l *Limiter) allowOnce(ctx context.Context, key string) decision {
 	select {
 	case <-ctx.Done():
-		return false, ctx.Err()
+		return decisionLimit
 	default:
 	}
 	if l.rdb == nil {
-		return true, nil // 本地无 Redis 时 fail-open，不阻塞开发
+		if l.onRedisError == redisFailClosed {
+			metrics.LimiterDependencyTotal.WithLabelValues("fail_closed").Inc()
+			return decisionUnavailable
+		}
+		return decisionAllow
 	}
 	res, err := l.rdb.Eval(ctx, luaAllow, []string{key}, l.rate, l.burst).Result()
 	if err != nil {
 		if ctx.Err() != nil {
-			return false, ctx.Err()
+			return decisionLimit
 		}
-		// Redis 故障时 fail-open 保可用（计量侧是 fail-spool 保正确性）
-		return true, nil
+		if l.onRedisError == redisFailClosed {
+			metrics.LimiterDependencyTotal.WithLabelValues("fail_closed").Inc()
+			return decisionUnavailable
+		}
+		metrics.LimiterDependencyTotal.WithLabelValues("fail_open").Inc()
+		return decisionAllow
 	}
 	n, _ := res.(int64)
-	return n == 1, nil
+	if n == 1 {
+		return decisionAllow
+	}
+	return decisionLimit
 }
 
-// Allow 尝试获取令牌，支持有界排队：Burst 超限时最多等 queueTimeout
-func (l *Limiter) Allow(ctx context.Context, key string) bool {
-	ok, _ := l.allowOnce(ctx, key)
-	if ok || l.queueTimeout == 0 {
-		return ok
+// Decide reports whether the request may proceed. unavailable is true when
+// the limiter cannot enforce its policy and is configured fail-closed.
+func (l *Limiter) Decide(ctx context.Context, key string) (allowed, unavailable bool) {
+	switch l.decide(ctx, key) {
+	case decisionAllow:
+		return true, false
+	case decisionUnavailable:
+		return false, true
+	default:
+		return false, false
 	}
-	// 有界排队：每 50ms 重试一次，直到超时或拿到令牌或 ctx 取消
+}
+
+func (l *Limiter) decide(ctx context.Context, key string) decision {
+	d := l.allowOnce(ctx, key)
+	if d != decisionLimit || l.queueTimeout == 0 {
+		return d
+	}
 	deadline := time.Now().Add(l.queueTimeout)
 	for time.Now().Before(deadline) {
 		timer := time.NewTimer(50 * time.Millisecond)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
-			return false
+			return decisionLimit
 		case <-timer.C:
 		}
-		if ok, _ := l.allowOnce(ctx, key); ok {
-			return true
+		d = l.allowOnce(ctx, key)
+		if d != decisionLimit {
+			return d
 		}
 	}
-	return false
+	return decisionLimit
+}
+
+// Allow 尝试获取令牌，支持有界排队：Burst 超限时最多等 queueTimeout
+func (l *Limiter) Allow(ctx context.Context, key string) bool {
+	return l.decide(ctx, key) == decisionAllow
 }
 
 // Middleware 按租户限流，放在 auth 之后、proxy 之前
@@ -118,9 +184,14 @@ func Middleware(l *Limiter) func(http.Handler) http.Handler {
 			}
 			key := "ratelimit:tenant:" + tenant
 			start := time.Now()
-			ok := l.Allow(r.Context(), key)
+			allowed, unavailable := l.Decide(r.Context(), key)
 			wait := time.Since(start)
-			if !ok {
+			if unavailable {
+				w.Header().Set("Retry-After", "1")
+				http.Error(w, "rate limiter unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			if !allowed {
 				metrics.LimiterLimited.WithLabelValues(tenant).Inc()
 				if wait >= 50*time.Millisecond {
 					metrics.LimiterQueueWait.WithLabelValues(tenant).Observe(wait.Seconds())

@@ -3,15 +3,19 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"llm-gateway/internal/metering"
 	"llm-gateway/internal/observability"
+	"llm-gateway/internal/ready"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -26,7 +30,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("create ledger: %v", err)
 	}
-	consumer := metering.NewConsumer(rdb, ledger)
+	consumerOpts := metering.ConsumerOptions{}
+	if name := os.Getenv("METERING_CONSUMER_NAME"); name != "" {
+		consumerOpts.Name = name
+	}
+	consumer := metering.NewConsumerWithOptions(rdb, ledger, consumerOpts)
+	log.Printf("metering consumer name=%s", consumer.Name())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -34,8 +43,21 @@ func main() {
 
 	// 对账/查询接口，演示 W3 验收
 	mux := http.NewServeMux()
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("ok\n"))
+	mux.Handle("/metrics", promhttp.Handler())
+	mux.HandleFunc("/healthz", ready.Live)
+	mux.HandleFunc("/livez", ready.Live)
+	mux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), 200*time.Millisecond)
+		defer cancel()
+		var redisErr error
+		if err := rdb.Ping(ctx).Err(); err != nil {
+			redisErr = fmt.Errorf("redis: %w", err)
+		}
+		var ledgerErr error
+		if _, err := ledger.Count(); err != nil {
+			ledgerErr = fmt.Errorf("ledger: %w", err)
+		}
+		ready.Write(w, ready.Dependencies(redisErr, ledgerErr))
 	})
 	mux.HandleFunc("/ledger/count", func(w http.ResponseWriter, r *http.Request) {
 		count, err := ledger.Count()

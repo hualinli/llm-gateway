@@ -46,6 +46,16 @@ var (
 		Buckets: []float64{.01, .05, .1, .2, .3, .5},
 	}, []string{"tenant"})
 
+	LimiterDependencyTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "limiter_dependency_total",
+		Help: "Limiter decisions taken because Redis was missing or unreachable",
+	}, []string{"result"})
+
+	ActiveStreamsRejectedTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "gateway_active_streams_rejected_total",
+		Help: "Requests rejected because the gateway active stream limit was reached",
+	})
+
 	// 上游
 	ProviderRetryTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "provider_retry_total",

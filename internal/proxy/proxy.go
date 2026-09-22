@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"llm-gateway/internal/auth"
@@ -26,6 +28,9 @@ type Handler struct {
 	registry     *provider.Registry
 	producer     eventProducer
 	writeTimeout time.Duration
+	// maxActive is the concurrent chat-stream cap. Zero means unlimited.
+	maxActive atomic.Int32
+	inflight  atomic.Int32
 }
 
 const defaultDownstreamWriteTimeout = 30 * time.Second
@@ -36,6 +41,15 @@ func NewHandler(r *provider.Registry, p eventProducer) *Handler {
 		producer:     p,
 		writeTimeout: defaultDownstreamWriteTimeout,
 	}
+}
+
+// SetMaxActiveStreams caps concurrent chat streams. Zero disables the cap.
+// Requests above the cap are rejected with 503 before the body is read.
+func (h *Handler) SetMaxActiveStreams(n int) {
+	if n < 0 {
+		n = 0
+	}
+	h.maxActive.Store(int32(n))
 }
 
 // countingWriter 用来判断"是否已向下游写过字节"，
@@ -84,14 +98,21 @@ func (c *countingWriter) Flush() {
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	tenant := auth.TenantFromContext(r.Context())
-	metrics.ActiveStreams.Inc()
-	defer metrics.ActiveStreams.Dec()
 
 	if r.Method != http.MethodPost {
 		metrics.RequestsTotal.WithLabelValues(tenant, "", "405").Inc()
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	release, ok := h.admit()
+	if !ok {
+		metrics.ActiveStreamsRejectedTotal.Inc()
+		metrics.RequestsTotal.WithLabelValues(tenant, "", "503").Inc()
+		w.Header().Set("Retry-After", "1")
+		http.Error(w, "too many active streams", http.StatusServiceUnavailable)
+		return
+	}
+	defer release()
 
 	requestID := observability.RequestID(r.Context())
 	var err error
@@ -131,8 +152,16 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `only streaming requests are supported (set "stream": true)`, http.StatusBadRequest)
 		return
 	}
-	if model == "" {
-		model = "default"
+	model, err = normalizeModel(model)
+	if err != nil {
+		metrics.RequestsTotal.WithLabelValues(tenant, "", "400").Inc()
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if !h.registry.HasModel(model) {
+		metrics.RequestsTotal.WithLabelValues(tenant, model, "404").Inc()
+		http.Error(w, fmt.Sprintf("unknown model %q; see GET /v1/models", model), http.StatusNotFound)
+		return
 	}
 	providers := h.registry.ProvidersFor(model)
 	if len(providers) == 0 {
@@ -282,6 +311,44 @@ func extractModelStream(body []byte) (model string, stream bool) {
 		return "", false
 	}
 	return p.Model, p.Stream != nil && *p.Stream
+}
+
+func (h *Handler) admit() (func(), bool) {
+	max := h.maxActive.Load()
+	if max > 0 {
+		for {
+			cur := h.inflight.Load()
+			if cur >= max {
+				return nil, false
+			}
+			if h.inflight.CompareAndSwap(cur, cur+1) {
+				metrics.ActiveStreams.Inc()
+				return func() {
+					h.inflight.Add(-1)
+					metrics.ActiveStreams.Dec()
+				}, true
+			}
+		}
+	}
+	metrics.ActiveStreams.Inc()
+	return func() { metrics.ActiveStreams.Dec() }, true
+}
+
+const maxModelBytes = 128
+
+func normalizeModel(model string) (string, error) {
+	if model == "" {
+		model = "default"
+	}
+	if len(model) > maxModelBytes {
+		return "", errors.New("model is too long")
+	}
+	for _, r := range model {
+		if r < 0x20 || r == 0x7f {
+			return "", errors.New("model contains control characters")
+		}
+	}
+	return model, nil
 }
 
 // clientStatus 把上游错误映射为回给客户端的状态码。

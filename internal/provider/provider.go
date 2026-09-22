@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"reflect"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -199,6 +200,28 @@ func (r *Registry) ProvidersFor(model string) []Provider {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return append([]Provider(nil), r.routes[model]...)
+}
+
+// HasModel reports whether the current snapshot contains the model, even if
+// its provider list is empty. Callers use it to distinguish an unknown model
+// from a known model whose providers are all unavailable.
+func (r *Registry) HasModel(model string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	_, ok := r.routes[model]
+	return ok
+}
+
+// Models returns the configured model names in sorted order.
+func (r *Registry) Models() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	names := make([]string, 0, len(r.routes))
+	for name := range r.routes {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // UpdateRoutes 热更全量路由，routes: model -> provider names。
