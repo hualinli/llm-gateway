@@ -3,7 +3,7 @@ name: llm-gateway-tests
 
 services:
   redis:
-    image: redis:7
+    image: redis:7.4.11
     ports:
       - "127.0.0.1:16379:6379"
     command: ["redis-server", "--save", "", "--appendonly", "no"]
@@ -16,7 +16,7 @@ services:
       retries: 30
 
   postgres:
-    image: postgres:16
+    image: postgres:16.15
     ports:
       - "127.0.0.1:15433:5432"
     environment:
