@@ -12,18 +12,21 @@ import (
 // AuditEvent intentionally contains only non-sensitive metadata. In
 // particular, raw API keys and key hashes must never be added to this type.
 type AuditEvent struct {
-	Time          time.Time
-	Action        string
-	Outcome       string
-	Subject       string
-	Role          Role
-	TenantID      string
-	KeyID         string
-	RequestID     string
-	TraceID       string
-	ConfigVersion int64
-	KeyCount      int
-	Error         string
+	Time              time.Time
+	Action            string
+	Outcome           string
+	Subject           string
+	Role              Role
+	TenantID          string
+	KeyID             string
+	RequestID         string
+	TraceID           string
+	ConfigVersion     int64
+	KeyCount          int
+	Error             string
+	CredentialID      string
+	ProviderID        string
+	GatewayInstanceID string
 }
 
 type AuditSink interface {
@@ -75,14 +78,16 @@ func (s *MemoryAuditSink) Events() []AuditEvent {
 type LogAuditSink struct{}
 
 func (LogAuditSink) Record(_ context.Context, event AuditEvent) {
-	log.Printf("audit action=%s outcome=%s subject=%s role=%s tenant_id=%s key_id=%s request_id=%s trace_id=%s config_version=%d key_count=%d",
+	log.Printf("audit action=%s outcome=%s subject=%s role=%s tenant_id=%s key_id=%s credential_id=%s provider_id=%s gateway_instance_id=%s request_id=%s trace_id=%s config_version=%d key_count=%d",
 		event.Action, event.Outcome, event.Subject, event.Role, event.TenantID, event.KeyID,
+		event.CredentialID, event.ProviderID, event.GatewayInstanceID,
 		event.RequestID, event.TraceID, event.ConfigVersion, event.KeyCount)
 }
 
 func safeAuditError(value string) string {
 	switch value {
-	case "authorization failed", "request canceled", "key generation failed", "key ID generation failed", "configuration persistence failed", "configuration read failed", "key ID missing", "tenant scope denied", "key not found":
+	case "authorization failed", "request canceled", "key generation failed", "key ID generation failed", "configuration persistence failed", "configuration read failed", "key ID missing", "tenant scope denied", "key not found",
+		CodeInvalidCredential, CodeUnsupportedCredentialRef, CodeCredentialNotFound, CodeCredentialRevoked, CodeCredentialProviderMismatch, CodeCredentialInUse, CodeCredentialUnavailable:
 		return value
 	default:
 		if value == "" {

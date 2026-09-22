@@ -6,26 +6,30 @@
 
 > 后续工作的统一优先级、阶段目标、系统不变量和 Agent 协作方式见 [项目演进路线图](docs/PROJECT-ROADMAP.md)。
 
-> **项目当前定位**：架构骨架和本地 Demo 已经可运行，但还不是生产级多 Provider 网关。本文将“已完成”“当前限制”和“待做项”明确分开，所有性能和可靠性结论都以实际测试数据为准，不以设计目标冒充实现结果。
+> **当前事实源**：截至 2026-09-22 的已完成功能、已关闭问题、剩余风险和验证结果见 [项目状态与问题清单](docs/PROJECT-STATUS.md)。本文后半部分保留了较多设计背景；判断当前完成度时以状态清单为准。
+
+> **项目当前定位**：核心服务已可由 Compose 一次启动，两个进程外 Mock 由操作者按需手工启动；热更新 Provider/路由、租户 Key、流式请求、首事件前切备和最终入账已跑通。项目仍是生产导向原型，不是生产级多 Provider 网关。
 
 ## 项目状态概览
 
 | 领域 | 当前状态 | 说明 |
 |---|---|---|
-| Gateway 基础链路 | 已完成基础闭环 | 鉴权 → 限流 → SSE 代理 → 异步计量可以本地跑通 |
-| SSE 故障切换边界 | 已完成基础实现 | 首事件前可切备，首事件后不重放；OpenAI adapter 已有首事件/流式超时，Proxy 级背压仍待做 |
-| Provider | OpenAI-compatible；Demo 走进程外 mock | 控制面已下发 protocol/url/credential_ref；`cmd/upstream-mock` 已进 main；Anthropic 和更完整治理仍待做 |
-| 限流 | 已完成基础实现 | Redis Lua 令牌桶和有界轮询等待；Redis 故障默认 fail-open，可用 `LIMITER_ON_REDIS_ERROR=closed` 改为拒绝 |
-| 计量 | 已完成基础链路 | Redis Stream、Consumer Group、PG 唯一约束和基础 DLQ 已有；仍可能丢事件，对账口径也需重做 |
-| 控制面 | 已完成一致性基础 | gRPC Get/Watch、版本持久化、重连补拉、周期性校验和可选租约已有；TLS/mTLS 已支持配置，管理面鉴权仍待做 |
-| 管理后台 | 尚未接入主线 | Hertz IDL/生成代码曾在 `wip/management-hertz`，handlers 仍为空；计划实现用户/管理员 CRUD 和安全接线 |
-| 可观测性 | 已完成基础实现 | Prometheus 指标、pprof、基础 Grafana Dashboard 已有 |
-| 压测 | 已完成基础工具 | 能统计 SSE TTFT/总耗时分位数；还没有足够可信的压测报告和完整抖动指标 |
-| 生产安全性 | 待做 | 明文 API Key、insecure gRPC、未鉴权管理面、默认账号密码等问题尚未解决 |
+| Gateway 基础链路 | ✅ 已完成基础闭环 | 鉴权 → 限流 → SSE 代理 → 异步计量已在 Compose 全链路跑通 |
+| SSE 故障切换边界 | ✅ 已完成核心语义 | 首事件前可切备，首事件后不重放；客户端取消、首事件和流式超时已有测试；慢客户端实网证据仍缺失 |
+| Provider | 🟡 单协议可用 | OpenAI-compatible、动态 protocol/url/credential_ref 和进程外 mock 已完成；第二协议不是当前阻断项 |
+| 限流 | 🟡 基础实现完成 | Redis Lua 令牌桶、有界轮询、fail-open/fail-closed 和全局活跃流上限已有；动态租户策略和高并发故障实验未完成 |
+| 计量 | 🟡 基础闭环完成 | 独立 event ID、Redis Stream、spool、PG 幂等、DLQ、pending 接管和事件级对账已有；Consumer 自愈、保留策略和大规模恢复仍缺失 |
+| 控制面 | 🟡 一致性基础完成 | Get/Watch、PG 版本、原子 patch、防回退、TLS/mTLS、管理认证和 Gateway applied/rejected 回报已有；聚合 active 语义和报告时效未完成 |
+| 凭据管理 | ✅ 第一版完成 | `/keys` Create/List/Revoke、admin/tenant-user 授权核心和 PG 审计已有；正式身份签发/轮换流程未完成 |
+| 可观测性 | 🟡 基础实现完成 | Prometheus 已抓 Gateway/Metering，基础 Dashboard 已有；告警和指标口径仍需完善 |
+| 测试 | ✅ 当前回归通过 | 143 个测试；2026-09-22 普通 race、vet、build 和 Redis/PostgreSQL 集成测试通过 |
+| Demo 与 CI | 🟡 Demo v0 可运行 | `demo-up/config/smoke/down` 已接线，Mock 刻意保持手工启停；自动故障编排、连续证据和 CI 尚未完成 |
+| 性能证据 | ⬜ 未完成 | 有 SSE 压测工具，没有直连基线、容量拐点、资源上界和正式报告 |
+| 生产安全性 | 🟡 Compose 已收紧一部分 | Compose 强制 PG、管理认证、fail-closed 和活跃流上限；gRPC 仍为 insecure，诊断/计量查询端点仍公开，直接运行二进制仍有宽松回退默认值 |
 
 当前更准确的简历定位是：
 
-> 使用 Go 实现了一个生产导向的 LLM 流式网关原型，完成了基础数据面、控制面、异步计量和可观测性闭环；后续重点是补齐真实 Provider、可靠性、安全性和可验证的性能数据。
+> 使用 Go 实现了一个生产导向的 LLM 流式网关原型，完成了 OpenAI-compatible 流式数据面、版本化控制面、异步计量和可运行 Demo v0；后续重点是可靠性恢复、自动化故障场景、CI、安全默认值和可验证的性能数据。
 
 ---
 
@@ -147,7 +151,7 @@
 
 - 当前真实 adapter 只有 OpenAI-compatible，Anthropic 尚未实现；
 - `Registry.UpdateRoutes` 现在要求 Provider 通过实例或显式 factory 注册，未知名称会拒绝整版路由更新，不再自动创建 Mock；
-- Gateway 通过 `OPENAI_BASE_URL` 注册 OpenAI factory，控制面路由可以引用对应 Provider ID；
+- Gateway 不在启动参数中注册任何业务 Provider；Provider 实例和路由只由控制面版本化快照创建；
 - 路由配置应用失败时，Gateway 仍会优先撤销新快照中不存在的旧 key；
 - 当前 cost 计算仍是演示用的 `1 token = 1 分`，没有按 Provider/model 配置真实价格。
 
@@ -196,9 +200,9 @@
 - 网关为每次执行生成独立 `evt_` ID，使用 `EventID` / `event_id` 标识计量事件；客户端 ID 单独保存在 `client_request_id`，重复调用分别计费，事件重投递去重；
 - 升级计量字段时应先停止旧版 Gateway/Consumer，再启动新版；先执行 `make migrate-up` 将 PG 台账列 `request_id` 重命名为 `event_id`，然后启动新版服务，保留原 ID 和账单。旧 Redis/spool JSON 仅在读取入口接受 `request_id`，新写入统一为 `event_id`；不支持新旧程序混跑。缺失或冲突 ID 会拒绝解析，Consumer 转入死信队列，spool 隔离原始记录。
 - `X-Request-ID` 现在会校验长度和字符集；未提供时由 Gateway 生成，并通过响应头返回；Gateway 同时返回 `X-Trace-ID` 并解析 W3C `traceparent`；
-- `Reconcile` 已改为事件级比较并报告 duplicate/pending/DLQ/具体差异；仍未覆盖历史归档、超大 Stream 分页和完整 PG 集成场景；
+- `Reconcile` 已改为事件级比较并报告 duplicate/pending/DLQ/具体差异，真实 PG 往返集成已验证；仍未覆盖历史归档、超大 Stream 分页和时间窗口对账；
 - Ledger 的 Count/Balance 查询错误现在会向上返回，HTTP 接口返回 503；
-- `METERING_REQUIRE_POSTGRES=true` 时 PostgreSQL 不可用会阻止 metering 启动；默认 Demo 模式仍允许回退内存，重启会丢失台账。
+- `METERING_REQUIRE_POSTGRES=true` 时 PostgreSQL 不可用会阻止 metering 启动；Compose 已强制开启。直接运行二进制的宽松默认仍允许回退内存，重启会丢失台账。
 
 因此当前可以说“短时突发和 Redis 故障下的计量恢复能力已增强”，但仍不能说“计量事件绝对不丢”或“对账一致率 100%”：进程被强制终止时尚未落盘的内存队列、spool 满盘/写失败以及 Redis Stream retention 仍是边界。
 
@@ -220,20 +224,20 @@
 
 当前限制：
 
-- `/config` 管理接口没有认证和授权；
+- `/config` 和 `/gateways` 已支持 admin Bearer 认证；Compose 已强制开启并提供仅用于本地演示的默认 token。直接运行二进制时生产部署必须显式设置 `CONTROL_REQUIRE_ADMIN_AUTH=true` 和强 token；
 - 本地 Demo 默认使用 insecure credentials；TLS/mTLS 已有可配置实现，生产部署必须提供证书并开启校验；
-- 新配置已使用 `KeyRecord` 的 hash/metadata，不再写入 raw API key；PGStore 启动时会在事务内迁移旧历史 payload，仍需补充真实 PG 集成演练；
+- 新配置已使用 `KeyRecord` 的 hash/metadata，不再写入 raw API key；PGStore 启动时会在事务内迁移旧历史 payload，真实 PG 集成测试已完成第一版；
 - `/config` GET 已返回 key hash prefix，不再返回明文 API key；
 - watcher channel 现在会保留最新快照，不再简单丢弃后续版本；仍需增加慢连接和生产网络故障注入测试；
 - ApplyConfig 现在串行化版本生成；
 - 不存在的 Provider 现在会拒绝整版路由更新；
-- Provider 配置现在随版本化快照下发：`providers` 按 ID 保存 `protocol`（`openai-compatible` 或 `mock`）、URL、`credential_ref`、模型映射和连接/首块/空闲/尝试超时；`routes` 仍保持 `model -> ordered provider IDs`；
-- Gateway 收到快照后会先校验并构建完整 Provider/路由快照，再一次性发布。任意 Provider 配置无效时保留旧快照；同 ID 且配置未变的实例复用，配置变化会重建，旧 OpenAI transport 只关闭空闲连接，因此在途 SSE 继续使用旧实例；
-- 第一版上游凭据只支持本地 `credential_ref` 解析（默认 `env://ENV_NAME` / `env:ENV_NAME`，也可注入部署侧 resolver），控制面不接收或持久化原始密钥；形如 `sk-` 的引用会被拒绝；
-- `/config` 对非法 Provider/凭据快照返回 400；版本冲突返回 409；
+- Provider 配置现在随版本化快照下发：`providers` 按 ID 保存 `protocol`（业务配置仅接受 `openai-compatible`）、URL、`credential_ref`、模型映射和连接/首块/空闲/尝试超时；`routes` 仍保持 `model -> ordered provider IDs`；
+- Gateway 收到快照后会先校验并构建完整 Provider/路由快照，再一次性发布。任意 Provider 配置无效或凭据解析失败时保留旧快照；同 ID 且配置未变的实例复用，引用变化会重建，旧 OpenAI transport 只关闭空闲连接，因此在途 SSE 继续使用旧实例；
+- Provider 密钥只来自 Control 的 `provider_credentials` 表。管理 API 创建 `control://provider-credentials/<id>` 引用，Gateway 在应用快照时通过内部 gRPC 解析一次，明文只留在 Provider 进程内存。`env://` 不再是业务凭据方案；
+- `/config` 对非法 Provider/凭据快照返回 400；版本冲突和仍被引用的凭据撤销返回 409；
 - `/config` 返回的 `result=persisted` 只表示控制面已记下 desired 版本，不表示任何 Gateway 已经应用；各实例的 applied/rejected 由 Gateway 通过 `ReportGatewayStatus` 回报，`GET /gateways` 可查看。这份回报在控制面进程内存里，重启后要等 Gateway 再次上报；
-- 空库启动时会种入 `primary` / `backup`，默认指向本机 `cmd/upstream-mock`（`:18080` / `:18081`）；Gateway 不再预置内嵌 mock 实例；
-- `CONTROL_REQUIRE_POSTGRES=true` 时 PostgreSQL 不可用会拒绝启动；默认 Demo 模式仍允许回退内存，生产环境必须开启该选项。
+- 空库启动保持空配置；Gateway 和 Control 都不会预置 Provider，更不会把失败流量暗中切到内嵌 Mock；
+- `CONTROL_REQUIRE_POSTGRES=true` 时 PostgreSQL 不可用会拒绝启动；Compose 已强制开启。直接运行二进制的宽松默认仍允许回退内存，生产环境必须开启该选项。
 
 ### 2.7 可观测性和压测工具
 
@@ -252,21 +256,24 @@
 
 当前限制：
 
-- 压测器每个请求创建一个新的 `http.Client`，连接池复用不理想；
+- `cmd/loadtest` 当前每个请求创建一个 Worker/client；底层仍使用共享 DefaultTransport，但工具本身缺少显式连接池参数、连接统计和分阶段诊断；
 - 没有统计 chunk 间隔抖动；
-- EOF 但没有 `[DONE]` 时，压测器可能把截断流误判为成功；
+- EOF 但没有 `[DONE]` 时已判为失败；仍缺少按断流原因分类和结构化错误明细；
 - 没有输出结构化 JSON 报告；
 - 没有和直连 Provider 的基准对比；
 - tenant/model 直接作为 Prometheus label，需限制高基数；
+- Prometheus 已抓取 Metering；Dashboard 仍未完整展示 spool、DLQ、pending 和 ledger failure；
 - 尚未形成 1 万并发、P95 额外延迟或固定内存上限的可信实测结果。
 
 ---
 
 ## 3. 待做事项与为什么要做
 
-以下按优先级排序。P0 是正确性、安全和核心协议问题；P1 是真实功能和可靠性增强；P2 是工程化和求职展示材料。
+> 本节包含早期设计拆解，已完成项直接标注在条目中，不再作为当前执行队列。当前优先级和未完成问题以 [项目状态与问题清单](docs/PROJECT-STATUS.md)及[路线图](docs/PROJECT-ROADMAP.md)为准。
 
-### P0：补齐真实 Provider adapter 与 Provider 配置
+以下按问题域保留设计背景。P0/P1/P2 是当时的分级，不代表 2026-09-22 的当前顺序。
+
+### 历史 P0：真实 Provider adapter 与 Provider 配置（OpenAI-compatible 主线已完成）
 
 **当前进度**：OpenAI-compatible HTTP adapter、控制面动态 Provider 配置、进程外 `cmd/upstream-mock` 已进 main。运行时这一刀也已落地：未知模型 404、`GET /v1/models`、限流 Redis 故障策略、Gateway 活跃流上限、metering 实例级 consumer、`/livez` 与 `/readyz`。下一步是证据（CI、一份 mock 压测记录、Redis 短断后的 spool 恢复），不要先做 Anthropic、按租户模型白名单或成员账单。
 
@@ -279,7 +286,7 @@
 - 已完成 OpenAI usage 流尾解析；
 - 已完成上游错误解析和 Retryable 分类；
 - 已完成基于 `httptest.Server` 的基础契约测试；
-- 待做 Anthropic adapter。Provider 配置从控制面下发、凭据引用已完成第一版。
+- 第二协议 adapter（例如 Anthropic）尚未实现，但已推迟到 Demo v1 和核心闭环稳定之后；Provider 配置下发与凭据引用第一版已完成。
 
 **为什么做**：
 
@@ -550,7 +557,7 @@ downstream client
 - 输出 JSON 格式报告；
 - 做直连 Provider 与 Gateway 的 overhead 对比；
 - 记录 pprof、内存、GC、CPU 和连接数；
-- 为 Docker Compose 增加 Gateway、Control、Metering 服务、健康检查、secrets 和 Grafana datasource provisioning；
+- Docker Compose 的 Gateway、Control、Metering、迁移与健康检查已完成；secrets 和 Grafana datasource provisioning 尚未完成；
 - 增加 CI：`go test`、`go vet`、`go test -race`、`go build`、集成测试；
 - 只在有测试产物后填写“万级并发”“P95 小于 2ms”等性能结论。
 
@@ -896,44 +903,56 @@ git diff --check
 
 ## 5. 本地运行
 
-### 5.1 启动基础设施
+### 5.1 五分钟 Demo
 
 ```bash
-docker compose up -d
-```
-
-当前 Compose 主要提供：
-
-- Redis：`localhost:6379`
-- PostgreSQL：`localhost:5433`
-- Prometheus：`localhost:9090`
-- Grafana：`localhost:3000`
-
-先显式执行数据库迁移（连接地址须与服务使用的 `POSTGRES_DSN` 一致）：
-
-```bash
-export POSTGRES_DSN='postgres://gateway:gateway@localhost:5433/llm_gateway?sslmode=disable'
-make migrate-up
-make migrate-version
-```
-
-迁移采用 golang-migrate，SQL 位于 [migrations](migrations/README.md)。服务只检查 schema 版本，不自动建表/改表；缺少迁移或 dirty 状态会阻止 PG 服务启动，不会因 schema 错误回退内存。业务查询 SQL 位于 `internal/control/queries/` 和 `internal/metering/queries/`，通过 `go:embed` 打包，不依赖运行目录。
-
-Gateway、Control、Metering 和假上游当前需要单独启动。建议按以下顺序：
-
-```bash
-# terminal 1-2: OpenAI-compatible fake upstreams
+# terminal 1-2：Mock 是普通外部 OpenAI-compatible 服务，按需手工启动
 make mock-primary
 make mock-backup
 
-# terminal 3
-go run ./cmd/control
+# terminal 3：构建并启动 PostgreSQL、Redis、迁移、Control、Metering、Gateway
+make demo-up
 
-# terminal 4
-go run ./cmd/metering
+# 热更新两个 Provider、默认路由和一个租户 Key
+make demo-config
 
-# terminal 5
-go run ./cmd/gateway
+# 验证主 Provider、完整 SSE 和最终入账
+make demo-smoke
+```
+
+`demo-config` 会把一次性 raw key 写入 `data/demo-api-key`（权限 `0600`），并输出主流 Chat 客户端可填写的 OpenAI-compatible Base URL：`http://localhost:8090/v1`。Gateway 启动时没有 Provider；在配置成功前 `/livez` 为 200、`/readyz` 为 503。
+
+要观察故障语义，先在对应终端停止 Mock，再执行：
+
+```bash
+# 只停止 primary：请求应由 backup 完成并入账
+make demo-smoke-backup
+
+# 再停止 backup：请求应明确返回 502，不会暗中切到内嵌 Mock
+make demo-smoke-unavailable
+```
+
+停止核心服务不会删除数据卷；清理数据必须显式执行破坏性入口：
+
+```bash
+make demo-down
+make demo-clean  # 显式删除 PostgreSQL、Redis、Grafana 和 spool 卷
+```
+
+默认 Compose 提供：
+
+- Redis：`localhost:6379`
+- PostgreSQL：`localhost:5433`
+- Control gRPC/HTTP：`localhost:50051` / `localhost:50052`
+- Gateway：`localhost:8090`
+- Metering：`localhost:8091`
+
+迁移是 Compose 中的一次性服务，业务服务只会在迁移成功后启动。SQL 位于 [migrations](migrations/README.md)；服务不会因 schema 错误回退内存。业务查询通过 `go:embed` 打包，不依赖运行目录。
+
+Prometheus/Grafana 是可选 profile，避免占用常见的 `9090/3000` 端口：
+
+```bash
+make demo-observability
 ```
 
 默认服务：
@@ -946,8 +965,8 @@ go run ./cmd/gateway
 | Control HTTP demo admin | `localhost:50052` |
 | Fake upstream primary | `localhost:18080` |
 | Fake upstream backup | `localhost:18081` |
-| Prometheus | `localhost:9090` |
-| Grafana | `localhost:3000` |
+| Prometheus（可选） | `localhost:9090` |
+| Grafana（可选） | `localhost:3000` |
 
 环境变量：
 
@@ -964,6 +983,8 @@ CONTROL_TLS_CLIENT_CERT_FILE='' # Gateway mTLS 客户端证书
 CONTROL_TLS_CLIENT_KEY_FILE=''
 CONTROL_TLS_SERVER_NAME='' # Gateway 校验证书时的 ServerName
 CONTROL_TLS_REQUIRE_CLIENT_CERT=false
+PROVIDER_CREDENTIAL_MASTER_KEY_FILE=/run/secrets/provider-credential-master-key # base64 编码的 32 字节集群主密钥；不要用环境变量传递明文
+CONTROL_ALLOW_INSECURE_CREDENTIAL_RESOLVE=false # 仅本地 Demo 可设为 true；生产解析必须走 mTLS
 CONTROL_ADMIN_TOKEN='' # 管理面 admin Bearer token；生产配合下方 require 开关
 CONTROL_REQUIRE_ADMIN_AUTH=false # 生产建议 true；未配置 token 时拒绝启动
 CONTROL_IDENTITY_SIGNING_SECRET='' # 可选；>=32 字节，用于 tenant-user signed identity token
@@ -973,25 +994,23 @@ METERING_SPOOL_DIR='./data/metering-spool' # 可选；Redis 故障时本地持�
 CONTROL_REQUIRE_POSTGRES=false # 生产建议 true；PG 不可用时拒绝启动 control
 # 正式模式（开启 CONTROL_REQUIRE_ADMIN_AUTH 或 CONTROL_REQUIRE_POSTGRES）拒绝 /config 的 legacy keys；仅本地 Demo 兼容
 METERING_REQUIRE_POSTGRES=false # 生产建议 true；PG 不可用时拒绝启动 metering
-UPSTREAM_PRIMARY_URL='http://127.0.0.1:18080' # 控制面空库种入的主上游
-UPSTREAM_BACKUP_URL='http://127.0.0.1:18081' # 控制面空库种入的备上游
-
-# 可选：注册一个 OpenAI-compatible Provider
-OPENAI_BASE_URL='https://api.openai.com'
-OPENAI_API_KEY='replace-me'
-OPENAI_PROVIDER_ID='openai'
-OPENAI_MODEL='' # 可选；为空时保留客户端 model
 ```
 
-设置 `OPENAI_BASE_URL` 后，Gateway 会显式注册一个名为 `OPENAI_PROVIDER_ID` 的兼容 Provider。也可以直接通过控制面配置动态创建 Provider；上游密钥使用 Gateway 本地的 `credential_ref` 解析，不放进控制面配置：
+Gateway 不读取 `OPENAI_BASE_URL` 或 Provider ID 来创建业务路由。所有 Provider 都必须通过控制面动态配置。需要鉴权的上游密钥先写入 Control 凭据仓库，配置里只放 `credential_ref`：
 
 ```bash
-curl -X POST http://localhost:50052/config \
-  -H 'Content-Type: application/json' \
-  -d '{"providers":{"openai":{"id":"openai","protocol":"openai-compatible","url":"https://api.openai.com","credential_ref":"env://OPENAI_API_KEY"}},"routes":{"default":["openai"]}}'
+umask 077
+printf '%s' "$OPENAI_API_KEY" > /tmp/openai-key
+chmod 600 /tmp/openai-key
+go run ./cmd/democtl credential-create -provider openai -secret-file /tmp/openai-key
+rm /tmp/openai-key
+go run ./cmd/democtl provider-apply -id openai -url https://api.openai.com \
+  -credential-ref 'control://provider-credentials/pcred_...' -route default
 ```
 
-`credential_ref` 默认支持 `env://ENV_NAME` 和 `env:ENV_NAME`；部署侧可以通过 `NewRegistryWithOptions` 注入 Vault/KMS 等本地解析器。Provider 配置还支持 `model_mapping`、`mock_delay_ms` 和 `timeouts`（各阶段毫秒值：`connect_timeout_ms`、`tls_handshake_timeout_ms`、`response_header_timeout_ms`、`first_byte_timeout_ms`、`idle_timeout_ms`、`attempt_timeout_ms`、`max_event_bytes`）。
+`credential-create` 从文件或 stdin 读取 secret，标准输出只有 credential id、引用和指纹。轮换时创建新凭据、`provider-apply` 切到新引用，等 Gateway applied 后再 `credential-revoke -id <旧 id>`。当前配置仍引用该凭据时撤销返回 409。空 `credential_ref` 只适用于明确不需要鉴权的 Provider。集群主密钥由 `make demo-up` 在 `data/provider-credential-master-key` 生成一次并复用；生产环境把同一文件挂载为 Docker/Kubernetes Secret，不要为每个 Provider 改部署配置。
+
+Provider 配置还支持 `model_mapping` 和 `timeouts`（各阶段毫秒值：`connect_timeout_ms`、`tls_handshake_timeout_ms`、`response_header_timeout_ms`、`first_byte_timeout_ms`、`idle_timeout_ms`、`attempt_timeout_ms`、`max_event_bytes`）。
 
 本地调试也可以把控制面指到进程外假上游，而不是内嵌 `protocol: mock`。假上游讲真实的 OpenAI-compatible SSE，TTFT、出字间隔、故障都在它自己的进程上调：
 
@@ -1000,13 +1019,14 @@ make mock-primary   # :18080，TTFT 20ms
 make mock-backup    # :18081，TTFT 80ms
 
 curl -X POST http://localhost:50052/config \
+  -H 'Authorization: Bearer demo-control-token' \
   -H 'Content-Type: application/json' \
   -d '{"providers":{"primary":{"id":"primary","protocol":"openai-compatible","url":"http://127.0.0.1:18080"},"backup":{"id":"backup","protocol":"openai-compatible","url":"http://127.0.0.1:18081"}},"routes":{"default":["primary","backup"]}}'
 ```
 
-`cmd/upstream-mock` 支持 `-ttft`、`-token-interval`、`-tokens`、`-status`、`-hang`、`-fail-after`、`-max-inflight`、`-echo`。默认丢弃请求正文，按 `-name` 循环吐假 token。`-echo` 则先写 `{name} sha256=<raw body>`，再把 `messages` 文本按 `-tokens` 切开回放，用来核对网关有没有把请求完整转到上游。Gateway 把它当成普通 HTTP Provider。控制面空库默认种入 `primary`/`backup` 指向这两端口；Gateway 启动时不再预置内嵌 mock 实例，未同步到控制面前没有上游。
+`cmd/upstream-mock` 支持 `-ttft`、`-token-interval`、`-tokens`、`-status`、`-hang`、`-fail-after`、`-max-inflight`、`-echo`。默认丢弃请求正文，按 `-name` 循环吐假 token。`-echo` 则先写 `{name} sha256=<raw body>`，再把 `messages` 文本按 `-tokens` 切开回放，用来核对网关有没有把请求完整转到上游。Gateway 只把它当成普通 HTTP Provider；Mock 不在 Compose 中，也不会由 Control/Gateway 自动创建。
 
-进程内 `MockProvider` 仍用于单测和显式 `protocol: mock` 快照，不再作为默认 Demo 上游。
+进程内 `MockProvider` 只用于包内测试；业务配置明确拒绝 `protocol: mock`。
 
 注意：`cmd/control` 的 `/config` 默认仍是本地 Demo 模式；生产必须设置 `CONTROL_ADMIN_TOKEN` 并开启 `CONTROL_REQUIRE_ADMIN_AUTH=true`，同时配置 gRPC TLS/mTLS。管理接口返回的是 key hash prefix，不返回 raw API key；正式模式会拒绝请求体中的 legacy `keys`，应使用 `key_records` 或 CredentialService。
 
@@ -1052,7 +1072,7 @@ data: [DONE]
 ### 5.3 查看配置和计量
 
 ```bash
-curl http://localhost:50052/config
+curl -H 'Authorization: Bearer demo-control-token' http://localhost:50052/config
 curl http://localhost:8091/ledger/count
 curl 'http://localhost:8091/ledger/balance?tenant=tenant-demo'
 curl http://localhost:8091/reconcile
@@ -1140,20 +1160,27 @@ CONTROL_TEST_POSTGRES_DSN='postgres://gateway:gateway@localhost:5433/llm_gateway
   go test ./internal/control -run TestPostgresMigratesLegacyControlPayload -v -count=1
 ```
 
-仍需补充：
+已完成但曾列为待办：
 
 - auth 基础鉴权和 hash record 测试已完成；
-- Redis Lua 高并发和故障注入集成测试；
 - Producer overflow、Redis flush 重试、spool 恢复和 Close flush 的完整测试；**overflow fallback 基础单元测试已完成，Redis 恢复集成测试已完成第一版，spool 满盘和 kill -9 恢复仍待补充**；
 - Consumer 重复消费、pending reclaim、DLQ 测试；**Redis 集成测试已完成第一版**；
-- PG Ledger 集成测试和生产模式启动失败测试；
+- PG Ledger 往返、重复投递和迁移集成测试已完成；
 - Control PG 历史 raw-key payload 迁移集成测试已完成第一版；
 - 真实 HTTP Provider 契约测试已完成第一版；
 - SSE reader 边界测试已完成第一版；
 - loadtest worker 已校验首个 data event、`[DONE]` 完整性和非 200 统计；Collector 已校验并发报告和分位数；
 - gRPC 真实网络和端到端配置热更新测试已完成第一版；
-- 客户端断开和慢客户端测试；
-- 负载、故障注入和数据恢复测试。
+- 客户端断开取消上游已有真实 HTTP 测试。
+
+仍需补充：
+
+- Redis Lua 高并发和组合故障注入；
+- spool 满盘、kill -9、断电和大文件恢复实验；
+- Consumer 建组自愈、pending cursor 分页和 DLQ 写失败的长期恢复；
+- 慢客户端真实网络测试；
+- 负载、故障注入、数据保留和恢复报告；
+- Control/Metering 生产模式启动与优雅退出的进程级测试。
 
 ---
 
@@ -1178,7 +1205,7 @@ CONTROL_TEST_POSTGRES_DSN='postgres://gateway:gateway@localhost:5433/llm_gateway
 - Producer 退出前 flush；**已完成第一版**；
 - Consumer kill -9 后 pending 可接管；**pending reclaim 集成测试已完成第一版**；
 - 重复事件不重复计费；**集成测试已完成第一版**；
-- 跨租户相同 request ID 不会互相去重；**基础逻辑已完成，PG 复合键迁移仍待做**；
+- 跨租户相同 client request ID 不会互相去重；**每次执行使用独立 event ID，PG 集成验证已完成**；
 - 对账输出具体差异明细；**已完成第一版**；
 - PostgreSQL 查询错误不再静默返回 0；**已完成第一版**；
 - 生产模式可禁止静默回退 MemoryLedger；**已完成第一版**。
@@ -1187,9 +1214,9 @@ CONTROL_TEST_POSTGRES_DSN='postgres://gateway:gateway@localhost:5433/llm_gateway
 
 验收标准：
 
-- 管理 API Bearer 认证和 Service 层租户授权核心已完成；正式用户身份令牌仍待接入；
-- 用户和管理员 CRUD 通过 Hertz HTTP facade 接入控制面 service；
-- 用户创建 API Key 只返回一次 raw key，列表仅返回 prefix，删除后优先撤销；**CredentialService 核心已完成，Hertz facade 待接入**；
+- 管理 API Bearer 认证和 Service 层租户授权核心已完成；签名 token verifier 已完成，正式签发、轮换和撤销流程仍待接入；
+- 完整用户账号/登录 CRUD 和 Hertz 管理后台未实现，且不是 Demo v0 阻断项；
+- 用户创建 API Key 只返回一次 raw key，列表仅返回 prefix，删除后优先撤销；**CredentialService 与 `/keys` HTTP facade 已完成**；
 - gRPC 使用 TLS/mTLS；
 - 数据库和配置下发不含 raw API Key；
 - Watch 丢消息后可以补拉最新版本；**已完成基础重连、版本跳跃和 Gateway key 撤销测试**；

@@ -36,7 +36,8 @@ func (s *PGAuditSink) Record(ctx context.Context, event AuditEvent) {
 	_, err := s.db.ExecContext(ctx, queryInsertAudit,
 		event.Time, event.Action, event.Outcome, event.Subject, string(event.Role),
 		event.TenantID, event.KeyID, event.RequestID, event.TraceID,
-		event.ConfigVersion, event.KeyCount, safeAuditError(event.Error))
+		event.ConfigVersion, event.KeyCount, safeAuditError(event.Error),
+		event.CredentialID, event.ProviderID, event.GatewayInstanceID)
 	if err != nil {
 		// The service operation has already changed the configuration snapshot;
 		// do not turn an audit outage into a misleading failed Create/Revoke.

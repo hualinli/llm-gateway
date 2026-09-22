@@ -3,6 +3,7 @@ package upstreammock
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -36,6 +37,9 @@ type Config struct {
 	// Echo streams a checksum of the raw body plus message text.
 	// Default is a name-prefixed synthetic loop; use Echo only to verify forwarding.
 	Echo bool
+	// ExpectedAuthorization, when set, requires Authorization: Bearer <value>.
+	// An empty value keeps the historical unauthenticated behavior.
+	ExpectedAuthorization string
 }
 
 // Handler serves POST /v1/chat/completions and GET /healthz.
@@ -79,6 +83,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
+	if h.cfg.ExpectedAuthorization != "" {
+		provided := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if subtle.ConstantTimeCompare([]byte(provided), []byte(h.cfg.ExpectedAuthorization)) != 1 {
+			writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+	}
 	if h.sem != nil {
 		select {
 		case h.sem <- struct{}{}:

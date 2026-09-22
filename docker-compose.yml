@@ -1,5 +1,96 @@
 services:
+  migrate:
+    build:
+      context: .
+    entrypoint: ["/usr/local/bin/migrate"]
+    command: ["up"]
+    environment:
+      POSTGRES_DSN: postgres://gateway:gateway@postgres:5432/llm_gateway?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  control:
+    build:
+      context: .
+    entrypoint: ["/usr/local/bin/control"]
+    environment:
+      POSTGRES_DSN: postgres://gateway:gateway@postgres:5432/llm_gateway?sslmode=disable
+      CONTROL_REQUIRE_POSTGRES: "true"
+      CONTROL_REQUIRE_ADMIN_AUTH: "true"
+      CONTROL_ADMIN_TOKEN: ${CONTROL_ADMIN_TOKEN:-demo-control-token}
+      PROVIDER_CREDENTIAL_MASTER_KEY_FILE: /run/secrets/provider-credential-master-key
+      CONTROL_ALLOW_INSECURE_CREDENTIAL_RESOLVE: "true"
+    ports:
+      - "50051:50051"
+      - "50052:50052"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:50052/healthz"]
+      interval: 2s
+      timeout: 1s
+      retries: 30
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    volumes:
+      - ./data/provider-credential-master-key:/run/secrets/provider-credential-master-key:ro
+
+  metering:
+    build:
+      context: .
+    entrypoint: ["/usr/local/bin/metering"]
+    environment:
+      REDIS_ADDR: redis:6379
+      POSTGRES_DSN: postgres://gateway:gateway@postgres:5432/llm_gateway?sslmode=disable
+      METERING_REQUIRE_POSTGRES: "true"
+    ports:
+      - "8091:8091"
+    volumes:
+      - metering-spool:/var/lib/llm-gateway/metering-spool
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8091/readyz"]
+      interval: 2s
+      timeout: 1s
+      retries: 30
+
+  gateway:
+    build:
+      context: .
+    entrypoint: ["/usr/local/bin/gateway"]
+    environment:
+      REDIS_ADDR: redis:6379
+      CONTROL_ADDR: control:50051
+      LIMITER_ON_REDIS_ERROR: closed
+      GATEWAY_MAX_ACTIVE_STREAMS: "256"
+      METERING_SPOOL_DIR: /var/lib/llm-gateway/metering-spool
+    ports:
+      - "8090:8090"
+    volumes:
+      - metering-spool:/var/lib/llm-gateway/metering-spool
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      control:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      # A provider-less Gateway is intentionally live but not ready. Provider
+      # configuration is submitted explicitly after external mocks start.
+      test: ["CMD", "wget", "-qO-", "http://localhost:8090/livez"]
+      interval: 2s
+      timeout: 1s
+      retries: 30
+
   prometheus:
+    profiles: ["observability"]
     image: prom/prometheus:v3.14.0
     ports:
       - "9090:9090"
@@ -9,10 +100,13 @@ services:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.retention.time=7d"
     depends_on:
-      redis:
+      gateway:
+        condition: service_healthy
+      metering:
         condition: service_healthy
 
   grafana:
+    profiles: ["observability"]
     image: grafana/grafana:13.2.2
     ports:
       - "3000:3000"
@@ -58,3 +152,4 @@ volumes:
   redis-data:
   grafana-data:
   pg-data:
+  metering-spool:

@@ -21,7 +21,7 @@ var files embed.FS
 //go:embed check.sql
 var checkSQL string
 
-const Version = 2
+const Version = 3
 
 var ErrSchema = errors.New("database schema requires migration")
 

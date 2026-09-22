@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -68,7 +69,7 @@ func TestRegistryDynamicConfigFailureKeepsOldSnapshot(t *testing.T) {
 
 func TestRegistryCredentialRefUsesLocalResolver(t *testing.T) {
 	var resolved atomic.Int32
-	registry := NewRegistryWithOptions(nil, RegistryOptions{Credentials: CredentialResolverFunc(func(ref string) (string, error) {
+	registry := NewRegistryWithOptions(nil, RegistryOptions{Credentials: CredentialResolverFunc(func(_ context.Context, _ string, ref string) (string, error) {
 		if ref != "secret/openai" {
 			t.Fatalf("ref=%q", ref)
 		}
@@ -104,7 +105,7 @@ func TestRegistryCredentialRefChangeRebuildsAndUsesNewKey(t *testing.T) {
 	defer server.Close()
 
 	registry := NewRegistryWithOptions(nil, RegistryOptions{
-		Credentials: CredentialResolverFunc(func(ref string) (string, error) {
+		Credentials: CredentialResolverFunc(func(_ context.Context, _ string, ref string) (string, error) {
 			switch ref {
 			case "secret/old":
 				return "old-key", nil
@@ -259,22 +260,64 @@ func TestRegistryRetiresRemovedInstanceIdleConnections(t *testing.T) {
 	}
 }
 
-func TestEnvCredentialResolverRejectsBareSecret(t *testing.T) {
-	if _, err := (EnvCredentialResolver{}).Resolve("raw-api-key"); err == nil {
-		t.Fatal("bare credential_ref must be rejected")
+func TestCredentialResolverScrubsUnsafeErrors(t *testing.T) {
+	if err := safeResolverError(errors.New("raw-api-key")); err == nil || strings.Contains(err.Error(), "raw-api-key") {
+		t.Fatalf("resolver error leaked or was empty: %v", err)
+	}
+	if got := safeResolverError(errors.New("credential_revoked")); got == nil || got.Error() != "credential_revoked" {
+		t.Fatalf("stable credential code was rewritten: %v", got)
 	}
 }
 
-func TestEnvCredentialResolverReadsEnvAliases(t *testing.T) {
-	t.Setenv("GATEWAY_UPSTREAM_KEY", "from-env")
-	got, err := (EnvCredentialResolver{}).Resolve("env://GATEWAY_UPSTREAM_KEY")
-	if err != nil || got != "from-env" {
-		t.Fatalf("env:// resolve: got=%q err=%v", got, err)
+func TestRegistryResolveFailureKeepsPreviousProvider(t *testing.T) {
+	registry := NewRegistryWithOptions(nil, RegistryOptions{
+		ResolveTimeout: 20 * time.Millisecond,
+		Credentials: CredentialResolverFunc(func(ctx context.Context, providerID, ref string) (string, error) {
+			if ref == "secret/old" {
+				return "old-key", nil
+			}
+			if ref == "secret/slow" {
+				<-ctx.Done()
+				return "", ctx.Err()
+			}
+			return "", errors.New("sk-should-not-appear-in-errors")
+		}),
+	})
+	routes := map[string][]string{"m": {"openai"}}
+	first := ProviderConfig{ID: "openai", Protocol: "openai-compatible", URL: "https://example.test", CredentialRef: "secret/old"}
+	if err := registry.ApplyConfig(routes, map[string]ProviderConfig{"openai": first}); err != nil {
+		t.Fatal(err)
 	}
-	got, err = (EnvCredentialResolver{}).Resolve("env:GATEWAY_UPSTREAM_KEY")
-	if err != nil || got != "from-env" {
-		t.Fatalf("env: resolve: got=%q err=%v", got, err)
+	old := registry.ProvidersFor("m")[0]
+	failed := first
+	failed.CredentialRef = "secret/new"
+	if err := registry.ApplyConfig(routes, map[string]ProviderConfig{"openai": failed}); err == nil || strings.Contains(err.Error(), "sk-should-not-appear") {
+		t.Fatalf("resolve failure error=%v", err)
 	}
+	if got := registry.ProvidersFor("m"); len(got) != 1 || !sameProvider(got[0], old) {
+		t.Fatal("failed resolve replaced the serving provider")
+	}
+	failed.CredentialRef = "secret/slow"
+	if err := registry.ApplyConfig(routes, map[string]ProviderConfig{"openai": failed}); err == nil {
+		t.Fatal("timed-out resolve was accepted")
+	}
+	if got := registry.ProvidersFor("m"); len(got) != 1 || !sameProvider(got[0], old) {
+		t.Fatal("timed-out resolve replaced the serving provider")
+	}
+	if _, err := gotProviderKey(registry); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func gotProviderKey(registry *Registry) (string, error) {
+	p, ok := registry.ProvidersFor("m")[0].(*OpenAIProvider)
+	if !ok {
+		return "", errors.New("provider type changed")
+	}
+	if p.apiKey != "old-key" {
+		return "", errors.New("serving provider lost its resolved key")
+	}
+	return p.apiKey, nil
 }
 
 // compile-time guard for the lifecycle contract: every built-in provider can

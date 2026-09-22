@@ -25,20 +25,22 @@ func main() {
 		failAfter     = flag.Int("fail-after", 0, "close after N content events without [DONE]; 0 completes")
 		maxInflight   = flag.Int("max-inflight", 0, "concurrent stream limit; extra requests get 429; 0 unlimited")
 		echo          = flag.Bool("echo", false, "stream body sha256 plus messages; default keeps the synthetic name loop")
+		authorization = flag.String("authorization", os.Getenv("UPSTREAM_MOCK_AUTHORIZATION"), "required bearer token; empty disables the check")
 	)
 	flag.Parse()
 
 	handler := upstreammock.NewHandler(upstreammock.Config{
-		Name:             *name,
-		TTFT:             *ttft,
-		TokenInterval:    *tokenInterval,
-		CompletionTokens: *tokens,
-		PromptTokens:     *promptTokens,
-		Status:           *status,
-		Hang:             *hang,
-		FailAfter:        *failAfter,
-		MaxInflight:      *maxInflight,
-		Echo:             *echo,
+		Name:                  *name,
+		TTFT:                  *ttft,
+		TokenInterval:         *tokenInterval,
+		CompletionTokens:      *tokens,
+		PromptTokens:          *promptTokens,
+		Status:                *status,
+		Hang:                  *hang,
+		FailAfter:             *failAfter,
+		MaxInflight:           *maxInflight,
+		Echo:                  *echo,
+		ExpectedAuthorization: *authorization,
 	})
 	srv := &http.Server{
 		Addr:              *listen,
@@ -46,8 +48,8 @@ func main() {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	go func() {
-		log.Printf("upstream-mock %s listening on %s ttft=%s token-interval=%s tokens=%d status=%d hang=%v fail-after=%d max-inflight=%d echo=%v",
-			*name, *listen, *ttft, *tokenInterval, *tokens, *status, *hang, *failAfter, *maxInflight, *echo)
+		log.Printf("upstream-mock %s listening on %s ttft=%s token-interval=%s tokens=%d status=%d hang=%v fail-after=%d max-inflight=%d echo=%v authorization=%s",
+			*name, *listen, *ttft, *tokenInterval, *tokens, *status, *hang, *failAfter, *maxInflight, *echo, authorizationState(*authorization))
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatal(err)
 		}
@@ -57,4 +59,11 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	log.Println("upstream-mock exit")
+}
+
+func authorizationState(token string) string {
+	if token == "" {
+		return "off"
+	}
+	return "required"
 }

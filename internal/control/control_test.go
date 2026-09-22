@@ -103,10 +103,11 @@ func TestApplyProviderConfigCopiesAndPersistsSnapshot(t *testing.T) {
 			Id:            "openai",
 			Protocol:      "openai-compatible",
 			Url:           "https://provider.example",
-			CredentialRef: "env://OPENAI_KEY",
+			CredentialRef: "control://provider-credentials/pcred_0123456789abcdef",
 			Timeouts:      &pb.ProviderTimeouts{FirstByteTimeoutMs: 1200},
 		},
 	}
+	srv.SetProviderCredentialStore(activeCredentialStore{providerID: "openai", credentialID: "pcred_0123456789abcdef"})
 	cfg, err := srv.ApplyKeyRecordsAndProviders(nil, RoutesToProto(map[string][]string{"m": {"openai"}}), providers)
 	if err != nil {
 		t.Fatal(err)
@@ -120,7 +121,7 @@ func TestApplyProviderConfigCopiesAndPersistsSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stored == nil || stored.Version != 1 || stored.Providers["openai"].CredentialRef != "env://OPENAI_KEY" {
+	if stored == nil || stored.Version != 1 || stored.Providers["openai"].CredentialRef != "control://provider-credentials/pcred_0123456789abcdef" {
 		t.Fatalf("stored provider snapshot=%+v", stored)
 	}
 	if stored.Providers["openai"].Timeouts == nil || stored.Providers["openai"].Timeouts.FirstByteTimeoutMs != 1200 {
@@ -130,28 +131,30 @@ func TestApplyProviderConfigCopiesAndPersistsSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(encoded), "OPENAI_KEY") {
+	if !strings.Contains(string(encoded), "pcred_0123456789abcdef") {
 		t.Fatal("credential reference should remain observable for local resolution")
 	}
 }
 
 func TestProviderConfigValidationRejectsInvalidEntries(t *testing.T) {
 	for name, cfg := range map[string]*pb.ProviderConfig{
-		"bad-protocol": {Protocol: "anthropic", Url: "https://provider.example"},
-		"bad-url":      {Protocol: "openai-compatible", Url: "file:///tmp/model"},
-		"userinfo-url": {Protocol: "openai-compatible", Url: "https://user:pass@provider.example"},
-		"query-url":    {Protocol: "openai-compatible", Url: "https://provider.example?token=1"},
-		"bad-mock-ref": {Protocol: "mock", CredentialRef: "env://MOCK_KEY"},
-		"raw-secret":   {Protocol: "openai-compatible", Url: "https://provider.example", CredentialRef: "sk-live-secret"},
+		"bad-protocol":  {Protocol: "anthropic", Url: "https://provider.example"},
+		"bad-url":       {Protocol: "openai-compatible", Url: "file:///tmp/model"},
+		"userinfo-url":  {Protocol: "openai-compatible", Url: "https://user:pass@provider.example"},
+		"query-url":     {Protocol: "openai-compatible", Url: "https://provider.example?token=1"},
+		"embedded-mock": {Protocol: "mock"},
+		"raw-secret":    {Protocol: "openai-compatible", Url: "https://provider.example", CredentialRef: "sk-live-secret"},
+		"env-ref":       {Protocol: "openai-compatible", Url: "https://provider.example", CredentialRef: "env://OPENAI_API_KEY"},
+		"unknown-ref":   {Protocol: "openai-compatible", Url: "https://provider.example", CredentialRef: "vault://secret"},
 	} {
 		if err := ValidateProviderConfigs(map[string]*pb.ProviderConfig{name: cfg}); err == nil {
 			t.Fatalf("%s: invalid provider config was accepted", name)
 		}
 	}
 	if err := ValidateProviderConfigs(map[string]*pb.ProviderConfig{
-		"mock": {Protocol: "MOCK"},
+		"openai": {Protocol: "OPENAI_COMPATIBLE", Url: "https://provider.example"},
 	}); err != nil {
-		t.Fatalf("mock protocol should be case-insensitive: %v", err)
+		t.Fatalf("openai-compatible protocol should be case-insensitive: %v", err)
 	}
 }
 
@@ -443,4 +446,28 @@ func waitFor(t *testing.T, cond func() bool, what string) {
 		time.Sleep(5 * time.Millisecond)
 	}
 	t.Fatalf("timeout waiting for %s", what)
+}
+
+type activeCredentialStore struct {
+	providerID   string
+	credentialID string
+}
+
+func (s activeCredentialStore) Create(context.Context, string, []byte) (ProviderCredentialMetadata, error) {
+	return ProviderCredentialMetadata{}, credentialError(CodeCredentialUnavailable)
+}
+func (s activeCredentialStore) List(context.Context, string) ([]ProviderCredentialMetadata, error) {
+	return nil, credentialError(CodeCredentialUnavailable)
+}
+func (s activeCredentialStore) Metadata(_ context.Context, credentialID string) (ProviderCredentialMetadata, error) {
+	if credentialID != s.credentialID {
+		return ProviderCredentialMetadata{}, credentialError(CodeCredentialNotFound)
+	}
+	return ProviderCredentialMetadata{CredentialID: credentialID, ProviderID: s.providerID, Status: "active"}, nil
+}
+func (s activeCredentialStore) Resolve(context.Context, string, string) ([]byte, error) {
+	return nil, credentialError(CodeCredentialUnavailable)
+}
+func (s activeCredentialStore) Revoke(context.Context, string) error {
+	return credentialError(CodeCredentialUnavailable)
 }

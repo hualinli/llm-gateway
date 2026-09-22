@@ -22,6 +22,10 @@ type SyncOptions struct {
 	// InstanceID identifies this Gateway in control-plane status reports.
 	// Empty disables reporting so tests can sync without observing status.
 	InstanceID string
+	// OnClient receives the live control connection before a snapshot is
+	// applied and nil after that connection closes. Credential resolution uses
+	// this connection instead of dialing again on the request path.
+	OnClient func(*Client)
 }
 
 func (o SyncOptions) withDefaults() SyncOptions {
@@ -128,6 +132,9 @@ func (s *Synchronizer) Run(ctx context.Context, apply func(*pb.Config) error) er
 			}
 			continue
 		}
+		if options.OnClient != nil {
+			options.OnClient(client)
+		}
 
 		watchCtx, watchCancel := context.WithCancel(ctx)
 		applyAndReport := func(cfg *pb.Config) error {
@@ -140,6 +147,9 @@ func (s *Synchronizer) Run(ctx context.Context, apply func(*pb.Config) error) er
 			watchErr = s.watchLoop(ctx, client, watchCtx, watch, applyAndReport, checkLease, options)
 		}
 		watchCancel()
+		if options.OnClient != nil {
+			options.OnClient(nil)
+		}
 		client.Close()
 		if watchErr != nil && ctx.Err() == nil {
 			log.Printf("control sync ended: %v", watchErr)
@@ -234,13 +244,24 @@ func (s *Synchronizer) report(client *Client, cfg *pb.Config, applyErr error) {
 	if applyErr != nil {
 		req.State = "rejected"
 		req.RejectedVersion = cfg.GetVersion()
-		req.RejectReason = applyErr.Error()
+		req.RejectReason = safeRejectReason(applyErr)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), s.options.GetConfigTimeout)
 	defer cancel()
 	if _, err := client.ReportGatewayStatus(ctx, req); err != nil {
 		log.Printf("control sync status report failed instance=%s: %v", s.options.InstanceID, err)
 	}
+}
+
+func safeRejectReason(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "sk-") || strings.ContainsAny(msg, "\r\n") || len(msg) > 240 {
+		return "credential_unavailable"
+	}
+	return msg
 }
 
 func waitContext(ctx context.Context, delay time.Duration) error {

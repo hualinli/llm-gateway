@@ -35,10 +35,11 @@ message KeyRecord {
 }
 
 // ProviderConfig contains non-secret provider settings. Secrets are referred
-// to by credential_ref and resolved by the Gateway's local credential store.
+// to by credential_ref and resolved through ProviderCredentialResolver when a
+// Gateway applies a snapshot. They are never stored in Config.
 message ProviderConfig {
   string id = 1;
-  string protocol = 2;       // openai-compatible or mock
+  string protocol = 2;       // openai-compatible; mocks run as external compatible servers
   string url = 3;            // base URL for HTTP providers
   string credential_ref = 4; // opaque reference; never a raw secret
   string model = 5;          // optional upstream model override
@@ -77,4 +78,24 @@ message ReportGatewayStatusRequest {
 
 message ReportGatewayStatusResponse {
   int64 desired_version = 1;
+}
+
+// ProviderCredentialResolver is an internal control-plane API. It is not part
+// of ConfigService, so plaintext never enters GetConfig or WatchConfig.
+// Production listeners must use mTLS. Local demo may opt in to insecure
+// transport explicitly; the RPC still returns only the secret bytes for one
+// credential and must not be logged.
+service ProviderCredentialResolver {
+  rpc ResolveProviderCredential(ResolveProviderCredentialRequest)
+      returns (ResolveProviderCredentialResponse);
+}
+
+message ResolveProviderCredentialRequest {
+  string credential_ref = 1;
+  string provider_id = 2;
+  string gateway_instance_id = 3;
+}
+
+message ResolveProviderCredentialResponse {
+  bytes secret = 1;
 }

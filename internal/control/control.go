@@ -40,6 +40,11 @@ type Server struct {
 	// the persisted desired snapshot and are lost when this process restarts.
 	reportsMu sync.RWMutex
 	reports   map[string]GatewayReport
+
+	// providerCredentials is the encrypted secret repository. Nil fails closed
+	// for any control:// reference. Config snapshots still store only refs.
+	providerCredentials ProviderCredentialStore
+	credentialResolver  *providerCredentialResolver
 }
 
 // NewServer 创建并尝试从 Store 恢复最新配置；恢复失败视为启动期致命错误。
@@ -139,10 +144,13 @@ func (s *Server) PatchConfig(patch ConfigPatch) (*pb.Config, error) {
 
 func (s *Server) applyKeyRecordsLocked(records []*pb.KeyRecord, routes map[string]*pb.ProviderList, providers map[string]*pb.ProviderConfig) (*pb.Config, error) {
 	if err := validateKeyRecords(records); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidConfig, err)
+		return nil, fmt.Errorf("%w: %w", ErrInvalidConfig, err)
 	}
 	if err := validateProviderConfigs(providers); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidConfig, err)
+		return nil, fmt.Errorf("%w: %w", ErrInvalidConfig, err)
+	}
+	if err := s.bindProviderCredentials(providers); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrInvalidConfig, err)
 	}
 	next := cloneConfig(&pb.Config{Version: s.CurrentConfig().Version, KeyRecords: records, Routes: routes, Providers: normalizeProviderConfigSnapshot(providers)})
 	next.Version++
@@ -344,10 +352,6 @@ func validateProviderConfigs(configs map[string]*pb.ProviderConfig) error {
 		}
 		protocol := normalizeProviderProtocol(cfg.Protocol)
 		switch protocol {
-		case "mock":
-			if cfg.CredentialRef != "" {
-				return fmt.Errorf("provider %q mock cannot use credential_ref", id)
-			}
 		case "openai-compatible":
 			providerURL := strings.TrimSpace(cfg.Url)
 			if providerURL == "" {
@@ -360,11 +364,8 @@ func validateProviderConfigs(configs map[string]*pb.ProviderConfig) error {
 		default:
 			return fmt.Errorf("provider %q has unsupported protocol %q", id, cfg.Protocol)
 		}
-		if strings.ContainsAny(cfg.CredentialRef, "\r\n") {
-			return fmt.Errorf("provider %q credential_ref contains newline", id)
-		}
-		if strings.HasPrefix(strings.TrimSpace(cfg.CredentialRef), "sk-") {
-			return fmt.Errorf("provider %q credential_ref looks like a raw secret", id)
+		if err := validateCredentialRefScheme(cfg.CredentialRef); err != nil {
+			return fmt.Errorf("provider %q credential_ref: %w", id, err)
 		}
 		if strings.ContainsAny(cfg.Model, "\r\n") {
 			return fmt.Errorf("provider %q model contains newline", id)
@@ -440,7 +441,82 @@ func NewGRPCServerWithTLS(s *Server, cfg *TLSConfig) (*grpc.Server, error) {
 	}
 	gs := grpc.NewServer(options...)
 	pb.RegisterConfigServiceServer(gs, s)
+	if s.credentialResolver != nil {
+		pb.RegisterProviderCredentialResolverServer(gs, s.credentialResolver)
+	}
 	return gs, nil
+}
+
+// SetProviderCredentialStore attaches the encrypted repository used to validate
+// control:// references before a snapshot is persisted.
+func (s *Server) SetProviderCredentialStore(store ProviderCredentialStore) {
+	if s == nil {
+		return
+	}
+	s.providerCredentials = store
+}
+
+// EnableProviderCredentialResolver registers the internal resolve RPC.
+// allowInsecure permits non-mTLS callers and is only for an explicit local demo.
+func (s *Server) EnableProviderCredentialResolver(store ProviderCredentialStore, audit AuditSink, allowInsecure bool) {
+	if s == nil {
+		return
+	}
+	if store != nil {
+		s.providerCredentials = store
+	}
+	s.credentialResolver = newProviderCredentialResolver(store, audit, allowInsecure)
+}
+
+// RevalidateCredentialRefs checks the restored snapshot against the credential
+// repository. A missing, revoked, or unbound reference fails startup.
+func (s *Server) RevalidateCredentialRefs(ctx context.Context) error {
+	if s == nil {
+		return nil
+	}
+	return s.bindProviderCredentialsContext(ctx, s.CurrentConfig().Providers)
+}
+
+func (s *Server) bindProviderCredentials(providers map[string]*pb.ProviderConfig) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	return s.bindProviderCredentialsContext(ctx, providers)
+}
+
+func (s *Server) bindProviderCredentialsContext(ctx context.Context, providers map[string]*pb.ProviderConfig) error {
+	for id, cfg := range providers {
+		if cfg == nil {
+			continue
+		}
+		if err := s.checkCredentialBinding(ctx, id, cfg.CredentialRef); err != nil {
+			return fmt.Errorf("provider %q credential_ref: %w", id, err)
+		}
+	}
+	return nil
+}
+
+func (s *Server) checkCredentialBinding(ctx context.Context, providerID, ref string) error {
+	credentialID, err := ParseProviderCredentialRef(strings.TrimSpace(ref))
+	if err != nil || credentialID == "" {
+		return err
+	}
+	if s.providerCredentials == nil {
+		return credentialError(CodeCredentialUnavailable)
+	}
+	meta, err := s.providerCredentials.Metadata(ctx, credentialID)
+	if err != nil {
+		return err
+	}
+	if meta.Status == "revoked" {
+		return credentialError(CodeCredentialRevoked)
+	}
+	if meta.Status != "active" {
+		return credentialError(CodeCredentialUnavailable)
+	}
+	if meta.ProviderID != providerID {
+		return credentialError(CodeCredentialProviderMismatch)
+	}
+	return nil
 }
 
 // Serve 在已有 listener 上启动 insecure gRPC。
@@ -478,8 +554,9 @@ func RunWithTLS(addr string, s *Server, cfg *TLSConfig) error {
 
 // Client 网关侧订阅端
 type Client struct {
-	conn   *grpc.ClientConn
-	client pb.ConfigServiceClient
+	conn        *grpc.ClientConn
+	client      pb.ConfigServiceClient
+	credentials pb.ProviderCredentialResolverClient
 }
 
 func Dial(addr string) (*Client, error) {
@@ -494,7 +571,15 @@ func Dial(addr string) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Client{conn: conn, client: pb.NewConfigServiceClient(conn)}, nil
+	return newControlClient(conn), nil
+}
+
+func newControlClient(conn *grpc.ClientConn) *Client {
+	return &Client{
+		conn:        conn,
+		client:      pb.NewConfigServiceClient(conn),
+		credentials: pb.NewProviderCredentialResolverClient(conn),
+	}
 }
 
 // DialContext is the bounded, blocking insecure variant used by local demos.
@@ -523,7 +608,29 @@ func DialContextWithTLS(ctx context.Context, addr string, cfg *TLSConfig) (*Clie
 	if err != nil {
 		return nil, err
 	}
-	return &Client{conn: conn, client: pb.NewConfigServiceClient(conn)}, nil
+	return newControlClient(conn), nil
+}
+
+func (c *Client) ResolveProviderCredential(ctx context.Context, ref, providerID, instanceID string) (string, error) {
+	if c == nil || c.credentials == nil {
+		return "", credentialError(CodeCredentialUnavailable)
+	}
+	resp, err := c.credentials.ResolveProviderCredential(ctx, &pb.ResolveProviderCredentialRequest{
+		CredentialRef:     ref,
+		ProviderId:        providerID,
+		GatewayInstanceId: instanceID,
+	})
+	if err != nil {
+		return "", credentialErrorFromStatus(err)
+	}
+	if resp == nil {
+		return "", credentialError(CodeCredentialUnavailable)
+	}
+	secret := append([]byte(nil), resp.Secret...)
+	wipeBytes(resp.Secret)
+	value := string(secret)
+	wipeBytes(secret)
+	return value, nil
 }
 
 func (c *Client) GetConfig(ctx context.Context) (*pb.Config, error) {

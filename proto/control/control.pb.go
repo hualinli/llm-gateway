@@ -220,11 +220,12 @@ func (x *KeyRecord) GetStatus() string {
 }
 
 // ProviderConfig contains non-secret provider settings. Secrets are referred
-// to by credential_ref and resolved by the Gateway's local credential store.
+// to by credential_ref and resolved through ProviderCredentialResolver when a
+// Gateway applies a snapshot. They are never stored in Config.
 type ProviderConfig struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Protocol      string                 `protobuf:"bytes,2,opt,name=protocol,proto3" json:"protocol,omitempty"`                                // openai-compatible or mock
+	Protocol      string                 `protobuf:"bytes,2,opt,name=protocol,proto3" json:"protocol,omitempty"`                                // openai-compatible; mocks run as external compatible servers
 	Url           string                 `protobuf:"bytes,3,opt,name=url,proto3" json:"url,omitempty"`                                          // base URL for HTTP providers
 	CredentialRef string                 `protobuf:"bytes,4,opt,name=credential_ref,json=credentialRef,proto3" json:"credential_ref,omitempty"` // opaque reference; never a raw secret
 	Model         string                 `protobuf:"bytes,5,opt,name=model,proto3" json:"model,omitempty"`                                      // optional upstream model override
@@ -616,6 +617,110 @@ func (x *ReportGatewayStatusResponse) GetDesiredVersion() int64 {
 	return 0
 }
 
+type ResolveProviderCredentialRequest struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	CredentialRef     string                 `protobuf:"bytes,1,opt,name=credential_ref,json=credentialRef,proto3" json:"credential_ref,omitempty"`
+	ProviderId        string                 `protobuf:"bytes,2,opt,name=provider_id,json=providerId,proto3" json:"provider_id,omitempty"`
+	GatewayInstanceId string                 `protobuf:"bytes,3,opt,name=gateway_instance_id,json=gatewayInstanceId,proto3" json:"gateway_instance_id,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *ResolveProviderCredentialRequest) Reset() {
+	*x = ResolveProviderCredentialRequest{}
+	mi := &file_proto_control_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResolveProviderCredentialRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResolveProviderCredentialRequest) ProtoMessage() {}
+
+func (x *ResolveProviderCredentialRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_control_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResolveProviderCredentialRequest.ProtoReflect.Descriptor instead.
+func (*ResolveProviderCredentialRequest) Descriptor() ([]byte, []int) {
+	return file_proto_control_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *ResolveProviderCredentialRequest) GetCredentialRef() string {
+	if x != nil {
+		return x.CredentialRef
+	}
+	return ""
+}
+
+func (x *ResolveProviderCredentialRequest) GetProviderId() string {
+	if x != nil {
+		return x.ProviderId
+	}
+	return ""
+}
+
+func (x *ResolveProviderCredentialRequest) GetGatewayInstanceId() string {
+	if x != nil {
+		return x.GatewayInstanceId
+	}
+	return ""
+}
+
+type ResolveProviderCredentialResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Secret        []byte                 `protobuf:"bytes,1,opt,name=secret,proto3" json:"secret,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResolveProviderCredentialResponse) Reset() {
+	*x = ResolveProviderCredentialResponse{}
+	mi := &file_proto_control_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResolveProviderCredentialResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResolveProviderCredentialResponse) ProtoMessage() {}
+
+func (x *ResolveProviderCredentialResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_control_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResolveProviderCredentialResponse.ProtoReflect.Descriptor instead.
+func (*ResolveProviderCredentialResponse) Descriptor() ([]byte, []int) {
+	return file_proto_control_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *ResolveProviderCredentialResponse) GetSecret() []byte {
+	if x != nil {
+		return x.Secret
+	}
+	return nil
+}
+
 var File_proto_control_proto protoreflect.FileDescriptor
 
 const file_proto_control_proto_rawDesc = "" +
@@ -678,11 +783,20 @@ const file_proto_control_proto_rawDesc = "" +
 	"\rreject_reason\x18\x04 \x01(\tR\frejectReason\x12\x14\n" +
 	"\x05state\x18\x05 \x01(\tR\x05state\"F\n" +
 	"\x1bReportGatewayStatusResponse\x12'\n" +
-	"\x0fdesired_version\x18\x01 \x01(\x03R\x0edesiredVersion2\xdd\x01\n" +
+	"\x0fdesired_version\x18\x01 \x01(\x03R\x0edesiredVersion\"\x9a\x01\n" +
+	" ResolveProviderCredentialRequest\x12%\n" +
+	"\x0ecredential_ref\x18\x01 \x01(\tR\rcredentialRef\x12\x1f\n" +
+	"\vprovider_id\x18\x02 \x01(\tR\n" +
+	"providerId\x12.\n" +
+	"\x13gateway_instance_id\x18\x03 \x01(\tR\x11gatewayInstanceId\";\n" +
+	"!ResolveProviderCredentialResponse\x12\x16\n" +
+	"\x06secret\x18\x01 \x01(\fR\x06secret2\xdd\x01\n" +
 	"\rConfigService\x121\n" +
 	"\tGetConfig\x12\x13.control.GetRequest\x1a\x0f.control.Config\x127\n" +
 	"\vWatchConfig\x12\x15.control.WatchRequest\x1a\x0f.control.Config0\x01\x12`\n" +
-	"\x13ReportGatewayStatus\x12#.control.ReportGatewayStatusRequest\x1a$.control.ReportGatewayStatusResponseB#Z!llm-gateway/proto/control;controlb\x06proto3"
+	"\x13ReportGatewayStatus\x12#.control.ReportGatewayStatusRequest\x1a$.control.ReportGatewayStatusResponse2\x90\x01\n" +
+	"\x1aProviderCredentialResolver\x12r\n" +
+	"\x19ResolveProviderCredential\x12).control.ResolveProviderCredentialRequest\x1a*.control.ResolveProviderCredentialResponseB#Z!llm-gateway/proto/control;controlb\x06proto3"
 
 var (
 	file_proto_control_proto_rawDescOnce sync.Once
@@ -696,39 +810,43 @@ func file_proto_control_proto_rawDescGZIP() []byte {
 	return file_proto_control_proto_rawDescData
 }
 
-var file_proto_control_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_proto_control_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_proto_control_proto_goTypes = []any{
-	(*Config)(nil),                      // 0: control.Config
-	(*ProviderList)(nil),                // 1: control.ProviderList
-	(*KeyRecord)(nil),                   // 2: control.KeyRecord
-	(*ProviderConfig)(nil),              // 3: control.ProviderConfig
-	(*ProviderTimeouts)(nil),            // 4: control.ProviderTimeouts
-	(*GetRequest)(nil),                  // 5: control.GetRequest
-	(*WatchRequest)(nil),                // 6: control.WatchRequest
-	(*ReportGatewayStatusRequest)(nil),  // 7: control.ReportGatewayStatusRequest
-	(*ReportGatewayStatusResponse)(nil), // 8: control.ReportGatewayStatusResponse
-	nil,                                 // 9: control.Config.KeysEntry
-	nil,                                 // 10: control.Config.RoutesEntry
-	nil,                                 // 11: control.Config.ProvidersEntry
-	nil,                                 // 12: control.ProviderConfig.ModelMappingEntry
+	(*Config)(nil),                            // 0: control.Config
+	(*ProviderList)(nil),                      // 1: control.ProviderList
+	(*KeyRecord)(nil),                         // 2: control.KeyRecord
+	(*ProviderConfig)(nil),                    // 3: control.ProviderConfig
+	(*ProviderTimeouts)(nil),                  // 4: control.ProviderTimeouts
+	(*GetRequest)(nil),                        // 5: control.GetRequest
+	(*WatchRequest)(nil),                      // 6: control.WatchRequest
+	(*ReportGatewayStatusRequest)(nil),        // 7: control.ReportGatewayStatusRequest
+	(*ReportGatewayStatusResponse)(nil),       // 8: control.ReportGatewayStatusResponse
+	(*ResolveProviderCredentialRequest)(nil),  // 9: control.ResolveProviderCredentialRequest
+	(*ResolveProviderCredentialResponse)(nil), // 10: control.ResolveProviderCredentialResponse
+	nil, // 11: control.Config.KeysEntry
+	nil, // 12: control.Config.RoutesEntry
+	nil, // 13: control.Config.ProvidersEntry
+	nil, // 14: control.ProviderConfig.ModelMappingEntry
 }
 var file_proto_control_proto_depIdxs = []int32{
-	9,  // 0: control.Config.keys:type_name -> control.Config.KeysEntry
-	10, // 1: control.Config.routes:type_name -> control.Config.RoutesEntry
+	11, // 0: control.Config.keys:type_name -> control.Config.KeysEntry
+	12, // 1: control.Config.routes:type_name -> control.Config.RoutesEntry
 	2,  // 2: control.Config.key_records:type_name -> control.KeyRecord
-	11, // 3: control.Config.providers:type_name -> control.Config.ProvidersEntry
+	13, // 3: control.Config.providers:type_name -> control.Config.ProvidersEntry
 	4,  // 4: control.ProviderConfig.timeouts:type_name -> control.ProviderTimeouts
-	12, // 5: control.ProviderConfig.model_mapping:type_name -> control.ProviderConfig.ModelMappingEntry
+	14, // 5: control.ProviderConfig.model_mapping:type_name -> control.ProviderConfig.ModelMappingEntry
 	1,  // 6: control.Config.RoutesEntry.value:type_name -> control.ProviderList
 	3,  // 7: control.Config.ProvidersEntry.value:type_name -> control.ProviderConfig
 	5,  // 8: control.ConfigService.GetConfig:input_type -> control.GetRequest
 	6,  // 9: control.ConfigService.WatchConfig:input_type -> control.WatchRequest
 	7,  // 10: control.ConfigService.ReportGatewayStatus:input_type -> control.ReportGatewayStatusRequest
-	0,  // 11: control.ConfigService.GetConfig:output_type -> control.Config
-	0,  // 12: control.ConfigService.WatchConfig:output_type -> control.Config
-	8,  // 13: control.ConfigService.ReportGatewayStatus:output_type -> control.ReportGatewayStatusResponse
-	11, // [11:14] is the sub-list for method output_type
-	8,  // [8:11] is the sub-list for method input_type
+	9,  // 11: control.ProviderCredentialResolver.ResolveProviderCredential:input_type -> control.ResolveProviderCredentialRequest
+	0,  // 12: control.ConfigService.GetConfig:output_type -> control.Config
+	0,  // 13: control.ConfigService.WatchConfig:output_type -> control.Config
+	8,  // 14: control.ConfigService.ReportGatewayStatus:output_type -> control.ReportGatewayStatusResponse
+	10, // 15: control.ProviderCredentialResolver.ResolveProviderCredential:output_type -> control.ResolveProviderCredentialResponse
+	12, // [12:16] is the sub-list for method output_type
+	8,  // [8:12] is the sub-list for method input_type
 	8,  // [8:8] is the sub-list for extension type_name
 	8,  // [8:8] is the sub-list for extension extendee
 	0,  // [0:8] is the sub-list for field type_name
@@ -745,9 +863,9 @@ func file_proto_control_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_control_proto_rawDesc), len(file_proto_control_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   13,
+			NumMessages:   15,
 			NumExtensions: 0,
-			NumServices:   1,
+			NumServices:   2,
 		},
 		GoTypes:           file_proto_control_proto_goTypes,
 		DependencyIndexes: file_proto_control_proto_depIdxs,

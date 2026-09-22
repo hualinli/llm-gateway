@@ -1,4 +1,4 @@
-.PHONY: tidy up down run vet test test-up test-down integration-test mock-primary mock-backup
+.PHONY: tidy up down run vet test test-up test-down integration-test mock-primary mock-backup demo-up demo-observability demo-config demo-smoke demo-smoke-backup demo-smoke-unavailable demo-down demo-clean ensure-master-key
 
 TEST_REDIS_ADDR ?= 127.0.0.1:16379
 TEST_POSTGRES_DSN ?= postgres://gateway_test:test_only_local@127.0.0.1:15433/gateway_test?sslmode=disable
@@ -9,11 +9,39 @@ TEST_FLAGS ?= -race
 tidy:
 	go mod tidy
 
-up:
-	docker compose up -d
+up: ensure-master-key
+	HOST_UID="$$(id -u)" HOST_GID="$$(id -g)" docker compose up -d --build --wait
 
 down:
 	docker compose down
+
+demo-up: up
+
+demo-observability: ensure-master-key
+	HOST_UID="$$(id -u)" HOST_GID="$$(id -g)" docker compose --profile observability up -d --build --wait
+
+demo-config:
+	go run ./cmd/democtl configure
+
+demo-smoke:
+	go run ./cmd/democtl request -expect-provider primary
+
+# Stop the primary mock first; this proves pre-first-event failover.
+demo-smoke-backup:
+	go run ./cmd/democtl request -expect-provider backup
+
+# Stop both mocks first; this proves failure is explicit and no hidden mock is used.
+demo-smoke-unavailable:
+	go run ./cmd/democtl request -expect-status 502
+
+demo-down: down
+
+# Explicitly destructive: removes PostgreSQL, Redis, Grafana and spool volumes.
+demo-clean:
+	docker compose down -v
+
+ensure-master-key:
+	go run ./cmd/democtl ensure-master-key
 
 run:
 	go run ./cmd/gateway

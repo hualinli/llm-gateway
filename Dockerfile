@@ -1,0 +1,25 @@
+FROM golang:1.26.3-alpine3.22 AS build
+
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+
+RUN CGO_ENABLED=0 go build -trimpath -o /out/gateway ./cmd/gateway \
+    && CGO_ENABLED=0 go build -trimpath -o /out/control ./cmd/control \
+    && CGO_ENABLED=0 go build -trimpath -o /out/metering ./cmd/metering \
+    && CGO_ENABLED=0 go build -trimpath -o /out/migrate ./cmd/migrate
+
+FROM alpine:3.22.1
+
+RUN apk add --no-cache ca-certificates \
+    && addgroup -S gateway \
+    && adduser -S -G gateway gateway \
+    && mkdir -p /var/lib/llm-gateway/metering-spool \
+    && chown -R gateway:gateway /var/lib/llm-gateway
+
+COPY --from=build /out/ /usr/local/bin/
+
+USER gateway
+WORKDIR /var/lib/llm-gateway
+ENTRYPOINT ["/usr/local/bin/gateway"]

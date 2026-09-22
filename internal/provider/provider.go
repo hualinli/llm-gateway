@@ -2,9 +2,9 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
-	"os"
 	"reflect"
 	"sort"
 	"strings"
@@ -35,56 +35,18 @@ type Provider interface {
 // 工厂必须是显式注册的；未知 Provider 名称不能静默退化为 Mock。
 type ProviderFactory func() (Provider, error)
 
-// CredentialResolver resolves an opaque credential_ref locally on the
-// Gateway. Provider secrets therefore never cross the control-plane config
-// boundary. Implementations should keep the returned secret in process
-// memory only and must not log it.
+// CredentialResolver resolves an opaque credential_ref while a Gateway applies
+// a snapshot. Implementations must not log the secret or resolve it on the
+// request path. The context carries the apply-time deadline.
 type CredentialResolver interface {
-	Resolve(ref string) (string, error)
+	Resolve(ctx context.Context, providerID, ref string) (string, error)
 }
 
 // CredentialResolverFunc adapts a function to CredentialResolver.
-type CredentialResolverFunc func(string) (string, error)
+type CredentialResolverFunc func(context.Context, string, string) (string, error)
 
-func (f CredentialResolverFunc) Resolve(ref string) (string, error) { return f(ref) }
-
-// EnvCredentialResolver is the small, local-first credential backend used by
-// the demo. References must be env://NAME (or env:NAME); a bare value is
-// rejected so a raw API key cannot accidentally be persisted as a reference.
-type EnvCredentialResolver struct{}
-
-func (EnvCredentialResolver) Resolve(ref string) (string, error) {
-	ref = strings.TrimSpace(ref)
-	var name string
-	switch {
-	case strings.HasPrefix(ref, "env://"):
-		name = strings.TrimPrefix(ref, "env://")
-	case strings.HasPrefix(ref, "env:"):
-		name = strings.TrimPrefix(ref, "env:")
-	default:
-		return "", fmt.Errorf("credential_ref %q must use env:// or a configured resolver", ref)
-	}
-	if !validCredentialEnvName(name) {
-		return "", fmt.Errorf("invalid credential_ref %q", ref)
-	}
-	value, ok := os.LookupEnv(name)
-	if !ok || value == "" {
-		return "", fmt.Errorf("credential environment variable %q is not set", name)
-	}
-	return value, nil
-}
-
-func validCredentialEnvName(name string) bool {
-	if name == "" {
-		return false
-	}
-	for i, r := range name {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || r == '_' || (i > 0 && r >= '0' && r <= '9') {
-			continue
-		}
-		return false
-	}
-	return true
+func (f CredentialResolverFunc) Resolve(ctx context.Context, providerID, ref string) (string, error) {
+	return f(ctx, providerID, ref)
 }
 
 // ProviderTimeouts is the validated, duration-based form of the control
@@ -116,6 +78,9 @@ type ProviderConfig struct {
 // RegistryOptions controls dynamic provider construction.
 type RegistryOptions struct {
 	Credentials CredentialResolver
+	// ResolveTimeout bounds credential resolution while applying a snapshot.
+	// Zero selects two seconds. Resolution does not run on the request path.
+	ResolveTimeout time.Duration
 }
 
 func cloneStringMap(in map[string]string) map[string]string {
@@ -143,8 +108,9 @@ type Registry struct {
 	instances map[string]Provider
 	// specs contains only providers created from a dynamic config. A matching
 	// spec permits safe instance reuse on the next snapshot.
-	specs       map[string]ProviderConfig
-	credentials CredentialResolver
+	specs          map[string]ProviderConfig
+	credentials    CredentialResolver
+	resolveTimeout time.Duration
 }
 
 func NewRegistry(routes map[string][]Provider) *Registry {
@@ -152,15 +118,16 @@ func NewRegistry(routes map[string][]Provider) *Registry {
 }
 
 func NewRegistryWithOptions(routes map[string][]Provider, options RegistryOptions) *Registry {
-	if options.Credentials == nil {
-		options.Credentials = EnvCredentialResolver{}
+	if options.ResolveTimeout <= 0 {
+		options.ResolveTimeout = 2 * time.Second
 	}
 	r := &Registry{
-		routes:      make(map[string][]Provider, len(routes)),
-		factories:   make(map[string]ProviderFactory),
-		instances:   make(map[string]Provider),
-		specs:       make(map[string]ProviderConfig),
-		credentials: options.Credentials,
+		routes:         make(map[string][]Provider, len(routes)),
+		factories:      make(map[string]ProviderFactory),
+		instances:      make(map[string]Provider),
+		specs:          make(map[string]ProviderConfig),
+		credentials:    options.Credentials,
+		resolveTimeout: options.ResolveTimeout,
 	}
 	for model, ps := range routes {
 		r.routes[model] = append([]Provider(nil), ps...)
@@ -361,12 +328,18 @@ func (r *Registry) buildProvider(cfg ProviderConfig) (Provider, error) {
 		apiKey := ""
 		if cfg.CredentialRef != "" {
 			if r.credentials == nil {
-				return nil, fmt.Errorf("credential resolver is not configured")
+				return nil, errors.New("credential_unavailable")
 			}
+			timeout := r.resolveTimeout
+			if timeout <= 0 {
+				timeout = 2 * time.Second
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
 			var err error
-			apiKey, err = r.credentials.Resolve(cfg.CredentialRef)
+			apiKey, err = r.credentials.Resolve(ctx, cfg.ID, cfg.CredentialRef)
+			cancel()
 			if err != nil {
-				return nil, fmt.Errorf("resolve credential_ref: %w", err)
+				return nil, fmt.Errorf("resolve credential: %w", safeResolverError(err))
 			}
 		}
 		openAI := DefaultOpenAIConfig(cfg.ID, cfg.URL, apiKey)
@@ -396,6 +369,21 @@ func (r *Registry) buildProvider(cfg ProviderConfig) (Provider, error) {
 		return NewOpenAIProvider(openAI)
 	default:
 		return nil, fmt.Errorf("unsupported protocol %q", cfg.Protocol)
+	}
+}
+
+func safeResolverError(err error) error {
+	if err == nil {
+		return nil
+	}
+	code := err.Error()
+	switch code {
+	case "invalid_credential", "unsupported_credential_ref", "credential_not_found",
+		"credential_revoked", "credential_provider_mismatch", "credential_in_use",
+		"credential_unavailable":
+		return err
+	default:
+		return errors.New("credential_unavailable")
 	}
 }
 

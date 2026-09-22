@@ -29,27 +29,15 @@ import (
 )
 
 func main() {
-	// Routes and providers come from the control-plane snapshot. Local demo
-	// seed points at cmd/upstream-mock; OPENAI_BASE_URL still registers a
-	// bootstrap factory for a named provider.
-	registry := provider.NewRegistry(nil)
-	// Real Provider registration is explicit for bootstrap factories. A
-	// control-plane snapshot may also construct the built-in provider protocols
-	// dynamically; unknown route IDs are still rejected atomically.
-	if baseURL := os.Getenv("OPENAI_BASE_URL"); baseURL != "" {
-		name := os.Getenv("OPENAI_PROVIDER_ID")
-		if name == "" {
-			name = "openai"
-		}
-		cfg := provider.DefaultOpenAIConfig(name, baseURL, os.Getenv("OPENAI_API_KEY"))
-		cfg.Model = os.Getenv("OPENAI_MODEL")
-		if err := registry.RegisterFactory(name, func() (provider.Provider, error) {
-			return provider.NewOpenAIProvider(cfg)
-		}); err != nil {
-			log.Fatalf("register openai provider: %v", err)
-		}
-		log.Printf("provider registered: %s endpoint=%s", name, baseURL)
-	}
+	// Routes and provider instances come exclusively from the versioned
+	// control-plane snapshot. The Gateway deliberately starts empty: it must
+	// never invent a provider or silently fall back to an in-process mock.
+	instanceID := gatewayInstanceID()
+	credentials := &controlCredentialResolver{instanceID: instanceID}
+	registry := provider.NewRegistryWithOptions(nil, provider.RegistryOptions{
+		Credentials:    credentials,
+		ResolveTimeout: durationEnv("GATEWAY_CREDENTIAL_RESOLVE_TIMEOUT", 2*time.Second),
+	})
 
 	// Redis 复用：限流 + Stream 共享同一实例
 	redisAddr := os.Getenv("REDIS_ADDR")
@@ -99,7 +87,6 @@ func main() {
 		controlAddr = "localhost:50051"
 	}
 	controlCtx, controlCancel := context.WithCancel(context.Background())
-	instanceID := gatewayInstanceID()
 	log.Printf("gateway instance=%s", instanceID)
 	controlSync := control.NewSynchronizer(controlAddr, control.SyncOptions{
 		PollInterval:   durationEnv("CONTROL_CONFIG_POLL_INTERVAL", 30*time.Second),
@@ -107,6 +94,9 @@ func main() {
 		OnLeaseExpired: func() { authStore.UpdateRecords(nil) },
 		TLS:            control.TLSConfigFromEnv(),
 		InstanceID:     instanceID,
+		OnClient: func(client *control.Client) {
+			credentials.client.Store(client)
+		},
 	})
 	go func() {
 		err := controlSync.Run(controlCtx, func(cfg *pb.Config) error {

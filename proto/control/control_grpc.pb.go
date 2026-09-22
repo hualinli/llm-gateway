@@ -209,3 +209,118 @@ var ConfigService_ServiceDesc = grpc.ServiceDesc{
 	},
 	Metadata: "proto/control.proto",
 }
+
+const (
+	ProviderCredentialResolver_ResolveProviderCredential_FullMethodName = "/control.ProviderCredentialResolver/ResolveProviderCredential"
+)
+
+// ProviderCredentialResolverClient is the client API for ProviderCredentialResolver service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// ProviderCredentialResolver is an internal control-plane API. It is not part
+// of ConfigService, so plaintext never enters GetConfig or WatchConfig.
+// Production listeners must use mTLS. Local demo may opt in to insecure
+// transport explicitly; the RPC still returns only the secret bytes for one
+// credential and must not be logged.
+type ProviderCredentialResolverClient interface {
+	ResolveProviderCredential(ctx context.Context, in *ResolveProviderCredentialRequest, opts ...grpc.CallOption) (*ResolveProviderCredentialResponse, error)
+}
+
+type providerCredentialResolverClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewProviderCredentialResolverClient(cc grpc.ClientConnInterface) ProviderCredentialResolverClient {
+	return &providerCredentialResolverClient{cc}
+}
+
+func (c *providerCredentialResolverClient) ResolveProviderCredential(ctx context.Context, in *ResolveProviderCredentialRequest, opts ...grpc.CallOption) (*ResolveProviderCredentialResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResolveProviderCredentialResponse)
+	err := c.cc.Invoke(ctx, ProviderCredentialResolver_ResolveProviderCredential_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ProviderCredentialResolverServer is the server API for ProviderCredentialResolver service.
+// All implementations must embed UnimplementedProviderCredentialResolverServer
+// for forward compatibility.
+//
+// ProviderCredentialResolver is an internal control-plane API. It is not part
+// of ConfigService, so plaintext never enters GetConfig or WatchConfig.
+// Production listeners must use mTLS. Local demo may opt in to insecure
+// transport explicitly; the RPC still returns only the secret bytes for one
+// credential and must not be logged.
+type ProviderCredentialResolverServer interface {
+	ResolveProviderCredential(context.Context, *ResolveProviderCredentialRequest) (*ResolveProviderCredentialResponse, error)
+	mustEmbedUnimplementedProviderCredentialResolverServer()
+}
+
+// UnimplementedProviderCredentialResolverServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedProviderCredentialResolverServer struct{}
+
+func (UnimplementedProviderCredentialResolverServer) ResolveProviderCredential(context.Context, *ResolveProviderCredentialRequest) (*ResolveProviderCredentialResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ResolveProviderCredential not implemented")
+}
+func (UnimplementedProviderCredentialResolverServer) mustEmbedUnimplementedProviderCredentialResolverServer() {
+}
+func (UnimplementedProviderCredentialResolverServer) testEmbeddedByValue() {}
+
+// UnsafeProviderCredentialResolverServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to ProviderCredentialResolverServer will
+// result in compilation errors.
+type UnsafeProviderCredentialResolverServer interface {
+	mustEmbedUnimplementedProviderCredentialResolverServer()
+}
+
+func RegisterProviderCredentialResolverServer(s grpc.ServiceRegistrar, srv ProviderCredentialResolverServer) {
+	// If the following call panics, it indicates UnimplementedProviderCredentialResolverServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&ProviderCredentialResolver_ServiceDesc, srv)
+}
+
+func _ProviderCredentialResolver_ResolveProviderCredential_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResolveProviderCredentialRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ProviderCredentialResolverServer).ResolveProviderCredential(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ProviderCredentialResolver_ResolveProviderCredential_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ProviderCredentialResolverServer).ResolveProviderCredential(ctx, req.(*ResolveProviderCredentialRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// ProviderCredentialResolver_ServiceDesc is the grpc.ServiceDesc for ProviderCredentialResolver service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var ProviderCredentialResolver_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "control.ProviderCredentialResolver",
+	HandlerType: (*ProviderCredentialResolverServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "ResolveProviderCredential",
+			Handler:    _ProviderCredentialResolver_ResolveProviderCredential_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "proto/control.proto",
+}

@@ -68,7 +68,7 @@ func TestFreshSchemaRequiresExplicitMigration(t *testing.T) {
 	if err := migrations.Check(db); err != nil {
 		t.Fatal(err)
 	}
-	for _, table := range []string{"metering_events", "control_config", "control_audit_events"} {
+	for _, table := range []string{"metering_events", "control_config", "control_audit_events", "provider_credentials"} {
 		var name sql.NullString
 		if err := db.QueryRow(`SELECT to_regclass($1)::text`, table).Scan(&name); err != nil || !name.Valid {
 			t.Fatalf("missing %s: %v", table, err)
@@ -128,7 +128,9 @@ func TestAdoptUnversionedSchemaAndRollback(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := m.Steps(-1); err != nil {
+			// Version 3 adds provider credentials. Roll back to version 1 so the
+			// event_id rename is undone and the credential table is removed.
+			if err := m.Migrate(1); err != nil {
 				t.Fatal(err)
 			}
 			a, b = m.Close()

@@ -97,15 +97,15 @@ func TestConfigPatchPreservesAndClearsProviders(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := srv.ApplyKeyRecordsAndProviders(nil, routes(), map[string]*pb.ProviderConfig{
-		"mock-a": {Id: "mock-a", Protocol: "mock", MockDelayMs: 5},
+		"provider-a": {Id: "provider-a", Protocol: "openai-compatible", Url: "http://provider-a.test"},
 	}); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := srv.PatchConfig(ConfigPatch{Routes: RoutesToProto(map[string][]string{"other": {"mock-a"}})})
+	cfg, err := srv.PatchConfig(ConfigPatch{Routes: RoutesToProto(map[string][]string{"other": {"provider-a"}})})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Providers["mock-a"] == nil || cfg.Providers["mock-a"].MockDelayMs != 5 {
+	if cfg.Providers["provider-a"] == nil || cfg.Providers["provider-a"].Url != "http://provider-a.test" {
 		t.Fatalf("omitted providers were dropped: %+v", cfg.Providers)
 	}
 	if _, ok := cfg.Routes["other"]; !ok {

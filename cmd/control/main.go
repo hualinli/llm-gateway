@@ -97,7 +97,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("control init: %v", err)
 	}
-	// 空库启动时种入初始版，和 gateway 的写死版保持一致；有存档则直接恢复
+	// An empty store stays empty. Providers and routes are business state and
+	// must be submitted explicitly through the control plane; startup must not
+	// silently point traffic at local mocks or any other endpoint.
 	auditSink := control.AuditSink(control.LogAuditSink{})
 	if pgStore, ok := store.(*control.PGStore); ok {
 		var auditErr error
@@ -120,26 +122,17 @@ func main() {
 				TenantId: record.TenantID, Status: record.Status,
 			}}
 		}
-		primaryURL := os.Getenv("UPSTREAM_PRIMARY_URL")
-		if primaryURL == "" {
-			primaryURL = "http://127.0.0.1:18080"
-		}
-		backupURL := os.Getenv("UPSTREAM_BACKUP_URL")
-		if backupURL == "" {
-			backupURL = "http://127.0.0.1:18081"
-		}
-		if _, err := srv.ApplyKeyRecordsAndProviders(bootstrapRecords, control.RoutesToProto(map[string][]string{
-			"default": {"primary", "backup"},
-		}), map[string]*pb.ProviderConfig{
-			"primary": {Id: "primary", Protocol: "openai-compatible", Url: primaryURL},
-			"backup":  {Id: "backup", Protocol: "openai-compatible", Url: backupURL},
-		}); err != nil {
-			log.Fatalf("control seed: %v", err)
+		if len(bootstrapRecords) > 0 {
+			if _, err := srv.ApplyKeyRecordsAndProviders(bootstrapRecords, nil, nil); err != nil {
+				log.Fatalf("control bootstrap credential: %v", err)
+			}
 		}
 	}
 
 	// gRPC :50051；配置证书后启用 TLS/mTLS，否则仅用于本地 Demo。
 	tlsConfig := control.TLSConfigFromEnv()
+	providerCredentials := configureProviderCredentials(srv, store, tlsConfig)
+	srv.EnableProviderCredentialResolver(providerCredentials, auditSink, flagEnv("CONTROL_ALLOW_INSECURE_CREDENTIAL_RESOLVE"))
 	go func() {
 		if err := control.RunWithTLS(":50051", srv, tlsConfig); err != nil {
 			log.Fatalf("control grpc: %v", err)
@@ -167,12 +160,23 @@ func main() {
 	if err != nil {
 		log.Fatalf("control credential HTTP: %v", err)
 	}
+	providerCredentialService, err := control.NewProviderCredentialService(srv, providerCredentials, auditSink)
+	if err != nil {
+		log.Fatalf("provider credentials: %v", err)
+	}
+	providerCredentialHandler, err := control.NewProviderCredentialHTTPHandler(providerCredentialService)
+	if err != nil {
+		log.Fatalf("provider credential HTTP: %v", err)
+	}
 	configHandler := newConfigHandler(srv, auditSink, legacyKeyInputAllowed)
 	mux.Handle("/config", control.AdminAuth(configHandler, adminToken, requireAdminAuth))
 	mux.Handle("/gateways", control.AdminAuth(newGatewayStatusHandler(srv), adminToken, requireAdminAuth))
 	keysAuth := control.IdentityAuth(credentialHandler, identityVerifier, true)
 	mux.Handle("/keys", keysAuth)
 	mux.Handle("/keys/", keysAuth)
+	providerAuth := control.AdminAuth(providerCredentialHandler, adminToken, requireAdminAuth)
+	mux.Handle("/provider-credentials", providerAuth)
+	mux.Handle("/provider-credentials/", providerAuth)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok\n")) })
 
 	go func() {

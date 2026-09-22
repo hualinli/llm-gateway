@@ -106,7 +106,7 @@ func main() {
 
 	srv := &http.Server{Addr: ":8091", Handler: observability.Middleware(mux)}
 	go func() {
-		log.Printf("metering listening on :8091 ledger in-memory")
+		log.Printf("metering listening on :8091")
 		log.Printf("metering consumer group=%s stream=%s", metering.GroupName, metering.StreamName)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("metering http: %v", err)

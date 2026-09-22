@@ -59,14 +59,15 @@ func TestConfigAppliesProvidersAndReturnsThemOnGet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	srv.SetProviderCredentialStore(allowProviderCredential{providerID: "openai", credentialID: "pcred_0123456789abcdef"})
 	h := newConfigHandler(srv, control.NopAuditSink{}, false)
-	req := httptest.NewRequest("POST", "/config", strings.NewReader(`{"providers":{"openai":{"id":"openai","protocol":"openai-compatible","url":"https://api.openai.com","credential_ref":"env://OPENAI_API_KEY"}},"routes":{"default":["openai"]}}`))
+	req := httptest.NewRequest("POST", "/config", strings.NewReader(`{"providers":{"openai":{"id":"openai","protocol":"openai-compatible","url":"https://api.openai.com","credential_ref":"control://provider-credentials/pcred_0123456789abcdef"}},"routes":{"default":["openai"]}}`))
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if rec.Code != 200 {
 		t.Fatalf("apply providers: status=%d body=%s", rec.Code, rec.Body)
 	}
-	if !strings.Contains(rec.Body.String(), `"credential_ref":"env://OPENAI_API_KEY"`) || !strings.Contains(rec.Body.String(), `"result":"persisted"`) {
+	if !strings.Contains(rec.Body.String(), `"credential_ref":"control://provider-credentials/pcred_0123456789abcdef"`) || !strings.Contains(rec.Body.String(), `"result":"persisted"`) {
 		t.Fatalf("POST response missing persisted provider snapshot: %s", rec.Body)
 	}
 
@@ -77,7 +78,7 @@ func TestConfigAppliesProvidersAndReturnsThemOnGet(t *testing.T) {
 		t.Fatalf("GET config: status=%d body=%s", getRec.Code, getRec.Body)
 	}
 	body := getRec.Body.String()
-	if !strings.Contains(body, `"openai"`) || !strings.Contains(body, "env://OPENAI_API_KEY") {
+	if !strings.Contains(body, `"openai"`) || !strings.Contains(body, "pcred_0123456789abcdef") {
 		t.Fatalf("GET missing provider snapshot: %s", body)
 	}
 	if strings.Contains(body, "sk-") {
@@ -107,4 +108,31 @@ func TestRedactKeyRecords(t *testing.T) {
 	if redacted[0]["key_id"] != "key-1" || redacted[0]["key_prefix"] != "in..." || redacted[0]["tenant_id"] != "tenant-a" {
 		t.Fatalf("unexpected redacted record: %+v", redacted[0])
 	}
+}
+
+type allowProviderCredential struct {
+	providerID   string
+	credentialID string
+}
+
+func (s allowProviderCredential) Create(context.Context, string, []byte) (control.ProviderCredentialMetadata, error) {
+	return control.ProviderCredentialMetadata{}, &control.CredentialError{Code: control.CodeCredentialUnavailable}
+}
+func (s allowProviderCredential) List(context.Context, string) ([]control.ProviderCredentialMetadata, error) {
+	return nil, &control.CredentialError{Code: control.CodeCredentialUnavailable}
+}
+func (s allowProviderCredential) Metadata(_ context.Context, credentialID string) (control.ProviderCredentialMetadata, error) {
+	if credentialID != s.credentialID {
+		return control.ProviderCredentialMetadata{}, &control.CredentialError{Code: control.CodeCredentialNotFound}
+	}
+	return control.ProviderCredentialMetadata{
+		CredentialID: credentialID, CredentialRef: control.ProviderCredentialRef(credentialID),
+		ProviderID: s.providerID, Status: "active",
+	}, nil
+}
+func (s allowProviderCredential) Resolve(context.Context, string, string) ([]byte, error) {
+	return nil, &control.CredentialError{Code: control.CodeCredentialUnavailable}
+}
+func (s allowProviderCredential) Revoke(context.Context, string) error {
+	return &control.CredentialError{Code: control.CodeCredentialUnavailable}
 }
