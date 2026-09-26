@@ -238,6 +238,66 @@ func TestProviderCredentialLifecyclePostgres(t *testing.T) {
 	}
 }
 
+func TestProviderCredentialMutationsRollBackWhenAuditUnavailable(t *testing.T) {
+	dsn, db := isolatedCredentialDB(t)
+	if err := migrations.Up(dsn); err != nil {
+		t.Fatal(err)
+	}
+	key, _, err := EnsureMasterKeyFile(t.TempDir() + "/master-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := NewPGProviderCredentialStore(db, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := newTestServer(t)
+	sink, err := NewPGAuditSink(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := NewProviderCredentialService(srv, store, sink)
+	if err != nil {
+		t.Fatal(err)
+	}
+	admin := Principal{Subject: "admin", Role: RoleAdmin}
+	created, err := service.CreateAs(context.Background(), admin, "openai", []byte("test-secret"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var auditRows int
+	if err := db.QueryRow(`SELECT count(*) FROM control_audit_events WHERE credential_id=$1 AND outcome='success'`, created.CredentialID).Scan(&auditRows); err != nil || auditRows != 1 {
+		t.Fatalf("create audit rows=%d err=%v", auditRows, err)
+	}
+	revoked, err := service.CreateAs(context.Background(), admin, "openai", []byte("revoke-secret"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.RevokeAs(context.Background(), admin, revoked.CredentialID); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`SELECT count(*) FROM control_audit_events WHERE credential_id=$1 AND action='provider_credential.revoke' AND outcome='success'`, revoked.CredentialID).Scan(&auditRows); err != nil || auditRows != 1 {
+		t.Fatalf("revoke audit rows=%d err=%v", auditRows, err)
+	}
+	if _, err := db.Exec(`DROP TABLE control_audit_events`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.CreateAs(context.Background(), admin, "other", []byte("another-secret")); credentialCode(err) != CodeCredentialUnavailable {
+		t.Fatalf("create without audit err=%v", err)
+	}
+	var credentials int
+	if err := db.QueryRow(`SELECT count(*) FROM provider_credentials`).Scan(&credentials); err != nil || credentials != 2 {
+		t.Fatalf("credential count after rolled-back create=%d err=%v", credentials, err)
+	}
+	if err := service.RevokeAs(context.Background(), admin, created.CredentialID); credentialCode(err) != CodeCredentialUnavailable {
+		t.Fatalf("revoke without audit err=%v", err)
+	}
+	meta, err := store.Metadata(context.Background(), created.CredentialID)
+	if err != nil || meta.Status != "active" {
+		t.Fatalf("credential after rolled-back revoke status=%s err=%v", meta.Status, err)
+	}
+}
+
 func isolatedCredentialDB(t *testing.T) (string, *sql.DB) {
 	t.Helper()
 	base := os.Getenv("CONTROL_TEST_POSTGRES_DSN")

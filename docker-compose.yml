@@ -23,8 +23,9 @@ services:
       PROVIDER_CREDENTIAL_MASTER_KEY_FILE: /run/secrets/provider-credential-master-key
       CONTROL_ALLOW_INSECURE_CREDENTIAL_RESOLVE: "true"
     ports:
-      - "50051:50051"
-      - "50052:50052"
+      # The insecure credential resolver is reachable from the host only for local demo work.
+      - "127.0.0.1:50051:50051"
+      - "127.0.0.1:50052:50052"
     depends_on:
       migrate:
         condition: service_completed_successfully

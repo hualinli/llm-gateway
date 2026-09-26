@@ -961,8 +961,8 @@ make demo-observability
 |---|---|
 | Gateway | `localhost:8090` |
 | Metering | `localhost:8091` |
-| Control gRPC | `localhost:50051` |
-| Control HTTP demo admin | `localhost:50052` |
+| Control gRPC（仅宿主机本地访问） | `localhost:50051` |
+| Control HTTP demo admin（仅宿主机本地访问） | `localhost:50052` |
 | Fake upstream primary | `localhost:18080` |
 | Fake upstream backup | `localhost:18081` |
 | Prometheus（可选） | `localhost:9090` |

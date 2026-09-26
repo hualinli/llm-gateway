@@ -89,6 +89,15 @@ func (s *PGProviderCredentialStore) VerifyMasterKey(ctx context.Context) error {
 }
 
 func (s *PGProviderCredentialStore) Create(ctx context.Context, providerID string, secret []byte) (ProviderCredentialMetadata, error) {
+	return s.create(ctx, providerID, secret, nil)
+}
+
+// CreateWithAudit commits the credential and its success audit row together.
+func (s *PGProviderCredentialStore) CreateWithAudit(ctx context.Context, providerID string, secret []byte, audit AuditEvent) (ProviderCredentialMetadata, error) {
+	return s.create(ctx, providerID, secret, &audit)
+}
+
+func (s *PGProviderCredentialStore) create(ctx context.Context, providerID string, secret []byte, audit *AuditEvent) (ProviderCredentialMetadata, error) {
 	if s == nil || s.db == nil || !s.key.available() {
 		return ProviderCredentialMetadata{}, credentialError(CodeCredentialUnavailable)
 	}
@@ -124,6 +133,14 @@ func (s *PGProviderCredentialStore) Create(ctx context.Context, providerID strin
 	if _, err := tx.ExecContext(ctx, queryInsertProviderCredential,
 		credentialID, providerID, ciphertext, nonce, s.key.ID, fingerprint, createdAt); err != nil {
 		return ProviderCredentialMetadata{}, credentialError(CodeCredentialUnavailable)
+	}
+	if audit != nil {
+		audit.CredentialID = credentialID
+		audit.ProviderID = providerID
+		audit.Outcome = "success"
+		if err := insertAuditTx(ctx, tx, *audit); err != nil {
+			return ProviderCredentialMetadata{}, credentialError(CodeCredentialUnavailable)
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return ProviderCredentialMetadata{}, credentialError(CodeCredentialUnavailable)
@@ -230,6 +247,15 @@ func (s *PGProviderCredentialStore) Resolve(ctx context.Context, credentialID, p
 }
 
 func (s *PGProviderCredentialStore) Revoke(ctx context.Context, credentialID string) error {
+	return s.revoke(ctx, credentialID, nil)
+}
+
+// RevokeWithAudit commits revocation and its success audit row together.
+func (s *PGProviderCredentialStore) RevokeWithAudit(ctx context.Context, credentialID string, audit AuditEvent) error {
+	return s.revoke(ctx, credentialID, &audit)
+}
+
+func (s *PGProviderCredentialStore) revoke(ctx context.Context, credentialID string, audit *AuditEvent) error {
 	if s == nil || s.db == nil {
 		return credentialError(CodeCredentialUnavailable)
 	}
@@ -269,6 +295,14 @@ func (s *PGProviderCredentialStore) Revoke(ctx context.Context, credentialID str
 			return nil
 		}
 		return credentialError(CodeCredentialUnavailable)
+	}
+	if audit != nil {
+		audit.CredentialID = credentialID
+		audit.ProviderID = meta.ProviderID
+		audit.Outcome = "success"
+		if err := insertAuditTx(ctx, tx, *audit); err != nil {
+			return credentialError(CodeCredentialUnavailable)
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return credentialError(CodeCredentialUnavailable)

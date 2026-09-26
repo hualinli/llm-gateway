@@ -39,11 +39,26 @@ func (s *PGAuditSink) Record(ctx context.Context, event AuditEvent) {
 		event.ConfigVersion, event.KeyCount, safeAuditError(event.Error),
 		event.CredentialID, event.ProviderID, event.GatewayInstanceID)
 	if err != nil {
-		// The service operation has already changed the configuration snapshot;
-		// do not turn an audit outage into a misleading failed Create/Revoke.
+		// Configuration, reads and failed attempts use best-effort auditing.
+		// Successful provider credential mutations write their audit row in the
+		// same transaction instead of using this method.
 		// Keep the error safe: never log event.Error or any request payload.
 		logAuditWriteFailure(event, err)
 	}
+}
+
+// insertAuditTx makes a successful provider credential mutation and its audit
+// row one PostgreSQL commit. A failed audit insert must roll back the mutation.
+func insertAuditTx(ctx context.Context, tx *sql.Tx, event AuditEvent) error {
+	if event.Time.IsZero() {
+		event.Time = time.Now().UTC()
+	}
+	_, err := tx.ExecContext(ctx, queryInsertAudit,
+		event.Time, event.Action, event.Outcome, event.Subject, string(event.Role),
+		event.TenantID, event.KeyID, event.RequestID, event.TraceID,
+		event.ConfigVersion, event.KeyCount, safeAuditError(event.Error),
+		event.CredentialID, event.ProviderID, event.GatewayInstanceID)
+	return err
 }
 
 func (p *PGStore) DB() *sql.DB {

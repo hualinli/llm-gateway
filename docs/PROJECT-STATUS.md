@@ -4,6 +4,8 @@
 > 审查基线：`abdc47e`  
 > 范围：业务源码、测试、迁移、Compose、Prometheus/Grafana 配置、README、路线图和历史验证记录。
 
+> 2026-09-26 FEAT-001 补充验收：本地 Compose 的 Control 宿主机端口已限于 `127.0.0.1`；Provider 凭据成功创建/撤销与成功审计已改为同一 PostgreSQL 事务；Control/Gateway 容器分别重启后凭据请求与最终入账通过。证据见 [合并前补充验收](verification/2026-09-26/feat001-merge-fixes/README.md)。下文未注明的状态仍以 2026-09-22 审查为准。
+
 本文是“当前已经做到什么、还存在什么问题”的事实源；[PROJECT-ROADMAP.md](PROJECT-ROADMAP.md)负责描述推进顺序和退出标准。历史评估与修复报告保留当时结论，不再作为当前待办清单。
 
 ## 1. 状态标记

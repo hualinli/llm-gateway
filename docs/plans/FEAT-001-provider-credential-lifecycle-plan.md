@@ -98,7 +98,7 @@ go test -race ./internal/control ./migrations -count=1
 - [ ] `ListAs`：仅 admin；只返回 metadata；
 - [ ] `RevokeAs`：仅 admin；检查当前 desired 配置是否引用；
 - [ ] 重复 revoke 幂等；
-- [ ] 为 create/list/revoke 写审计事件；
+- [ ] 成功 create/revoke 与对应成功审计在同一 PostgreSQL 事务提交；list 与失败尝试尽力写审计事件；
 - [ ] 审计事件只含 credential ID、provider ID、状态和 config version。
 
 ### B2. HTTP facade

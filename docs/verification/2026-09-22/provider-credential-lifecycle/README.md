@@ -54,3 +54,5 @@ CONTROL_TEST_POSTGRES_DSN=postgres://gateway_test:test_only_local@127.0.0.1:1543
 - 没有单独停掉 Control/Gateway 容器再拉起的手工剧本；重启语义由同一数据库上的新 Store、新 Server 和新 Registry 覆盖。
 - 没有把这次凭据请求送进 Metering Consumer 做对账。计量链路本身未改，本记录不把它算作新的入账证据。
 - 多 Gateway 全部切换、master key 在线轮换和外部 Secret Manager 仍未实现。
+
+2026-09-26 已补充 [独立 Compose 的 Control/Gateway 进程重启与计量验收](../../2026-09-26/feat001-merge-fixes/README.md)。

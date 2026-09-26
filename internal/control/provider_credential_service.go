@@ -16,6 +16,11 @@ type ProviderCredentialService struct {
 	audit  AuditSink
 }
 
+type auditedProviderCredentialStore interface {
+	CreateWithAudit(context.Context, string, []byte, AuditEvent) (ProviderCredentialMetadata, error)
+	RevokeWithAudit(context.Context, string, AuditEvent) error
+}
+
 func NewProviderCredentialService(server *Server, store ProviderCredentialStore, audit AuditSink) (*ProviderCredentialService, error) {
 	if server == nil {
 		return nil, errors.New("provider credential service requires control server")
@@ -43,7 +48,14 @@ func (s *ProviderCredentialService) CreateAs(ctx context.Context, principal Prin
 		s.audit.Record(ctx, audit)
 		return ProviderCredentialMetadata{}, err
 	}
-	created, err := s.store.Create(ctx, providerID, secret)
+	audit.ConfigVersion = s.server.CurrentConfig().Version
+	var created ProviderCredentialMetadata
+	var err error
+	if store, ok := s.store.(auditedProviderCredentialStore); ok {
+		created, err = store.CreateWithAudit(ctx, providerID, secret, audit)
+	} else {
+		created, err = s.store.Create(ctx, providerID, secret)
+	}
 	if err != nil {
 		audit.Error = safeCredentialAuditError(err)
 		audit.ProviderID = providerID
@@ -54,7 +66,9 @@ func (s *ProviderCredentialService) CreateAs(ctx context.Context, principal Prin
 	audit.CredentialID = created.CredentialID
 	audit.ProviderID = created.ProviderID
 	audit.ConfigVersion = s.server.CurrentConfig().Version
-	s.audit.Record(ctx, audit)
+	if _, ok := s.store.(auditedProviderCredentialStore); !ok {
+		s.audit.Record(ctx, audit)
+	}
 	return created, nil
 }
 
@@ -131,13 +145,21 @@ func (s *ProviderCredentialService) RevokeAs(ctx context.Context, principal Prin
 		s.audit.Record(ctx, audit)
 		return credentialError(CodeCredentialInUse)
 	}
-	if err := s.store.Revoke(ctx, credentialID); err != nil {
-		audit.Error = safeCredentialAuditError(err)
+	var revokeErr error
+	if store, ok := s.store.(auditedProviderCredentialStore); ok {
+		revokeErr = store.RevokeWithAudit(ctx, credentialID, audit)
+	} else {
+		revokeErr = s.store.Revoke(ctx, credentialID)
+	}
+	if revokeErr != nil {
+		audit.Error = safeCredentialAuditError(revokeErr)
 		s.audit.Record(ctx, audit)
-		return err
+		return revokeErr
 	}
 	audit.Outcome = "success"
-	s.audit.Record(ctx, audit)
+	if _, ok := s.store.(auditedProviderCredentialStore); !ok {
+		s.audit.Record(ctx, audit)
+	}
 	return nil
 }
 
