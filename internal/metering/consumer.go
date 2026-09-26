@@ -103,21 +103,33 @@ func InstanceConsumerName() string {
 	return host + "-" + strconv.Itoa(os.Getpid())
 }
 
-// EnsureGroup 启动时建组，已存在则忽略
-func (c *Consumer) EnsureGroup(ctx context.Context) {
-	_ = c.rdb.XGroupCreateMkStream(ctx, StreamName, GroupName, "0").Err()
-	// BUSYGROUP 已存在不算错
+// EnsureGroup creates the group, treating only an existing group as success.
+func (c *Consumer) EnsureGroup(ctx context.Context) error {
+	err := c.rdb.XGroupCreateMkStream(ctx, StreamName, GroupName, "0").Err()
+	if err != nil && !strings.Contains(err.Error(), "BUSYGROUP") {
+		return err
+	}
+	return nil
 }
 
 // Run 阻塞消费，ctx 取消即退出
 func (c *Consumer) Run(ctx context.Context) {
-	c.EnsureGroup(ctx)
 	log.Printf("metering consumer group=%s consumer=%s stream=%s", GroupName, c.name, StreamName)
 
 	// 后台定期认领 pending（崩溃后重放）
 	go c.reclaimLoop(ctx)
 
+	needsGroup := true
 	for {
+		if needsGroup {
+			if err := c.EnsureGroup(ctx); err != nil {
+				if ctx.Err() != nil || !waitConsumerRetry(ctx, consumerErrorBackoff) {
+					return
+				}
+				continue
+			}
+			needsGroup = false
+		}
 		select {
 		case <-ctx.Done():
 			return
@@ -133,6 +145,10 @@ func (c *Consumer) Run(ctx context.Context) {
 			Block:    c.block,
 		}).Result()
 		if err != nil && err != redis.Nil {
+			if strings.Contains(err.Error(), "NOGROUP") {
+				log.Printf("metering: group missing, recreating: %v", err)
+				needsGroup = true
+			}
 			// Redis 故障时不要 tight-loop；消息仍由 Redis Stream 保留，
 			// 等待退避后重新读取，不改变 pending/ACK 语义。
 			if !waitConsumerRetry(ctx, consumerErrorBackoff) {
@@ -238,22 +254,37 @@ func (c *Consumer) reclaimLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			// 尝试认领 Idle >30s 的 pending
-			msgs, _, err := c.rdb.XAutoClaim(ctx, &redis.XAutoClaimArgs{
-				Stream:   StreamName,
-				Group:    GroupName,
-				Consumer: c.name,
-				MinIdle:  c.idle,
-				Start:    "0-0",
-				Count:    c.count,
-			}).Result()
-			if err != nil || len(msgs) == 0 {
-				continue
-			}
-			metrics.MeteringPendingClaimTotal.Add(float64(len(msgs)))
-			for _, m := range msgs {
-				c.handle(ctx, m)
-			}
+			c.reclaimPending(ctx)
 		}
+	}
+}
+
+// reclaimPending follows Redis's cursor, so a failing message at the front
+// cannot hide later pending messages. Bound work per tick to keep reads fair.
+func (c *Consumer) reclaimPending(ctx context.Context) {
+	start := "0-0"
+	for page := 0; page < 32 && ctx.Err() == nil; page++ {
+		msgs, next, err := c.rdb.XAutoClaim(ctx, &redis.XAutoClaimArgs{
+			Stream:   StreamName,
+			Group:    GroupName,
+			Consumer: c.name,
+			MinIdle:  c.idle,
+			Start:    start,
+			Count:    c.count,
+		}).Result()
+		if err != nil {
+			if ctx.Err() == nil {
+				log.Printf("metering: pending reclaim failed: %v", err)
+			}
+			return
+		}
+		metrics.MeteringPendingClaimTotal.Add(float64(len(msgs)))
+		for _, m := range msgs {
+			c.handle(ctx, m)
+		}
+		if next == "0-0" || next == "" || next == start {
+			return
+		}
+		start = next
 	}
 }

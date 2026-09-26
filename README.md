@@ -905,6 +905,14 @@ git diff --check
 
 ### 5.1 五分钟 Demo
 
+完整验收可直接运行 `make demo-accept`。它在 Compose 内启动两个无对外端口的 Mock，配置路由和租户 Key，然后连续三轮验证主路 SSE、首事件前切换到备用、两个上游都不可用时返回 502、计费增加两条及事件级对账。每轮的请求日志和对账 JSON 保存到 `data/verification/demo-<commit>-<time>/`。结束后 Mock 会停止，核心服务和数据卷保留，便于检查现场。运行前需有 Docker、Go 和 Python 3。
+
+```bash
+make demo-accept
+```
+
+手工演示仍可按以下步骤操作：
+
 ```bash
 # terminal 1-2：Mock 是普通外部 OpenAI-compatible 服务，按需手工启动
 make mock-primary
@@ -940,6 +948,8 @@ make demo-clean  # 显式删除 PostgreSQL、Redis、Grafana 和 spool 卷
 ```
 
 默认 Compose 提供：
+
+所有已发布端口只监听本机 `127.0.0.1`；Compose 内的服务彼此通过内部网络访问。此配置只用于本地 Demo。
 
 - Redis：`localhost:6379`
 - PostgreSQL：`localhost:5433`

@@ -1,4 +1,4 @@
-.PHONY: tidy up down run vet test test-up test-down integration-test mock-primary mock-backup demo-up demo-observability demo-config demo-smoke demo-smoke-backup demo-smoke-unavailable demo-down demo-clean ensure-master-key
+.PHONY: tidy up down run vet test test-up test-down integration-test mock-primary mock-backup demo-up demo-observability demo-config demo-smoke demo-smoke-backup demo-smoke-unavailable demo-accept demo-down demo-clean ensure-master-key
 
 TEST_REDIS_ADDR ?= 127.0.0.1:16379
 TEST_POSTGRES_DSN ?= postgres://gateway_test:test_only_local@127.0.0.1:15433/gateway_test?sslmode=disable
@@ -33,6 +33,10 @@ demo-smoke-backup:
 # Stop both mocks first; this proves failure is explicit and no hidden mock is used.
 demo-smoke-unavailable:
 	go run ./cmd/democtl request -expect-status 502
+
+# Three complete primary/failover/outage/reconciliation runs on one checkout.
+demo-accept:
+	bash scripts/demo-accept.sh
 
 demo-down: down
 
