@@ -1,0 +1,12 @@
+# Local-only benchmark overlay. Run with the base file and demo-mocks profile.
+services:
+  gateway:
+    environment:
+      GATEWAY_LIMITER_RATE: "100000"
+      GATEWAY_LIMITER_BURST: "100000"
+  mock-primary:
+    ports:
+      - "127.0.0.1:18080:18080"
+  mock-backup:
+    ports:
+      - "127.0.0.1:18081:18081"
