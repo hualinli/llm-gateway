@@ -57,6 +57,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", required=True)
     parser.add_argument("--arrival-only", action="store_true", help="run fixed arrival rate cases only")
+    parser.add_argument("--no-build", action="store_true", help="reuse already built local Compose images")
     args = parser.parse_args()
     output_dir = pathlib.Path(args.output).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -73,7 +74,7 @@ def main():
     command(["go", "build", "-o", str(binary), "./cmd/loadtest"])
     with (output_dir / "compose-up.log").open("w") as log:
         command(["make", "ensure-master-key"], stdout=log, stderr=subprocess.STDOUT)
-        command(COMPOSE + ["up", "-d", "--build", "--wait"], stdout=log, stderr=subprocess.STDOUT, env={**os.environ, "HOST_UID": str(os.getuid()), "HOST_GID": str(os.getgid())})
+        command(COMPOSE + ["up", "-d", "--no-build" if args.no_build else "--build", "--wait"], stdout=log, stderr=subprocess.STDOUT, env={**os.environ, "HOST_UID": str(os.getuid()), "HOST_GID": str(os.getgid())})
     try:
         with (output_dir / "configure.log").open("w") as log:
             command(["go", "run", "./cmd/democtl", "configure", "-primary-url", "http://mock-primary:18080", "-backup-url", "http://mock-backup:18081"], stdout=log, stderr=subprocess.STDOUT)
