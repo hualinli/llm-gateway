@@ -22,17 +22,17 @@ def metrics():
     try:
         with urllib.request.urlopen("http://127.0.0.1:8090/metrics", timeout=2) as response:
             lines = response.read().decode().splitlines()
-        names = ("process_cpu_seconds_total", "process_resident_memory_bytes", "go_memstats_heap_alloc_bytes", "go_gc_cycles_total_gc_cycles")
+        names = ("process_cpu_seconds_total", "process_resident_memory_bytes", "go_memstats_heap_alloc_bytes", "go_gc_duration_seconds_count")
         return {key: float(value) for line in lines if line and not line.startswith("#") and "{" not in line for key, value in [line.split()[:2]] if key in names}
     except Exception as exc:
         return {"sample_error": str(exc)}
 
 
-def run_case(binary, output_dir, name, target, key, concurrency, requests, repetition):
+def run_case(binary, output_dir, name, target, key, concurrency, requests, repetition, rate=0):
     path = output_dir / f"{name}-c{concurrency}-r{repetition}"
     path.mkdir(parents=True)
     result = path / "result.json"
-    args = [str(binary), "-target", target, "-c", str(concurrency), "-n", str(requests), "-json", str(result)]
+    args = [str(binary), "-target", target, "-c", str(concurrency), "-n", str(requests), "-rate", str(rate), "-json", str(result)]
     if key:
         args.extend(["-key", key])
     samples = []
@@ -56,6 +56,7 @@ def run_case(binary, output_dir, name, target, key, concurrency, requests, repet
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", required=True)
+    parser.add_argument("--arrival-only", action="store_true", help="run fixed arrival rate cases only")
     args = parser.parse_args()
     output_dir = pathlib.Path(args.output).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -63,7 +64,7 @@ def main():
     status = command(["git", "status", "--short"], capture_output=True, text=True).stdout
     if status:
         raise RuntimeError("commit benchmark code before measuring; worktree is dirty")
-    environment = {"commit": commit, "platform": platform.platform(), "machine": platform.machine(), "python": platform.python_version(), "go": command(["go", "version"], capture_output=True, text=True).stdout.strip(), "docker_compose": command(["docker", "compose", "version"], capture_output=True, text=True).stdout.strip(), "started_unix": time.time(), "scenarios": "closed-loop; primary/direct c1/16/64/128; backup c16; three repeats each"}
+    environment = {"commit": commit, "platform": platform.platform(), "machine": platform.machine(), "python": platform.python_version(), "go": command(["go", "version"], capture_output=True, text=True).stdout.strip(), "docker_compose": command(["docker", "compose", "version"], capture_output=True, text=True).stdout.strip(), "started_unix": time.time(), "scenarios": "fixed arrival 100/300 requests/s at c64" if args.arrival_only else "closed-loop; primary/direct c1/16/64/128; backup c16; three repeats each"}
     for key, value in (("cpu", "hw.ncpu"), ("memory_bytes", "hw.memsize")):
         result = subprocess.run(["sysctl", "-n", value], capture_output=True, text=True)
         environment[key] = result.stdout.strip() if result.returncode == 0 else "unavailable"
@@ -80,13 +81,19 @@ def main():
         command(["go", "run", "./cmd/democtl", "request", "-expect-provider", "primary"], stdout=subprocess.DEVNULL)
         cases = []
         for name, target, api_key in (("direct", "http://127.0.0.1:18080/v1/chat/completions", ""), ("gateway", "http://127.0.0.1:8090/v1/chat/completions", key)):
-            for concurrency, requests in ((1, 60), (16, 240), (64, 480), (128, 640)):
-                for repetition in range(1, 4):
-                    cases.append(run_case(binary, output_dir, name, target, api_key, concurrency, requests, repetition))
-        command(COMPOSE + ["stop", "mock-primary"], stdout=subprocess.DEVNULL)
-        command(["go", "run", "./cmd/democtl", "request", "-expect-provider", "backup"], stdout=subprocess.DEVNULL)
-        for repetition in range(1, 4):
-            cases.append(run_case(binary, output_dir, "backup", "http://127.0.0.1:8090/v1/chat/completions", key, 16, 240, repetition))
+            if args.arrival_only:
+                for rate, requests in ((100, 600), (300, 900)):
+                    for repetition in range(1, 4):
+                        cases.append(run_case(binary, output_dir, f"{name}-rate{rate}", target, api_key, 64, requests, repetition, rate))
+            else:
+                for concurrency, requests in ((1, 60), (16, 240), (64, 480), (128, 640)):
+                    for repetition in range(1, 4):
+                        cases.append(run_case(binary, output_dir, name, target, api_key, concurrency, requests, repetition))
+        if not args.arrival_only:
+            command(COMPOSE + ["stop", "mock-primary"], stdout=subprocess.DEVNULL)
+            command(["go", "run", "./cmd/democtl", "request", "-expect-provider", "backup"], stdout=subprocess.DEVNULL)
+            for repetition in range(1, 4):
+                cases.append(run_case(binary, output_dir, "backup", "http://127.0.0.1:8090/v1/chat/completions", key, 16, 240, repetition))
         deadline = time.time() + 60
         while True:
             try:
