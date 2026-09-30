@@ -20,6 +20,15 @@ var (
 		Help: "Total requests that reached the entry middleware, including auth and limiter rejections that never reach the proxy. Labels are deliberately bounded: route and result_class only (no tenant, key or request id).",
 	}, []string{"route", "result_class"})
 
+	// Console 入口指标：与 gateway_entry_requests_total 同构，但 route 的取值集合
+	// 由 Console 自己的路由表决定（internal/console.RouteClass），不能复用 Gateway
+	// 的 route 语义。result_class 仍然复用 httperr.Class 的封闭词表；同样不加
+	// user/org/request id 标签。
+	ConsoleEntryRequestsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "console_entry_requests_total",
+		Help: "Total requests handled by the Console HTTP entry, by matched route and result_class. Labels are deliberately bounded: route and result_class only (no user, organization or request id).",
+	}, []string{"route", "result_class"})
+
 	LatencySeconds = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "gateway_latency_seconds",
 		Help:    "End-to-end latency",

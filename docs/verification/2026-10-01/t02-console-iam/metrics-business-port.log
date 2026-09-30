@@ -1,0 +1,10 @@
+HTTP/1.1 404 Not Found
+Server: hertz
+Date: Wed, 30 Sep 2026 20:58:00 GMT
+Content-Type: application/json
+Content-Length: 100
+X-Request-Id: bf8e6b2b8235a2a682f87231669b4da8
+X-Trace-Id: ed66477a6b060eafb4f0e17c6adf8b09
+X-Content-Type-Options: nosniff
+
+{"error":{"code":"not_found","message":"not found","request_id":"bf8e6b2b8235a2a682f87231669b4da8"}}

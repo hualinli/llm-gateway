@@ -1,0 +1,9 @@
+HTTP 200
+Server: hertz
+Date: Wed, 30 Sep 2026 20:58:58 GMT
+Content-Type: application/json
+Content-Length: 167
+X-Request-Id: acc-check06-05
+X-Trace-Id: 6d0c23cfcd63fdf77a106b9d22ed3323
+
+{"organization":{"id":"2","type":"enterprise","name":"demo-enterprise-a","status":"active","legacy_tenant_id":null,"created_at":"2026-09-30T20:57:37Z"},"role":"admin"}

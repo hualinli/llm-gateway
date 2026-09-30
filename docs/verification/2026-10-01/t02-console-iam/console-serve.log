@@ -1,0 +1,140 @@
+WARNING: sonic/ast only supports (go1.17~1.26 and amd64 CPU) or (go1.20~1.26 and arm64 CPU), but your environment is not suitable and will fallback to encoding/json
+2026/09/30 20:57:56 runtime profile=demo WARNING: demo mode, production checks are not enforced
+2026/09/30 20:57:56 WARNING: production check failed: CONSOLE_SECURE_COOKIES: must be true so the gw_session cookie is never sent over plaintext HTTP
+2026/10/01 04:57:56.389440 engine.go:702: [Debug] HERTZ: Method=POST   absolutePath=/api/v1/auth/login        --> handlerName=llm-gateway/internal/console.(*server).login-fm (num=4 handlers)
+2026/10/01 04:57:56.389539 engine.go:702: [Debug] HERTZ: Method=GET    absolutePath=/livez                    --> handlerName=llm-gateway/internal/console.(*server).livez-fm (num=4 handlers)
+2026/10/01 04:57:56.389546 engine.go:702: [Debug] HERTZ: Method=GET    absolutePath=/readyz                   --> handlerName=llm-gateway/internal/console.(*server).readyz-fm (num=4 handlers)
+2026/10/01 04:57:56.389556 engine.go:702: [Debug] HERTZ: Method=GET    absolutePath=/api/v1/me                --> handlerName=llm-gateway/internal/console.(*server).me-fm (num=5 handlers)
+2026/10/01 04:57:56.389562 engine.go:702: [Debug] HERTZ: Method=GET    absolutePath=/api/v1/organizations     --> handlerName=llm-gateway/internal/console.(*server).listOrganizations-fm (num=5 handlers)
+2026/10/01 04:57:56.389572 engine.go:702: [Debug] HERTZ: Method=GET    absolutePath=/api/v1/organizations/:org --> handlerName=llm-gateway/internal/console.(*server).getOrganization-fm (num=5 handlers)
+2026/10/01 04:57:56.389578 engine.go:702: [Debug] HERTZ: Method=POST   absolutePath=/api/v1/auth/logout       --> handlerName=llm-gateway/internal/console.(*server).logout-fm (num=6 handlers)
+2026/10/01 04:57:56.389583 engine.go:702: [Debug] HERTZ: Method=POST   absolutePath=/api/v1/organizations     --> handlerName=llm-gateway/internal/console.(*server).createOrganization-fm (num=6 handlers)
+2026/10/01 04:57:56.389589 engine.go:702: [Debug] HERTZ: Method=POST   absolutePath=/api/v1/admin/users       --> handlerName=llm-gateway/internal/console.(*server).createUser-fm (num=7 handlers)
+2026/10/01 04:57:56.389594 engine.go:702: [Debug] HERTZ: Method=POST   absolutePath=/api/v1/admin/users/:user/status --> handlerName=llm-gateway/internal/console.(*server).setUserStatus-fm (num=7 handlers)
+2026/09/30 20:57:56 console diagnostics listening on 127.0.0.1:9092 (/metrics, /debug/pprof/*)
+2026/09/30 20:57:56 console listening on 127.0.0.1:8092 (profile=demo session_ttl=12h0m0s secure_cookies=false)
+2026/10/01 04:57:56.389769 engine.go:416: [Info] HERTZ: Using network library=netpoll
+2026/10/01 04:57:56.389825 transport.go:152: [Info] HERTZ: HTTP server listening on address=127.0.0.1:8092
+2026/09/30 20:58:00 console request method=GET route=health status=200 class=ok duration_ms=0.02 bytes=3 request_id=5bfe7004642e42350351cf31f8916c54
+2026/09/30 20:58:00 console request method=GET route=health status=200 class=ok duration_ms=0.00 bytes=3 request_id=17f75d84fba7882bd875e126866b6db0
+2026/09/30 20:58:00 console request method=GET route=health status=200 class=ok duration_ms=0.87 bytes=3 request_id=53bc6acc24fae35bac673c53169e105b
+2026/09/30 20:58:00 console request method=GET route=other status=404 class=not_found duration_ms=0.12 bytes=100 request_id=bf8e6b2b8235a2a682f87231669b4da8
+2026/09/30 20:58:07 console request method=GET route=health status=200 class=ok duration_ms=0.00 bytes=3 request_id=acc-check01-01
+2026/09/30 20:58:07 console request method=GET route=health status=200 class=ok duration_ms=1.24 bytes=3 request_id=acc-check01-02
+2026/09/30 20:58:07 console request method=POST route=auth_login status=200 class=ok duration_ms=168.97 bytes=738 request_id=acc-check02-01
+2026/09/30 20:58:07 console request method=GET route=me status=200 class=ok duration_ms=1.49 bytes=738 request_id=acc-check03-01
+2026/09/30 20:58:07 console request method=GET route=me status=401 class=unauthorized duration_ms=0.01 bytes=99 request_id=acc-check03-02
+2026/09/30 20:58:07 console request method=GET route=me status=401 class=unauthorized duration_ms=0.82 bytes=105 request_id=acc-check03-03
+2026/09/30 20:58:07 console request method=POST route=organizations_create status=403 class=forbidden duration_ms=0.77 bytes=102 request_id=acc-check04-01
+2026/09/30 20:58:07 console request method=POST route=organizations_create status=403 class=forbidden duration_ms=1.41 bytes=102 request_id=acc-check04-02
+2026/09/30 20:58:07 console request method=POST route=organizations_create status=201 class=ok duration_ms=2.92 bytes=165 request_id=acc-check04-03
+2026/09/30 20:58:07 console request method=GET route=organizations_list status=200 class=ok duration_ms=1.12 bytes=698 request_id=acc-check05-01
+2026/09/30 20:58:07 console request method=GET route=organizations_list status=200 class=ok duration_ms=0.95 bytes=698 request_id=acc-check05-02
+2026/09/30 20:58:07 console request method=GET route=organizations_list status=400 class=invalid_request duration_ms=0.60 bytes=121 request_id=acc-check05-03
+2026/09/30 20:58:07 console request method=GET route=organizations_list status=400 class=invalid_request duration_ms=0.57 bytes=121 request_id=acc-check05-04
+2026/09/30 20:58:07 console request method=GET route=organizations_list status=200 class=ok duration_ms=1.05 bytes=195 request_id=acc-check05-05
+2026/09/30 20:58:07 console request method=GET route=organizations_list status=200 class=ok duration_ms=1.10 bytes=197 request_id=acc-check05-06
+2026/09/30 20:58:07 console request method=GET route=organizations_list status=200 class=ok duration_ms=0.84 bytes=698 request_id=acc-check06-01
+2026/09/30 20:58:07 console request method=POST route=auth_login status=200 class=ok duration_ms=167.30 bytes=607 request_id=acc-check06-02
+2026/09/30 20:58:07 console request method=GET route=organizations_get status=404 class=not_found duration_ms=1.22 bytes=95 request_id=acc-check06-03
+2026/09/30 20:58:58 console request method=GET route=health status=200 class=ok duration_ms=0.01 bytes=3 request_id=acc-check01-01
+2026/09/30 20:58:58 console request method=GET route=health status=200 class=ok duration_ms=0.77 bytes=3 request_id=acc-check01-02
+2026/09/30 20:58:58 console request method=POST route=auth_login status=200 class=ok duration_ms=167.10 bytes=904 request_id=acc-check02-01
+2026/09/30 20:58:58 console request method=GET route=me status=200 class=ok duration_ms=0.78 bytes=904 request_id=acc-check03-01
+2026/09/30 20:58:58 console request method=GET route=me status=401 class=unauthorized duration_ms=0.01 bytes=99 request_id=acc-check03-02
+2026/09/30 20:58:58 console request method=GET route=me status=401 class=unauthorized duration_ms=0.55 bytes=105 request_id=acc-check03-03
+2026/09/30 20:58:58 console request method=POST route=organizations_create status=403 class=forbidden duration_ms=0.52 bytes=102 request_id=acc-check04-01
+2026/09/30 20:58:58 console request method=POST route=organizations_create status=403 class=forbidden duration_ms=1.00 bytes=102 request_id=acc-check04-02
+2026/09/30 20:58:58 console request method=POST route=organizations_create status=201 class=ok duration_ms=2.13 bytes=165 request_id=acc-check04-03
+2026/09/30 20:58:58 console request method=GET route=organizations_list status=200 class=ok duration_ms=0.81 bytes=864 request_id=acc-check05-01
+2026/09/30 20:58:58 console request method=GET route=organizations_list status=200 class=ok duration_ms=0.84 bytes=864 request_id=acc-check05-02
+2026/09/30 20:58:58 console request method=GET route=organizations_list status=400 class=invalid_request duration_ms=0.51 bytes=121 request_id=acc-check05-03
+2026/09/30 20:58:58 console request method=GET route=organizations_list status=400 class=invalid_request duration_ms=0.50 bytes=121 request_id=acc-check05-04
+2026/09/30 20:58:58 console request method=GET route=organizations_list status=200 class=ok duration_ms=0.83 bytes=195 request_id=acc-check05-05
+2026/09/30 20:58:58 console request method=GET route=organizations_list status=200 class=ok duration_ms=1.44 bytes=197 request_id=acc-check05-06
+2026/09/30 20:58:58 console request method=GET route=organizations_list status=200 class=ok duration_ms=1.13 bytes=864 request_id=acc-check06-01
+2026/09/30 20:58:59 console request method=POST route=auth_login status=200 class=ok duration_ms=167.00 bytes=607 request_id=acc-check06-02
+2026/09/30 20:58:59 console request method=GET route=organizations_get status=404 class=not_found duration_ms=1.07 bytes=95 request_id=acc-check06-03
+2026/09/30 20:58:59 console request method=GET route=organizations_get status=404 class=not_found duration_ms=0.96 bytes=95 request_id=acc-check06-04
+2026/09/30 20:58:59 console request method=GET route=organizations_get status=200 class=ok duration_ms=0.97 bytes=167 request_id=acc-check06-05
+2026/09/30 20:58:59 console request method=GET route=organizations_list status=200 class=ok duration_ms=1.15 bytes=382 request_id=acc-check06-06
+2026/09/30 20:58:59 console request method=POST route=auth_logout status=204 class=ok duration_ms=1.70 bytes=0 request_id=acc-check07-01
+2026/09/30 20:58:59 console request method=GET route=me status=401 class=unauthorized duration_ms=0.52 bytes=105 request_id=acc-check07-02
+2026/09/30 20:58:59 console request method=POST route=auth_login status=200 class=ok duration_ms=168.04 bytes=1070 request_id=acc-check08-01
+2026/09/30 20:58:59 console audit time=2026-09-30T20:58:59Z action=admin.user.create outcome=success actor_user=1 actor_email=admin@accept.test target_user=6 target_email=accept-victim-05cd486b@accept.test orgs=[] request_id=acc-check08-02 trace_id=c3736f29a2ee8c3317edd30be462ab52 error=
+2026/09/30 20:58:59 console request method=POST route=admin_users_create status=201 class=ok duration_ms=167.09 bytes=168 request_id=acc-check08-02
+2026/09/30 20:58:59 console request method=POST route=admin_users_create status=403 class=forbidden duration_ms=0.87 bytes=115 request_id=acc-check08-03
+2026/09/30 20:58:59 console audit time=2026-09-30T20:58:59Z action=admin.user.create outcome=success actor_user=1 actor_email=admin@accept.test target_user=7 target_email=accept-evil-05cd486b@accept.test orgs=[] request_id=acc-check08-04 trace_id=9ea945aa46315b50f58bf9522c8ea743 error=
+2026/09/30 20:58:59 console request method=POST route=admin_users_create status=201 class=ok duration_ms=166.04 bytes=166 request_id=acc-check08-04
+2026/09/30 20:58:59 console request method=POST route=auth_login status=200 class=ok duration_ms=166.15 bytes=438 request_id=acc-check09-01
+2026/09/30 20:58:59 console audit time=2026-09-30T20:58:59Z action=admin.user.status outcome=success actor_user=1 actor_email=admin@accept.test target_user=6 target_email=accept-victim-05cd486b@accept.test orgs=[] request_id=acc-check09-02 trace_id=6d1075ca60fe02477948db5eead56651 error=
+2026/09/30 20:58:59 console request method=POST route=admin_users_status status=200 class=ok duration_ms=1.80 bytes=170 request_id=acc-check09-02
+2026/09/30 20:58:59 console request method=GET route=me status=401 class=unauthorized duration_ms=0.58 bytes=105 request_id=acc-check09-03
+2026/09/30 20:58:59 console request method=POST route=admin_users_status status=400 class=invalid_request duration_ms=0.75 bytes=120 request_id=acc-check09-04
+2026/09/30 20:58:59 console audit time=2026-09-30T20:58:59Z action=admin.user.status outcome=failure actor_user=1 actor_email=admin@accept.test target_user=9223372036854775807 target_email= orgs=[] request_id=acc-check09-05 trace_id=4f221a69a7d296e27c103f69ece10a2c error=iam: not found
+2026/09/30 20:58:59 console request method=POST route=admin_users_status status=404 class=not_found duration_ms=1.16 bytes=82 request_id=acc-check09-05
+2026/09/30 20:58:59 console request method=POST route=admin_users_status status=400 class=invalid_request duration_ms=0.88 bytes=113 request_id=acc-check09-06
+2026/09/30 20:59:00 console request method=POST route=auth_login status=403 class=forbidden duration_ms=173.72 bytes=89 request_id=acc-check09-07
+2026/09/30 21:00:02 console request method=POST route=auth_login status=401 class=unauthorized duration_ms=329.93 bytes=101 request_id=acc-check10-01
+2026/09/30 21:00:02 console request method=POST route=auth_login status=401 class=unauthorized duration_ms=164.70 bytes=101 request_id=acc-check10-02
+2026/09/30 21:00:03 console request method=POST route=auth_login status=401 class=unauthorized duration_ms=165.07 bytes=101 request_id=acc-check10-03
+2026/09/30 21:00:03 console request method=POST route=auth_login status=401 class=unauthorized duration_ms=165.57 bytes=101 request_id=acc-check10-04
+2026/09/30 21:00:03 console request method=POST route=auth_login status=401 class=unauthorized duration_ms=164.24 bytes=101 request_id=acc-check10-05
+2026/09/30 21:00:03 console request method=POST route=auth_login status=429 class=rate_limited duration_ms=0.04 bytes=112 request_id=acc-check10-06
+2026/09/30 21:00:03 console request method=GET route=other status=404 class=not_found duration_ms=0.01 bytes=82 request_id=acc-check11-01
+2026/09/30 21:00:03 console request method=DELETE route=other status=405 class=invalid_request duration_ms=0.01 bytes=100 request_id=acc-check11-02
+2026/09/30 21:00:03 console request method=POST route=auth_login status=400 class=invalid_request duration_ms=0.04 bytes=109 request_id=acc-check11-03
+2026/09/30 21:00:03 console request method=POST route=auth_login status=429 class=rate_limited duration_ms=0.03 bytes=112 request_id=acc-check12-01
+2026/09/30 21:00:47 console request method=GET route=health status=200 class=ok duration_ms=0.00 bytes=3 request_id=acc-check01-01
+2026/09/30 21:00:47 console request method=GET route=health status=200 class=ok duration_ms=0.70 bytes=3 request_id=acc-check01-02
+2026/09/30 21:00:47 console request method=POST route=auth_login status=200 class=ok duration_ms=168.29 bytes=1070 request_id=acc-check02-01
+2026/09/30 21:00:47 console request method=GET route=me status=200 class=ok duration_ms=1.00 bytes=1070 request_id=acc-check03-01
+2026/09/30 21:00:47 console request method=GET route=me status=401 class=unauthorized duration_ms=0.01 bytes=99 request_id=acc-check03-02
+2026/09/30 21:00:47 console request method=GET route=me status=401 class=unauthorized duration_ms=0.61 bytes=105 request_id=acc-check03-03
+2026/09/30 21:00:47 console request method=POST route=organizations_create status=403 class=forbidden duration_ms=0.74 bytes=102 request_id=acc-check04-01
+2026/09/30 21:00:47 console request method=POST route=organizations_create status=403 class=forbidden duration_ms=0.94 bytes=102 request_id=acc-check04-02
+2026/09/30 21:00:47 console request method=POST route=organizations_create status=201 class=ok duration_ms=2.19 bytes=166 request_id=acc-check04-03
+2026/09/30 21:00:48 console request method=GET route=organizations_list status=200 class=ok duration_ms=1.13 bytes=1031 request_id=acc-check05-01
+2026/09/30 21:00:48 console request method=GET route=organizations_list status=200 class=ok duration_ms=0.97 bytes=1031 request_id=acc-check05-02
+2026/09/30 21:00:48 console request method=GET route=organizations_list status=400 class=invalid_request duration_ms=0.53 bytes=121 request_id=acc-check05-03
+2026/09/30 21:00:48 console request method=GET route=organizations_list status=400 class=invalid_request duration_ms=0.64 bytes=121 request_id=acc-check05-04
+2026/09/30 21:00:48 console request method=GET route=organizations_list status=200 class=ok duration_ms=0.90 bytes=195 request_id=acc-check05-05
+2026/09/30 21:00:48 console request method=GET route=organizations_list status=200 class=ok duration_ms=0.88 bytes=197 request_id=acc-check05-06
+2026/09/30 21:00:48 console request method=GET route=organizations_list status=200 class=ok duration_ms=1.19 bytes=1031 request_id=acc-check06-01
+2026/09/30 21:00:48 console request method=POST route=auth_login status=200 class=ok duration_ms=168.19 bytes=607 request_id=acc-check06-02
+2026/09/30 21:00:48 console request method=GET route=organizations_get status=404 class=not_found duration_ms=0.98 bytes=95 request_id=acc-check06-03
+2026/09/30 21:00:48 console request method=GET route=organizations_get status=404 class=not_found duration_ms=0.99 bytes=95 request_id=acc-check06-04
+2026/09/30 21:00:48 console request method=GET route=organizations_get status=200 class=ok duration_ms=0.84 bytes=167 request_id=acc-check06-05
+2026/09/30 21:00:48 console request method=GET route=organizations_list status=200 class=ok duration_ms=0.87 bytes=382 request_id=acc-check06-06
+2026/09/30 21:00:48 console request method=POST route=auth_logout status=204 class=ok duration_ms=1.12 bytes=0 request_id=acc-check07-01
+2026/09/30 21:00:48 console request method=GET route=me status=401 class=unauthorized duration_ms=0.82 bytes=105 request_id=acc-check07-02
+2026/09/30 21:00:48 console request method=POST route=auth_login status=200 class=ok duration_ms=167.69 bytes=1237 request_id=acc-check08-01
+2026/09/30 21:00:48 console audit time=2026-09-30T21:00:48Z action=admin.user.create outcome=success actor_user=1 actor_email=admin@accept.test target_user=8 target_email=accept-victim-150b7b78@accept.test orgs=[] request_id=acc-check08-02 trace_id=e59f2ce77b81bee836e54e9a548b3751 error=
+2026/09/30 21:00:48 console request method=POST route=admin_users_create status=201 class=ok duration_ms=167.53 bytes=168 request_id=acc-check08-02
+2026/09/30 21:00:48 console request method=POST route=admin_users_create status=403 class=forbidden duration_ms=1.14 bytes=115 request_id=acc-check08-03
+2026/09/30 21:00:48 console audit time=2026-09-30T21:00:48Z action=admin.user.create outcome=success actor_user=1 actor_email=admin@accept.test target_user=9 target_email=accept-evil-150b7b78@accept.test orgs=[] request_id=acc-check08-04 trace_id=5cc4c22e942cb73c29521880e4e08329 error=
+2026/09/30 21:00:48 console request method=POST route=admin_users_create status=201 class=ok duration_ms=171.47 bytes=166 request_id=acc-check08-04
+2026/09/30 21:00:48 console request method=POST route=auth_login status=429 class=rate_limited duration_ms=0.03 bytes=112 request_id=acc-check09-01
+2026/09/30 21:01:49 console request method=POST route=auth_login status=200 class=ok duration_ms=168.02 bytes=438 request_id=acc-check09-02
+2026/09/30 21:01:49 console audit time=2026-09-30T21:01:49Z action=admin.user.status outcome=success actor_user=1 actor_email=admin@accept.test target_user=8 target_email=accept-victim-150b7b78@accept.test orgs=[] request_id=acc-check09-03 trace_id=0378f4f3b426111e55d3c4d9c9be3021 error=
+2026/09/30 21:01:49 console request method=POST route=admin_users_status status=200 class=ok duration_ms=1.53 bytes=170 request_id=acc-check09-03
+2026/09/30 21:01:49 console request method=GET route=me status=401 class=unauthorized duration_ms=0.48 bytes=105 request_id=acc-check09-04
+2026/09/30 21:01:49 console request method=POST route=admin_users_status status=400 class=invalid_request duration_ms=0.83 bytes=120 request_id=acc-check09-05
+2026/09/30 21:01:49 console audit time=2026-09-30T21:01:49Z action=admin.user.status outcome=failure actor_user=1 actor_email=admin@accept.test target_user=9223372036854775807 target_email= orgs=[] request_id=acc-check09-06 trace_id=54900597a59dc5069d8046cd3a1a3bab error=iam: not found
+2026/09/30 21:01:49 console request method=POST route=admin_users_status status=404 class=not_found duration_ms=1.38 bytes=82 request_id=acc-check09-06
+2026/09/30 21:01:49 console request method=POST route=admin_users_status status=400 class=invalid_request duration_ms=0.91 bytes=113 request_id=acc-check09-07
+2026/09/30 21:01:49 console request method=POST route=auth_login status=403 class=forbidden duration_ms=164.69 bytes=89 request_id=acc-check09-08
+2026/09/30 21:02:51 console request method=POST route=auth_login status=401 class=unauthorized duration_ms=167.07 bytes=101 request_id=acc-check10-01
+2026/09/30 21:02:51 console request method=POST route=auth_login status=401 class=unauthorized duration_ms=165.06 bytes=101 request_id=acc-check10-02
+2026/09/30 21:02:52 console request method=POST route=auth_login status=401 class=unauthorized duration_ms=164.84 bytes=101 request_id=acc-check10-03
+2026/09/30 21:02:52 console request method=POST route=auth_login status=401 class=unauthorized duration_ms=163.94 bytes=101 request_id=acc-check10-04
+2026/09/30 21:02:52 console request method=POST route=auth_login status=401 class=unauthorized duration_ms=165.06 bytes=101 request_id=acc-check10-05
+2026/09/30 21:02:52 console request method=POST route=auth_login status=429 class=rate_limited duration_ms=0.03 bytes=112 request_id=acc-check10-06
+2026/09/30 21:02:52 console request method=GET route=other status=404 class=not_found duration_ms=0.01 bytes=82 request_id=acc-check11-01
+2026/09/30 21:02:52 console request method=DELETE route=other status=405 class=invalid_request duration_ms=0.01 bytes=100 request_id=acc-check11-02
+2026/09/30 21:02:52 console request method=POST route=auth_login status=400 class=invalid_request duration_ms=0.02 bytes=109 request_id=acc-check11-03
+2026/09/30 21:02:52 console request method=POST route=auth_login status=429 class=rate_limited duration_ms=0.03 bytes=112 request_id=acc-check12-01
+2026/09/30 21:03:25 console shutting down on terminated
+2026/10/01 05:03:25.410777 engine.go:316: [Info] HERTZ: Begin graceful shutdown, wait at most 10s ...
+2026/10/01 05:03:25.410853 engine.go:334: [Info] HERTZ: Execute OnShutdownHooks finish
+2026/09/30 21:03:25 console exit

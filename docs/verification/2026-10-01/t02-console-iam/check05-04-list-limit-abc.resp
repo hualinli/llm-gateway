@@ -1,0 +1,10 @@
+HTTP 400
+Server: hertz
+Date: Wed, 30 Sep 2026 20:58:58 GMT
+Content-Type: application/json
+Content-Length: 121
+X-Request-Id: acc-check05-04
+X-Trace-Id: b8a62241851662f9f21f757a6599011e
+X-Content-Type-Options: nosniff
+
+{"error":{"code":"invalid_request","message":"limit must be an integer between 1 and 100","request_id":"acc-check05-04"}}

@@ -1,0 +1,9 @@
+HTTP 200
+Server: hertz
+Date: Wed, 30 Sep 2026 20:58:58 GMT
+Content-Type: application/json
+Content-Length: 864
+X-Request-Id: acc-check05-01
+X-Trace-Id: ec4a733b02b77fe7ef6ca1fefb020e6a
+
+{"items":[{"organization":{"id":"1","type":"personal","name":"admin@accept.test","status":"active","legacy_tenant_id":null,"created_at":"2026-09-30T20:57:37Z"},"role":"owner"},{"organization":{"id":"2","type":"enterprise","name":"demo-enterprise-a","status":"active","legacy_tenant_id":null,"created_at":"2026-09-30T20:57:37Z"},"role":"owner"},{"organization":{"id":"3","type":"enterprise","name":"demo-enterprise-b","status":"active","legacy_tenant_id":null,"created_at":"2026-09-30T20:57:38Z"},"role":"owner"},{"organization":{"id":"6","type":"enterprise","name":"accept-fd042726","status":"active","legacy_tenant_id":null,"created_at":"2026-09-30T20:58:07Z"},"role":"owner"},{"organization":{"id":"9","type":"enterprise","name":"accept-9e5c7e3c","status":"active","legacy_tenant_id":null,"created_at":"2026-09-30T20:58:58Z"},"role":"owner"}],"next_cursor":null}

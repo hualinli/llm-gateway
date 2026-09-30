@@ -1,0 +1,10 @@
+HTTP 200
+Server: hertz
+Date: Wed, 30 Sep 2026 20:58:57 GMT
+Content-Type: text/plain; charset=utf-8
+Content-Length: 3
+X-Request-Id: acc-check01-02
+X-Trace-Id: 15abb98e49a9c20bb4a1fbc3c126110a
+
+ok
+

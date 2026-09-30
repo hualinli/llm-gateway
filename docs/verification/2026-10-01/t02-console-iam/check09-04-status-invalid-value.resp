@@ -1,0 +1,10 @@
+HTTP 400
+Server: hertz
+Date: Wed, 30 Sep 2026 20:58:59 GMT
+Content-Type: application/json
+Content-Length: 120
+X-Request-Id: acc-check09-04
+X-Trace-Id: 37b25fa6b66e7c1871e73edc0ec3d9de
+X-Content-Type-Options: nosniff
+
+{"error":{"code":"invalid_request","message":"status must be \"active\" or \"disabled\"","request_id":"acc-check09-04"}}

@@ -1,0 +1,10 @@
+# prod fail-fast：缺少 POSTGRES_DSN / CONSOLE_DIAGNOSTICS_ADDR / CONSOLE_SECURE_COOKIES
+$ env -u POSTGRES_DSN -u CONSOLE_DIAGNOSTICS_ADDR -u CONSOLE_SECURE_COOKIES GATEWAY_PROFILE=prod /var/folders/06/6pp62dv93lq23br_tqkd3_f00000gn/T/t02-console-accept-secrets/console serve
+WARNING: sonic/ast only supports (go1.17~1.26 and amd64 CPU) or (go1.20~1.26 and arm64 CPU), but your environment is not suitable and will fallback to encoding/json
+2026/09/30 21:00:14 runtime profile=prod (production checks enforced)
+2026/09/30 21:00:14 console production preflight failed:
+production profile requires 3 setting(s) to be fixed:
+POSTGRES_DSN: must be set: the Console has no in-memory fallback and will not serve without PostgreSQL
+CONSOLE_DIAGNOSTICS_ADDR: must be set to a listener address different from the business address ":8092" so /metrics and /debug/pprof/* are not exposed on the API listener
+CONSOLE_SECURE_COOKIES: must be true so the gw_session cookie is never sent over plaintext HTTP
+exit_code=1

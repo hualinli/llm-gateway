@@ -5,6 +5,8 @@
 > 范围：业务源码、测试、迁移、Compose、CI workflow、Makefile、脚本与历史验证报告。
 >
 > **T01A 更新（2026-10-01）**：§4.4 增加运行时 profile/生产 fail-fast、诊断与查询 listener 分离、统一错误信封与入口指标、隔离基线 runner、本地证书 bootstrap；§3 第 5 条与 §5 的对应风险已按 T01A 结果更新。基线命令与结果见 §7。
+>
+> **T02 更新（2026-10-01）**：新增 Console API（Hertz）与用户/组织/会话基础（migration 000004，`users`/`sessions`/`organizations`/`memberships`）；决策见 [ADR-0002](decisions/ADR-0002-iam-identity-and-organizations.md)，接口冻结见 [console-v1.yaml](openapi/console-v1.yaml)，验收证据见 [T02 验收](verification/2026-10-01/t02-console-iam/README.md)。§4.5 与 §5 对应行已更新。
 
 > **当前产品目标与实施顺序**见 [生产导向多租户计费平台路线](plans/PRODUCTION-INTERVIEW-ROADMAP-2026-10-01.md)，配套 [压测与故障验收规格](plans/BENCHMARK-AND-ACCEPTANCE-2026-10-01.md) 与 [Agent 执行 Prompt 与任务包](plans/AGENT-PROMPTS-2026-10-01.md)（T00–T12）。[PROJECT-ROADMAP.md](PROJECT-ROADMAP.md) 自 2026-10-01 起只作为历史路线保留（其中系统不变量与 Agent 协议仍有效）。
 >
@@ -118,16 +120,17 @@
 | ✅ | 统一错误信封与入口指标（T01A） | `internal/httperr` 输出 `{"error":{"code","message","request_id"}}`（含 `X-Content-Type-Options: nosniff`），auth/limiter/proxy 的提前返回全部改用稳定 code；`gateway_entry_requests_total{route,result_class}` 覆盖 auth/limiter 提前拒绝，标签有界（无 user/key/request）；`gateway_first_event_seconds` 与遗留 `gateway_ttft_seconds` 同时记录，定义见 [请求指标口径](observability/request-metrics.md)。**first_content 尚未实现**，由 T01B 的压测客户端测量 |
 | 🟡 | 本地证书 bootstrap（T01A） | `scripts/dev-certs.sh` 幂等生成本地 CA、Control 服务端证书、Gateway 客户端证书和主密钥到 gitignored `data/dev-certs/`，不打印密钥材料，`--force` 整体重建。仅为本地联调，不含轮换/吊销/KMS |
 
-### 4.5 多租户产品面（新路线目标，当前未实现）
+### 4.5 多租户产品面（按新路线逐任务实现）
 
 | 状态 | 目标能力 | 当前事实 |
 |---|---|---|
-| ⬜ | users / sessions / 登录退出 | 无表、无 API、无前端 |
-| ⬜ | organizations / memberships / invitations / RBAC | 只有字符串 `tenant`，`Principal` 仅 admin / tenant-user |
-| ⬜ | Key 归属（org/user/created_by/expires/model allowlist） | Key 只有 tenant；无归属、无到期、无模型白名单 |
+| ✅ | users / sessions / 登录退出（T02） | `users`/`sessions` 表（migration 000004）；bcrypt cost 12、随机不透明 session token 只存 SHA-256；`gw_session` HttpOnly/SameSite=Lax/固定 TTL，prod 强制 Secure；登出、禁用、`auth_version` 递增都立即失效旧会话；登录按 email+IP 节流（429 + `Retry-After`） |
+| 🟡 | organizations / memberships（T02 基础） | `organizations`/`memberships` 表 + 个人组织部分唯一索引 + `legacy_tenant_id` 映射列；个人组织幂等创建（含 owner 成员关系）、企业组织创建、按用户列出、非成员一律 404。**尚未实现**：邀请、角色变更、最后 owner 保护、成员策略投影（T03） |
+| ⬜ | invitations / RBAC 策略（T03） | 只有表结构与角色枚举约束（`owner/admin/member/billing_viewer`），没有邀请与权限矩阵执行 |
+| ⬜ | Key 归属（org/user/created_by/expires/model allowlist） | Key 仍只有 tenant 字符串；T03 增加归属与迁移步骤 |
 | ⬜ | 不可变价格版本与精确金额 | `CostCents = TotalTokens`；无 `price_versions` |
 | ⬜ | 钱包、预占、receipt/outbox、幂等结算 | `/ledger/balance` 是累计消费；无 `billing_accounts`/`billing_executions`/`usage_receipts` |
-| ⬜ | Console API（Hertz）与 Web UI | 无 `cmd/console`、`internal/iam`、`internal/organization`、`internal/billing`、`web/` |
+| ✅ | Console API（Hertz，T02 会话/组织子集） | `cmd/console` + `internal/console`（Hertz 原生中间件、独立 DB pool、`migrations.Check` 不自动迁移、诊断 listener 分离、prod fail-fast）；OpenAPI 见 [docs/openapi/console-v1.yaml](openapi/console-v1.yaml)。**尚无 Web UI**（T04/T08） |
 | ⬜ | 多实例：心跳、策略租约、stale 判定 | 报告仅存 Control 内存，无心跳/目标集合/过期 |
 
 ## 5. 当前风险与未验证边界（按新路线任务归属）
@@ -138,8 +141,8 @@
 | ~~计量/对账查询端点（`/ledger/*`、`/reconcile`）无鉴权~~ | **T01A 已提供** `METERING_ADMIN_TOKEN` 鉴权；demo 未设置 token 时仍开放（有 WARNING），生产 profile 强制要求 token | T01A（已完成） |
 | 远端 CI 是否跑绿 | 无证据（仓库非公开，无法查询） | T12（发布候选） |
 | `cmd/loadtest` 过载时降低发压、TTFT 口径、固定 10s timeout | 存在 | T01B |
-| 压测环境未隔离（使用日常 Compose/端口/卷） | 存在 | T01A |
-| 无用户/组织/权限/会话模型 | 不存在 | T02 / T03 |
+| 压测环境未隔离（使用日常 Compose/端口/卷） | T01A 已提供隔离 runner（`scripts/isolated-baseline.py`） | T01A（已完成） |
+| ~~无用户/组织/权限/会话模型~~ | **T02 已提供会话/组织基础**；邀请、角色矩阵、最后 owner 保护与策略投影仍缺 | T02（会话/组织基础已完成）、T03 |
 | 配置 persisted 不等于 active，无心跳/租约/stale 判定 | 存在 | T09 |
 | 累计消费被误当余额 | 文档风险已纠正，接口语义待新接口替换 | T05 |
 | 成功流在 `[DONE]` 后、flush 前 SIGKILL 丢事件 | 存在，代码可见 | T06C / T07A |
@@ -199,6 +202,21 @@
 | 生产 fail-fast / 诊断分离 / 查询鉴权烟测 | ✅ 三个二进制在 `prod` 缺配置时非零退出并列出全部失败项；补齐后通过 preflight；业务端口 `/metrics` 404 而诊断端口 200；无/错 token 401、正确 token 200 | 由 T01A 实现工作流执行，限制见证据文档 §4 |
 | 环境限制 | ⚠️ 构建容器无 `proxy.golang.org` 出网，demo/隔离构建临时使用 `GOPROXY=goproxy.cn` 的 Dockerfile 副本（运行后还原）；Docker CLI 需工作区本地 `DOCKER_CONFIG` | 不影响被测代码，但解释证据时须一并说明 |
 
+### 7.3 T02（2026-10-01，任务分支 `codex/t02-console-iam`）
+
+| 检查 | 结果 | 说明 |
+|---|---|---|
+| `gofmt -l cmd internal migrations` / `go build ./...` / `go vet ./...` | ✅ 通过 | 新增 `cmd/console`、`internal/console`、`internal/iam`、`internal/organization` |
+| `go test ./... -count=1` | ✅ 26 个 package 全通过 | 含 Hertz handler/中间件测试与 `internal/iam`、`internal/organization` 单元测试 |
+| `make integration-test`（隔离 Redis + PG，`-race`，含 `IAM_TEST_POSTGRES_DSN`） | ✅ 通过，0 skip | PG 用例覆盖迁移 0→4 / 4→3、邮箱唯一、个人组织并发唯一、会话生命周期、CSRF、节流、非成员 404 |
+| 黑盒 HTTP 验收 `scripts/console-accept.sh` | ✅ 11/11 硬检查 PASS，错误信封/`nosniff`/`request_id` 全量扫描通过；`fail-on-contract-divergence` 退出码 0 | [T02 验收证据](verification/2026-10-01/t02-console-iam/README.md)（含原始 `.req/.resp`） |
+| 迁移 v3→4 与全新 0→4 | ✅ 两者通过且重复执行 no-op；迁移不写入任何 users/organizations/memberships 行 | 同上 §5/§6 |
+| bootstrap 幂等（`--demo-data` 两次） | ✅ 第二次 `admin_created=false`、企业与用户 0 新建；凭据文件 sha256 不变、0600，日志无密码 | 同上 |
+| prod 守卫（缺 PG/诊断地址/Secure cookie） | ✅ 非零退出并一次列出全部失败项 | 同上 |
+| 诊断端口分离 | ✅ 业务端口 `/metrics` 404、诊断端口 `/metrics` 200、`/debug/pprof/*` 200 | 同上 |
+| 验收发现的产品缺陷 BUG-1（登录节流按 IP 而非 email+IP，造成同 IP 跨账号锁定） | ✅ 已修复并复验：`internal/iam.Login` 自建 `email\|clientKey` 桶 + 回归测试 + 黑盒重跑（check12 由 429 变 200，0 product bug） | 修复记录见证据文档 §10 |
+| 未验证 | ⚠️ prod profile 的真实 HTTPS `Secure` cookie、12h 会话过期、`/admin/users` 可选 organizations 字段、审计持久化契约、多实例共享节流、浏览器 SameSite 行为 | 见证据文档 §9 |
+
 ## 8. 证据索引
 
 | 证据 | 日期 / 适用 commit | 覆盖 | 限制 |
@@ -210,4 +228,6 @@
 | [2026-09-26 本机 SSE 压测记录](verification/2026-09-26/performance/README.md)（+ `closed-loop-raw.json`、`fixed-arrival-raw.json`） | 闭环 `ec24990`、固定到达 `4459c83` | 闭环并发 1/16/64/128、固定到达 100/300 RPS、直连对照、切备路径 | 单机 Docker Desktop 合成流；TTFT 为首个非空 `data:`；固定到达在过载档会降低实际发压；不可外推生产容量 |
 | [T01A 运行基线证据](verification/2026-10-01/t01a-prod-profiles/README.md)（+ race/integration/demo 原始输出） | 2026-10-01，`c069666` / `d15dcc2` | profile 与生产 fail-fast、诊断 listener 分离、查询鉴权、错误信封、入口指标、`go test -race ./...`、`make integration-test`、`make demo-accept` 三轮 | 无真实 PG/Redis 的 prod 正例启动；构建使用离线 GOPROXY 回退副本；demo 脚本 `start --wait` 兼容性已修复 |
 | [T01A 隔离低负载基线](verification/2026-10-01/t01a-baseline/README.md) | 2026-10-01，`c069666`（干净工作区）+ 首次 dirty 运行 `0ffe182` | 独立 Compose project/端口/卷/run_id；直连 vs Gateway 的低负载闭环与固定到达对照、资源采样、对账 | 单机低负载合成流；两条路径差值在噪声内，不能宣称零开销；`--keep`/`--no-build`/提前停止路径未执行 |
+| [T02 Console/IAM 验收](verification/2026-10-01/t02-console-iam/README.md)（+ `summary.json`、`summary-fixed-1.json`、逐检查 `.req/.resp`、迁移/bootstrap/服务日志） | 2026-10-01，任务分支 `codex/t02-console-iam`（base `b505bfd`） | 迁移 v3→4 与全新 0→4、bootstrap 幂等、11 项黑盒 HTTP 验收（登录/会话/CSRF/组织/跨组织 404/登出/平台管理员/禁用/节流/错误信封）、诊断端口分离、prod 守卫，以及 BUG-1 的修复复验 | 使用隔离测试 PG；prod 的真实 HTTPS Secure cookie、12h 过期、多实例节流、审计持久化契约未验证；验收脚本 `scripts/console-accept.sh` 需已运行的 Console |
+| [ADR-0002 身份与组织边界](decisions/ADR-0002-iam-identity-and-organizations.md) + [console-v1.yaml](openapi/console-v1.yaml) | 2026-10-01 | T02 冻结的决策、数据模型、API 契约与配置 | 契约只覆盖 T02 子集；邀请/RBAC/Key 归属属 T03 |
 | 新路线三个计划文档 + [计划审查](plans/PLAN-REVIEW-2026-10-01.md) | 2026-10-01，基线 `a38999c` | 产品目标、架构边界、任务包与验收规格 | 计划本身不是实现证据 |

@@ -28,7 +28,7 @@
 | Demo 与 CI | 🟡 已有编排、远端未确认 | `demo-up/config/smoke/down`、`scripts/demo-accept.sh` 三轮正常/切备/双故障/对账和 `.github/workflows/ci.yml` 已提交；2026-10-01 `make demo-accept` 三轮 PASS；**远端 CI 是否跑绿未知**；实验环境已由 [隔离 runner](docs/verification/2026-10-01/t01a-baseline/README.md) 覆盖 |
 | 性能证据 | 🟡 历史本机数据 | [2026-09-26 本机直连/网关基线与切备报告](docs/verification/2026-09-26/performance/README.md)是历史证据（闭环 `ec24990`、固定到达 `4459c83`）；[T01A 隔离低负载对照](docs/verification/2026-10-01/t01a-baseline/README.md)在固定 commit 上复测了直连 vs Gateway；容量拐点、慢客户端和生产资源上界未验证 |
 | 生产安全性 | 🟡 生产 profile 已收紧，部署仍待验证 | `GATEWAY_PROFILE=prod` 缺任一必要配置即拒绝启动（禁 legacy raw-key/内存回退/匿名管理面/insecure 凭据解析，要求 mTLS、显式限流与活跃流上限、诊断 listener 分离）；诊断与业务 listener 可分离，`/ledger/*`、`/reconcile` 支持 `METERING_ADMIN_TOKEN` 鉴权；决策见 [ADR-0001](docs/decisions/ADR-0001-runtime-profiles.md)。**未验证**：真实 PG/Redis 的 prod 正例启动、诊断 listener 自身的认证、证书轮换 |
-| 多租户产品面 | ⬜ 未开始 | 仓库没有用户/组织/成员/会话/钱包/价格版本模型，也没有 `web/`；按新路线 T02–T08 实施 |
+| 多租户产品面 | 🟡 会话/组织基础已实现 | T02 落地了 Console API（Hertz，`cmd/console`）与 `users`/`sessions`/`organizations`/`memberships`（migration 000004）：登录/登出/`/me`、个人组织幂等创建、企业组织创建、按用户列出组织、平台管理员受控创建用户与禁用。**仍缺**：邀请与角色矩阵、Key 归属、价格/钱包/账单、Web UI（T03–T08）。决策见 [ADR-0002](docs/decisions/ADR-0002-iam-identity-and-organizations.md)，接口见 [console-v1.yaml](docs/openapi/console-v1.yaml) |
 
 当前更准确的简历定位是：
 
@@ -1160,6 +1160,49 @@ eval "$(scripts/dev-certs.sh | grep '^export ')"
 
 ```bash
 GATEWAY_PROFILE=prod go run ./cmd/gateway
+```
+
+### 5.7 Console（用户、组织与浏览器会话）
+
+Console 是独立进程（`cmd/console`，HTTP 层 `internal/console`，Hertz），承载控制面身份：用户、组织、成员关系和浏览器会话。它使用自己的 `*sql.DB` 连接池，启动时只做只读的 `migrations.Check`，**从不自动迁移**；契约与数据模型见 [ADR-0002](docs/decisions/ADR-0002-iam-identity-and-organizations.md)，HTTP 契约见 [docs/openapi/console-v1.yaml](docs/openapi/console-v1.yaml)。
+
+| 方法 | 路径 | 鉴权 |
+|---|---|---|
+| POST | `/api/v1/auth/login` | 无（`email` + `password`，失败 401，节流 429 + `Retry-After`） |
+| POST | `/api/v1/auth/logout` | 会话 + CSRF → `204` |
+| GET | `/api/v1/me` | 会话 |
+| GET | `/api/v1/organizations` | 会话（`limit` 默认 20、最大 100，cursor 为上一页最后一个 id） |
+| GET | `/api/v1/organizations/{org}` | 会话（非成员 404，不泄露存在性） |
+| POST | `/api/v1/organizations` | 会话 + CSRF → `201`，创建者为 `owner` |
+| POST | `/api/v1/admin/users` | 会话 + 平台管理员 + CSRF → `201` |
+| POST | `/api/v1/admin/users/{user}/status` | 会话 + 平台管理员 + CSRF；`disabled` 递增 `auth_version`，该用户全部会话立即失效 |
+| GET | `/livez`、`/readyz` | 无 |
+
+**Cookie 与 CSRF**：登录成功返回 `Set-Cookie: gw_session=<opaque token>`（`HttpOnly`、`SameSite=Lax`、`Path=/`，`Secure` 由 profile 决定，prod 强制开启）以及同样属性的 `gw_csrf` 伴随 cookie；`gw_session` 服务端只存 SHA-256 摘要，明文只在登录响应中出现一次。所有非安全方法必须带 `X-CSRF-Token`，与会话记录比对失败一律 `403 forbidden`（`SameSite` 不替代 CSRF 校验）。`GET /api/v1/me` 会回显当前会话的 `csrf_token`，刷新页面后无需重新登录。
+
+**Bootstrap**（幂等，可重复执行；密码只从文件读取，从不打印或写日志）：
+
+```bash
+printf '%s' 'choose-a-strong-password' > data/console-admin-password && chmod 600 data/console-admin-password
+make console-bootstrap        # 等价于 go run ./cmd/console bootstrap --admin-email you@example.com --admin-password-file data/console-admin-password
+make console-bootstrap-demo   # 追加 demo-enterprise-a / demo-enterprise-b（各 3 名成员：owner + admin + billing_viewer）
+```
+
+`--demo-data` 在 `prod` profile 下被拒绝。demo 用户的随机密码只在首次创建时写入 `data/console-demo-credentials.txt`（`0600`，已存在则不覆盖），终端只输出路径与计数。
+
+| 变量 | 默认 | 作用 |
+|---|---|---|
+| `CONSOLE_ADDR` | `:8092` | 业务 listener |
+| `CONSOLE_DIAGNOSTICS_ADDR` | 空（demo 与业务同端口，仅 `/metrics`） | 设置后 `/metrics` 与 `/debug/pprof/*` 只在独立 listener 提供；prod 必填且不得与业务地址相同 |
+| `POSTGRES_DSN` | 空（demo 回退本地 compose DSN，`127.0.0.1:5433`） | Console 只使用 PostgreSQL，无内存回退；prod 必填 |
+| `CONSOLE_SESSION_TTL` | `12h` | 会话固定有效期（同时是 cookie `Max-Age`） |
+| `CONSOLE_SECURE_COOKIES` | prod 强制 `true`，demo 默认 `false` | cookie 的 `Secure` 属性；prod 未显式开启时启动失败 |
+| `CONSOLE_LOGIN_RATE` / `CONSOLE_LOGIN_BURST` | `5` / `5` | 每分钟每 `email + 客户端 IP` 的登录令牌桶 |
+
+```bash
+make console-run   # 本机启动（默认 serve；bootstrap 见上）
+curl -i -X POST localhost:8092/api/v1/auth/login -H 'Content-Type: application/json' \
+  -d '{"email":"admin@example.com","password":"..."}'
 ```
 
 ---

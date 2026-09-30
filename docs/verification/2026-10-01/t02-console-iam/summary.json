@@ -1,0 +1,675 @@
+{
+  "tool": "scripts/console-accept.sh",
+  "version": 1,
+  "started_at": "2026-09-30T20:58:58Z",
+  "base_url": "http://127.0.0.1:8092",
+  "admin_email": "admin@accept.test",
+  "demo_credentials_file": "/var/folders/06/6pp62dv93lq23br_tqkd3_f00000gn/T/t02-console-accept-secrets/demo-credentials.txt",
+  "insecure_cookies_ok": true,
+  "login_burst": 5,
+  "checks": [
+    {
+      "id": "check01",
+      "title": "GET /livez 探针",
+      "kind": "check",
+      "status": "PASS",
+      "started_at": "2026-09-30T20:58:58Z",
+      "finished_at": "2026-09-30T20:58:58Z",
+      "details": {
+        "description": "存活/就绪探针在业务 listener 上",
+        "raw_files": [
+          "check01-01-livez.resp",
+          "check01-02-readyz.resp"
+        ],
+        "livez_status": 200,
+        "readyz_status": 200
+      },
+      "notes": [],
+      "failure": null,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/livez",
+          "status": 200,
+          "error_code": null,
+          "request_id": "acc-check01-01"
+        },
+        {
+          "method": "GET",
+          "path": "/readyz",
+          "status": 200,
+          "error_code": null,
+          "request_id": "acc-check01-02"
+        }
+      ]
+    },
+    {
+      "id": "check02",
+      "title": "POST /api/v1/auth/login 会话与 cookie",
+      "kind": "check",
+      "status": "PASS",
+      "started_at": "2026-09-30T20:58:58Z",
+      "finished_at": "2026-09-30T20:58:58Z",
+      "details": {
+        "raw_files": [
+          "check02-01-login-admin-admin.resp"
+        ],
+        "gw_session_attributes": {
+          "http_only": true,
+          "same_site": "Lax",
+          "path": "/",
+          "secure": false,
+          "max_age": "43200"
+        },
+        "user_id": "1",
+        "personal_org_id": "1",
+        "csrf_token_redacted": "86aL…<redacted:43>"
+      },
+      "notes": [
+        "个人组织 id=1 role=owner；csrf=86aL…<redacted:43>"
+      ],
+      "failure": null,
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "status": 200,
+          "error_code": null,
+          "request_id": "acc-check02-01"
+        }
+      ]
+    },
+    {
+      "id": "check03",
+      "title": "GET /api/v1/me 无/篡改 cookie 负例",
+      "kind": "check",
+      "status": "PASS",
+      "started_at": "2026-09-30T20:58:58Z",
+      "finished_at": "2026-09-30T20:58:58Z",
+      "details": {
+        "raw_files": [
+          "check03-01-me-with-session.resp",
+          "check03-02-me-no-cookie.resp",
+          "check03-03-me-tampered-cookie.resp"
+        ],
+        "me_status": 200,
+        "anonymous_status": 401,
+        "tampered_status": 401
+      },
+      "notes": [
+        "被拒绝的 cookie 会被清理（Set-Cookie gw_session Max-Age=0）"
+      ],
+      "failure": null,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/me",
+          "status": 200,
+          "error_code": null,
+          "request_id": "acc-check03-01"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/me",
+          "status": 401,
+          "error_code": "unauthorized",
+          "request_id": "acc-check03-02"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/me",
+          "status": 401,
+          "error_code": "unauthorized",
+          "request_id": "acc-check03-03"
+        }
+      ]
+    },
+    {
+      "id": "check04",
+      "title": "POST /api/v1/organizations CSRF",
+      "kind": "check",
+      "status": "PASS",
+      "started_at": "2026-09-30T20:58:58Z",
+      "finished_at": "2026-09-30T20:58:58Z",
+      "details": {
+        "raw_files": [
+          "check04-01-create-org-no-csrf.resp",
+          "check04-02-create-org-wrong-csrf.resp",
+          "check04-03-create-org-ok.resp"
+        ],
+        "new_org_id": "9",
+        "new_org_name": "accept-9e5c7e3c"
+      },
+      "notes": [],
+      "failure": null,
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/api/v1/organizations",
+          "status": 403,
+          "error_code": "forbidden",
+          "request_id": "acc-check04-01"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/organizations",
+          "status": 403,
+          "error_code": "forbidden",
+          "request_id": "acc-check04-02"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/organizations",
+          "status": 201,
+          "error_code": null,
+          "request_id": "acc-check04-03"
+        }
+      ]
+    },
+    {
+      "id": "check05",
+      "title": "GET /api/v1/organizations 列表与 limit",
+      "kind": "check",
+      "status": "PASS",
+      "started_at": "2026-09-30T20:58:58Z",
+      "finished_at": "2026-09-30T20:58:58Z",
+      "details": {
+        "raw_files": [
+          "check05-01-list-default.resp",
+          "check05-02-list-limit-1000.resp",
+          "check05-03-list-limit-0.resp",
+          "check05-04-list-limit-abc.resp",
+          "check05-05-list-page-1.resp",
+          "check05-06-list-page-2.resp"
+        ],
+        "items_on_default_page": 5,
+        "limit_1000_status": 200,
+        "limit_1000_items": 5,
+        "limit_0_status": 400,
+        "limit_abc_status": 400,
+        "pagination_cursor": "1"
+      },
+      "notes": [
+        "limit=0/limit=abc → 400 invalid_request（与 OpenAPI 一致：小于 1 或非数字被拒绝）"
+      ],
+      "failure": null,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/organizations",
+          "status": 200,
+          "error_code": null,
+          "request_id": "acc-check05-01"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/organizations?limit=1000",
+          "status": 200,
+          "error_code": null,
+          "request_id": "acc-check05-02"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/organizations?limit=0",
+          "status": 400,
+          "error_code": "invalid_request",
+          "request_id": "acc-check05-03"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/organizations?limit=abc",
+          "status": 400,
+          "error_code": "invalid_request",
+          "request_id": "acc-check05-04"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/organizations?limit=1",
+          "status": 200,
+          "error_code": null,
+          "request_id": "acc-check05-05"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/organizations?limit=1&cursor=1",
+          "status": 200,
+          "error_code": null,
+          "request_id": "acc-check05-06"
+        }
+      ]
+    },
+    {
+      "id": "check06",
+      "title": "跨组织读取不泄露存在性（demo 用户）",
+      "kind": "check",
+      "status": "PASS",
+      "started_at": "2026-09-30T20:58:58Z",
+      "finished_at": "2026-09-30T20:58:59Z",
+      "details": {
+        "raw_files": [
+          "check06-01-admin-list-orgs.resp",
+          "check06-02-login-demo-demo-enterprise-a-admin.resp",
+          "check06-03-get-org-b.resp",
+          "check06-04-get-unknown-org.resp",
+          "check06-05-get-org-a.resp",
+          "check06-06-demo-list-orgs.resp"
+        ],
+        "demo_user": "demo-enterprise-a-admin@example.com",
+        "org_a": "2",
+        "org_b": "3",
+        "org_b_status": 404,
+        "org_a_status": 200
+      },
+      "notes": [
+        "demo 用户 demo-enterprise-a-admin@example.com：org_a=2 → 200，org_b=3 → 404 not_found（不泄露存在性）"
+      ],
+      "failure": null,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/organizations?limit=100",
+          "status": 200,
+          "error_code": null,
+          "request_id": "acc-check06-01"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "status": 200,
+          "error_code": null,
+          "request_id": "acc-check06-02"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/organizations/3",
+          "status": 404,
+          "error_code": "not_found",
+          "request_id": "acc-check06-03"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/organizations/9223372036854775807",
+          "status": 404,
+          "error_code": "not_found",
+          "request_id": "acc-check06-04"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/organizations/2",
+          "status": 200,
+          "error_code": null,
+          "request_id": "acc-check06-05"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/organizations?limit=100",
+          "status": 200,
+          "error_code": null,
+          "request_id": "acc-check06-06"
+        }
+      ]
+    },
+    {
+      "id": "check07",
+      "title": "POST /api/v1/auth/logout 会话撤销",
+      "kind": "check",
+      "status": "PASS",
+      "started_at": "2026-09-30T20:58:59Z",
+      "finished_at": "2026-09-30T20:58:59Z",
+      "details": {
+        "raw_files": [
+          "check07-01-logout.resp",
+          "check07-02-me-after-logout.resp"
+        ],
+        "logout_status": 204,
+        "replay_status": 401
+      },
+      "notes": [
+        "登出同时过期 cookie：gw_session Max-Age=0"
+      ],
+      "failure": null,
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/logout",
+          "status": 204,
+          "error_code": null,
+          "request_id": "acc-check07-01"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/me",
+          "status": 401,
+          "error_code": "unauthorized",
+          "request_id": "acc-check07-02"
+        }
+      ]
+    },
+    {
+      "id": "check08",
+      "title": "POST /api/v1/admin/users 权限",
+      "kind": "check",
+      "status": "PASS",
+      "started_at": "2026-09-30T20:58:59Z",
+      "finished_at": "2026-09-30T20:58:59Z",
+      "details": {
+        "raw_files": [
+          "check08-01-login-admin-2-admin.resp",
+          "check08-02-admin-create-user.resp",
+          "check08-03-nonadmin-create-user.resp",
+          "check08-04-admin-creates-same-email.resp"
+        ],
+        "victim_user_id": "6",
+        "victim_email": "accept-victim-05cd486b@accept.test",
+        "nonadmin_status": 403
+      },
+      "notes": [
+        "受控用户 id=6；非管理员同端点 → 403 forbidden 且未创建账号"
+      ],
+      "failure": null,
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "status": 200,
+          "error_code": null,
+          "request_id": "acc-check08-01"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/users",
+          "status": 201,
+          "error_code": null,
+          "request_id": "acc-check08-02"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/users",
+          "status": 403,
+          "error_code": "forbidden",
+          "request_id": "acc-check08-03"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/users",
+          "status": 201,
+          "error_code": null,
+          "request_id": "acc-check08-04"
+        }
+      ]
+    },
+    {
+      "id": "check09",
+      "title": "POST /api/v1/admin/users/{id}/status",
+      "kind": "check",
+      "status": "PASS",
+      "started_at": "2026-09-30T20:58:59Z",
+      "finished_at": "2026-09-30T20:59:00Z",
+      "details": {
+        "raw_files": [
+          "check09-01-login-victim-accept-victim-05cd486b.resp",
+          "check09-02-disable-user.resp",
+          "check09-03-me-after-disable.resp",
+          "check09-04-status-invalid-value.resp",
+          "check09-05-status-unknown-user.resp",
+          "check09-06-status-non-numeric-id.resp",
+          "check09-07-login-disabled-user.resp"
+        ],
+        "victim_user_id": "6",
+        "disable_status": 200,
+        "stale_session_status": 401,
+        "invalid_status_code": "invalid_request",
+        "unknown_user_code": "not_found"
+      },
+      "notes": [
+        "禁用 → 200；旧会话 401；status=paused → 400 invalid_request；未知 id → 404 not_found"
+      ],
+      "failure": null,
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "status": 200,
+          "error_code": null,
+          "request_id": "acc-check09-01"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/users/6/status",
+          "status": 200,
+          "error_code": null,
+          "request_id": "acc-check09-02"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/me",
+          "status": 401,
+          "error_code": "unauthorized",
+          "request_id": "acc-check09-03"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/users/6/status",
+          "status": 400,
+          "error_code": "invalid_request",
+          "request_id": "acc-check09-04"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/users/9223372036854775807/status",
+          "status": 404,
+          "error_code": "not_found",
+          "request_id": "acc-check09-05"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/users/not-a-number/status",
+          "status": 400,
+          "error_code": "invalid_request",
+          "request_id": "acc-check09-06"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "status": 403,
+          "error_code": "forbidden",
+          "request_id": "acc-check09-07"
+        }
+      ]
+    },
+    {
+      "id": "check10",
+      "title": "登录节流 429 rate_limited",
+      "kind": "check",
+      "status": "PASS",
+      "started_at": "2026-09-30T20:59:00Z",
+      "finished_at": "2026-09-30T21:00:03Z",
+      "details": {
+        "raw_files": [
+          "check10-01-wrong-password-01.resp",
+          "check10-02-wrong-password-02.resp",
+          "check10-03-wrong-password-03.resp",
+          "check10-04-wrong-password-04.resp",
+          "check10-05-wrong-password-05.resp",
+          "check10-06-wrong-password-06.resp"
+        ],
+        "throwaway_email": "accept-throttle-4ae42187@accept.test",
+        "attempts_to_429": 6,
+        "configured_burst": 5,
+        "expected_attempts_with_full_bucket": 6,
+        "attempts": [
+          {
+            "attempt": 1,
+            "status": 401,
+            "code": "unauthorized",
+            "retry_after": null
+          },
+          {
+            "attempt": 2,
+            "status": 401,
+            "code": "unauthorized",
+            "retry_after": null
+          },
+          {
+            "attempt": 3,
+            "status": 401,
+            "code": "unauthorized",
+            "retry_after": null
+          },
+          {
+            "attempt": 4,
+            "status": 401,
+            "code": "unauthorized",
+            "retry_after": null
+          },
+          {
+            "attempt": 5,
+            "status": 401,
+            "code": "unauthorized",
+            "retry_after": null
+          },
+          {
+            "attempt": 6,
+            "status": 429,
+            "code": "rate_limited",
+            "retry_after": "60"
+          }
+        ]
+      },
+      "notes": [
+        "等待 62s 让登录令牌桶回满，以便测量“burst 之后第几次被 429”",
+        "dedicated email=accept-throttle-4ae42187@accept.test：第 6 次错误密码进入 429 rate_limited（burst=5，Retry-After=60）"
+      ],
+      "failure": null,
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "status": 401,
+          "error_code": "unauthorized",
+          "request_id": "acc-check10-01"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "status": 401,
+          "error_code": "unauthorized",
+          "request_id": "acc-check10-02"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "status": 401,
+          "error_code": "unauthorized",
+          "request_id": "acc-check10-03"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "status": 401,
+          "error_code": "unauthorized",
+          "request_id": "acc-check10-04"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "status": 401,
+          "error_code": "unauthorized",
+          "request_id": "acc-check10-05"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "status": 429,
+          "error_code": "rate_limited",
+          "request_id": "acc-check10-06"
+        }
+      ]
+    },
+    {
+      "id": "check11",
+      "title": "错误信封与 nosniff 全量扫描",
+      "kind": "check",
+      "status": "PASS",
+      "started_at": "2026-09-30T21:00:03Z",
+      "finished_at": "2026-09-30T21:00:03Z",
+      "details": {
+        "raw_files": [
+          "check11-01-not-found-route.resp",
+          "check11-02-method-not-allowed.resp",
+          "check11-03-malformed-login-body.resp"
+        ],
+        "error_responses_checked": 24
+      },
+      "notes": [
+        "扫过 24 个 4xx/5xx 响应：信封字段集合、code 词表、request_id 回显、nosniff、application/json 全部满足"
+      ],
+      "failure": null,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/v1/definitely-not-a-route",
+          "status": 404,
+          "error_code": "not_found",
+          "request_id": "acc-check11-01"
+        },
+        {
+          "method": "DELETE",
+          "path": "/api/v1/me",
+          "status": 405,
+          "error_code": "method_not_allowed",
+          "request_id": "acc-check11-02"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "status": 400,
+          "error_code": "invalid_request",
+          "request_id": "acc-check11-03"
+        }
+      ]
+    },
+    {
+      "id": "check12",
+      "title": "节流 key 契约探测（非致命）",
+      "kind": "observation",
+      "status": "OBSERVED",
+      "started_at": "2026-09-30T21:00:03Z",
+      "finished_at": "2026-09-30T21:00:03Z",
+      "details": {
+        "raw_files": [
+          "check12-01-other-email-login.resp"
+        ],
+        "other_email": "admin@accept.test",
+        "other_email_status": 429,
+        "other_email_code": "rate_limited",
+        "contract_divergence": "login throttle bucket keyed by client IP only"
+      },
+      "notes": [],
+      "failure": null,
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "status": 429,
+          "error_code": "rate_limited",
+          "request_id": "acc-check12-01"
+        }
+      ]
+    }
+  ],
+  "product_bugs": [
+    {
+      "id": "BUG-1",
+      "title": "登录节流按客户端 IP 计量，而不是 ADR-0002 §2.5 要求的 email+IP",
+      "endpoint": "POST /api/v1/auth/login",
+      "expected": "换一个 email 后应立即拥有自己的 5 次/分钟突发额度（不同 email 不应共享桶）",
+      "actual": "同一 IP 在 throwaway email 被 429 后，另一个（正确密码的）email 立刻也收到 429 rate_limited",
+      "repro": "先对 accept-throttle-<rand>@accept.test 连续错误密码触发 429，再立刻用管理员邮箱 + 正确密码 POST /api/v1/auth/login → 429",
+      "code_path": "internal/console/handlers.go: s.iam.Login(ctx, email, req.Password, c.ClientIP())；internal/iam/service.go: key := strings.TrimSpace(clientKey)（clientKey 已只是 IP）",
+      "impact": "一个 NAT/出口 IP 上的 5 次失败登录会让该 IP 上所有账号在剩余窗口内无法登录（含正确密码），违反 ADR §2.5 的 email+IP 语义，也构成跨账号拒绝服务。"
+    }
+  ],
+  "result": "PASS",
+  "finished_at": "2026-09-30T21:00:03Z"
+}

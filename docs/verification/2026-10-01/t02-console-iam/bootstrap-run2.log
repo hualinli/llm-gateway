@@ -1,0 +1,10 @@
+# bootstrap 第 2 次：必须完全幂等，且不覆盖已存在的凭据文件
+$ POSTGRES_DSN='postgres://gateway_test:test_only_local@127.0.0.1:15433/gateway_test?sslmode=disable' go run ./cmd/console bootstrap --admin-email admin@accept.test --admin-password-file /var/folders/06/6pp62dv93lq23br_tqkd3_f00000gn/T/t02-console-accept-secrets/admin-password --demo-data --demo-credentials-file /var/folders/06/6pp62dv93lq23br_tqkd3_f00000gn/T/t02-console-accept-secrets/demo-credentials.txt
+WARNING: sonic/ast only supports (go1.17~1.26 and amd64 CPU) or (go1.20~1.26 and arm64 CPU), but your environment is not suitable and will fallback to encoding/json
+2026/09/30 20:57:38 runtime profile=demo WARNING: demo mode, production checks are not enforced
+2026/09/30 20:57:38 WARNING: production check failed: CONSOLE_DIAGNOSTICS_ADDR: must be set to a listener address different from the business address ":8092" so /metrics and /debug/pprof/* are not exposed on the API listener
+2026/09/30 20:57:38 WARNING: production check failed: CONSOLE_SECURE_COOKIES: must be true so the gw_session cookie is never sent over plaintext HTTP
+2026/09/30 20:57:38 console bootstrap: profile=demo admin_email=admin@accept.test admin_user_id=1 admin_created=false
+2026/09/30 20:57:38 console bootstrap: personal_organization_id=1
+2026/09/30 20:57:38 console bootstrap: enterprises created=0 reused=2 demo_users created=0 reused=4 memberships_upserted=4
+2026/09/30 20:57:38 console bootstrap: no demo user was created in this run; existing passwords are unchanged
