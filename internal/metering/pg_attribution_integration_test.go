@@ -255,8 +255,9 @@ func TestPGAttributionDownMigrationIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := m.Steps(-1); err != nil {
-		t.Fatal(err)
+	// 固定回滚 000007：后续任务会继续追加迁移，Steps(-1) 会回滚最新的那个。
+	if err := m.Migrate(6); err != nil {
+		t.Fatalf("migrate down to 6: %v", err)
 	}
 	a, b := m.Close()
 	if a != nil || b != nil {

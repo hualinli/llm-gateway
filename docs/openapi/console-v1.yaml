@@ -88,6 +88,12 @@ tags:
     description: Organization API keys, issued by the Control AdminService (T03)
   - name: usage
     description: Metering usage in an organization scope (T03)
+  - name: prices
+    description: Immutable model price versions, platform-administrator only (T05, ADR-0004)
+  - name: billing
+    description: |
+      Organization billing account and append-only ledger (T05, ADR-0004).
+      Every amount is a decimal string of integer micro-yuan (10^-6 CNY).
   - name: admin
     description: Platform-administrator-only user management
   - name: probes
@@ -1041,6 +1047,322 @@ paths:
         '500':
           $ref: '#/components/responses/Internal'
 
+  /api/v1/admin/prices:
+    get:
+      tags: [prices]
+      operationId: listAdminPrices
+      summary: List price versions
+      description: |
+        Platform administrators only (`403 forbidden` for every other
+        authenticated caller, `401 unauthorized` without a session).
+
+        A price version is an immutable row: a model's input and output prices
+        from `effective_at` onwards, plus the provider cost when it is known.
+        Re-pricing a model publishes a new row; nothing is ever updated in
+        place, and the database refuses `UPDATE`/`DELETE` on the table.
+
+        The list is history, not "currently effective": it is ordered by id
+        DESC (newest publication first). `model` narrows it to one model's
+        versions. Amounts are decimal strings of micro-yuan per one million
+        tokens; `provider_*_cost_*` is `null` when the cost is unknown, which is
+        not the same as zero.
+      parameters:
+        - $ref: '#/components/parameters/PriceModelFilter'
+        - $ref: '#/components/parameters/BillingLimit'
+        - $ref: '#/components/parameters/PriceCursor'
+      responses:
+        '200':
+          description: One page of price versions.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PriceVersionPage' }
+              examples:
+                default:
+                  value:
+                    items:
+                      - id: "12"
+                        model: gpt-4o
+                        currency: CNY
+                        input_price_micro_per_million: "1500000"
+                        output_price_micro_per_million: "6000000"
+                        provider_input_cost_micro_per_million: "900000"
+                        provider_output_cost_micro_per_million: null
+                        effective_at: 2026-10-01T00:00:00Z
+                        created_by: "1"
+                        created_at: 2026-09-30T09:15:00Z
+                    next_cursor: "12"
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+    post:
+      tags: [prices]
+      operationId: createAdminPrice
+      summary: Publish a new price version
+      description: |
+        Platform administrators only; requires the session-bound `X-CSRF-Token`
+        header.
+
+        The body is the whole price. `effective_at` is part of its identity, so
+        publishing the same `(model, effective_at)` twice is `409 conflict`
+        rather than an overwrite: an in-flight request must always be able to
+        reconstruct the price it was admitted with (T06 pins the version at
+        admission). A new `effective_at` is how a price changes.
+
+        All prices are non-negative decimal strings of micro-yuan per one
+        million tokens. A JSON number is rejected with `400 invalid_request`:
+        the wire format is part of the money contract. `currency` may only be
+        `CNY` in this version.
+      parameters:
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreatePriceVersionRequest' }
+            examples:
+              default:
+                value:
+                  model: gpt-4o
+                  currency: CNY
+                  input_price_micro_per_million: "1500000"
+                  output_price_micro_per_million: "6000000"
+                  provider_input_cost_micro_per_million: "900000"
+                  provider_output_cost_micro_per_million: null
+                  effective_at: 2026-10-01T00:00:00Z
+      responses:
+        '201':
+          description: The price version was published.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PriceVersion' }
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/v1/orgs/{org}/billing/account:
+    get:
+      tags: [billing]
+      operationId: getOrgBillingAccount
+      summary: Read an organization's billing account
+      description: |
+        Read scope is the ADR-0003 §2.3 matrix action `view_org_usage`:
+        `owner`, `admin` and the read-only `billing_viewer` may read it. A plain
+        `member` is `403 forbidden` (they are a member, so the organization's
+        existence is not a secret) and a non-member is `404 not_found`.
+
+        `available_micro = posted_balance_micro - reserved_micro` is echoed so a
+        client never has to re-derive the number T06's admission compares
+        against. `posted_balance_micro` may be negative: that is an explicit
+        debt, not a spendable balance, and `reserved_micro` is never negative.
+
+        An organization without a billing account row answers `404 not_found`.
+        This endpoint is read-only and never creates the row as a side effect of
+        a GET; the row appears when the first posting is applied (a platform
+        adjustment now, an admission reservation in T06).
+      parameters:
+        - $ref: '#/components/parameters/OrgID'
+      responses:
+        '200':
+          description: The account projection.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BillingAccount' }
+              examples:
+                default:
+                  value:
+                    organization_id: "2"
+                    currency: CNY
+                    posted_balance_micro: "12500000"
+                    reserved_micro: "2500000"
+                    available_micro: "10000000"
+                    status: active
+                    version: "3"
+                    created_at: 2026-10-01T10:00:00Z
+                    updated_at: 2026-10-01T11:00:00Z
+                    available_note: "available_micro = posted_balance_micro - reserved_micro. A negative available amount is a debt, not a spendable balance."
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/v1/orgs/{org}/billing/entries:
+    get:
+      tags: [billing]
+      operationId: listOrgBillingEntries
+      summary: Paged organization ledger
+      description: |
+        The same `view_org_usage` scope as the account read (`403` for a plain
+        member, `404` for a non-member).
+
+        The ledger is append-only: a correction is a new reversing entry, never
+        an edit of a past row, so this page is the audit trail of every money
+        movement. Ordering is `(posted_at, id) DESC`; `next_cursor` is an opaque
+        URL-safe token carrying exactly that pair, and passing it back resumes
+        after the last returned row without gaps or duplicates. `limit` defaults
+        to 20 and is clamped to 100.
+
+        `kind` filters one movement type. `direction` is the only sign in the
+        ledger: `credit` increases the bucket the kind targets, `debit`
+        decreases it. An organization with no entries answers an empty page, not
+        a 404.
+      parameters:
+        - $ref: '#/components/parameters/OrgID'
+        - $ref: '#/components/parameters/BillingLimit'
+        - $ref: '#/components/parameters/BillingEntriesCursor'
+        - $ref: '#/components/parameters/BillingEntryKind'
+      responses:
+        '200':
+          description: One page of ledger entries.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BillingEntryPage' }
+              examples:
+                default:
+                  value:
+                    items:
+                      - id: "42"
+                        organization_id: "2"
+                        kind: adjustment
+                        direction: credit
+                        amount_micro: "1500000"
+                        business_id: adj-2026-10-01-0001
+                        reason: goodwill credit for incident INC-42
+                        operator_user_id: "1"
+                        request_id: 01J8Z9Q7
+                        posted_at: 2026-10-01T12:00:00Z
+                        created_at: 2026-10-01T12:00:00Z
+                    next_cursor: null
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/v1/admin/billing/accounts/{org}/adjustments:
+    post:
+      tags: [billing]
+      operationId: adjustBillingAccount
+      summary: Post a platform credit or debit adjustment
+      description: |
+        Platform administrators only, on any organization: a platform adjustment
+        is not an organization-scoped write, and no organization role (not even
+        `owner`) is granted `platform_admin_ops`. The session-bound
+        `X-CSRF-Token` header is required as well.
+
+        **Idempotency.** The `Idempotency-Key` header becomes the ledger's
+        `business_id`, and `(business_id, kind)` is unique. Replaying the same
+        key with the same payload applies the posting exactly once and returns
+        the stored entry with `replayed: true` and `200 OK`; reusing the key
+        with a different payload (a different amount, direction or reason) is
+        `409 conflict` and moves no money.
+
+        **Atomicity and audit.** Locking the account row, inserting the
+        append-only entry, updating the projection and writing the
+        `console_audit_events` row happen in one PostgreSQL transaction: a
+        posting and its audit record commit or roll back together. A debit may
+        post a negative balance — that is an explicit receivable, and the T06
+        admission path refuses to spend from it; it is never clamped.
+
+        `amount_micro` is a strictly positive decimal string; the sign lives in
+        `direction`. `reason` is mandatory: an unexplained money movement is not
+        acceptable.
+      parameters:
+        - $ref: '#/components/parameters/OrgID'
+        - $ref: '#/components/parameters/CSRFToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdjustmentRequest' }
+            examples:
+              credit:
+                value:
+                  amount_micro: "1500000"
+                  direction: credit
+                  reason: goodwill credit for incident INC-42
+              debit:
+                value:
+                  amount_micro: "250000"
+                  direction: debit
+                  reason: reversal of duplicate credit adj-2026-10-01-0001
+      responses:
+        '201':
+          description: |
+            The posting was applied. `replayed` is `false`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdjustmentResponse' }
+        '200':
+          description: |
+            The `Idempotency-Key` had already been applied with this exact
+            payload; the stored entry is returned and no money moved.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdjustmentResponse' }
+              examples:
+                replayed:
+                  value:
+                    entry:
+                      id: "42"
+                      organization_id: "2"
+                      kind: adjustment
+                      direction: credit
+                      amount_micro: "1500000"
+                      business_id: adj-2026-10-01-0001
+                      reason: goodwill credit for incident INC-42
+                      operator_user_id: "1"
+                      request_id: 01J8Z9Q7
+                      posted_at: 2026-10-01T12:00:00Z
+                      created_at: 2026-10-01T12:00:00Z
+                    account:
+                      organization_id: "2"
+                      currency: CNY
+                      posted_balance_micro: "12500000"
+                      reserved_micro: "0"
+                      available_micro: "12500000"
+                      status: active
+                      version: "2"
+                      created_at: 2026-10-01T10:00:00Z
+                      updated_at: 2026-10-01T12:00:00Z
+                      available_note: "available_micro = posted_balance_micro - reserved_micro. A negative available amount is a debt, not a spendable balance."
+                    replayed: true
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
   /livez:
     get:
       tags: [probes]
@@ -1239,6 +1561,58 @@ components:
         `POST /api/v1/orgs/{org}/invitations`. It is a credential: it is never
         logged and never stored in plaintext (only its SHA-256 is kept).
       schema: { type: string, minLength: 1 }
+    BillingLimit:
+      name: limit
+      in: query
+      required: false
+      description: |
+        Page size. Defaults to 20; values above 100 are clamped to 100 and
+        values below 1 are `400 invalid_request`.
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    PriceModelFilter:
+      name: model
+      in: query
+      required: false
+      description: Exact model name filter. Omit it to list every model's versions.
+      schema: { type: string, maxLength: 128 }
+    PriceCursor:
+      name: cursor
+      in: query
+      required: false
+      description: |
+        Cursor from the previous response's `next_cursor`: the last price
+        version id. Rows with a greater id are newer, so paging walks backwards
+        through publication history. A malformed or negative value is
+        `400 invalid_request`.
+      schema: { type: string, pattern: '^[0-9]+$' }
+    BillingEntriesCursor:
+      name: cursor
+      in: query
+      required: false
+      description: |
+        Opaque cursor from the previous response's `next_cursor`, carrying the
+        last row's `(posted_at, id)` pair. Pass it back verbatim; a malformed or
+        non-canonical token is `400 invalid_request`.
+      schema: { type: string }
+    BillingEntryKind:
+      name: kind
+      in: query
+      required: false
+      description: Restrict the page to one ledger movement type.
+      schema:
+        type: string
+        enum: [credit, debit, adjustment, reservation, release]
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: |
+        Client-generated business id of one adjustment, 1..200 characters. It
+        becomes the ledger's `business_id`; replaying it with the same payload
+        returns the stored posting with `200 OK` and `replayed: true`, while a
+        different payload under the same key is `409 conflict` and moves no
+        money. A missing or over-long value is `400 invalid_request`.
+      schema: { type: string, minLength: 1, maxLength: 200 }
   responses:
     InvalidRequest:
       description: Malformed body, invalid parameter or invalid enum value.
@@ -2053,9 +2427,11 @@ components:
             - org.key.revoke
             - admin.user.create
             - admin.user.status
+            - admin.price.create
+            - billing.adjustment
         target_type:
           type: string
-          enum: [membership, invitation, user, api_key]
+          enum: [membership, invitation, user, api_key, price_version, billing_account]
         target_id:
           type: string
           description: Target id as a decimal string; empty when unknown (never the token).
@@ -2084,5 +2460,224 @@ components:
           type: [string, "null"]
           description: Last audit id of this page, or `null` on the last page.
 
+    PriceVersion:
+      type: object
+      description: |
+        One immutable price version: the prices of `model` from `effective_at`
+        onwards. Publishing a price inserts a row; the database refuses UPDATE
+        and DELETE on this table, so a past request can always be re-priced with
+        the version it was admitted under.
+      additionalProperties: false
+      required:
+        - id
+        - model
+        - currency
+        - input_price_micro_per_million
+        - output_price_micro_per_million
+        - provider_input_cost_micro_per_million
+        - provider_output_cost_micro_per_million
+        - effective_at
+        - created_by
+        - created_at
+      properties:
+        id: { type: string, description: 64-bit id as a decimal string. }
+        model: { type: string }
+        currency: { type: string, enum: [CNY] }
+        input_price_micro_per_million:
+          type: string
+          description: Micro-yuan per one million input tokens, as a decimal string.
+        output_price_micro_per_million:
+          type: string
+          description: Micro-yuan per one million output tokens, as a decimal string.
+        provider_input_cost_micro_per_million:
+          type: [string, "null"]
+          description: |
+            What the platform pays per one million input tokens. `null` means
+            unknown; it is never rendered as `0`.
+        provider_output_cost_micro_per_million:
+          type: [string, "null"]
+          description: Same as above for output tokens.
+        effective_at:
+          type: string
+          format: date-time
+          description: |
+            Instant this version takes effect. Together with `model` it is the
+            version's identity, so the pair is unique.
+        created_by:
+          type: [string, "null"]
+          description: Platform administrator who published it; `null` when the account was deleted.
+        created_at: { type: string, format: date-time }
+
+    PriceVersionPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/PriceVersion' }
+        next_cursor:
+          type: [string, "null"]
+          description: Last price version id of this page, or `null` on the last page.
+
+    CreatePriceVersionRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - model
+        - input_price_micro_per_million
+        - output_price_micro_per_million
+        - effective_at
+      properties:
+        model: { type: string, minLength: 1, maxLength: 128 }
+        currency:
+          type: string
+          enum: [CNY]
+          default: CNY
+          description: Only `CNY` exists in this version; anything else is `400 invalid_request`.
+        input_price_micro_per_million:
+          type: string
+          pattern: '^[0-9]+$'
+          description: Non-negative decimal string of micro-yuan per one million input tokens.
+        output_price_micro_per_million:
+          type: string
+          pattern: '^[0-9]+$'
+        provider_input_cost_micro_per_million:
+          type: [string, "null"]
+          pattern: '^[0-9]+$'
+          description: Optional; omit or send `null` when the cost is unknown.
+        provider_output_cost_micro_per_million:
+          type: [string, "null"]
+          pattern: '^[0-9]+$'
+        effective_at:
+          type: string
+          format: date-time
+          description: RFC 3339 instant; must not collide with an existing version of the same model.
+
+    BillingAccount:
+      type: object
+      description: |
+        The organization's billing projection. It is derived from the ledger and
+        can always be recomputed from it; the ledger, not this row, is the fact.
+      additionalProperties: false
+      required:
+        - organization_id
+        - currency
+        - posted_balance_micro
+        - reserved_micro
+        - available_micro
+        - status
+        - version
+        - created_at
+        - updated_at
+        - available_note
+      properties:
+        organization_id: { type: string }
+        currency: { type: string, enum: [CNY] }
+        posted_balance_micro:
+          type: string
+          description: |
+            Sum of every posted entry. May be negative: an explicit debt that
+            the admission path refuses to spend from.
+        reserved_micro:
+          type: string
+          description: Funds held by in-flight executions (T06). Never negative.
+        available_micro:
+          type: string
+          description: "`posted_balance_micro - reserved_micro`."
+        status: { type: string, enum: [active, suspended] }
+        version:
+          type: string
+          description: Monotonic projection version, incremented on every posting.
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        available_note:
+          type: string
+          description: Frozen wording of the available-funds invariant, so a UI cannot present the posted balance as spendable money.
+
+    BillingEntry:
+      type: object
+      description: |
+        One append-only ledger row. Corrections are new reversing entries, never
+        edits; the table rejects UPDATE and DELETE.
+      additionalProperties: false
+      required:
+        - id
+        - organization_id
+        - kind
+        - direction
+        - amount_micro
+        - business_id
+        - reason
+        - operator_user_id
+        - request_id
+        - posted_at
+        - created_at
+      properties:
+        id: { type: string }
+        organization_id: { type: string }
+        kind:
+          type: string
+          enum: [credit, debit, adjustment, reservation, release]
+          description: |
+            `credit`/`debit`/`adjustment` move the posted balance;
+            `reservation`/`release` move the reserved bucket (T06).
+        direction:
+          type: string
+          enum: [credit, debit]
+          description: The only sign in the ledger; `amount_micro` is always positive.
+        amount_micro: { type: string, description: Strictly positive decimal string of micro-yuan. }
+        business_id:
+          type: string
+          description: Business identity of the posting; `(business_id, kind)` is unique, which is what makes a retry a replay.
+        reason: { type: [string, "null"] }
+        operator_user_id:
+          type: [string, "null"]
+          description: "`null` for a posting the platform made without an operator."
+        request_id: { type: [string, "null"] }
+        posted_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+
+    BillingEntryPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/BillingEntry' }
+        next_cursor:
+          type: [string, "null"]
+          description: Opaque `(posted_at, id)` cursor, or `null` on the last page.
+
+    AdjustmentRequest:
+      type: object
+      additionalProperties: false
+      required: [amount_micro, direction, reason]
+      properties:
+        amount_micro:
+          type: string
+          pattern: '^[1-9][0-9]*$'
+          description: Strictly positive decimal string of micro-yuan. A JSON number is `400 invalid_request`.
+        direction: { type: string, enum: [credit, debit] }
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 512
+          description: Mandatory human reason, stored on the entry and in its audit row.
+
+    AdjustmentResponse:
+      type: object
+      additionalProperties: false
+      required: [entry, account, replayed]
+      properties:
+        entry: { $ref: '#/components/schemas/BillingEntry' }
+        account: { $ref: '#/components/schemas/BillingAccount' }
+        replayed:
+          type: boolean
+          description: |
+            `false` when this call applied the posting (`201 Created`), `true`
+            when the same `Idempotency-Key` and payload had already been applied
+            (`200 OK`).
+
 security:
-  - sessionCookie: []

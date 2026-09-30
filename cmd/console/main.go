@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"llm-gateway/internal/appenv"
+	"llm-gateway/internal/billing"
 	"llm-gateway/internal/console"
 	"llm-gateway/internal/iam"
 	"llm-gateway/internal/organization"
@@ -107,6 +108,10 @@ func runServe(profile appenv.Profile, args []string) error {
 	}
 	defer func() { _ = channel.Close() }()
 
+	// T05 (ADR-0004): one billing store serves both the platform price surface
+	// and the organization account/ledger surface. It shares the Console pool.
+	billingStore := billing.NewPGStore(db)
+
 	return serve(serveOptions{
 		config:              cfg,
 		profile:             profile,
@@ -114,6 +119,8 @@ func runServe(profile appenv.Profile, args []string) error {
 		orgs:                orgs,
 		keys:                channel.Keys(),
 		usage:               console.NewPGUsageStore(db),
+		prices:              billingStore,
+		accounts:            billingStore,
 		publication:         channel.Publication(),
 		publicationInterval: cfg.PublicationInterval,
 		audit:               audit,
@@ -148,6 +155,10 @@ type serveOptions struct {
 	keys console.KeyService
 	// usage backs GET /api/v1/orgs/{org}/usage. nil answers 500.
 	usage console.UsageStore
+	// prices and accounts back the T05 billing surface (ADR-0004). nil answers
+	// 503 instead of pretending the platform has no prices and no ledger.
+	prices   console.PriceService
+	accounts console.BillingAccountService
 	// publication is optional: nil disables the policy-publication loop.
 	publication         publicationRunner
 	publicationInterval time.Duration
