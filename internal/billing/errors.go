@@ -18,6 +18,12 @@
 //   - the legacy metering_events.cost_cents column is untouched: it stays the
 //     historical demo price, and is never recomputed from a price version.
 //
+// T06B adds the execution/reservation state machine on top of that: one
+// billing_executions row per admission pins the price version and the trusted
+// token upper bounds, and the reservation itself is an ordinary append-only
+// ledger entry (kind=reservation, direction=credit) written in the same
+// transaction as the account projection.
+//
 // This package deliberately knows nothing about HTTP: internal/console declares
 // the interfaces it needs and cmd/console wires the PostgreSQL stores in. The
 // only shared-surface coupling is the console_audit_events table, which a
@@ -73,4 +79,26 @@ var (
 	// ErrInvalidArgument marks a caller-fixable request that is not covered by a
 	// more specific sentinel above.
 	ErrInvalidArgument = errors.New("billing: invalid argument")
+
+	// ErrInsufficientFunds marks an admission that the account cannot afford:
+	// available = posted_balance - reserved is smaller than the pinned upper
+	// bound. The gateway must refuse the request without calling upstream. A
+	// reservation is never taken partially and the execution row is never
+	// written.
+	ErrInsufficientFunds = errors.New("billing: insufficient available funds for this execution")
+
+	// ErrAccountSuspended marks an admission for an organization whose billing
+	// account is suspended (ADR-0004 §2.4). Suspension is an operational state:
+	// it does not stop platform adjustments, but it does stop new requests.
+	ErrAccountSuspended = errors.New("billing: the billing account is suspended")
+
+	// ErrExecutionNotFound marks an unknown execution id. Reads are not
+	// organization scoped: execution ids are unguessable admission identities,
+	// and the caller that holds one already passed admission.
+	ErrExecutionNotFound = errors.New("billing: billing execution not found")
+
+	// ErrExecutionState marks a transition the state machine refuses: a
+	// terminal execution cannot be reserved, released or failed again, and a
+	// settled execution is T07's business, not the release path's.
+	ErrExecutionState = errors.New("billing: the execution is not in a state that allows this transition")
 )
