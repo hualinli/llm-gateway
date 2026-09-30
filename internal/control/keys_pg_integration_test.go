@@ -751,8 +751,10 @@ func TestControlMigration000006DownPostgres(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertControlTables(t, db, true)
-	if err := migrator.Steps(-1); err != nil {
-		t.Fatalf("step down 000006: %v", err)
+	// 固定迁移到 000006 之前：后续任务可能追加 000007 等迁移，
+	// Steps(-1) 会回滚最新的那个而不是 000006。
+	if err := migrator.Migrate(5); err != nil {
+		t.Fatalf("migrate down to 5: %v", err)
 	}
 	assertControlTables(t, db, false)
 	if err := migrator.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {

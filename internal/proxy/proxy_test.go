@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"llm-gateway/internal/auth"
+	"llm-gateway/internal/gatewayguard"
 	"llm-gateway/internal/httperr"
 	"llm-gateway/internal/metering"
 	"llm-gateway/internal/provider"
@@ -91,6 +92,51 @@ type recordingProducer struct {
 func (p *recordingProducer) Enqueue(e metering.Event) bool {
 	p.events = append(p.events, e)
 	return true
+}
+
+// TestMeteringEventCarriesGuardAttribution pins the T03 attribution wiring: the
+// proxy copies the verified guard attribution into the metering event and uses
+// the guard's execution id as the event identity, while an unguarded request
+// keeps the legacy evt_ identity and leaves attribution unknown.
+func TestMeteringEventCarriesGuardAttribution(t *testing.T) {
+	p := &fakeProvider{name: "a", chunks: []string{"data: [DONE]\n\n"}}
+	producer := &recordingProducer{}
+	h := NewHandler(provider.NewRegistry(map[string][]provider.Provider{"m1": {p}}), producer)
+
+	req := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(streamBody))
+	ctx := context.WithValue(req.Context(), auth.TenantKey, "org:7")
+	ctx = gatewayguard.WithAttribution(ctx, gatewayguard.Attribution{
+		TenantID: "org:7", OrgID: 7, UserID: 42, KeyID: "key-1", ExecutionID: "exec_guarded",
+	})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req.WithContext(ctx))
+	if rec.Code != 200 || len(producer.events) != 1 {
+		t.Fatalf("status=%d events=%d", rec.Code, len(producer.events))
+	}
+	event := producer.events[0]
+	if event.EventID != "exec_guarded" || event.ExecutionID != "exec_guarded" {
+		t.Fatalf("execution identity not reused: %+v", event)
+	}
+	if event.OrgID != 7 || event.UserID != 42 || event.KeyID != "key-1" || event.TenantID != "org:7" {
+		t.Fatalf("attribution missing: %+v", event)
+	}
+
+	// Without a guard the request still bills, but with unknown attribution.
+	producer.events = nil
+	unguarded := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(streamBody))
+	unguarded = unguarded.WithContext(context.WithValue(unguarded.Context(), auth.TenantKey, "tenant-a"))
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, unguarded)
+	if rec.Code != 200 || len(producer.events) != 1 {
+		t.Fatalf("unguarded status=%d events=%d", rec.Code, len(producer.events))
+	}
+	event = producer.events[0]
+	if !strings.HasPrefix(event.EventID, "evt_") || event.ExecutionID != "" {
+		t.Fatalf("unguarded event identity = %+v", event)
+	}
+	if event.OrgID != 0 || event.UserID != 0 || event.KeyID != "" {
+		t.Fatalf("unguarded event invented attribution: %+v", event)
+	}
 }
 
 func TestRepeatedClientRequestIDCreatesDistinctBillingEvents(t *testing.T) {

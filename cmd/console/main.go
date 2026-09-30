@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"llm-gateway/internal/appenv"
 	"llm-gateway/internal/console"
@@ -96,14 +97,28 @@ func runServe(profile appenv.Profile, args []string) error {
 	audit := console.NewPGSink(db)
 	audit.Logger = log.Default()
 
+	// T03: the Console → Control AdminService channel (keys + policy
+	// publication). It is optional — without CONTROL_ADDR key endpoints answer
+	// 503 and no publication loop runs — but it never blocks startup: the loop
+	// converges once Control returns.
+	channel, err := buildControlChannel(cfg, db, orgs, log.Default())
+	if err != nil {
+		return err
+	}
+	defer func() { _ = channel.Close() }()
+
 	return serve(serveOptions{
-		config:  cfg,
-		profile: profile,
-		iam:     users,
-		orgs:    orgs,
-		audit:   audit,
-		ready:   db.PingContext,
-		logger:  log.Default(),
+		config:              cfg,
+		profile:             profile,
+		iam:                 users,
+		orgs:                orgs,
+		keys:                channel.Keys(),
+		usage:               console.NewPGUsageStore(db),
+		publication:         channel.Publication(),
+		publicationInterval: cfg.PublicationInterval,
+		audit:               audit,
+		ready:               db.PingContext,
+		logger:              log.Default(),
 	})
 }
 
@@ -114,6 +129,13 @@ type auditService interface {
 	console.AuditStore
 }
 
+// publicationRunner is the background policy-publication loop started by serve.
+// *organization.PublicationWorker implements it; tests use a fake to observe the
+// start/stop lifecycle without PostgreSQL.
+type publicationRunner interface {
+	Run(ctx context.Context, interval time.Duration)
+}
+
 // serveOptions carries the wired dependencies into serve(). The service fields
 // are the console interfaces, so the wiring is testable with fakes.
 type serveOptions struct {
@@ -121,6 +143,14 @@ type serveOptions struct {
 	profile appenv.Profile
 	iam     console.IAMService
 	orgs    console.OrganizationService
+	// keys is optional: nil (no CONTROL_ADDR) makes the key endpoints answer 503
+	// instead of pretending an organization has no keys.
+	keys console.KeyService
+	// usage backs GET /api/v1/orgs/{org}/usage. nil answers 500.
+	usage console.UsageStore
+	// publication is optional: nil disables the policy-publication loop.
+	publication         publicationRunner
+	publicationInterval time.Duration
 	// audit is optional: nil disables the audit trail and makes
 	// GET /api/v1/orgs/{org}/audit answer 500 instead of pretending there is no
 	// audit history.

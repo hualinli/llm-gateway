@@ -408,19 +408,38 @@ func normalizeProviderProtocol(protocol string) string {
 	}
 }
 
+// KeyRecordsToAuth projects the snapshot's key records into the Gateway's
+// non-secret credential type. Attribution is copied verbatim: a legacy record
+// (org_id 0, absent owner/expiry/allowlist) keeps its "unknown" meaning, and
+// message presence is preserved so an explicitly empty allowlist stays
+// deny-all instead of collapsing into "inherit" (ADR-0003 §2.7/§2.9).
 func KeyRecordsToAuth(records []*pb.KeyRecord) []auth.KeyRecord {
 	out := make([]auth.KeyRecord, 0, len(records))
 	for _, record := range records {
 		if record == nil {
 			continue
 		}
-		out = append(out, auth.KeyRecord{
+		projected := auth.KeyRecord{
 			ID:       record.KeyId,
 			Hash:     record.KeyHash,
 			Prefix:   record.KeyPrefix,
 			TenantID: record.TenantId,
 			Status:   record.Status,
-		})
+			OrgID:    record.OrgId,
+		}
+		if record.OwnerUserId != nil {
+			owner := record.GetOwnerUserId()
+			projected.OwnerUserID = &owner
+		}
+		if record.ExpiresAt != nil {
+			expiresAt := record.GetExpiresAt().AsTime().UTC().Truncate(time.Microsecond)
+			projected.ExpiresAt = &expiresAt
+		}
+		if list := record.GetModelAllowlist(); list != nil {
+			models := append([]string(nil), list.GetModels()...)
+			projected.ModelAllowlist = &models
+		}
+		out = append(out, projected)
 	}
 	return out
 }

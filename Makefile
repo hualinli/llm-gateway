@@ -1,4 +1,4 @@
-.PHONY: tidy up down run vet test test-up test-down integration-test mock-primary mock-backup demo-up demo-observability demo-config demo-smoke demo-smoke-backup demo-smoke-unavailable demo-accept demo-down demo-clean ensure-master-key console-run console-bootstrap console-bootstrap-demo
+.PHONY: tidy up down run vet test test-up test-down integration-test mock-primary mock-backup demo-up demo-observability demo-config demo-smoke demo-smoke-backup demo-smoke-unavailable demo-accept demo-down demo-clean ensure-master-key dev-certs console-run console-run-tls console-bootstrap console-bootstrap-demo
 
 TEST_REDIS_ADDR ?= 127.0.0.1:16379
 TEST_POSTGRES_DSN ?= postgres://gateway_test:test_only_local@127.0.0.1:15433/gateway_test?sslmode=disable
@@ -50,9 +50,32 @@ ensure-master-key:
 run:
 	go run ./cmd/gateway
 
+# 本地 Control mTLS 材料（CA、Control 服务端证书、Gateway/Console 客户端证书、
+# Provider 凭据主密钥）。幂等：已存在则只打印导出变量。
+dev-certs:
+	bash scripts/dev-certs.sh
+
 # Console（控制面 IAM）：默认 serve。POSTGRES_DSN 缺失时 demo profile 回退本地
 # compose DSN（127.0.0.1:5433）。
+# 不带 CONTROL_ADDR 时 Key 管理返回 503、不启动策略发布 loop（本地 IAM 调试仍可用）。
 console-run:
+	go run ./cmd/console
+
+# 带 Console -> Control 管理通道的本地启动：先 `make dev-certs`，并让 Control 以
+# CONTROL_ADMIN_SERVICE_ENABLED=true + CONTROL_CONSOLE_SERVICE_NAME=console 运行
+# （生产要求 CONTROL_TLS_REQUIRE_CLIENT_CERT=true；本地 demo 可用
+# CONTROL_ALLOW_INSECURE_ADMIN_SERVICE=true 走明文）。
+CONSOLE_CONTROL_ADDR ?= localhost:50051
+CONSOLE_CONTROL_SERVICE_NAME ?= console
+CONSOLE_DEV_CERTS_DIR ?= data/dev-certs
+console-run-tls:
+	CONTROL_ADDR='$(CONSOLE_CONTROL_ADDR)' \
+	CONTROL_CONSOLE_SERVICE_NAME='$(CONSOLE_CONTROL_SERVICE_NAME)' \
+	CONTROL_TLS_CA_FILE='$(CONSOLE_DEV_CERTS_DIR)/ca.crt' \
+	CONTROL_TLS_CLIENT_CERT_FILE='$(CONSOLE_DEV_CERTS_DIR)/console-client.crt' \
+	CONTROL_TLS_CLIENT_KEY_FILE='$(CONSOLE_DEV_CERTS_DIR)/console-client.key' \
+	CONTROL_TLS_SERVER_NAME=control \
+	CONSOLE_PUBLICATION_INTERVAL=15s \
 	go run ./cmd/console
 
 # 幂等 bootstrap：创建/复用平台管理员并保证其个人组织存在。
@@ -100,6 +123,7 @@ integration-test: test-up
 		CONTROL_TEST_POSTGRES_DSN='$(TEST_POSTGRES_DSN)' \
 		IAM_TEST_POSTGRES_DSN='$(TEST_POSTGRES_DSN)' \
 		METERING_TEST_POSTGRES_DSN='$(TEST_POSTGRES_DSN)' \
+		GATEWAY_TEST_POSTGRES_DSN='$(TEST_POSTGRES_DSN)' \
 		go test $(TEST_FLAGS) $(TEST_PACKAGES) -run '$(TEST_RUN)' -count=1 -timeout=120s
 
 # Explicit schema changes; export POSTGRES_DSN for the intended database.

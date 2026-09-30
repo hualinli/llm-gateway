@@ -17,6 +17,7 @@ import (
 	"llm-gateway/internal/appenv"
 	"llm-gateway/internal/auth"
 	"llm-gateway/internal/control"
+	"llm-gateway/internal/gatewayguard"
 	"llm-gateway/internal/limiter"
 	"llm-gateway/internal/metering"
 	"llm-gateway/internal/metrics"
@@ -106,6 +107,21 @@ func main() {
 	}
 	authStore := auth.NewMemoryStoreFromRecords(bootstrapRecords)
 
+	// 数据面 PG access guard（ADR-0003 §2.8）：在快照解析 Key 之后、进入上游
+	// 之前，用一条短只读查询确认 org/user/member/key 的当前有效性。生产 profile
+	// 必须 GATEWAY_ACCESS_GUARD=pg；demo/test 默认关闭并打印 WARNING，关闭时
+	// 退化为只执行快照可见的检查，且完全不建立 PG 连接。
+	guardConfig, err := accessGuardConfigFromEnv(appenv.EnvLookup)
+	if err != nil {
+		log.Fatalf("access guard: %v", err)
+	}
+	orgPolicies := gatewayguard.NewPolicySet()
+	accessGuard, closeAccessGuard, err := openAccessGuard(guardConfig, orgPolicies)
+	if err != nil {
+		log.Fatalf("access guard: %v", err)
+	}
+	log.Printf("access guard mode=%s", guardConfig.Mode)
+
 	// 控制面同步：GetConfig 补拉、Watch 低延迟推送、周期校验和可选租约。
 	// 版本跳跃由同步器接受，Gateway 只拒绝旧版本；租约到期时撤销本地 key。
 	controlAddr := os.Getenv("CONTROL_ADDR")
@@ -115,11 +131,16 @@ func main() {
 	controlCtx, controlCancel := context.WithCancel(context.Background())
 	log.Printf("gateway instance=%s", instanceID)
 	controlSync := control.NewSynchronizer(controlAddr, control.SyncOptions{
-		PollInterval:   durationEnv("CONTROL_CONFIG_POLL_INTERVAL", 30*time.Second),
-		LeaseTimeout:   durationEnv("CONTROL_CONFIG_LEASE", 0),
-		OnLeaseExpired: func() { authStore.UpdateRecords(nil) },
-		TLS:            controlTLS,
-		InstanceID:     instanceID,
+		PollInterval: durationEnv("CONTROL_CONFIG_POLL_INTERVAL", 30*time.Second),
+		LeaseTimeout: durationEnv("CONTROL_CONFIG_LEASE", 0),
+		OnLeaseExpired: func() {
+			authStore.UpdateRecords(nil)
+			// 控制面失联：本地 key 全部撤销，同时清掉组织策略，避免用过期
+			// 策略继续放行（allowlist/RPM 都来自同一个快照）。
+			orgPolicies.Replace(nil)
+		},
+		TLS:        controlTLS,
+		InstanceID: instanceID,
 		OnClient: func(client *control.Client) {
 			credentials.client.Store(client)
 		},
@@ -133,6 +154,8 @@ func main() {
 				log.Printf("control: reject config v%d: %v", cfg.Version, err)
 				return err
 			}
+			// 策略先于 key 生效：新 key 的第一个请求就能看到它所属组织的策略。
+			orgPolicies.Replace(orgPoliciesFromProto(cfg.OrgPolicies))
 			authStore.UpdateRecords(control.KeyRecordsToAuth(cfg.KeyRecords))
 			return nil
 		})
@@ -141,9 +164,14 @@ func main() {
 		}
 	}()
 
-	// 链路顺序：auth(提租户) → limiter(按租户限) → proxy(透传+计量)
+	// 组织级 RPM 直接消费快照里的 org_policies；没有发布策略的组织保持原来的
+	// 租户默认桶（单层令牌桶，不叠加）。
+	lim.SetOrgRates(orgPolicies)
+
+	// 链路顺序：auth(提租户) → guard(权威校验+归属) → limiter(按 org/租户限) → proxy(透传+计量)
+	guarded := gatewayguard.Middleware(accessGuard, gatewayguard.Options{KnownModel: registry.HasModel})
 	limitedProxy := limiter.Middleware(lim)(proxyHandler)
-	authedLimitedProxy := auth.Middleware(authStore)(limitedProxy)
+	authedLimitedProxy := auth.Middleware(authStore)(guarded(limitedProxy))
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", ready.Live)
@@ -154,7 +182,7 @@ func main() {
 		ready.Write(w, ready.Gateway(len(registry.Models()), rdb.Ping(ctx).Err(), lim.FailClosed()))
 	})
 	mux.Handle("/v1/chat/completions", authedLimitedProxy)
-	mux.Handle("/v1/models", auth.Middleware(authStore)(limiter.Middleware(lim)(proxy.NewModelsHandler(registry))))
+	mux.Handle("/v1/models", auth.Middleware(authStore)(guarded(limiter.Middleware(lim)(proxy.NewModelsHandler(registry)))))
 
 	// 生产把 pprof/metrics 与业务 listener 分离；demo/test 未设置诊断地址时保持
 	// 原行为（诊断端点挂在业务端口上）。
@@ -229,6 +257,9 @@ func main() {
 	if shutdownErr != nil {
 		log.Printf("shutdown completed with errors: %v", shutdownErr)
 	}
+	if err := closeAccessGuard(); err != nil {
+		log.Printf("access guard shutdown: %v", err)
+	}
 	_ = rdb.Close()
 	log.Println("exit")
 }
@@ -262,6 +293,16 @@ func gatewayChecks(lookup appenv.Lookup, controlTLSConfigured bool) []appenv.Che
 			Name:   "LLM_GATEWAY_BOOTSTRAP_API_KEY",
 			Detail: "must be empty: production keys are issued by the control plane, and a raw bootstrap key bypasses it",
 			OK:     strings.TrimSpace(lookup("LLM_GATEWAY_BOOTSTRAP_API_KEY")) == "",
+		},
+		{
+			Name:   "GATEWAY_ACCESS_GUARD",
+			Detail: `must be "pg": production must verify the key's organization, owner/member and key row against PostgreSQL before every upstream call (demo/test may set "off")`,
+			OK:     accessGuardModeOf(lookup) == accessGuardPG,
+		},
+		{
+			Name:   "POSTGRES_DSN",
+			Detail: `must be set when GATEWAY_ACCESS_GUARD=pg: the access guard reads authoritative organization/user/membership state from PostgreSQL`,
+			OK:     accessGuardModeOf(lookup) != accessGuardPG || strings.TrimSpace(lookup("POSTGRES_DSN")) != "",
 		},
 		{
 			Name:   "LIMITER_ON_REDIS_ERROR",
@@ -309,6 +350,16 @@ func warnFailedChecks(checks []appenv.Check) {
 			log.Printf("WARNING: production check failed: %s: %s", check.Name, check.Detail)
 		}
 	}
+}
+
+// accessGuardModeOf mirrors the runtime parser for the preflight: an invalid
+// value fails the check instead of silently disabling the guard.
+func accessGuardModeOf(lookup appenv.Lookup) accessGuardMode {
+	mode, err := parseAccessGuardMode(lookup("GATEWAY_ACCESS_GUARD"))
+	if err != nil {
+		return ""
+	}
+	return mode
 }
 
 // positiveInt mirrors appenv.PositiveIntEnv over an injected Lookup.

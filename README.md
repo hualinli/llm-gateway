@@ -1003,6 +1003,9 @@ PROVIDER_CREDENTIAL_MASTER_KEY_FILE=/run/secrets/provider-credential-master-key 
 CONTROL_ALLOW_INSECURE_CREDENTIAL_RESOLVE=false # 仅本地 Demo 可设为 true；生产解析必须走 mTLS
 CONTROL_ADMIN_TOKEN='' # 管理面 admin Bearer token；生产配合下方 require 开关
 CONTROL_REQUIRE_ADMIN_AUTH=false # 生产建议 true；未配置 token 时拒绝启动
+CONTROL_ADMIN_SERVICE_ENABLED=false # Console -> Control 管理 gRPC（Key/策略）；启用时要求 CONTROL_CONSOLE_SERVICE_NAME
+CONTROL_CONSOLE_SERVICE_NAME='' # Control 信任的 Console 客户端身份；生产必须配合 mTLS 客户端证书
+CONTROL_ALLOW_INSECURE_ADMIN_SERVICE=false # 仅本地 Demo 可设为 true；生产管理面必须 mTLS
 CONTROL_IDENTITY_SIGNING_SECRET='' # 可选；>=32 字节，用于 tenant-user signed identity token
 LLM_GATEWAY_BOOTSTRAP_API_KEY='' # 可选；本地 Demo bootstrap credential，禁止写入源码/日志
 LLM_GATEWAY_BOOTSTRAP_TENANT_ID='tenant-demo'
@@ -1176,6 +1179,16 @@ Console 是独立进程（`cmd/console`，HTTP 层 `internal/console`，Hertz）
 | POST | `/api/v1/organizations` | 会话 + CSRF → `201`，创建者为 `owner` |
 | POST | `/api/v1/admin/users` | 会话 + 平台管理员 + CSRF → `201` |
 | POST | `/api/v1/admin/users/{user}/status` | 会话 + 平台管理员 + CSRF；`disabled` 递增 `auth_version`，该用户全部会话立即失效 |
+| GET | `/api/v1/orgs/{org}/members` | 会话 + 矩阵（owner/admin/billing_viewer 看全量；member 只看到自己；非成员 404） |
+| GET/POST | `/api/v1/orgs/{org}/invitations` | 读取需 `manage_members`；创建需 CSRF，token 只返回一次 |
+| POST | `/api/v1/invitations/{token}/accept` | 会话 + CSRF；email/role 由邀请固定，只能接受一次 |
+| PATCH/DELETE | `/api/v1/orgs/{org}/members/{user}` | 会话 + CSRF + 矩阵（最后 owner 保护、admin 不能动 owner/admin） |
+| POST | `/api/v1/orgs/{org}/owner-transfer` | 会话 + CSRF + 矩阵（只有 owner；旧 owner 降为 admin） |
+| GET | `/api/v1/orgs/{org}/audit` | 会话 + `manage_members`；member/billing_viewer 403，非成员 404 |
+| GET | `/api/v1/orgs/{org}/keys` | 会话 + 矩阵；member 只列本人 Key，admin/owner 列全组织，billing_viewer 403；`?operation_id=` 回查 metadata（`replayed=true`，永不含 secret） |
+| POST | `/api/v1/orgs/{org}/keys` | 会话 + CSRF + 矩阵 → `201`；raw secret **只出现一次**，`secret_returned_once=true` 且响应内含提示文案；可带 `operation_id` 做幂等重试（重放不再返回 secret） |
+| POST | `/api/v1/orgs/{org}/keys/{key}/revoke` | 会话 + CSRF + 矩阵 → `200`；member 只能撤本人 Key（否则 404），admin/owner 可撤组织内任意 Key |
+| GET | `/api/v1/orgs/{org}/usage` | 会话 + 矩阵；member 只见本人行（`scope=self`），billing_viewer/admin/owner 见全组织 |
 | GET | `/livez`、`/readyz` | 无 |
 
 **Cookie 与 CSRF**：登录成功返回 `Set-Cookie: gw_session=<opaque token>`（`HttpOnly`、`SameSite=Lax`、`Path=/`，`Secure` 由 profile 决定，prod 强制开启）以及同样属性的 `gw_csrf` 伴随 cookie；`gw_session` 服务端只存 SHA-256 摘要，明文只在登录响应中出现一次。所有非安全方法必须带 `X-CSRF-Token`，与会话记录比对失败一律 `403 forbidden`（`SameSite` 不替代 CSRF 校验）。`GET /api/v1/me` 会回显当前会话的 `csrf_token`，刷新页面后无需重新登录。
@@ -1204,6 +1217,38 @@ make console-run   # 本机启动（默认 serve；bootstrap 见上）
 curl -i -X POST localhost:8092/api/v1/auth/login -H 'Content-Type: application/json' \
   -d '{"email":"admin@example.com","password":"..."}'
 ```
+
+#### Console → Control 管理通道（T03）
+
+Key 管理与组织策略发布都**不写本地表**：`internal/controlclient` 通过内部 gRPC `AdminService` 把命令提交给 Control（`api_keys` 是 Key 的唯一事实，快照只是派生投影），并运行一个只负责 `policy_publications` 的有界发布 loop。HTTP 契约（含每个错误码）见 [docs/openapi/console-v1.yaml](docs/openapi/console-v1.yaml)，数据面归属与兼容规则见 [docs/runbooks/tenant-to-org-migration.md](docs/runbooks/tenant-to-org-migration.md)。
+
+| 变量 | 默认 | 作用 |
+|---|---|---|
+| `CONTROL_ADDR` | 空 | Control gRPC 地址（如 `control:50051`）。**空表示禁用管理通道**：Key 接口返回 `503 unavailable`、不启动策略发布 loop，其余 IAM/组织接口照常服务；prod 必填 |
+| `CONTROL_CONSOLE_SERVICE_NAME` | 空 | 本 Console 在 Control 侧的身份（`CONTROL_CONSOLE_SERVICE_NAME`），必须等于客户端证书的 CN 或 SAN；客户端在第一个 RPC 前就会校验，避免“挂错证书”在运行期变成 `PERMISSION_DENIED` |
+| `CONTROL_TLS_CA_FILE` | 空 | 校验 Control 服务端证书的 CA；设置任一 `CONTROL_TLS_*` 后必填（半套配置直接拒绝启动） |
+| `CONTROL_TLS_CLIENT_CERT_FILE` / `CONTROL_TLS_CLIENT_KEY_FILE` | 空 | Console 的 mTLS 客户端证书（`scripts/dev-certs.sh` 生成的 `console-client.*`，CN=`console`）；必须成对设置 |
+| `CONTROL_TLS_SERVER_NAME` | 空 | 校验证书时的 ServerName（本地 demo 为 `control`） |
+| `CONSOLE_PUBLICATION_INTERVAL` | `15s` | 策略发布 loop 的周期（有界批次 + 退避重试）；必须是正 duration |
+
+Control 侧必须同时开启管理面，否则 Console 的 Key 接口会收到 `UNIMPLEMENTED`：
+
+```bash
+# 生产：mTLS + 明确的 Console 身份
+CONTROL_ADMIN_SERVICE_ENABLED=true
+CONTROL_CONSOLE_SERVICE_NAME=console
+CONTROL_TLS_REQUIRE_CLIENT_CERT=true
+CONTROL_TLS_CA_FILE=/etc/control/ca.crt
+# 本地 demo（仅 compose 内网）：显式放开 mTLS，明文通道会打印 WARNING
+# CONTROL_ALLOW_INSECURE_ADMIN_SERVICE=true
+```
+
+```bash
+make dev-certs        # 生成/补齐 CA、control、gateway-client、console-client 证书（幂等）
+make console-run-tls  # 带 CONTROL_ADDR + CONTROL_TLS_* 启动 Console（本地端口 50051）
+```
+
+组合语义（`internal/controlclient` 的错误映射）：同一 `operation_id` 但 payload 不同 → `409 conflict`；`expected_version` 不匹配 → `409 conflict`（消息里带 `current_version`）；Console 身份不被 Control 信任或连不上 → `502 upstream_unavailable`；完全没配置通道 → `503 unavailable`。用量接口的 `cost_cents` 是**演示累计消费**（固定演示价 1 token = 1 分），字段上标了 `cost_kind=demo_consumption`，不是余额、不是账单；`org_id IS NULL` 的历史事件不属于任何组织范围。
 
 ---
 

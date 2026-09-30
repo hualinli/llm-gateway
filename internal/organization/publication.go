@@ -225,6 +225,12 @@ func (w *PublicationWorker) publish(ctx context.Context, row claimedPublication,
 		TargetID:      row.TargetID,
 	}
 	if err := w.publisher.PublishOrgPolicy(ctx, request); err != nil {
+		// 发布过程中组织状态又前进了：这一行描述的是旧 revision，重试只会再次
+		// 发现被取代。直接删除，让新 revision 的那一行去收敛（与上面的
+		// revision 比较分支同一语义）。
+		if errors.Is(err, ErrPublicationSuperseded) {
+			return w.deleteRow(ctx, row.ID)
+		}
 		return w.markFailed(ctx, row, now, err)
 	}
 	if _, err := w.db.ExecContext(ctx, queryMarkPublicationPublished, row.ID, request.OperationID, w.now()); err != nil {

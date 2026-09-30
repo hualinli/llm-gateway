@@ -26,6 +26,10 @@
 //	DELETE /api/v1/orgs/{org}/members/{user}      session + CSRF + matrix
 //	POST /api/v1/orgs/{org}/owner-transfer        session + CSRF + matrix
 //	GET  /api/v1/orgs/{org}/audit                 session + matrix (manage_members)
+//	GET  /api/v1/orgs/{org}/keys                  session + matrix (own keys / org keys)
+//	POST /api/v1/orgs/{org}/keys                  session + CSRF + matrix
+//	POST /api/v1/orgs/{org}/keys/{key}/revoke     session + CSRF + matrix
+//	GET  /api/v1/orgs/{org}/usage                 session + matrix (own usage / org usage)
 //	GET  /livez, GET /readyz                      public
 package console
 
@@ -64,6 +68,12 @@ const (
 	PathInvitationAccept = "/api/v1/invitations/:token/accept"
 	PathOrgOwnerTransfer = "/api/v1/orgs/:org/owner-transfer"
 	PathOrgAudit         = "/api/v1/orgs/:org/audit"
+
+	// T03 key management and usage (ADR-0003 §2.2, §2.9). Keys are commands to
+	// the Control AdminService; the Console owns no key state.
+	PathOrgKeys      = "/api/v1/orgs/:org/keys"
+	PathOrgKeyRevoke = "/api/v1/orgs/:org/keys/:key/revoke"
+	PathOrgUsage     = "/api/v1/orgs/:org/usage"
 
 	PathLivez               = "/livez"
 	PathReadyz              = "/readyz"
@@ -149,6 +159,17 @@ type Options struct {
 	// nil means always ready.
 	Ready func(ctx context.Context) error
 
+	// Keys serves the organization key-management endpoints (ADR-0003 §2.2).
+	// nil means no control channel is configured: those routes answer 503
+	// unavailable instead of pretending an organization has no keys.
+	Keys KeyService
+	// Usage backs GET /api/v1/orgs/{org}/usage. nil answers 500 internal_error,
+	// like a missing audit store: an empty page would be a lie.
+	Usage UsageStore
+	// Now is the clock used for the usage window and key-expiry validation. nil
+	// means time.Now().UTC().
+	Now func() time.Time
+
 	// Logger receives access, audit and error logs. nil means log.Default().
 	Logger *log.Logger
 	// Audit receives the admin-action audit trail. nil means NopAuditSink.
@@ -164,11 +185,14 @@ type Options struct {
 type server struct {
 	iam              IAMService
 	orgs             OrganizationService
+	keys             KeyService
+	usage            UsageStore
 	secureCookies    bool
 	sessionTTL       time.Duration
 	retryAfter       time.Duration
 	loginOrgPageSize int
 	invitationTTL    time.Duration
+	now              func() time.Time
 	ready            func(ctx context.Context) error
 	logger           *log.Logger
 	audit            AuditSink
@@ -185,15 +209,27 @@ func newServer(opts Options) (*server, error) {
 	s := &server{
 		iam:              opts.IAM,
 		orgs:             opts.Organizations,
+		keys:             opts.Keys,
+		usage:            opts.Usage,
 		secureCookies:    opts.SecureCookies,
 		sessionTTL:       opts.SessionTTL,
 		retryAfter:       opts.RetryAfter,
 		loginOrgPageSize: opts.LoginOrgPageSize,
 		invitationTTL:    opts.InvitationTTL,
+		now:              opts.Now,
 		ready:            opts.Ready,
 		logger:           opts.Logger,
 		audit:            opts.Audit,
 		auditStore:       opts.AuditStore,
+	}
+	if s.now == nil {
+		s.now = func() time.Time { return time.Now().UTC() }
+	}
+	if s.keys == nil {
+		s.keys = unavailableKeyService{}
+	}
+	if s.usage == nil {
+		s.usage = unavailableUsageStore{}
 	}
 	if s.sessionTTL <= 0 {
 		s.sessionTTL = DefaultSessionTTL
@@ -281,6 +317,13 @@ func Register(engine *route.Engine, opts Options) error {
 	engine.DELETE(PathOrgMember, s.withSession, s.withCSRF, s.removeMember)
 	engine.POST(PathOrgOwnerTransfer, s.withSession, s.withCSRF, s.transferOwnership)
 	engine.GET(PathOrgAudit, s.withSession, s.listOrgAudit)
+
+	// T03: API keys are commands to Control (session + CSRF + matrix), and the
+	// usage endpoint is a read scoped by the same matrix (session only).
+	engine.GET(PathOrgKeys, s.withSession, s.listOrgKeys)
+	engine.POST(PathOrgKeys, s.withSession, s.withCSRF, s.createOrgKey)
+	engine.POST(PathOrgKeyRevoke, s.withSession, s.withCSRF, s.revokeOrgKey)
+	engine.GET(PathOrgUsage, s.withSession, s.listOrgUsage)
 	return nil
 }
 

@@ -15,11 +15,26 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+// OrgRateSource supplies the published per-organization token bucket from the
+// control snapshot (Config.org_policies). Implementations must be safe for
+// concurrent use and must not block: the source is read on the request path.
+type OrgRateSource interface {
+	// OrgRate returns the organization's bucket in requests per minute.
+	// ok=false means the organization has no published limit, in which case the
+	// limiter keeps its global/tenant default behaviour unchanged.
+	OrgRate(orgID int64) (requestsPerMinute, burst int, ok bool)
+}
+
 // Limiter 按租户 QPS 限流，基于 Redis 令牌桶 Lua
 type Limiter struct {
-	rdb   *redis.Client
-	rate  int // 每秒补充令牌数
-	burst int // 桶容量
+	rdb *redis.Client
+	// rate 是每秒补充令牌数；组织级策略按 requests_per_minute/60 计算，因此
+	// 可能是小数（Lua 的 tonumber 得到 double，桶里存的是浮点令牌数）。
+	rate  float64
+	burst int
+	// orgRates 是快照发布的组织级策略。缺失/未配置时保持原来的租户默认桶。
+	// 首版只有单层桶：命中组织策略就只扣组织桶，不再叠加租户桶。
+	orgRates OrgRateSource
 	// 等待上限：Burst 内超限时最多等多久，0 表示直接 429（蓝图里的有界排队）
 	queueTimeout time.Duration
 	// onRedisError is "open" or "closed". Open keeps Demo available when Redis
@@ -44,7 +59,30 @@ func New(rdb *redis.Client, rate, burst int, queueTimeout time.Duration) *Limite
 	if queueTimeout < 0 {
 		queueTimeout = 0
 	}
-	return &Limiter{rdb: rdb, rate: rate, burst: burst, queueTimeout: queueTimeout, onRedisError: redisFailOpen}
+	return &Limiter{rdb: rdb, rate: float64(rate), burst: burst, queueTimeout: queueTimeout, onRedisError: redisFailOpen}
+}
+
+// SetOrgRates installs the snapshot's per-organization policy source. Passing
+// nil keeps the tenant default for every request.
+func (l *Limiter) SetOrgRates(source OrgRateSource) {
+	l.orgRates = source
+}
+
+// bucket selects exactly one token bucket for the request. A published org
+// policy replaces the tenant default instead of stacking on top of it
+// (ADR-0003 §2.7: 首版只做 org 级 RPM，单层令牌桶).
+func (l *Limiter) bucket(orgID int64, tenant string) (string, float64, int) {
+	if orgID > 0 && l.orgRates != nil {
+		if rpm, burst, ok := l.orgRates.OrgRate(orgID); ok && rpm > 0 {
+			if burst <= 0 {
+				// A published RPM without an explicit burst gets one minute of
+				// tokens; the policy source normally resolves this already.
+				burst = rpm
+			}
+			return "ratelimit:org:" + strconv.FormatInt(orgID, 10), float64(rpm) / 60.0, burst
+		}
+	}
+	return "ratelimit:tenant:" + tenant, l.rate, l.burst
 }
 
 // SetOnRedisError selects what happens when Redis cannot answer.
@@ -97,7 +135,7 @@ const (
 	decisionUnavailable
 )
 
-func (l *Limiter) allowOnce(ctx context.Context, key string) decision {
+func (l *Limiter) allowOnce(ctx context.Context, key string, rate float64, burst int) decision {
 	select {
 	case <-ctx.Done():
 		return decisionLimit
@@ -110,7 +148,7 @@ func (l *Limiter) allowOnce(ctx context.Context, key string) decision {
 		}
 		return decisionAllow
 	}
-	res, err := l.rdb.Eval(ctx, luaAllow, []string{key}, l.rate, l.burst).Result()
+	res, err := l.rdb.Eval(ctx, luaAllow, []string{key}, rate, burst).Result()
 	if err != nil {
 		if ctx.Err() != nil {
 			return decisionLimit
@@ -132,7 +170,11 @@ func (l *Limiter) allowOnce(ctx context.Context, key string) decision {
 // Decide reports whether the request may proceed. unavailable is true when
 // the limiter cannot enforce its policy and is configured fail-closed.
 func (l *Limiter) Decide(ctx context.Context, key string) (allowed, unavailable bool) {
-	switch l.decide(ctx, key) {
+	return l.decideAt(ctx, key, l.rate, l.burst)
+}
+
+func (l *Limiter) decideAt(ctx context.Context, key string, rate float64, burst int) (allowed, unavailable bool) {
+	switch l.decide(ctx, key, rate, burst) {
 	case decisionAllow:
 		return true, false
 	case decisionUnavailable:
@@ -142,8 +184,8 @@ func (l *Limiter) Decide(ctx context.Context, key string) (allowed, unavailable 
 	}
 }
 
-func (l *Limiter) decide(ctx context.Context, key string) decision {
-	d := l.allowOnce(ctx, key)
+func (l *Limiter) decide(ctx context.Context, key string, rate float64, burst int) decision {
+	d := l.allowOnce(ctx, key, rate, burst)
 	if d != decisionLimit || l.queueTimeout == 0 {
 		return d
 	}
@@ -156,7 +198,7 @@ func (l *Limiter) decide(ctx context.Context, key string) decision {
 			return decisionLimit
 		case <-timer.C:
 		}
-		d = l.allowOnce(ctx, key)
+		d = l.allowOnce(ctx, key, rate, burst)
 		if d != decisionLimit {
 			return d
 		}
@@ -166,7 +208,7 @@ func (l *Limiter) decide(ctx context.Context, key string) decision {
 
 // Allow 尝试获取令牌，支持有界排队：Burst 超限时最多等 queueTimeout
 func (l *Limiter) Allow(ctx context.Context, key string) bool {
-	return l.decide(ctx, key) == decisionAllow
+	return l.decide(ctx, key, l.rate, l.burst) == decisionAllow
 }
 
 // Middleware 按租户限流，放在 auth 之后、proxy 之前
@@ -183,9 +225,11 @@ func Middleware(l *Limiter) func(http.Handler) http.Handler {
 				next.ServeHTTP(w, r)
 				return
 			}
-			key := "ratelimit:tenant:" + tenant
+			// 组织级策略来自控制面快照（access guard 已验证 org 归属）；没有
+			// 发布策略时退化为原来的租户桶，语义不变。
+			key, rate, burst := l.bucket(auth.OrgIDFromContext(r.Context()), tenant)
 			start := time.Now()
-			allowed, unavailable := l.Decide(r.Context(), key)
+			allowed, unavailable := l.decideAt(r.Context(), key, rate, burst)
 			wait := time.Since(start)
 			if unavailable {
 				w.Header().Set("Retry-After", "1")
@@ -222,8 +266,16 @@ func (l *Limiter) AvailableTokens(ctx context.Context, key string) int {
 	}
 	switch v := vals[0].(type) {
 	case string:
-		n, _ := strconv.Atoi(v)
-		return n
+		// The bucket stores fractional tokens when the rate comes from a
+		// per-minute policy (rpm/60), so parse a float and floor it.
+		n, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
+		if err != nil {
+			return 0
+		}
+		if n < 0 {
+			return 0
+		}
+		return int(n)
 	case int64:
 		return int(v)
 	}

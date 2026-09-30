@@ -133,6 +133,11 @@ func displayEventKey(e Event) string {
 	return e.TenantID + ":" + e.EventID
 }
 
+// eventsEqual compares the billing payload. Attribution (org/user/key/
+// execution) is deliberately excluded: a ledger row written before migration
+// 000007 or by an unguarded gateway has NULL attribution, and reporting that as
+// a billing payload mismatch would be a false alarm. Compare only the fields
+// that change the charge.
 func eventsEqual(a, b Event) bool {
 	return a.EventID == b.EventID &&
 		a.TenantID == b.TenantID &&

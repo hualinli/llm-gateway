@@ -146,4 +146,12 @@ var (
 		Name: "metering_pending_claim_total",
 		Help: "Metering pending messages claimed for retry",
 	})
+
+	// data-plane access guard（ADR-0003 §2.8）。result 是封闭集合：allowed，
+	// 以及 HTTP 错误码 unauthorized/forbidden/not_found/unavailable。刻意不加
+	// key/org/user 标签：这些取值上界不可控，且 key 属于凭据域，不允许进指标。
+	AccessGuardDecisions = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "gateway_access_guard_total",
+		Help: "Access guard decisions by bounded result: allowed, unauthorized, forbidden, not_found or unavailable. Labels never carry key, organization or user values.",
+	}, []string{"result"})
 )

@@ -140,6 +140,11 @@ type fakeOrgs struct {
 	transferOwnershipFn func(ctx context.Context, actorUserID, orgID, targetUserID int64) error
 	authorizeFn         func(ctx context.Context, actorUserID, orgID int64, action organization.Action) (organization.Membership, error)
 
+	// memberships backs the default AuthorizeOrgAction with the REAL permission
+	// matrix (organization.Allowed), so key/usage tests exercise the frozen
+	// matrix instead of restating it. Nil keeps the "not configured" default.
+	memberships map[int64]map[int64]string
+
 	listCalls    []listCall
 	addCalls     []addMemberCall
 	inviteCalls  []createInvitationCall
@@ -299,9 +304,22 @@ func (f *fakeOrgs) TransferOwnership(ctx context.Context, actorUserID, orgID, ta
 func (f *fakeOrgs) AuthorizeOrgAction(ctx context.Context, actorUserID, orgID int64, action organization.Action) (organization.Membership, error) {
 	f.mu.Lock()
 	f.authzCalls = append(f.authzCalls, authorizeCall{ActorUserID: actorUserID, OrgID: orgID, Action: action})
+	memberships := f.memberships
 	f.mu.Unlock()
 	if f.authorizeFn != nil {
 		return f.authorizeFn(ctx, actorUserID, orgID, action)
+	}
+	if memberships != nil {
+		role, ok := memberships[actorUserID][orgID]
+		if !ok {
+			// Non-member and unknown organization are the same answer, exactly
+			// like the real service.
+			return organization.Membership{}, organization.ErrNotFound
+		}
+		if !organization.Allowed(role, action) {
+			return organization.Membership{}, organization.ErrForbidden
+		}
+		return organization.Membership{OrgID: orgID, UserID: actorUserID, Role: role, Status: "active"}, nil
 	}
 	return organization.Membership{}, errors.New("authorizeOrgAction not configured")
 }
@@ -358,6 +376,8 @@ type harness struct {
 	engine     *route.Engine
 	iam        *fakeIAM
 	orgs       *fakeOrgs
+	control    *fakeControl
+	usage      *fakeUsage
 	audit      *recordingAudit
 	auditStore *fakeAuditStore
 	logs       *bytes.Buffer
@@ -365,13 +385,16 @@ type harness struct {
 }
 
 // newHarness builds the Hertz engine with fake services. mutate may adjust the
-// resolved options (cookie security, TTL, retry window) before registration.
+// resolved options (cookie security, TTL, retry window, key/usage services)
+// before registration.
 func newHarness(t *testing.T, mutate func(*Options)) *harness {
 	t.Helper()
 	h := &harness{
 		t:          t,
 		iam:        &fakeIAM{},
 		orgs:       &fakeOrgs{},
+		control:    &fakeControl{},
+		usage:      &fakeUsage{},
 		audit:      &recordingAudit{},
 		auditStore: &fakeAuditStore{},
 		logs:       &bytes.Buffer{},
@@ -379,9 +402,12 @@ func newHarness(t *testing.T, mutate func(*Options)) *harness {
 	opts := Options{
 		IAM:           h.iam,
 		Organizations: h.orgs,
+		Keys:          NewControlKeyService(h.orgs, h.control, ControlKeyServiceOptions{}),
+		Usage:         h.usage,
 		Audit:         h.audit,
 		AuditStore:    h.auditStore,
 		Logger:        log.New(h.logs, "", 0),
+		Now:           func() time.Time { return time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC) },
 	}
 	if mutate != nil {
 		mutate(&opts)

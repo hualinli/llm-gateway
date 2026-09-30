@@ -178,3 +178,139 @@ func newRedisLimiterIntegrationClient(t *testing.T) *redis.Client {
 	}
 	return rdb
 }
+
+// staticOrgRates is the snapshot policy for tests: one published organization.
+type staticOrgRates struct {
+	orgID int64
+	rpm   int
+	burst int
+}
+
+func (s staticOrgRates) OrgRate(orgID int64) (int, int, bool) {
+	if orgID != s.orgID {
+		return 0, 0, false
+	}
+	return s.rpm, s.burst, true
+}
+
+func TestBucketSelectionUsesSingleOrgLayer(t *testing.T) {
+	l := New(nil, 20, 40, 0)
+
+	key, rate, burst := l.bucket(0, "tenant-a")
+	if key != "ratelimit:tenant:tenant-a" || rate != 20 || burst != 40 {
+		t.Fatalf("default bucket = %q %v %d", key, rate, burst)
+	}
+
+	l.SetOrgRates(staticOrgRates{orgID: 7, rpm: 600, burst: 120})
+	key, rate, burst = l.bucket(7, "tenant-a")
+	if key != "ratelimit:org:7" {
+		t.Fatalf("org bucket key = %q", key)
+	}
+	if rate != 10 || burst != 120 { // 600 rpm = 10 tokens/s
+		t.Fatalf("org bucket = %v tokens/s burst=%d, want 10/120", rate, burst)
+	}
+
+	// An organization without a published policy keeps the tenant default.
+	key, rate, burst = l.bucket(9, "tenant-a")
+	if key != "ratelimit:tenant:tenant-a" || rate != 20 || burst != 40 {
+		t.Fatalf("unpublished org bucket = %q %v %d", key, rate, burst)
+	}
+
+	// Fractional rates survive (30 rpm = 0.5 tokens/s).
+	l.SetOrgRates(staticOrgRates{orgID: 8, rpm: 30})
+	_, rate, burst = l.bucket(8, "tenant-a")
+	if rate != 0.5 || burst != 30 {
+		t.Fatalf("fractional org bucket = %v/%d, want 0.5/30", rate, burst)
+	}
+
+	// Removing the source restores the default behaviour.
+	l.SetOrgRates(nil)
+	key, _, _ = l.bucket(7, "tenant-a")
+	if key != "ratelimit:tenant:tenant-a" {
+		t.Fatalf("bucket after clearing policies = %q", key)
+	}
+}
+
+func TestMiddlewareSelectsOrgBucketAndNeverBothLayers(t *testing.T) {
+	rdb := newRedisLimiterIntegrationClient(t)
+	defer rdb.Close()
+	ctx := context.Background()
+	const tenant = "tenant-org-rpm"
+	orgID := int64(4242)
+	orgKey := "ratelimit:org:4242"
+	tenantKey := "ratelimit:tenant:" + tenant
+	defer rdb.Del(ctx, orgKey, tenantKey)
+
+	l := New(rdb, 1000, 1000, 0)
+	l.SetOrgRates(staticOrgRates{orgID: orgID, rpm: 6000, burst: 2})
+	reached := 0
+	handler := Middleware(l)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reached++
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	request := func() int {
+		req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+		reqCtx := context.WithValue(req.Context(), auth.TenantKey, tenant)
+		reqCtx = auth.WithKeyRecord(reqCtx, auth.KeyRecord{ID: "key-1", OrgID: orgID})
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req.WithContext(reqCtx))
+		return rec.Code
+	}
+	if code := request(); code != http.StatusNoContent {
+		t.Fatalf("first request status=%d", code)
+	}
+	if code := request(); code != http.StatusNoContent {
+		t.Fatalf("second request status=%d", code)
+	}
+	// The published burst is 2: the third request within the same instant must
+	// be limited, which proves the org bucket (not the tenant default of 1000)
+	// is the one enforcing the limit.
+	if code := request(); code != http.StatusTooManyRequests {
+		t.Fatalf("third request status=%d, want 429", code)
+	}
+	if reached != 2 {
+		t.Fatalf("downstream reached %d times, want 2", reached)
+	}
+	if exists, err := rdb.Exists(ctx, tenantKey).Result(); err != nil || exists != 0 {
+		t.Fatalf("tenant bucket was also consumed (exists=%d err=%v): org RPM must be a single layer", exists, err)
+	}
+	if exists, err := rdb.Exists(ctx, orgKey).Result(); err != nil || exists != 1 {
+		t.Fatalf("org bucket missing (exists=%d err=%v)", exists, err)
+	}
+}
+
+func TestMiddlewareKeepsTenantBucketWithoutOrgPolicy(t *testing.T) {
+	rdb := newRedisLimiterIntegrationClient(t)
+	defer rdb.Close()
+	ctx := context.Background()
+	const tenant = "tenant-no-org-policy"
+	tenantKey := "ratelimit:tenant:" + tenant
+	orgKey := "ratelimit:org:777"
+	defer rdb.Del(ctx, tenantKey, orgKey)
+
+	l := New(rdb, 1, 1, 0)
+	l.SetOrgRates(staticOrgRates{orgID: 777, rpm: 600, burst: 1})
+	handler := Middleware(l)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	// No snapshot record (or a legacy key with org 0): the tenant default must
+	// still apply, unchanged from before T03.
+	reqCtx := context.WithValue(req.Context(), auth.TenantKey, tenant)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req.WithContext(reqCtx))
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status=%d", rec.Code)
+	}
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req.WithContext(reqCtx))
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("status=%d, want 429 from the tenant bucket", rec.Code)
+	}
+	if exists, err := rdb.Exists(ctx, tenantKey).Result(); err != nil || exists != 1 {
+		t.Fatalf("tenant bucket missing (exists=%d err=%v)", exists, err)
+	}
+	if exists, err := rdb.Exists(ctx, orgKey).Result(); err != nil || exists != 0 {
+		t.Fatalf("org bucket created without an org policy (exists=%d err=%v)", exists, err)
+	}
+}

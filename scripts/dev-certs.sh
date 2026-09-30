@@ -5,6 +5,8 @@
 #   ca.crt / ca.key                       本地 CA
 #   control.crt / control.key             Control gRPC 服务端证书（SAN: control, localhost, 127.0.0.1）
 #   gateway-client.crt / gateway-client.key   Gateway 的 mTLS 客户端证书
+#   console-client.crt / console-client.key   Console 的 mTLS 客户端证书（CN=console，与
+#                                             CONTROL_CONSOLE_SERVICE_NAME 对应）
 #   provider-credential-master-key        base64 编码的 32 字节集群主密钥（格式与 control.EnsureMasterKeyFile 一致）
 #
 # 用法：
@@ -32,6 +34,7 @@ usage: scripts/dev-certs.sh [--force] [dir]
   CONTROL_TLS_CA_FILE CONTROL_TLS_CERT_FILE CONTROL_TLS_KEY_FILE
   CONTROL_TLS_CLIENT_CERT_FILE CONTROL_TLS_CLIENT_KEY_FILE
   CONTROL_TLS_SERVER_NAME CONTROL_TLS_REQUIRE_CLIENT_CERT
+  CONTROL_CONSOLE_SERVICE_NAME
   PROVIDER_CREDENTIAL_MASTER_KEY_FILE
 EOF
 }
@@ -71,15 +74,29 @@ if ! command -v openssl >/dev/null 2>&1; then
 	exit 1
 fi
 
-FILES="ca.crt ca.key control.crt control.key gateway-client.crt gateway-client.key provider-credential-master-key"
+# CORE 是「整套证书」的判定集合；CONSOLE 是 T03 新增的 Console 客户端证书。
+# 旧目录（只有 CORE）不会被判为损坏：脚本会只补生成 Console 客户端证书。
+CORE_FILES="ca.crt ca.key control.crt control.key gateway-client.crt gateway-client.key provider-credential-master-key"
+CONSOLE_FILES="console-client.crt console-client.key"
+FILES="$CORE_FILES $CONSOLE_FILES"
 
 all_present=1
 any_present=0
-for file in $FILES; do
+for file in $CORE_FILES; do
 	if [ -e "$DIR/$file" ]; then
 		any_present=1
 	else
 		all_present=0
+	fi
+done
+
+console_present=1
+console_any=0
+for file in $CONSOLE_FILES; do
+	if [ -e "$DIR/$file" ]; then
+		console_any=1
+	else
+		console_present=0
 	fi
 done
 
@@ -99,25 +116,77 @@ print_exports() {
 	echo "export CONTROL_TLS_CLIENT_CERT_FILE=$abs/gateway-client.crt"
 	echo "export CONTROL_TLS_CLIENT_KEY_FILE=$abs/gateway-client.key"
 	echo "export CONTROL_TLS_SERVER_NAME=control"
+	echo "export CONTROL_CONSOLE_SERVICE_NAME=console"
+	echo "# Console -> Control 管理通道（internal/controlclient 读取，客户端证书 CN=console）:"
+	echo "export CONTROL_ADDR=localhost:50051"
+	echo "export CONTROL_TLS_CLIENT_CERT_FILE=$abs/console-client.crt   # Console 覆盖上面 Gateway 的客户端证书"
+	echo "export CONTROL_TLS_CLIENT_KEY_FILE=$abs/console-client.key"
+	echo "export CONSOLE_PUBLICATION_INTERVAL=15s"
 	echo "export PROVIDER_CREDENTIAL_MASTER_KEY_FILE=$abs/provider-credential-master-key"
 	echo ""
 	echo "生产 profile 还会校验 PostgreSQL/管理认证/诊断端口等，见 docs/decisions/ADR-0001-runtime-profiles.md。"
 }
 
 if [ "$FORCE" -eq 0 ]; then
-	if [ "$all_present" -eq 1 ]; then
+	if [ "$all_present" -eq 1 ] && [ "$console_present" -eq 1 ]; then
 		echo "dev-certs: 已存在完整的一套文件，未做任何修改（需要重新生成请加 --force）"
 		print_exports
 		exit 0
 	fi
-	if [ "$any_present" -eq 1 ]; then
+	if [ "$any_present" -eq 1 ] && [ "$all_present" -ne 1 ]; then
 		echo "dev-certs: $DIR 中存在不完整的证书文件，拒绝覆盖；请先清理该目录或使用 --force" >&2
+		exit 1
+	fi
+	if [ "$console_any" -eq 1 ] && [ "$console_present" -ne 1 ]; then
+		echo "dev-certs: $DIR 中 Console 客户端证书不完整，拒绝覆盖；请先清理或使用 --force" >&2
 		exit 1
 	fi
 fi
 
 umask 077
 mkdir -p "$DIR"
+
+# 旧目录升级路径：CA 与其它证书都在，只缺 T03 的 Console 客户端证书时，用现有 CA
+# 只补生成这两个文件，不重新生成（也就不会让已分发的 Gateway 证书失效）。
+if [ "$FORCE" -eq 0 ] && [ "$all_present" -eq 1 ] && [ "$console_present" -ne 1 ]; then
+	if ! command -v openssl >/dev/null 2>&1; then
+		echo "dev-certs: openssl is required but was not found in PATH" >&2
+		exit 1
+	fi
+	STAGE="$DIR/.stage.$$"
+	rm -rf "$STAGE"
+	mkdir -p "$STAGE"
+	trap 'rm -rf "$STAGE"' EXIT INT TERM
+	CONF="$STAGE/openssl.cnf"
+	cat >"$CONF" <<'EOF'
+[ req ]
+distinguished_name = req_dn
+prompt = no
+
+[ req_dn ]
+CN = llm-gateway-local
+
+[ client_ext ]
+basicConstraints = critical,CA:FALSE
+keyUsage = critical,digitalSignature
+extendedKeyUsage = clientAuth
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid,issuer
+EOF
+	echo "dev-certs: 现有证书齐全，只补生成 Console 客户端证书到 $DIR ..."
+	openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$STAGE/console-client.key" 2>/dev/null
+	openssl req -new -key "$STAGE/console-client.key" -out "$STAGE/console-client.csr" -subj "/CN=console" -config "$CONF"
+	openssl x509 -req -in "$STAGE/console-client.csr" -CA "$DIR/ca.crt" -CAkey "$DIR/ca.key" \
+		-CAserial "$STAGE/ca.srl" -CAcreateserial \
+		-sha256 -days 825 -extfile "$CONF" -extensions client_ext -out "$STAGE/console-client.crt" 2>/dev/null
+	chmod 600 "$STAGE/console-client.key"
+	chmod 644 "$STAGE/console-client.crt"
+	mv -f "$STAGE/console-client.key" "$DIR/console-client.key"
+	mv -f "$STAGE/console-client.crt" "$DIR/console-client.crt"
+	echo "dev-certs: 完成（私钥 0600，证书 0644）"
+	print_exports
+	exit 0
+fi
 
 STAGE="$DIR/.stage.$$"
 rm -rf "$STAGE"
@@ -175,12 +244,17 @@ openssl req -new -key "$STAGE/gateway-client.key" -out "$STAGE/gateway-client.cs
 openssl x509 -req -in "$STAGE/gateway-client.csr" -CA "$STAGE/ca.crt" -CAkey "$STAGE/ca.key" -CAcreateserial \
 	-sha256 -days 825 -extfile "$CONF" -extensions client_ext -out "$STAGE/gateway-client.crt" 2>/dev/null
 
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$STAGE/console-client.key" 2>/dev/null
+openssl req -new -key "$STAGE/console-client.key" -out "$STAGE/console-client.csr" -subj "/CN=console" -config "$CONF"
+openssl x509 -req -in "$STAGE/console-client.csr" -CA "$STAGE/ca.crt" -CAkey "$STAGE/ca.key" -CAcreateserial \
+	-sha256 -days 825 -extfile "$CONF" -extensions client_ext -out "$STAGE/console-client.crt" 2>/dev/null
+
 openssl rand -base64 32 | tr -d '\n' >"$STAGE/provider-credential-master-key"
 
 for file in $FILES; do
 	chmod 600 "$STAGE/$file"
 done
-chmod 644 "$STAGE/ca.crt" "$STAGE/control.crt" "$STAGE/gateway-client.crt"
+chmod 644 "$STAGE/ca.crt" "$STAGE/control.crt" "$STAGE/gateway-client.crt" "$STAGE/console-client.crt"
 
 for file in $FILES; do
 	mv -f "$STAGE/$file" "$DIR/$file"

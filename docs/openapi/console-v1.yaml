@@ -5,7 +5,7 @@ info:
   description: |
     Console (control-plane IAM) HTTP API: T02 (users, sessions, organizations)
     plus the T03 organization surface (members, invitations, ownership transfer,
-    audit).
+    audit, API keys, usage).
 
     This document is the frozen contract of ADR-0002 §4 and ADR-0003 §2.3–§2.6
     and describes **only** the endpoints implemented by `internal/console` and
@@ -47,6 +47,25 @@ info:
     Roles never stack, `platform_admin` is a user-level flag and never an
     organization role, and every organization-scoped route answers `404` for a
     non-member so organization existence never leaks.
+
+    API keys (T03, ADR-0003 §2.2/§2.9): the Console owns no key state. Every key
+    command is submitted to the internal Control `AdminService` over gRPC/mTLS,
+    which owns the `api_keys` fact table and the versioned snapshot. The raw
+    secret is returned **exactly once**, by `POST /api/v1/orgs/{org}/keys`; it is
+    never stored, never audited and never logged, and no endpoint can recover it.
+    When that response is lost, read the key metadata back with
+    `GET /api/v1/orgs/{org}/keys?operation_id=...` (`replayed: true`, no secret)
+    or revoke the orphan key and create a new one.
+
+    Usage (T03, ADR-0003 §2.9) is read from `metering_events` in one organization
+    scope: a plain `member` sees only rows attributed to their own user id, while
+    `billing_viewer`, `admin` and `owner` see the whole organization. The legacy
+    cost column is accumulated **demo consumption**, never a balance, and the API
+    says so in `totals.cost_kind`/`cost_note`.
+
+    Control-channel failures are reported as `502 upstream_unavailable` (the
+    Console could not authenticate to or reach Control: the browser cannot fix
+    that) and `503 unavailable` (no control channel is configured at all).
   license:
     name: UNLICENSED
 servers:
@@ -65,6 +84,10 @@ tags:
     description: Single-use invitation links (T03)
   - name: audit
     description: Organization audit trail (T03)
+  - name: keys
+    description: Organization API keys, issued by the Control AdminService (T03)
+  - name: usage
+    description: Metering usage in an organization scope (T03)
   - name: admin
     description: Platform-administrator-only user management
   - name: probes
@@ -673,6 +696,351 @@ paths:
         '500':
           $ref: '#/components/responses/Internal'
 
+  /api/v1/orgs/{org}/keys:
+    get:
+      tags: [keys]
+      operationId: listOrgKeys
+      summary: List API key metadata (or recover one operation)
+      description: |
+        Requires `manage_own_keys` (ADR-0003 §2.3):
+
+        * `member` — only keys whose `owner_user_id` is the caller. The owner
+          filter is forced server-side; passing `owner_user_id` for somebody else
+          is `403 forbidden`.
+        * `admin` / `owner` — every key of the organization; they may narrow the
+          list with `owner_user_id`.
+        * `billing_viewer` — `403 forbidden` (the role has no key permission).
+        * non-member — `404 not_found`.
+
+        **Recovery mode.** With `operation_id`, the endpoint ignores
+        `limit`/`cursor`/`owner_user_id` and returns the metadata of the key that
+        operation created or revoked, with `replayed: true` and **no secret**:
+        Control stores the redacted operation result and deliberately never stores
+        the raw key. An unknown operation id, an operation of another
+        organization, another user's operation (for a member), or an operation
+        that is not about an API key all answer `404 not_found`.
+
+        Keys are sorted by `key_id` ascending and `next_cursor` is Control's
+        opaque page token, passed through unchanged.
+      parameters:
+        - $ref: '#/components/parameters/OrgID'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/KeyCursor'
+        - $ref: '#/components/parameters/KeyOwnerFilter'
+        - $ref: '#/components/parameters/KeyOperationID'
+      responses:
+        '200':
+          description: One page of key metadata, or the recovered operation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiKeyPage' }
+              examples:
+                page:
+                  value:
+                    items:
+                      - key_id: key_7f3c1a2b
+                        prefix: "sk-7f3c1a..."
+                        organization_id: "2"
+                        owner_user_id: "10"
+                        created_by: "10"
+                        status: active
+                        expires_at: null
+                        revoked_at: null
+                        model_allowlist: null
+                        policy_version: "1"
+                        created_at: 2026-10-01T12:00:00Z
+                        tenant_id: org:2
+                    next_cursor: null
+                    replayed: false
+                recovered:
+                  value:
+                    items:
+                      - key_id: key_7f3c1a2b
+                        prefix: "sk-7f3c1a..."
+                        organization_id: "2"
+                        owner_user_id: "10"
+                        created_by: "10"
+                        status: active
+                        expires_at: null
+                        revoked_at: null
+                        model_allowlist: null
+                        policy_version: "1"
+                        created_at: 2026-10-01T12:00:00Z
+                        tenant_id: org:2
+                    next_cursor: null
+                    replayed: true
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '502':
+          $ref: '#/components/responses/UpstreamUnavailable'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+    post:
+      tags: [keys]
+      operationId: createOrgKey
+      summary: Create an API key and return its secret once
+      description: |
+        Requires `manage_own_keys` plus the CSRF header (it is a mutation). The
+        response is the **only** place a raw API key secret ever appears: it is
+        generated inside Control, returned once and stored only as a hash plus a
+        prefix. Nothing in the Console logs or persists it.
+
+        Ownership: a `member` always creates a key for themselves (naming another
+        `owner_user_id` is `403 forbidden`); `admin`/`owner` may create a key for
+        any active member of the organization, and default to themselves when
+        `owner_user_id` is omitted. Naming a non-member is `400 invalid_request`.
+
+        Idempotency: the request may carry an `operation_id`. Retrying the same
+        create with the same value returns the stored metadata with
+        `replayed: true`, `secret_returned_once: false` and **no** `secret` field,
+        so a lost response can never create a second key. Reusing an
+        `operation_id` with a different payload is `409 conflict`.
+      parameters:
+        - $ref: '#/components/parameters/OrgID'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateApiKeyRequest' }
+            examples:
+              ownKey:
+                value: {}
+              forMember:
+                value:
+                  owner_user_id: "11"
+                  expires_at: 2027-01-01T00:00:00Z
+                  model_allowlist: ["gpt-4o", "claude-3-5-sonnet"]
+              idempotentRetry:
+                value:
+                  operation_id: web-create-8f0c1d2e
+      responses:
+        '201':
+          description: |
+            The key was created (or the operation was replayed). The `secret`
+            field is present exactly once, and `notice` says so in words.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CreateApiKeyResponse' }
+              examples:
+                created:
+                  value:
+                    key:
+                      key_id: key_7f3c1a2b
+                      prefix: "sk-7f3c1a..."
+                      organization_id: "2"
+                      owner_user_id: "10"
+                      created_by: "10"
+                      status: active
+                      expires_at: null
+                      revoked_at: null
+                      model_allowlist: null
+                      policy_version: "1"
+                      created_at: 2026-10-01T12:00:00Z
+                      tenant_id: org:2
+                    secret: sk-7f3c1a2b4d5e6f708192a3b4c5d6e7f8
+                    secret_returned_once: true
+                    replayed: false
+                    resulting_version: "12"
+                    notice: "Copy this secret now: it is shown only once and can never be retrieved again. If you lose it, revoke this key and create a new one."
+                replayed:
+                  value:
+                    key:
+                      key_id: key_7f3c1a2b
+                      prefix: "sk-7f3c1a..."
+                      organization_id: "2"
+                      owner_user_id: "10"
+                      created_by: "10"
+                      status: active
+                      expires_at: null
+                      revoked_at: null
+                      model_allowlist: null
+                      policy_version: "1"
+                      created_at: 2026-10-01T12:00:00Z
+                      tenant_id: org:2
+                    secret_returned_once: false
+                    replayed: true
+                    resulting_version: "12"
+                    notice: "This operation was already applied, so the raw secret is not available again. Read the key metadata with GET /api/v1/orgs/{org}/keys?operation_id=..., or revoke this key and create a new one."
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '502':
+          $ref: '#/components/responses/UpstreamUnavailable'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+  /api/v1/orgs/{org}/keys/{key}/revoke:
+    post:
+      tags: [keys]
+      operationId: revokeOrgKey
+      summary: Revoke an API key
+      description: |
+        Requires `manage_own_keys` plus the CSRF header. Revocation is a Control
+        command, not a Console write: Control records the operation, writes the
+        `api_keys` row and publishes a new snapshot version; the Gateway stops
+        resolving the key on its next snapshot (propagation timing is T09's
+        lease/heartbeat, this endpoint does not claim instant global revocation).
+
+        A `member` may revoke only their own key: the Console first proves
+        ownership against the owner-scoped key list, and anything else is
+        `404 not_found`. `admin`/`owner` revoke inside the organization scope, so
+        a key of another organization answers `404` as well (Control refuses the
+        scope assertion). Revoking an already revoked key is a no-op that returns
+        the stored metadata.
+      parameters:
+        - $ref: '#/components/parameters/OrgID'
+        - $ref: '#/components/parameters/KeyID'
+        - $ref: '#/components/parameters/CSRFToken'
+      responses:
+        '200':
+          description: The revoked key's metadata (no secret).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RevokeApiKeyResponse' }
+              examples:
+                revoked:
+                  value:
+                    key:
+                      key_id: key_7f3c1a2b
+                      prefix: "sk-7f3c1a..."
+                      organization_id: "2"
+                      owner_user_id: "10"
+                      created_by: "10"
+                      status: revoked
+                      expires_at: null
+                      revoked_at: 2026-10-01T13:00:00Z
+                      model_allowlist: null
+                      policy_version: "2"
+                      created_at: 2026-10-01T12:00:00Z
+                      tenant_id: org:2
+                    replayed: false
+                    resulting_version: "13"
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '502':
+          $ref: '#/components/responses/UpstreamUnavailable'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/v1/orgs/{org}/usage:
+    get:
+      tags: [usage]
+      operationId: listOrgUsage
+      summary: Read metering usage in an organization scope
+      description: |
+        Scope is the ADR-0003 §2.3 matrix, resolved server-side:
+
+        * `member` (`view_own_usage`) — only rows with `user_id` = the caller.
+          Passing another `user` is `403 forbidden`; the response reports
+          `scope: self`.
+        * `billing_viewer` (`view_org_usage`, read-only) — the whole
+          organization; `scope: organization`.
+        * `admin` / `owner` — the whole organization, optionally filtered with
+          `user`; `scope: organization`.
+        * non-member — `404 not_found`.
+
+        Window: `from`/`to` are RFC 3339; `to` defaults to now and `from` to
+        `to - 24h`. The range must be positive and at most 31 days.
+
+        Ordering and paging: `(occurred_at, id) DESC`, i.e. the event's
+        `metering_events.created_at` and its stable `event_id`. `next_cursor` is
+        an opaque URL-safe token carrying that pair: pass it back as `cursor` for
+        the next page. `limit` defaults to 20 and is clamped to 100. `totals`
+        always describe the **whole filtered window**, not the returned page.
+
+        Attribution (ADR-0003 §2.8): rows written before the attribution
+        migration keep `org_id = NULL` and are therefore invisible in every
+        organization scope — they are historical facts of an unknown
+        organization, not rows of this one. An organization row whose `user_id`
+        is `NULL` (a key created before key-level ownership existed) is visible
+        to the organization scope and reported with `attribution:
+        legacy_unknown_user` and `user_id: null`. A member never sees it.
+
+        Money: `cost_cents` is a decimal string, and it is the legacy demo price
+        (`1 token = 1 cent`) accumulated over the window. It is labelled
+        `cost_kind: demo_consumption` and is **not** an account balance and not an
+        invoice amount; T05 replaces it with versioned pricing.
+      parameters:
+        - $ref: '#/components/parameters/OrgID'
+        - $ref: '#/components/parameters/UsageFrom'
+        - $ref: '#/components/parameters/UsageTo'
+        - $ref: '#/components/parameters/UsageModel'
+        - $ref: '#/components/parameters/UsageUser'
+        - $ref: '#/components/parameters/UsageKey'
+        - $ref: '#/components/parameters/UsageLimit'
+        - $ref: '#/components/parameters/UsageCursor'
+      responses:
+        '200':
+          description: One page of usage plus the totals of the filtered window.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UsagePage' }
+              examples:
+                self:
+                  value:
+                    items:
+                      - id: evt_01J8Z9
+                        occurred_at: 2026-10-01T11:30:00Z
+                        organization_id: "2"
+                        user_id: "10"
+                        key_id: key_7f3c1a2b
+                        execution_id: exec_5c1f
+                        tenant_id: org:2
+                        model: gpt-4o
+                        provider: primary
+                        prompt_tokens: 120
+                        completion_tokens: 340
+                        total_tokens: 460
+                        cost_cents: "460"
+                        attribution: attributed
+                    next_cursor: null
+                    totals:
+                      events: 1
+                      prompt_tokens: 120
+                      completion_tokens: 340
+                      total_tokens: 460
+                      cost_cents: "460"
+                      cost_kind: demo_consumption
+                      cost_note: "cost_cents is accumulated demo consumption at the fixed demo price (1 token = 1 cent). It is not an account balance and not an invoice amount."
+                    window:
+                      from: 2026-09-30T12:00:00Z
+                      to: 2026-10-01T12:00:00Z
+                    scope: self
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/Internal'
+
   /livez:
     get:
       tags: [probes]
@@ -756,6 +1124,104 @@ components:
         Last organization id of the previous page, as a decimal string. Absent
         means the first page.
       schema: { type: string, pattern: '^[0-9]+$' }
+    KeyID:
+      name: key
+      in: path
+      required: true
+      description: |
+        API key id (Control's `api_keys.key_id`, for example `key_7f3c1a2b`). It
+        is globally unique, and every request additionally asserts the
+        organization scope, so a key of another organization is `404`.
+      schema: { type: string, minLength: 1, maxLength: 128 }
+      examples:
+        default: { value: "key_7f3c1a2b" }
+    KeyCursor:
+      name: cursor
+      in: query
+      required: false
+      description: |
+        Opaque page token from the previous response's `next_cursor`
+        (Control-issued). Absent means the first page; a malformed token is
+        `400 invalid_request`, never a silently ignored boundary.
+      schema: { type: string, maxLength: 512 }
+    KeyOwnerFilter:
+      name: owner_user_id
+      in: query
+      required: false
+      description: |
+        Restrict the list to one owner. Honored for `admin`/`owner`; a `member`
+        may only name themselves (any other value is `403 forbidden`), and the
+        filter is forced to the caller either way.
+      schema: { type: string, pattern: '^[1-9][0-9]*$' }
+    KeyOperationID:
+      name: operation_id
+      in: query
+      required: false
+      description: |
+        Recovery mode: return the stored metadata of this key operation
+        (`replayed: true`, never a secret). Unknown, foreign-organization or
+        non-key operations answer `404 not_found`.
+      schema: { type: string, minLength: 1, maxLength: 200 }
+    UsageFrom:
+      name: from
+      in: query
+      required: false
+      description: |
+        Inclusive lower bound on the event occurrence time, RFC 3339. Defaults to
+        `to - 24h`.
+      schema: { type: string, format: date-time }
+      examples:
+        default: { value: "2026-09-30T12:00:00Z" }
+    UsageTo:
+      name: to
+      in: query
+      required: false
+      description: |
+        Inclusive upper bound, RFC 3339. Defaults to now. `from` must be earlier
+        than `to` and the range may not exceed 31 days.
+      schema: { type: string, format: date-time }
+      examples:
+        default: { value: "2026-10-01T12:00:00Z" }
+    UsageModel:
+      name: model
+      in: query
+      required: false
+      description: Exact model name filter (for example `gpt-4o`).
+      schema: { type: string, maxLength: 128 }
+    UsageUser:
+      name: user
+      in: query
+      required: false
+      description: |
+        Exact user id filter. For a plain `member` this may only be the caller
+        (anything else is `403 forbidden`); for `billing_viewer`/`admin`/`owner`
+        any user id, or omit it for the whole organization.
+      schema: { type: string, pattern: '^[1-9][0-9]*$' }
+    UsageKey:
+      name: key
+      in: query
+      required: false
+      description: Exact API key id filter (`metering_events.key_id`).
+      schema: { type: string, maxLength: 128 }
+    UsageLimit:
+      name: limit
+      in: query
+      required: false
+      description: |
+        Page size. Defaults to 20; values above 100 are clamped to 100 and values
+        below 1 are `400 invalid_request`. Totals are not affected by the page
+        size.
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    UsageCursor:
+      name: cursor
+      in: query
+      required: false
+      description: |
+        Opaque cursor from the previous response's `next_cursor`, carrying the
+        last row's `(occurred_at, id)` pair. It is URL-safe and must be passed
+        back verbatim; a malformed or non-canonical token is
+        `400 invalid_request`.
+      schema: { type: string }
     CSRFToken:
       name: X-CSRF-Token
       in: header
@@ -911,6 +1377,37 @@ components:
                   code: rate_limited
                   message: too many login attempts, retry later
                   request_id: 8f1c0b2e4d5a6f708192a3b4c5d6e7f8
+    ServiceUnavailable:
+      description: |
+        `503 unavailable`. The Console has no control channel configured
+        (`CONTROL_ADDR` is unset), so key management cannot be served at all.
+        This is a deployment fact, not a per-request failure.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          examples:
+            noChannel:
+              value:
+                error:
+                  code: unavailable
+                  message: the control channel is not configured
+                  request_id: req-01J8Z9
+    UpstreamUnavailable:
+      description: |
+        `502 upstream_unavailable`. The Console could not authenticate to Control
+        (UNAUTHENTICATED/PERMISSION_DENIED, for example a client certificate that
+        is not `CONTROL_CONSOLE_SERVICE_NAME`) or could not reach it. The browser
+        cannot fix either, so this is deliberately not a `401`/`403`.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          examples:
+            controlDown:
+              value:
+                error:
+                  code: upstream_unavailable
+                  message: the control plane is unavailable
+                  request_id: req-01J8Z9
     Internal:
       description: Unexpected server-side failure. Details are logged, never returned.
       content:
@@ -952,6 +1449,8 @@ components:
                 - conflict
                 - method_not_allowed
                 - rate_limited
+                - upstream_unavailable
+                - unavailable
                 - internal_error
             message:
               type: string
@@ -1280,6 +1779,250 @@ components:
           enum: [admin]
           description: The outgoing owner always becomes `admin`.
 
+    ApiKey:
+      type: object
+      description: |
+        Redacted projection of one `api_keys` row (ADR-0003 §2.1/§2.9). It never
+        contains the key hash or the raw secret.
+      additionalProperties: false
+      required: [key_id, prefix, organization_id, owner_user_id, created_by, status, expires_at, revoked_at, model_allowlist, policy_version, created_at, tenant_id]
+      properties:
+        key_id:
+          type: string
+          description: Globally unique key id, used by the revoke endpoint.
+        prefix:
+          type: string
+          description: Display prefix (`sk-xxxxxxxx...`); enough to recognise a key, useless to use it.
+        organization_id:
+          type: string
+          description: Owning organization id (decimal string).
+        owner_user_id:
+          type: [string, "null"]
+          description: |
+            Owner user id, or `null` for a legacy/unknown owner. A `member` can
+            only ever see their own keys, so `null` never appears in their view.
+        created_by:
+          type: [string, "null"]
+          description: User id recorded as the creator of the key.
+        status:
+          type: string
+          enum: [active, revoked]
+        expires_at:
+          type: [string, "null"]
+          format: date-time
+          description: "`null` means the key does not expire."
+        revoked_at:
+          type: [string, "null"]
+          format: date-time
+          description: "`null` while the key is active."
+        model_allowlist:
+          type: [array, "null"]
+          items: { type: string }
+          description: |
+            Tri-state model permission (ADR-0003 §2.7): `null` inherits the
+            organization policy, `[]` is an explicit deny-all, and a non-empty
+            array is an explicit allowlist. The three cases must stay
+            distinguishable.
+        policy_version:
+          type: string
+          description: Policy version the key was last written with (decimal string).
+        created_at: { type: string, format: date-time }
+        tenant_id:
+          type: string
+          description: |
+            Legacy tenant projection the Gateway still resolves: the
+            organization's `legacy_tenant_id` when mapped, otherwise `org:<id>`.
+
+    ApiKeyPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor, replayed]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ApiKey' }
+        next_cursor:
+          type: [string, "null"]
+          description: Opaque Control page token, or `null` on the last page.
+        replayed:
+          type: boolean
+          description: |
+            `true` only for `?operation_id=...` recovery: the listed key is
+            stored metadata of an already applied operation, so no secret exists
+            for it any more. Always `false` for a normal list.
+
+    CreateApiKeyRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        owner_user_id:
+          type: string
+          pattern: '^[1-9][0-9]*$'
+          description: |
+            Optional owner. A `member` may only name themselves (or omit it);
+            `admin`/`owner` may name any active member of the organization.
+            Omitted defaults to the caller.
+        expires_at:
+          type: string
+          format: date-time
+          description: Optional RFC 3339 expiry; must be in the future.
+        model_allowlist:
+          type: array
+          items: { type: string }
+          description: |
+            Optional model allowlist. Absent or `null` inherits the organization
+            policy; `[]` is an explicit deny-all. Values are trimmed,
+            de-duplicated and sorted, and at most 256 models of 128 bytes each
+            are accepted.
+        operation_id:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: |
+            Optional client-chosen idempotency key. Retrying the same create with
+            the same value returns the stored metadata instead of creating a
+            second key; reusing it with a different payload is `409 conflict`.
+
+    CreateApiKeyResponse:
+      type: object
+      additionalProperties: false
+      required: [key, secret_returned_once, replayed, resulting_version, notice]
+      properties:
+        key: { $ref: '#/components/schemas/ApiKey' }
+        secret:
+          type: string
+          description: |
+            The raw API key. Present **only** on a first, non-replayed create and
+            omitted entirely on a replay: Control never stores it, so no later
+            request, log or export can return it again. Treat it as a credential
+            and store it in a secret manager.
+        secret_returned_once:
+          type: boolean
+          description: "`true` when `secret` is present in this response, `false` on an idempotent replay."
+        replayed:
+          type: boolean
+          description: "`true` when Control returned the stored result of an already applied operation."
+        resulting_version:
+          type: string
+          description: Control snapshot version produced by this command (decimal string).
+        notice:
+          type: string
+          description: Human-readable statement that the secret is shown once, or — on a replay — how to recover the metadata.
+
+    RevokeApiKeyResponse:
+      type: object
+      additionalProperties: false
+      required: [key, replayed, resulting_version]
+      properties:
+        key: { $ref: '#/components/schemas/ApiKey' }
+        replayed:
+          type: boolean
+          description: "`true` when the revoke was an idempotent replay."
+        resulting_version:
+          type: string
+          description: |
+            Control snapshot version produced by this command (decimal string);
+            unchanged when the key was already revoked.
+
+    UsageEvent:
+      type: object
+      description: |
+        One `metering_events` row. `id`/`occurred_at` are the event's stable
+        `event_id` and its `created_at` occurrence time.
+      additionalProperties: false
+      required: [id, occurred_at, organization_id, user_id, key_id, execution_id, tenant_id, model, provider, prompt_tokens, completion_tokens, total_tokens, cost_cents, attribution]
+      properties:
+        id:
+          type: string
+          description: Stable event id (`metering_events.event_id`); the tiebreaker of the `(occurred_at, id)` order.
+        occurred_at:
+          type: string
+          format: date-time
+          description: Event occurrence time (`metering_events.created_at`), RFC 3339 UTC.
+        organization_id:
+          type: [string, "null"]
+          description: |
+            Attributed organization. In an organization scope this is always the
+            requested organization; `null` rows (written before the attribution
+            migration) are excluded from every organization scope.
+        user_id:
+          type: [string, "null"]
+          description: |
+            Attributed user, or `null` for an organization row whose user is
+            unknown (legacy key). `null` rows are never visible to a `member`.
+        key_id:
+          type: [string, "null"]
+          description: Attributed API key id, or `null` when unknown.
+        execution_id:
+          type: [string, "null"]
+          description: Optional upstream execution correlation id.
+        tenant_id:
+          type: string
+          description: Legacy tenant string the event was written with.
+        model: { type: string }
+        provider: { type: string }
+        prompt_tokens: { type: integer, minimum: 0 }
+        completion_tokens: { type: integer, minimum: 0 }
+        total_tokens: { type: integer, minimum: 0 }
+        cost_cents:
+          type: string
+          description: |
+            Decimal string. Legacy demo consumption (1 token = 1 cent), not a
+            balance and not an invoice amount.
+        attribution:
+          type: string
+          enum: [attributed, legacy_unknown_user]
+          description: "`legacy_unknown_user` marks an attributed organization row with an unknown user."
+
+    UsageTotals:
+      type: object
+      description: |
+        Totals of the **whole filtered window**, independent of `limit`/`cursor`.
+      additionalProperties: false
+      required: [events, prompt_tokens, completion_tokens, total_tokens, cost_cents, cost_kind, cost_note]
+      properties:
+        events: { type: integer, minimum: 0 }
+        prompt_tokens: { type: integer, minimum: 0 }
+        completion_tokens: { type: integer, minimum: 0 }
+        total_tokens: { type: integer, minimum: 0 }
+        cost_cents:
+          type: string
+          description: Decimal string; accumulated demo consumption, never a balance.
+        cost_kind:
+          type: string
+          enum: [demo_consumption]
+          description: Label of the legacy price model behind `cost_cents`.
+        cost_note:
+          type: string
+          description: Human-readable reminder that this is demo consumption, not a balance or an invoice.
+
+    UsageWindow:
+      type: object
+      description: The window the server actually applied, after defaults.
+      additionalProperties: false
+      required: [from, to]
+      properties:
+        from: { type: string, format: date-time }
+        to: { type: string, format: date-time }
+
+    UsagePage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor, totals, window, scope]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/UsageEvent' }
+        next_cursor:
+          type: [string, "null"]
+          description: Opaque cursor for the next page, or `null` on the last page.
+        totals: { $ref: '#/components/schemas/UsageTotals' }
+        window: { $ref: '#/components/schemas/UsageWindow' }
+        scope:
+          type: string
+          enum: [self, organization]
+          description: The scope the server applied to this response.
+
     AuditEvent:
       type: object
       description: |
@@ -1306,11 +2049,13 @@ components:
             - org.member.role_change
             - org.member.remove
             - org.owner.transfer
+            - org.key.create
+            - org.key.revoke
             - admin.user.create
             - admin.user.status
         target_type:
           type: string
-          enum: [membership, invitation, user]
+          enum: [membership, invitation, user, api_key]
         target_id:
           type: string
           description: Target id as a decimal string; empty when unknown (never the token).

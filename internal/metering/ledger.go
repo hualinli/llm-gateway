@@ -89,9 +89,15 @@ func NewPGLedger(dsn string) (*PGLedger, error) {
 
 func (p *PGLedger) Close() error { return p.db.Close() }
 
+// Add writes one usage row. Attribution is written as SQL NULL when unknown
+// (legacy key without owner, unguarded gateway, pre-000007 event): a zero
+// user_id must never become a real user 0, and an empty key/execution id must
+// never become an empty-string identity.
 func (p *PGLedger) Add(e Event) (bool, error) {
 	res, err := p.db.Exec(queryInsertEvent,
-		e.EventID, e.TenantID, e.Model, e.Provider, e.PromptTokens, e.CompletionTokens, e.TotalTokens, e.CostCents, e.CreatedAt)
+		e.EventID, e.TenantID,
+		nullableInt64(e.OrgID), nullableInt64(e.UserID), nullableString(e.KeyID), nullableString(e.ExecutionID),
+		e.Model, e.Provider, e.PromptTokens, e.CompletionTokens, e.TotalTokens, e.CostCents, e.CreatedAt)
 	if err != nil {
 		return false, err
 	}
@@ -115,10 +121,25 @@ func (p *PGLedger) Snapshot() (map[string]Event, error) {
 
 	out := make(map[string]Event)
 	for rows.Next() {
-		var e Event
-		if err := rows.Scan(&e.EventID, &e.TenantID, &e.Model, &e.Provider, &e.PromptTokens, &e.CompletionTokens, &e.TotalTokens, &e.CostCents, &e.CreatedAt); err != nil {
+		var (
+			e           Event
+			orgID       sql.NullInt64
+			userID      sql.NullInt64
+			keyID       sql.NullString
+			executionID sql.NullString
+		)
+		if err := rows.Scan(&e.EventID, &e.TenantID, &orgID, &userID, &keyID, &executionID,
+			&e.Model, &e.Provider, &e.PromptTokens, &e.CompletionTokens, &e.TotalTokens, &e.CostCents, &e.CreatedAt); err != nil {
 			return nil, err
 		}
+		if orgID.Valid {
+			e.OrgID = orgID.Int64
+		}
+		if userID.Valid {
+			e.UserID = userID.Int64
+		}
+		e.KeyID = keyID.String
+		e.ExecutionID = executionID.String
 		out[eventKey(e)] = e
 	}
 	if err := rows.Err(); err != nil {
@@ -166,3 +187,19 @@ var querySnapshotEvents string
 
 //go:embed queries/tenant_balance.sql
 var queryTenantBalance string
+
+// nullableInt64 maps "unknown" (0 or negative) to SQL NULL so the ledger keeps
+// legacy rows distinguishable from a real attribution.
+func nullableInt64(value int64) any {
+	if value <= 0 {
+		return nil
+	}
+	return value
+}
+
+func nullableString(value string) any {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	return value
+}

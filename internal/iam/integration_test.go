@@ -147,8 +147,10 @@ func TestMigrationCreatesIAMSchemaAndFabricatesNoRows(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer m.Close()
-	if err := m.Steps(-1); err != nil {
-		t.Fatalf("down one step: %v", err)
+	// 固定迁移到 000004 之前（users/sessions/organizations/memberships 由 000004 建）：
+	// 后续任务会继续追加 000005+，用 Steps(-1) 只会回滚最新那个迁移。
+	if err := m.Migrate(3); err != nil {
+		t.Fatalf("migrate down to 3: %v", err)
 	}
 	for _, table := range tables {
 		var name sql.NullString
