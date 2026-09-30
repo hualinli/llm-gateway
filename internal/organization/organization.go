@@ -208,6 +208,13 @@ func (s *Service) Membership(ctx context.Context, userID, orgID int64) (Membersh
 
 // AddMember 以 upsert 写入成员关系：已存在则改角色并恢复 active，created_at
 // 保持首次加入时间。role 必须在受限取值内，否则返回普通校验错误。
+//
+// 这是**平台预置路径**（bootstrap 与 POST /api/v1/admin/users 的 organizations
+// 字段），调用者不是以组织成员身份行事：它不做权限矩阵检查、不递增 org_revision
+// 也不写 policy_publications。面向组织成员的管理入口必须走 T03 的
+// ChangeMemberRole / RemoveMember / TransferOwnership / CreateInvitation
+// （见 members.go、invitations.go），它们全部在同一个事务里读取调用者的成员关系
+// 并执行 ADR-0003 §2.3 的矩阵。
 func (s *Service) AddMember(ctx context.Context, orgID, userID int64, role string) (Membership, error) {
 	role = strings.TrimSpace(role)
 	if !validRole(role) {

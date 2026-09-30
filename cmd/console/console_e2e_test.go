@@ -79,6 +79,9 @@ func e2eBoot(t *testing.T) (*route.Engine, *sql.DB, *iam.Service, *organization.
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
+	// migrations.Version tracks the newest embedded migration (000006 today:
+	// 000005 Console + 000006 Control). The check stays strict so a half-applied
+	// schema fails the test instead of producing confusing downstream errors.
 	if err := migrations.Check(db); err != nil {
 		t.Fatal(err)
 	}
@@ -90,11 +93,14 @@ func e2eBoot(t *testing.T) (*route.Engine, *sql.DB, *iam.Service, *organization.
 		LoginBurst:         100,
 	})
 	orgs := organization.NewService(db)
+	audit := console.NewPGSink(db)
 	engine, err := console.New(console.Options{
 		IAM:           users,
 		Organizations: orgs,
 		SessionTTL:    time.Hour,
 		Ready:         db.PingContext,
+		Audit:         audit,
+		AuditStore:    audit,
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -45,6 +45,11 @@ type Server struct {
 	// for any control:// reference. Config snapshots still store only refs.
 	providerCredentials ProviderCredentialStore
 	credentialResolver  *providerCredentialResolver
+
+	// adminService is the Console-facing AdminService. Nil leaves the internal
+	// management RPCs unregistered (UNIMPLEMENTED) instead of exposing an
+	// unauthenticated surface.
+	adminService pb.AdminServiceServer
 }
 
 // NewServer 创建并尝试从 Store 恢复最新配置；恢复失败视为启动期致命错误。
@@ -443,6 +448,9 @@ func NewGRPCServerWithTLS(s *Server, cfg *TLSConfig) (*grpc.Server, error) {
 	pb.RegisterConfigServiceServer(gs, s)
 	if s.credentialResolver != nil {
 		pb.RegisterProviderCredentialResolverServer(gs, s.credentialResolver)
+	}
+	if s.adminService != nil {
+		pb.RegisterAdminServiceServer(gs, s.adminService)
 	}
 	return gs, nil
 }

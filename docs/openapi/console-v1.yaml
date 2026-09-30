@@ -3,12 +3,16 @@ info:
   title: LLM Gateway Console API
   version: "1.0.0"
   description: |
-    Console (control-plane IAM) HTTP API, task T02.
+    Console (control-plane IAM) HTTP API: T02 (users, sessions, organizations)
+    plus the T03 organization surface (members, invitations, ownership transfer,
+    audit).
 
-    This document is the frozen contract of ADR-0002 §4 and describes **only**
-    the endpoints that are implemented by `internal/console` and served by
-    `cmd/console`. There is no self-service registration, no invitation flow, no
-    OIDC/SSO/MFA and no password recovery in this version.
+    This document is the frozen contract of ADR-0002 §4 and ADR-0003 §2.3–§2.6
+    and describes **only** the endpoints implemented by `internal/console` and
+    served by `cmd/console`. There is no self-service registration, no email
+    delivery, no OIDC/SSO/MFA and no password recovery in this version. An
+    invitation is a link that an administrator copies; its email is **not**
+    verified by delivery.
 
     Cross-cutting rules:
 
@@ -18,8 +22,9 @@ info:
     * Every timestamp is RFC 3339 in UTC (`2026-10-01T12:00:00Z`).
     * Every error response uses the shared envelope below, including the
       correlation id echoed from `X-Request-ID`.
-    * List endpoints return `{"items": [...], "next_cursor": <string|null>}`,
-      ordered by `id ASC`. `limit` defaults to 20 and is clamped to 100.
+    * List endpoints return `{"items": [...], "next_cursor": <string|null>}`.
+      `limit` defaults to 20 and is clamped to 100. Cursors are opaque decimal
+      id strings; `null` means "no further page".
     * `/livez` and `/readyz` are the only unauthenticated, non-JSON endpoints.
 
     Authentication is a browser session cookie (`gw_session`). The session token
@@ -27,6 +32,21 @@ info:
     logout and when the user is disabled. Any state-changing request
     (`POST`/`PATCH`/`DELETE`) must additionally present the session-bound CSRF
     token in `X-CSRF-Token`; `SameSite` does not replace it.
+
+    Authorization is the ADR-0003 §2.3 permission matrix, enforced **only** in
+    the service layer (`internal/organization`) with the acting membership read
+    in the same transaction:
+
+    | action | member | billing_viewer | admin | owner |
+    |---|---|---|---|---|
+    | use_model / manage_own_keys / view_own_usage | ✓ | — | ✓ | ✓ |
+    | view_org_usage | — | ✓ | ✓ | ✓ |
+    | manage_members / change_member_policy | — | — | ✓ | ✓ |
+    | create_admin / transfer_owner | — | — | — | ✓ |
+
+    Roles never stack, `platform_admin` is a user-level flag and never an
+    organization role, and every organization-scoped route answers `404` for a
+    non-member so organization existence never leaks.
   license:
     name: UNLICENSED
 servers:
@@ -39,6 +59,12 @@ tags:
     description: Current identity
   - name: organizations
     description: Organizations the caller can see
+  - name: members
+    description: Organization members and their roles (T03)
+  - name: invitations
+    description: Single-use invitation links (T03)
+  - name: audit
+    description: Organization audit trail (T03)
   - name: admin
     description: Platform-administrator-only user management
   - name: probes
@@ -314,6 +340,339 @@ paths:
         '500':
           $ref: '#/components/responses/Internal'
 
+  /api/v1/orgs/{org}/members:
+    get:
+      tags: [members]
+      operationId: listOrgMembers
+      summary: List organization members
+      description: |
+        Visibility follows the permission matrix: `owner` and `admin`
+        (`manage_members`) and the read-only `billing_viewer` (`view_org_usage`)
+        see the whole organization; a plain `member` receives a single-element
+        list containing only themselves (they can confirm their own role but
+        cannot enumerate colleagues). A non-member receives `404 not_found`,
+        never `403`, so organization existence is not disclosed.
+
+        Member lists are not paginated in this version: `next_cursor` is always
+        `null` and the array shape is the frozen list shape.
+      parameters:
+        - $ref: '#/components/parameters/OrgID'
+      responses:
+        '200':
+          description: One page of active members, ordered by user id.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberPage'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+  /api/v1/orgs/{org}/members/{user}:
+    patch:
+      tags: [members]
+      operationId: changeMemberRole
+      summary: Change a member's role
+      description: |
+        Requires `manage_members` (admin/owner) and a valid CSRF token. Roles
+        never stack and there is no role inheritance.
+
+        Refusals:
+
+        * an `admin` acting on an `owner` or another `admin` → `403 forbidden`;
+        * granting `owner` (any actor) → `403 forbidden`: ownership is only
+          granted by `POST /api/v1/orgs/{org}/owner-transfer`;
+        * granting `admin` requires `create_admin`, which only an `owner` has →
+          otherwise `403 forbidden`;
+        * granting `platform_admin` → `403 forbidden` (it is not an
+          organization role);
+        * demoting the last remaining `owner`, including self-demotion →
+          `409 conflict`;
+        * an unknown target member → `404 not_found`;
+        * a non-member caller, or an unknown organization → `404 not_found`;
+        * a role outside the vocabulary → `400 invalid_request`.
+
+        A successful change bumps the organization's `org_revision` and writes a
+        `pending` policy publication **in the same transaction**, which is what
+        lets the data plane revoke affected keys later.
+      parameters:
+        - $ref: '#/components/parameters/OrgID'
+        - $ref: '#/components/parameters/UserID'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeMemberRoleRequest'
+            examples:
+              promoteToAdmin:
+                value: { role: admin }
+      responses:
+        '204':
+          description: Role changed; no body. Audited.
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/Internal'
+    delete:
+      tags: [members]
+      operationId: removeMember
+      summary: Remove a member from the organization
+      description: |
+        Requires `manage_members` and a valid CSRF token. Removal is a soft
+        delete (`memberships.status = 'removed'`) and bumps `org_revision` with a
+        `pending` policy publication in the same transaction.
+
+        An `admin` cannot remove an `owner` or another `admin` (`403`); the last
+        remaining `owner` cannot leave or be removed (`409 conflict`); an unknown
+        or already-removed member is `404 not_found`; a non-member caller gets
+        `404 not_found`.
+
+        Note: the data plane (Gateway) enforcement of the resulting key
+        revocation is a follow-up task; this endpoint only records the revision
+        and publication.
+      parameters:
+        - $ref: '#/components/parameters/OrgID'
+        - $ref: '#/components/parameters/UserID'
+        - $ref: '#/components/parameters/CSRFToken'
+      responses:
+        '204':
+          description: Member removed; no body. Audited.
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+  /api/v1/orgs/{org}/invitations:
+    get:
+      tags: [invitations]
+      operationId: listOrgInvitations
+      summary: List invitation metadata
+      description: |
+        Requires `manage_members` (admin/owner). Returns metadata only: the raw
+        token is returned exactly once by the create call, and the server stores
+        only its SHA-256. Non-members receive `404 not_found`; members without
+        the permission receive `403 forbidden`.
+
+        Newest first (id `DESC`); at most the 200 most recent invitations are
+        returned and `next_cursor` is always `null`.
+      parameters:
+        - $ref: '#/components/parameters/OrgID'
+      responses:
+        '200':
+          description: Invitations of the organization, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationPage'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/Internal'
+    post:
+      tags: [invitations]
+      operationId: createInvitation
+      summary: Create a single-use invitation link
+      description: |
+        Requires `manage_members` and a valid CSRF token. The response contains
+        the raw `token` **exactly once**; only its SHA-256 hash is stored, so a
+        lost token must be re-issued. The email and role are fixed at creation
+        time and can never be overridden when the invitation is accepted. The
+        administrator copies the link; no email is sent and the email address is
+        therefore not verified by delivery.
+
+        Rules: an `admin` may invite `member`/`billing_viewer`, only an `owner`
+        may invite an `admin` or an `owner`, and `platform_admin` can never be
+        invited. Creating an invitation does not change any membership, so it
+        does not bump `org_revision`.
+      parameters:
+        - $ref: '#/components/parameters/OrgID'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInvitationRequest'
+            examples:
+              default:
+                value: { email: invitee@example.com, role: member }
+      responses:
+        '201':
+          description: Invitation created; the raw token is returned once.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateInvitationResponse'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+  /api/v1/invitations/{token}/accept:
+    post:
+      tags: [invitations]
+      operationId: acceptInvitation
+      summary: Accept an invitation
+      description: |
+        Requires a session (the accepting identity) and a valid CSRF token: the
+        call creates a membership. No organization membership is required — the
+        token plus the invitation's fixed email are the authorization.
+
+        In one transaction the invitation row is locked, the status/expiry/email
+        are checked, the membership is created or reactivated with the
+        invitation's role, the invitation is marked accepted, `org_revision` is
+        bumped and a `pending` policy publication is written.
+
+        Refusals: unknown or tampered token → `404 not_found`; the logged-in
+        email does not match the invited email → `403 forbidden`; already
+        accepted, revoked or expired → `409 conflict`.
+      parameters:
+        - $ref: '#/components/parameters/InvitationToken'
+        - $ref: '#/components/parameters/CSRFToken'
+      responses:
+        '200':
+          description: Membership created or reactivated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MembershipRecord'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+  /api/v1/orgs/{org}/owner-transfer:
+    post:
+      tags: [members]
+      operationId: transferOwnership
+      summary: Transfer ownership to another member
+      description: |
+        The only path that grants `owner` (requires `transfer_owner`, i.e. the
+        caller must be an `owner`, plus a valid CSRF token). In one serialized
+        transaction the target is promoted to `owner` and the caller becomes
+        `admin`, so the organization always keeps at least one owner. The action
+        bumps `org_revision` and writes a `pending` policy publication.
+
+        Refusals: caller is not an owner → `403 forbidden`; target is the caller
+        → `400 invalid_request`; target is already an owner → `409 conflict`;
+        target is not an active member or the caller is not a member →
+        `404 not_found`.
+      parameters:
+        - $ref: '#/components/parameters/OrgID'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OwnerTransferRequest'
+            examples:
+              default:
+                value: { user: "3" }
+      responses:
+        '200':
+          description: Ownership transferred.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OwnerTransferResponse'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+  /api/v1/orgs/{org}/audit:
+    get:
+      tags: [audit]
+      operationId: listOrgAudit
+      summary: Read the organization audit trail
+      description: |
+        Requires `manage_members`: only `owner` and `admin` may read the audit
+        trail of an organization. A member or `billing_viewer` of the
+        organization receives `403 forbidden`; a non-member receives
+        `404 not_found`.
+
+        Rows are ordered newest first (id `DESC`) and the cursor is the last id
+        of the previous page. Every mutation of the T03 surface writes exactly
+        one row (success or failure) with actor, organization, action, target,
+        outcome and the request/trace correlation ids. Refused probes aimed at an
+        organization are attributed to that organization so its administrators
+        can see them; they can never be read back by the non-member who made
+        them. Passwords, session tokens, CSRF tokens and raw invitation tokens
+        are never stored.
+      parameters:
+        - $ref: '#/components/parameters/OrgID'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: One page of audit events, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditEventPage'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/Internal'
+
   /livez:
     get:
       tags: [probes]
@@ -405,6 +764,15 @@ components:
         Session-bound CSRF token returned by login and by `GET /api/v1/me`.
         Missing or mismatching values produce `403 forbidden`.
       schema: { type: string, minLength: 1 }
+    InvitationToken:
+      name: token
+      in: path
+      required: true
+      description: |
+        Raw invitation token (43 URL-safe characters) returned exactly once by
+        `POST /api/v1/orgs/{org}/invitations`. It is a credential: it is never
+        logged and never stored in plaintext (only its SHA-256 is kept).
+      schema: { type: string, minLength: 1 }
   responses:
     InvalidRequest:
       description: Malformed body, invalid parameter or invalid enum value.
@@ -432,8 +800,11 @@ components:
                   request_id: 8f1c0b2e4d5a6f708192a3b4c5d6e7f8
     Forbidden:
       description: |
-        Missing or mismatching CSRF token, a disabled user, or a caller without
-        platform-administrator privileges.
+        Missing or mismatching CSRF token, a disabled user, a caller without
+        platform-administrator privileges, or an organization member whose role
+        is refused by the ADR-0003 §2.3 matrix (including granting `owner`
+        outside the ownership-transfer endpoint, inviting an `admin` as an
+        `admin`, or redeeming an invitation issued for a different email).
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorEnvelope' }
@@ -444,8 +815,34 @@ components:
                   code: forbidden
                   message: missing or invalid CSRF token
                   request_id: 8f1c0b2e4d5a6f708192a3b4c5d6e7f8
+            matrixViolation:
+              summary: A member tries to invite (manage_members is admin/owner only)
+              value:
+                error:
+                  code: forbidden
+                  message: action is not permitted for your organization role
+                  request_id: 8f1c0b2e4d5a6f708192a3b4c5d6e7f8
+            ownerGrant:
+              summary: Ownership can only be granted by the transfer endpoint
+              value:
+                error:
+                  code: forbidden
+                  message: owner may only be granted through ownership transfer
+                  request_id: 8f1c0b2e4d5a6f708192a3b4c5d6e7f8
+            invitationEmail:
+              summary: The invitation was issued for a different email
+              value:
+                error:
+                  code: forbidden
+                  message: invitation was issued for a different email
+                  request_id: 8f1c0b2e4d5a6f708192a3b4c5d6e7f8
     NotFound:
-      description: Unknown resource, or a resource the caller may not see.
+      description: |
+        Unknown resource, or a resource the caller may not see: a non-member of
+        an organization, a removed member, a member or invitation that does not
+        exist, or an invitation token that does not exist (or was tampered
+        with). Non-membership is always `404`, never `403`, so organization
+        existence is not disclosed.
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorEnvelope' }
@@ -456,8 +853,24 @@ components:
                   code: not_found
                   message: organization not found
                   request_id: 8f1c0b2e4d5a6f708192a3b4c5d6e7f8
+            memberNotFound:
+              value:
+                error:
+                  code: not_found
+                  message: member not found
+                  request_id: 8f1c0b2e4d5a6f708192a3b4c5d6e7f8
+            invitationNotFound:
+              value:
+                error:
+                  code: not_found
+                  message: invitation not found
+                  request_id: 8f1c0b2e4d5a6f708192a3b4c5d6e7f8
     Conflict:
-      description: Uniqueness conflict, for example an email that is already registered.
+      description: |
+        A uniqueness conflict (an email that is already registered) or a state
+        conflict: the last remaining owner cannot leave or be demoted, and an
+        invitation that was already accepted, revoked or expired cannot be
+        redeemed.
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorEnvelope' }
@@ -467,6 +880,20 @@ components:
                 error:
                   code: conflict
                   message: email is already registered
+                  request_id: 8f1c0b2e4d5a6f708192a3b4c5d6e7f8
+            lastOwner:
+              summary: The organization must keep at least one owner
+              value:
+                error:
+                  code: conflict
+                  message: organization must keep at least one owner
+                  request_id: 8f1c0b2e4d5a6f708192a3b4c5d6e7f8
+            invitationNotPending:
+              summary: The invitation is no longer redeemable
+              value:
+                error:
+                  code: conflict
+                  message: invitation was already accepted
                   request_id: 8f1c0b2e4d5a6f708192a3b4c5d6e7f8
     RateLimited:
       description: Login throttled for this email and client IP.
@@ -685,6 +1112,232 @@ components:
           description: |
             `disabled` bumps the user's `auth_version`, immediately invalidating
             every existing session of that user.
+
+    Member:
+      type: object
+      description: One active member of an organization.
+      additionalProperties: false
+      required: [user_id, email, role, status, created_at]
+      properties:
+        user_id:
+          type: string
+          description: 64-bit user id as a decimal string.
+        email: { type: string, format: email }
+        role:
+          type: string
+          enum: [owner, admin, member, billing_viewer]
+        status:
+          type: string
+          enum: [active]
+          description: |
+            Only active members are listed; removed members never appear (the
+            field is part of the frozen shape for forward compatibility).
+        created_at: { type: string, format: date-time }
+
+    MemberPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Member' }
+        next_cursor:
+          type: [string, "null"]
+          description: Always `null` in this version (member lists are not paginated).
+
+    Invitation:
+      type: object
+      description: |
+        Invitation metadata. Never contains the token or its hash: the raw token
+        is returned exactly once by the create call.
+      additionalProperties: false
+      required: [id, organization_id, email, role, status, expires_at, created_at]
+      properties:
+        id: { type: string, description: 64-bit invitation id as a decimal string. }
+        organization_id: { type: string }
+        email:
+          type: string
+          format: email
+          description: Normalized (trimmed, lowercased) address the invitation is fixed to.
+        role:
+          type: string
+          enum: [owner, admin, member, billing_viewer]
+          description: Role the invitee receives; it cannot be overridden at acceptance.
+        status:
+          type: string
+          enum: [pending, accepted, revoked]
+        expires_at: { type: string, format: date-time }
+        accepted_at:
+          type: [string, "null"]
+          format: date-time
+        created_by:
+          type: [string, "null"]
+          description: User id of the creator, `null` after that user is deleted.
+        created_at: { type: string, format: date-time }
+
+    InvitationPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Invitation' }
+        next_cursor:
+          type: [string, "null"]
+          description: Always `null`; at most the 200 most recent invitations are returned.
+
+    CreateInvitationRequest:
+      type: object
+      additionalProperties: false
+      required: [email, role]
+      properties:
+        email:
+          type: string
+          format: email
+          description: |
+            Target address; it is normalized (trimmed, lowercased) and fixed.
+            No email is sent and the address is not verified by delivery.
+        role:
+          type: string
+          enum: [owner, admin, member, billing_viewer]
+          description: |
+            `member`/`billing_viewer` need `manage_members`; `admin` needs
+            `create_admin` (owner); `owner` may only be invited by an owner.
+        expires_in_seconds:
+          type: integer
+          minimum: 60
+          maximum: 2592000
+          description: |
+            Optional lifetime. Defaults to 259200 (72h) when omitted or 0;
+            clamped server-side to the documented range.
+
+    CreateInvitationResponse:
+      type: object
+      additionalProperties: false
+      required: [invitation, token]
+      properties:
+        invitation: { $ref: '#/components/schemas/Invitation' }
+        token:
+          type: string
+          description: |
+            Raw single-use token. Appears exactly once, in this response; the
+            server keeps only its SHA-256. Treat it as a credential.
+
+    MembershipRecord:
+      type: object
+      description: A membership that was created or reactivated.
+      additionalProperties: false
+      required: [organization_id, user_id, role, status, created_at]
+      properties:
+        organization_id: { type: string }
+        user_id: { type: string }
+        role:
+          type: string
+          enum: [owner, admin, member, billing_viewer]
+        status:
+          type: string
+          enum: [active, removed]
+        created_at:
+          type: string
+          format: date-time
+          description: First time the user joined the organization (unchanged on re-join).
+
+    ChangeMemberRoleRequest:
+      type: object
+      additionalProperties: false
+      required: [role]
+      properties:
+        role:
+          type: string
+          description: |
+            New role. `owner` is refused here (use the transfer endpoint) and
+            `platform_admin` is refused outright (it is a user-level flag, not
+            an organization role).
+          enum: [owner, admin, member, billing_viewer]
+
+    OwnerTransferRequest:
+      type: object
+      additionalProperties: false
+      required: [user]
+      properties:
+        user:
+          type: string
+          pattern: '^[1-9][0-9]*$'
+          description: User id (decimal string) of the new owner.
+
+    OwnerTransferResponse:
+      type: object
+      additionalProperties: false
+      required: [organization_id, owner_user_id, previous_owner_user_id, previous_owner_role]
+      properties:
+        organization_id: { type: string }
+        owner_user_id: { type: string, description: The new owner's user id. }
+        previous_owner_user_id: { type: string }
+        previous_owner_role:
+          type: string
+          enum: [admin]
+          description: The outgoing owner always becomes `admin`.
+
+    AuditEvent:
+      type: object
+      description: |
+        One console_audit_events row. It never contains passwords, session or
+        CSRF tokens, or invitation tokens.
+      additionalProperties: false
+      required: [id, action, target_type, target_id, outcome, detail, created_at]
+      properties:
+        id: { type: string }
+        actor_user_id:
+          type: [string, "null"]
+          description: "`null` for actions without an authenticated actor."
+        actor_organization_id:
+          type: [string, "null"]
+          description: |
+            Organization the action was performed in (for refused cross-org
+            probes: the organization that was targeted). `null` when there is no
+            organization context, e.g. accepting an unknown invitation token.
+        action:
+          type: string
+          enum:
+            - org.invitation.create
+            - org.invitation.accept
+            - org.member.role_change
+            - org.member.remove
+            - org.owner.transfer
+            - admin.user.create
+            - admin.user.status
+        target_type:
+          type: string
+          enum: [membership, invitation, user]
+        target_id:
+          type: string
+          description: Target id as a decimal string; empty when unknown (never the token).
+        outcome:
+          type: string
+          enum: [success, failure]
+        detail:
+          type: [object, "null"]
+          description: |
+            Action-specific, non-secret metadata (role, email, expiry, or the
+            failure reason). Passed through verbatim.
+          additionalProperties: true
+        request_id: { type: [string, "null"] }
+        trace_id: { type: [string, "null"] }
+        created_at: { type: string, format: date-time }
+
+    AuditEventPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AuditEvent' }
+        next_cursor:
+          type: [string, "null"]
+          description: Last audit id of this page, or `null` on the last page.
 
 security:
   - sessionCookie: []

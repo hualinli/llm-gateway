@@ -91,14 +91,27 @@ func runServe(profile appenv.Profile, args []string) error {
 	})
 	orgs := organization.NewService(db)
 
+	// T03: mutations are audited into console_audit_events, and GET
+	// /api/v1/orgs/{org}/audit reads them back. One sink implements both roles.
+	audit := console.NewPGSink(db)
+	audit.Logger = log.Default()
+
 	return serve(serveOptions{
 		config:  cfg,
 		profile: profile,
 		iam:     users,
 		orgs:    orgs,
+		audit:   audit,
 		ready:   db.PingContext,
 		logger:  log.Default(),
 	})
+}
+
+// auditService is the Console audit dependency: the write side (AuditSink) and
+// the read side (AuditStore). console.PGSink implements both.
+type auditService interface {
+	console.AuditSink
+	console.AuditStore
 }
 
 // serveOptions carries the wired dependencies into serve(). The service fields
@@ -108,6 +121,10 @@ type serveOptions struct {
 	profile appenv.Profile
 	iam     console.IAMService
 	orgs    console.OrganizationService
-	ready   func(ctx context.Context) error
-	logger  *log.Logger
+	// audit is optional: nil disables the audit trail and makes
+	// GET /api/v1/orgs/{org}/audit answer 500 instead of pretending there is no
+	// audit history.
+	audit  auditService
+	ready  func(ctx context.Context) error
+	logger *log.Logger
 }

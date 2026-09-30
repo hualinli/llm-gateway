@@ -8,7 +8,7 @@
 // envelope. It never reads the process environment — every knob arrives through
 // Options, so handlers stay testable with fakes.
 //
-// Route table (ADR-0002 §4):
+// Route table (ADR-0002 §4, ADR-0003 §2.3–§2.6):
 //
 //	POST /api/v1/auth/login                       public
 //	POST /api/v1/auth/logout                      session + CSRF
@@ -18,6 +18,14 @@
 //	POST /api/v1/organizations                    session + CSRF
 //	POST /api/v1/admin/users                      session + platform admin + CSRF
 //	POST /api/v1/admin/users/{user}/status        session + platform admin + CSRF
+//	GET  /api/v1/orgs/{org}/members               session (matrix decides visibility)
+//	GET  /api/v1/orgs/{org}/invitations           session + matrix (manage_members)
+//	POST /api/v1/orgs/{org}/invitations           session + CSRF + matrix
+//	POST /api/v1/invitations/{token}/accept       session + CSRF (token + fixed email)
+//	PATCH  /api/v1/orgs/{org}/members/{user}      session + CSRF + matrix
+//	DELETE /api/v1/orgs/{org}/members/{user}      session + CSRF + matrix
+//	POST /api/v1/orgs/{org}/owner-transfer        session + CSRF + matrix
+//	GET  /api/v1/orgs/{org}/audit                 session + matrix (manage_members)
 //	GET  /livez, GET /readyz                      public
 package console
 
@@ -43,10 +51,20 @@ const (
 	PathLogout = "/api/v1/auth/logout"
 	PathMe     = "/api/v1/me"
 
-	PathOrganizations       = "/api/v1/organizations"
-	PathOrganization        = "/api/v1/organizations/:org"
-	PathAdminUsers          = "/api/v1/admin/users"
-	PathAdminUserStatus     = "/api/v1/admin/users/:user/status"
+	PathOrganizations   = "/api/v1/organizations"
+	PathOrganization    = "/api/v1/organizations/:org"
+	PathAdminUsers      = "/api/v1/admin/users"
+	PathAdminUserStatus = "/api/v1/admin/users/:user/status"
+
+	// T03 organization surface (ADR-0003 §2.3–§2.6). The org-scoped routes use
+	// the frozen `/api/v1/orgs/{org}/...` shape from ADR-0003 §2.9.
+	PathOrgMembers       = "/api/v1/orgs/:org/members"
+	PathOrgMember        = "/api/v1/orgs/:org/members/:user"
+	PathOrgInvitations   = "/api/v1/orgs/:org/invitations"
+	PathInvitationAccept = "/api/v1/invitations/:token/accept"
+	PathOrgOwnerTransfer = "/api/v1/orgs/:org/owner-transfer"
+	PathOrgAudit         = "/api/v1/orgs/:org/audit"
+
 	PathLivez               = "/livez"
 	PathReadyz              = "/readyz"
 	PathMetrics             = "/metrics"
@@ -57,6 +75,12 @@ const (
 	DefaultListLimit        = 20
 	MaxListLimit            = 100
 	DefaultLoginOrgPageSize = 20
+	// DefaultInvitationTTL mirrors organization.DefaultInvitationTTL: the value
+	// used when a create-invitation request omits expires_in_seconds.
+	DefaultInvitationTTL = organization.DefaultInvitationTTL
+	// MinInvitationTTLSeconds / MaxInvitationTTLSeconds bound the per-request TTL.
+	MinInvitationTTLSeconds = 60
+	MaxInvitationTTLSeconds = int64(organization.MaxInvitationTTL / time.Second)
 	// maxJSONBodyBytes is a defensive bound for direct engine calls (tests):
 	// the real listener additionally enforces server.WithMaxRequestBodySize.
 	maxJSONBodyBytes = 1 << 20
@@ -76,6 +100,10 @@ type IAMService interface {
 
 // OrganizationService is the subset of internal/organization.Service consumed
 // by the HTTP layer.
+//
+// Every T03 entry point enforces the ADR-0003 §2.3 permission matrix inside the
+// service (with the acting user's membership read in the same transaction): the
+// HTTP layer only maps the typed errors onto status codes.
 type OrganizationService interface {
 	EnsurePersonalOrganization(ctx context.Context, userID int64, displayName string) (organization.Organization, error)
 	CreateEnterprise(ctx context.Context, ownerUserID int64, name string) (organization.Organization, error)
@@ -84,6 +112,16 @@ type OrganizationService interface {
 	// AddMember backs the optional `organizations` field of
 	// POST /api/v1/admin/users.
 	AddMember(ctx context.Context, orgID, userID int64, role string) (organization.Membership, error)
+
+	// T03 organization surface.
+	ListMembers(ctx context.Context, actorUserID, orgID int64) ([]organization.Member, error)
+	CreateInvitation(ctx context.Context, actorUserID, orgID int64, email, role string, ttl time.Duration) (organization.Invitation, string, error)
+	AcceptInvitation(ctx context.Context, rawToken string, userID int64, userEmail string) (organization.Membership, error)
+	ListInvitations(ctx context.Context, actorUserID, orgID int64) ([]organization.Invitation, error)
+	ChangeMemberRole(ctx context.Context, actorUserID, orgID, targetUserID int64, role string) error
+	RemoveMember(ctx context.Context, actorUserID, orgID, targetUserID int64) error
+	TransferOwnership(ctx context.Context, actorUserID, orgID, targetUserID int64) error
+	AuthorizeOrgAction(ctx context.Context, actorUserID, orgID int64, action organization.Action) (organization.Membership, error)
 }
 
 // Options carries every console handler dependency and knob. Zero values fall
@@ -103,6 +141,9 @@ type Options struct {
 	RetryAfter time.Duration
 	// LoginOrgPageSize bounds the organizations embedded in login/me responses.
 	LoginOrgPageSize int
+	// InvitationTTL is the default invitation lifetime when a create request
+	// does not carry expires_in_seconds. <= 0 means DefaultInvitationTTL.
+	InvitationTTL time.Duration
 
 	// Ready reports whether the business listener can serve traffic (DB ping).
 	// nil means always ready.
@@ -112,6 +153,10 @@ type Options struct {
 	Logger *log.Logger
 	// Audit receives the admin-action audit trail. nil means NopAuditSink.
 	Audit AuditSink
+	// AuditStore backs GET /api/v1/orgs/{org}/audit. nil means the endpoint
+	// answers 500 internal_error: a missing audit store must not look like an
+	// organization without audit history.
+	AuditStore AuditStore
 }
 
 // server holds the resolved options. Keeping it separate from Options means the
@@ -123,9 +168,11 @@ type server struct {
 	sessionTTL       time.Duration
 	retryAfter       time.Duration
 	loginOrgPageSize int
+	invitationTTL    time.Duration
 	ready            func(ctx context.Context) error
 	logger           *log.Logger
 	audit            AuditSink
+	auditStore       AuditStore
 }
 
 func newServer(opts Options) (*server, error) {
@@ -142,9 +189,11 @@ func newServer(opts Options) (*server, error) {
 		sessionTTL:       opts.SessionTTL,
 		retryAfter:       opts.RetryAfter,
 		loginOrgPageSize: opts.LoginOrgPageSize,
+		invitationTTL:    opts.InvitationTTL,
 		ready:            opts.Ready,
 		logger:           opts.Logger,
 		audit:            opts.Audit,
+		auditStore:       opts.AuditStore,
 	}
 	if s.sessionTTL <= 0 {
 		s.sessionTTL = DefaultSessionTTL
@@ -155,11 +204,17 @@ func newServer(opts Options) (*server, error) {
 	if s.loginOrgPageSize <= 0 || s.loginOrgPageSize > MaxListLimit {
 		s.loginOrgPageSize = DefaultLoginOrgPageSize
 	}
+	if s.invitationTTL <= 0 {
+		s.invitationTTL = DefaultInvitationTTL
+	}
 	if s.logger == nil {
 		s.logger = log.Default()
 	}
 	if s.audit == nil {
 		s.audit = NopAuditSink{}
+	}
+	if s.auditStore == nil {
+		s.auditStore = unavailableAuditStore{}
 	}
 	return s, nil
 }
@@ -214,6 +269,18 @@ func Register(engine *route.Engine, opts Options) error {
 	engine.POST(PathOrganizations, s.withSession, s.withCSRF, s.createOrganization)
 	engine.POST(PathAdminUsers, s.withSession, s.withCSRF, s.withPlatformAdmin, s.createUser)
 	engine.POST(PathAdminUserStatus, s.withSession, s.withCSRF, s.withPlatformAdmin, s.setUserStatus)
+
+	// T03: organization members, invitations, ownership transfer and audit.
+	// Every route needs a session; every state change additionally needs CSRF,
+	// including accepting an invitation (it creates a membership).
+	engine.GET(PathOrgMembers, s.withSession, s.listOrgMembers)
+	engine.GET(PathOrgInvitations, s.withSession, s.listOrgInvitations)
+	engine.POST(PathOrgInvitations, s.withSession, s.withCSRF, s.createInvitation)
+	engine.POST(PathInvitationAccept, s.withSession, s.withCSRF, s.acceptInvitation)
+	engine.PATCH(PathOrgMember, s.withSession, s.withCSRF, s.changeMemberRole)
+	engine.DELETE(PathOrgMember, s.withSession, s.withCSRF, s.removeMember)
+	engine.POST(PathOrgOwnerTransfer, s.withSession, s.withCSRF, s.transferOwnership)
+	engine.GET(PathOrgAudit, s.withSession, s.listOrgAudit)
 	return nil
 }
 

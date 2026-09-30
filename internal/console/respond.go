@@ -120,6 +120,55 @@ func (s *server) writeOrganizationError(c *app.RequestContext, operation string,
 	}
 }
 
+// writeOrganizationRBACError maps the T03 organization/RBAC errors onto the
+// frozen HTTP semantics (ADR-0003 §2.3–§2.5):
+//
+//   - 404 not_found        — non-member, unknown organization, unknown member or
+//     invitation: existence is never disclosed;
+//   - 403 forbidden        — the caller is a member, but the role matrix (or the
+//     owner/admin grant rules) refuses the action;
+//   - 409 conflict         — the request is refused because of current state:
+//     last owner, invitation already used/revoked/expired;
+//   - 400 invalid_request  — malformed role/email/target values.
+//
+// The service layer is the only place that decides; this function only maps.
+func (s *server) writeOrganizationRBACError(c *app.RequestContext, operation string, err error) {
+	switch {
+	case errors.Is(err, organization.ErrNotFound), errors.Is(err, organization.ErrNotMember):
+		s.writeError(c, http.StatusNotFound, "", "organization not found")
+	case errors.Is(err, organization.ErrMemberNotFound):
+		s.writeError(c, http.StatusNotFound, "", "member not found")
+	case errors.Is(err, organization.ErrInvitationNotFound):
+		s.writeError(c, http.StatusNotFound, "", "invitation not found")
+	case errors.Is(err, organization.ErrForbidden):
+		s.writeError(c, http.StatusForbidden, "", "action is not permitted for your organization role")
+	case errors.Is(err, organization.ErrOwnerGrant):
+		s.writeError(c, http.StatusForbidden, "", "owner may only be granted through ownership transfer")
+	case errors.Is(err, organization.ErrPlatformRole):
+		s.writeError(c, http.StatusForbidden, "", "platform_admin is not an organization role")
+	case errors.Is(err, organization.ErrInvitationEmailMismatch):
+		s.writeError(c, http.StatusForbidden, "", "invitation was issued for a different email")
+	case errors.Is(err, organization.ErrLastOwner):
+		s.writeError(c, http.StatusConflict, "", "organization must keep at least one owner")
+	case errors.Is(err, organization.ErrTargetAlreadyOwner):
+		s.writeError(c, http.StatusConflict, "", "ownership transfer target is already an owner")
+	case errors.Is(err, organization.ErrInvitationUsed):
+		s.writeError(c, http.StatusConflict, "", "invitation was already accepted")
+	case errors.Is(err, organization.ErrInvitationRevoked):
+		s.writeError(c, http.StatusConflict, "", "invitation was revoked")
+	case errors.Is(err, organization.ErrInvitationExpired):
+		s.writeError(c, http.StatusConflict, "", "invitation has expired")
+	case errors.Is(err, organization.ErrTransferTarget):
+		s.writeError(c, http.StatusBadRequest, "", "ownership transfer target is invalid")
+	case errors.Is(err, organization.ErrRoleInvalid):
+		s.writeError(c, http.StatusBadRequest, "", "role must be one of owner, admin, member, billing_viewer")
+	case errors.Is(err, organization.ErrInvitationEmailInvalid):
+		s.writeError(c, http.StatusBadRequest, "", "email is invalid")
+	default:
+		s.writeInternal(c, operation, err)
+	}
+}
+
 // writeRateLimited answers a throttled login. Retry-After is the throttle
 // window: the limiter is per-minute, so the client knows when a retry can
 // succeed. It deliberately does not reveal which credential was wrong.

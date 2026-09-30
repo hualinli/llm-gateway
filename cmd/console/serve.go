@@ -51,7 +51,11 @@ func serve(opts serveOptions) error {
 		RetryAfter:    time.Minute,
 		Ready:         opts.ready,
 		Logger:        opts.logger,
-		Audit:         console.LogAuditSink{Logger: opts.logger},
+		// T03: mutations are audited into console_audit_events (PG sink) and the
+		// audit endpoint reads the same table. When no sink is wired the trail
+		// falls back to the T02 log sink and the read endpoint answers 500.
+		Audit:      opts.audit,
+		AuditStore: opts.audit,
 	}); err != nil {
 		return err
 	}

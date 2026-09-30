@@ -748,14 +748,19 @@ func TestRouteClassIsBounded(t *testing.T) {
 		RouteAuthLogin: true, RouteAuthLogout: true, RouteMe: true,
 		RouteOrganizationsList: true, RouteOrganizationsGet: true, RouteOrganizationsCreate: true,
 		RouteAdminUsersCreate: true, RouteAdminUsersSetStatus: true,
+		RouteOrgMembersList: true, RouteOrgMemberUpdate: true, RouteOrgMemberDelete: true,
+		RouteOrgInvitationsList: true, RouteOrgInvitationsNew: true, RouteInvitationsAccept: true,
+		RouteOrgOwnerTransfer: true, RouteOrgAuditList: true,
 		RouteHealth: true, RouteMetrics: true, RouteOther: true,
 	}
-	if len(known) != 11 {
+	if len(known) != 19 {
 		t.Fatalf("route vocabulary changed: %d members", len(known))
 	}
 	for _, path := range []string{PathLogin, PathLogout, PathMe, PathOrganizations, PathOrganization,
-		PathAdminUsers, PathAdminUserStatus, PathLivez, PathReadyz, PathMetrics, "", "/nope", "/api/v1/x/1/2/3"} {
-		for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodDelete} {
+		PathAdminUsers, PathAdminUserStatus, PathOrgMembers, PathOrgMember, PathOrgInvitations,
+		PathInvitationAccept, PathOrgOwnerTransfer, PathOrgAudit,
+		PathLivez, PathReadyz, PathMetrics, "", "/nope", "/api/v1/x/1/2/3"} {
+		for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodPatch, http.MethodDelete} {
 			if !known[RouteClass(method, path)] {
 				t.Fatalf("RouteClass(%s %q)=%q is outside the bounded vocabulary", method, path, RouteClass(method, path))
 			}
@@ -769,6 +774,20 @@ func TestRouteClassIsBounded(t *testing.T) {
 	}
 	if RouteClass(http.MethodGet, "/api/v1/organizations/12345") != RouteOther {
 		t.Fatal("a raw path must never become a label; only the matched route pattern may")
+	}
+	// Method-sensitive labels: the same pattern carries two operations, and the
+	// invitation token must never become part of a label.
+	if RouteClass(http.MethodPatch, PathOrgMember) != RouteOrgMemberUpdate {
+		t.Fatal("PATCH /orgs/:org/members/:user must be labelled org_member_update")
+	}
+	if RouteClass(http.MethodDelete, PathOrgMember) != RouteOrgMemberDelete {
+		t.Fatal("DELETE /orgs/:org/members/:user must be labelled org_member_delete")
+	}
+	if RouteClass(http.MethodPost, PathOrgInvitations) != RouteOrgInvitationsNew {
+		t.Fatal("POST /orgs/:org/invitations must be labelled org_invitations_create")
+	}
+	if RouteClass(http.MethodPost, "/api/v1/invitations/raw-secret-token/accept") != RouteOther {
+		t.Fatal("a raw invitation path must never become a label")
 	}
 }
 

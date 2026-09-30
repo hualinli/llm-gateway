@@ -24,6 +24,14 @@ const (
 	RouteOrganizationsCreate = "organizations_create"
 	RouteAdminUsersCreate    = "admin_users_create"
 	RouteAdminUsersSetStatus = "admin_users_status"
+	RouteOrgMembersList      = "org_members_list"
+	RouteOrgMemberUpdate     = "org_member_update"
+	RouteOrgMemberDelete     = "org_member_delete"
+	RouteOrgInvitationsList  = "org_invitations_list"
+	RouteOrgInvitationsNew   = "org_invitations_create"
+	RouteInvitationsAccept   = "invitations_accept"
+	RouteOrgOwnerTransfer    = "org_owner_transfer"
+	RouteOrgAuditList        = "org_audit_list"
 	RouteHealth              = "health"
 	RouteMetrics             = "metrics"
 	RouteOther               = "other"
@@ -55,6 +63,24 @@ func RouteClass(method, fullPath string) string {
 		return RouteAdminUsersCreate
 	case PathAdminUserStatus:
 		return RouteAdminUsersSetStatus
+	case PathOrgMembers:
+		return RouteOrgMembersList
+	case PathOrgMember:
+		if method == string(consts.MethodPatch) {
+			return RouteOrgMemberUpdate
+		}
+		return RouteOrgMemberDelete
+	case PathOrgInvitations:
+		if method == string(consts.MethodPost) {
+			return RouteOrgInvitationsNew
+		}
+		return RouteOrgInvitationsList
+	case PathInvitationAccept:
+		return RouteInvitationsAccept
+	case PathOrgOwnerTransfer:
+		return RouteOrgOwnerTransfer
+	case PathOrgAudit:
+		return RouteOrgAuditList
 	case PathLivez, PathReadyz:
 		return RouteHealth
 	case PathMetrics:
