@@ -14,6 +14,14 @@
 历史审查 HEAD 为 a38999c，当前代码可能已变化；以实际源码和验证为准。
 
 仅执行本次指定任务。先检查 git status/HEAD，保护其他人的改动。
+修改文件前必须创建或确认本任务专属分支，默认codex/<task-id>-<short-name>，例如codex/t02-console-iam。
+不得在main/master、当前计划分支codex/demo-ci-metering-recovery或其他任务分支上直接实现。
+仅当当前分支明确属于本任务且用户让你继续时复用；同名分支已存在先核对，不覆盖/重置。
+基线必须包含本计划以及已经通过验收的前置任务；记录base ref/SHA，不盲目从origin/main创建。
+计划未合并时，首任务从包含这些文档的计划提交创建；后续从包含前置结果的已审查基线创建。
+新任务开始先报告branch/base SHA/工作区状态；确认分支正确后才编辑。
+工作区有他人改动或多Agent并行时使用独立worktree和独立任务分支；仅建分支不等于目录隔离。
+不要自动stash/reset/clean、搬运他人改动、force-push或合并其他任务；有歧义保留现场并说明。
 复用已有 SSE、控制面快照、凭据、Demo 和 CI，不另造替代实现。
 用户/企业/Web管理API放独立cmd/console；Gateway不挂报表/用户管理/后台任务。
 Control仍是配置单writer；Console通过新增内部管理gRPC和可恢复发布任务提交策略，不直写control_config。
@@ -376,7 +384,7 @@ CI验证最终候选：Go回归/race/vet/build、隔离Redis/PG/migration、前�
 ## 1. 任务之间的交接模板
 
 ```text
-任务：Txx；起始/结束HEAD；工作区状态
+任务：Txx；任务分支；base ref/SHA；起始/结束HEAD；worktree路径；工作区状态
 已改变行为：
 保护的不变量：
 新增/调整API与migration：
