@@ -449,6 +449,56 @@ func TestTransferOwnershipPromotesTargetAndBumpsRevision(t *testing.T) {
 	}
 }
 
+// TestTransferOwnershipChecksActorBeforeTarget 回归 T03 黑盒验收发现的校验顺序
+// 缺陷：当 target == caller 时，调用者的成员关系与权限矩阵必须先判，然后才判
+// 目标。服务层错误码对应 HTTP 契约：非成员 → ErrNotFound（404，不泄露组织存在
+// 性）、plain admin → ErrForbidden（403，矩阵拒绝）、合法 owner → ErrTransferTarget
+// （400，目标确实非法）。修复前前两者都会被提前的自我转移检查吞成 400。
+func TestTransferOwnershipChecksActorBeforeTarget(t *testing.T) {
+	db, _ := isolatedDSN(t)
+	svc := organization.NewService(db)
+	ctx := context.Background()
+
+	owner := createUser(t, db, "owner@example.com")
+	admin := createUser(t, db, "admin@example.com")
+	outsider := createUser(t, db, "outsider@example.com")
+	org := seedEnterprise(t, db, svc, "Acme", []int64{owner.ID, admin.ID}, []string{"owner", "admin"})
+
+	before := orgRevisionOf(t, db, org.ID)
+
+	// 非成员把 target 指向自己：必须 404 语义，而不是 400——否则状态码差异会
+	// 泄露“这个组织存在”。
+	if err := svc.TransferOwnership(ctx, outsider.ID, org.ID, outsider.ID); !errors.Is(err, organization.ErrNotFound) {
+		t.Fatalf("non-member transfer to self = %v, want ErrNotFound", err)
+	}
+	// plain admin 把 target 指向自己：必须 403 语义（transfer_owner 只属于 owner）。
+	if err := svc.TransferOwnership(ctx, admin.ID, org.ID, admin.ID); !errors.Is(err, organization.ErrForbidden) {
+		t.Fatalf("admin transfer to self = %v, want ErrForbidden", err)
+	}
+	// 合法 owner 转移到自己：仍然是 400 语义（ErrTransferTarget）。
+	if err := svc.TransferOwnership(ctx, owner.ID, org.ID, owner.ID); !errors.Is(err, organization.ErrTransferTarget) {
+		t.Fatalf("owner transfer to self = %v, want ErrTransferTarget", err)
+	}
+
+	// 三次拒绝都不得改动任何角色，也不得推进 revision 或写发布记录：拒绝发生在
+	// mutate 回调里，事务整体回滚。
+	if role, status := membershipRole(t, db, org.ID, owner.ID); role != "owner" || status != "active" {
+		t.Fatalf("owner after refused transfers = %q/%q, want owner/active", role, status)
+	}
+	if role, status := membershipRole(t, db, org.ID, admin.ID); role != "admin" || status != "active" {
+		t.Fatalf("admin after refused transfers = %q/%q, want admin/active", role, status)
+	}
+	if got := activeOwnerCount(t, db, org.ID); got != 1 {
+		t.Fatalf("owners after refused transfers = %d, want 1", got)
+	}
+	if after := orgRevisionOf(t, db, org.ID); after != before {
+		t.Fatalf("revision after refused transfers = %d, want unchanged %d", after, before)
+	}
+	if _, err := svc.Membership(ctx, outsider.ID, org.ID); !errors.Is(err, organization.ErrNotFound) {
+		t.Fatalf("outsider membership after refused transfers = %v, want ErrNotFound", err)
+	}
+}
+
 // --- 邀请 ------------------------------------------------------------------
 
 func TestInvitationLifecycleIsSingleUseWithFixedEmailAndRole(t *testing.T) {
