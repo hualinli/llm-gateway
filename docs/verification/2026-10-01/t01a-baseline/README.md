@@ -7,6 +7,29 @@ worktree：`.worktrees/t01a`；run_id：`20260930T195748Z-0ffe1829`；Compose �
 
 > 本文只记录**本次真实执行**得到的数字。原始 JSON 在 gitignored 的 `data/benchmarks/isolated-devrun/` 下，本文件记录复现命令、中位数/区间、对账结果与 manifest（路径 + 字节数 + sha256 前缀）。
 
+## 0. 正式运行（干净工作区，固定 commit）
+
+上面第 5、6 行是本 runner 首次开发运行（dirty 工作区、HEAD `0ffe182`）。T01A 提交后又在**干净工作区**上跑了一次正式基线：
+
+| 项目 | 值 |
+|---|---|
+| HEAD | `c069666d73ef3d6509365f14c54056be821ffa02`（T01A 提交；`environment.json` 记录 `dirty=false`） |
+| run_id / 项目 | `20260930T201020Z-c069666d` / `llm-gw-iso-20260930t201020z-c069666d` |
+| 输出 | `data/benchmarks/t01a-baseline/`（57 个文件，含 `summary.json`、`environment.json`、`manifest.json`、`raw/`、`resources/`） |
+| 复现 | `export GOCACHE=$PWD/../../.gocache; python3 scripts/isolated-baseline.py --output data/benchmarks/t01a-baseline`（干净工作区，无需 `--allow-dirty`） |
+| 结果 | 6 个用例 × 3 轮全部有效（`all_valid=true`），`/reconcile` `ok=true`、`pending_messages=0` |
+
+| 用例 | 吞吐 req/s 中位数 [min..max] | TTFT p50 ms | TTFT p95 ms | 总时长 p50 ms | Gateway RSS 峰值 MiB | CPU 秒 |
+|---|---|---|---|---|---|---|
+| direct closed c=1 n=60 | 6.88 [6.87..6.91] | 22.93 | 29.03 | 144.88 | – | – |
+| direct closed c=4 n=120 | 27.75 [26.78..28.13] | 23.86 | 28.89 | 144.21 | – | – |
+| direct fixed c=8 n=120 rate=20 | 19.52 [19.52..19.56] | 22.20 | 25.30 | 138.89 | – | – |
+| gateway closed c=1 n=60 | 6.98 [6.86..7.00] | 23.18 | 30.05 | 142.79 | 22.3 | 0.23 |
+| gateway closed c=4 n=120 | 28.41 [27.84..28.77] | 23.70 | 31.23 | 140.62 | 24.2 | 0.30 |
+| gateway fixed c=8 n=120 rate=20 | 19.53 [19.53..19.55] | 23.03 | 25.38 | 137.31 | 24.2 | 0.39 |
+
+与首次 dirty 运行（第 5 节表）差异在噪声范围内。两条路径的差值小于本实验可分辨的波动，**不能宣称零开销**。有关有效性限制见文末；正式运行同样受“构建容器无法直连 proxy.golang.org，回退到生成的 GOPROXY 副本”这一环境限制（记录在 `data/benchmarks/t01a-baseline/environment.json` 的 `warnings` 与 `build_recipe`）。
+
 ## 1. 交付物：`scripts/isolated-baseline.py`
 
 现有 `scripts/benchmark-local.py` 使用**日常** Compose 项目（默认项目名来自 checkout 目录）和固定端口 8090/8091/18080/18081，会与正在运行的日常栈、demo-accept 或其它 agent 冲突，并且会改动日常 Demo 配置。新 runner 是独立 Python 3 脚本（仅标准库），做同样口径的**低负载对照**，但完全隔离：

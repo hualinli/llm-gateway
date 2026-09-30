@@ -1,0 +1,6 @@
+bash scripts/demo-accept.sh
+PASS run-1: primary SSE, backup failover, both down 502, ledger 0->2, reconciliation
+PASS run-2: primary SSE, backup failover, both down 502, ledger 2->4, reconciliation
+PASS run-3: primary SSE, backup failover, both down 502, ledger 4->6, reconciliation
+PASS all three runs on commit d15dcc225de590e2aeda6566f700efa746e0de06
+Evidence: /Users/lihualin/Projects/llm-gateway/.worktrees/t01a/data/verification/demo-d15dcc225de5-20260930T201634Z

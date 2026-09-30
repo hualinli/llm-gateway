@@ -24,10 +24,10 @@
 | 控制面 | 🟡 一致性基础完成 | Get/Watch、PG 版本、原子 patch、防回退、TLS/mTLS、管理认证和 Gateway applied/rejected 回报已有；聚合 active 语义和报告时效未完成 |
 | 凭据管理 | ✅ 第一版完成 | `/keys` Create/List/Revoke、admin/tenant-user 授权核心和 PG 审计已有；正式身份签发/轮换流程未完成 |
 | 可观测性 | 🟡 基础实现完成 | Prometheus 已抓 Gateway/Metering，基础 Dashboard 已有；告警和指标口径仍需完善 |
-| 测试 | 🟡 分层执行状态不同 | 155 个 `func Test` 声明（不等于本轮执行用例数）；2026-10-01 普通 `go build`/`go vet`/`go test ./... -count=1` 通过；race 与 Redis/PostgreSQL 集成基线由新路线 T01A 执行 |
-| Demo 与 CI | 🟡 已有编排、远端未确认 | `demo-up/config/smoke/down`、`scripts/demo-accept.sh` 三轮正常/切备/双故障/对账和 `.github/workflows/ci.yml` 已提交；**远端 CI 是否跑绿未知**；压测/实验环境尚未隔离 |
-| 性能证据 | 🟡 历史本机数据 | [2026-09-26 本机直连/网关基线与切备报告](docs/verification/2026-09-26/performance/README.md)是历史证据（闭环 `ec24990`、固定到达 `4459c83`）；容量拐点、慢客户端和生产资源上界未验证 |
-| 生产安全性 | 🟡 Compose 已收紧一部分 | Compose 强制 PG、管理认证、fail-closed 和活跃流上限；gRPC 仍为 insecure，诊断/计量查询端点（`/ledger/*`、`/reconcile`）无鉴权，直接运行二进制仍有宽松回退默认值 |
+| 测试 | 🟡 分层执行状态不同 | 155 个 `func Test` 声明（不等于执行用例数）；2026-10-01 `go build`/`go vet`/`go test ./...`/`go test -race ./...` 全部通过，`make integration-test`（隔离 Redis 7.4.11 + PG 16.15）通过；证据见 [T01A 运行基线](docs/verification/2026-10-01/t01a-prod-profiles/README.md) |
+| Demo 与 CI | 🟡 已有编排、远端未确认 | `demo-up/config/smoke/down`、`scripts/demo-accept.sh` 三轮正常/切备/双故障/对账和 `.github/workflows/ci.yml` 已提交；2026-10-01 `make demo-accept` 三轮 PASS；**远端 CI 是否跑绿未知**；实验环境已由 [隔离 runner](docs/verification/2026-10-01/t01a-baseline/README.md) 覆盖 |
+| 性能证据 | 🟡 历史本机数据 | [2026-09-26 本机直连/网关基线与切备报告](docs/verification/2026-09-26/performance/README.md)是历史证据（闭环 `ec24990`、固定到达 `4459c83`）；[T01A 隔离低负载对照](docs/verification/2026-10-01/t01a-baseline/README.md)在固定 commit 上复测了直连 vs Gateway；容量拐点、慢客户端和生产资源上界未验证 |
+| 生产安全性 | 🟡 生产 profile 已收紧，部署仍待验证 | `GATEWAY_PROFILE=prod` 缺任一必要配置即拒绝启动（禁 legacy raw-key/内存回退/匿名管理面/insecure 凭据解析，要求 mTLS、显式限流与活跃流上限、诊断 listener 分离）；诊断与业务 listener 可分离，`/ledger/*`、`/reconcile` 支持 `METERING_ADMIN_TOKEN` 鉴权；决策见 [ADR-0001](docs/decisions/ADR-0001-runtime-profiles.md)。**未验证**：真实 PG/Redis 的 prod 正例启动、诊断 listener 自身的认证、证书轮换 |
 | 多租户产品面 | ⬜ 未开始 | 仓库没有用户/组织/成员/会话/钱包/价格版本模型，也没有 `web/`；按新路线 T02–T08 实施 |
 
 当前更准确的简历定位是：
