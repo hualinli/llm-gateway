@@ -1250,6 +1250,26 @@ make console-run-tls  # 带 CONTROL_ADDR + CONTROL_TLS_* 启动 Console（本地
 
 组合语义（`internal/controlclient` 的错误映射）：同一 `operation_id` 但 payload 不同 → `409 conflict`；`expected_version` 不匹配 → `409 conflict`（消息里带 `current_version`）；Console 身份不被 Control 信任或连不上 → `502 upstream_unavailable`；完全没配置通道 → `503 unavailable`。用量接口的 `cost_cents` 是**演示累计消费**（固定演示价 1 token = 1 分），字段上标了 `cost_kind=demo_consumption`，不是余额、不是账单；`org_id IS NULL` 的历史事件不属于任何组织范围。
 
+### 5.8 Web 控制台（T04）
+
+`web/` 是 Console 的浏览器前端：React + TypeScript + Vite + Ant Design + React Router + TanStack Query，**同源**消费 `/api/v1`（Console，HttpOnly 会话 cookie + `X-CSRF-Token`）与 `/v1`（Gateway，用户自己的 API Key）。数据全部来自真实 API，契约里不存在的字段（余额、预占、价格）不显示，只在页面上标注契约缺口；`cost_cents` 一律写作 demo 累计消费。页面：登录、组织切换、概览、模型目录 + Playground、本人 Key（secret 只显示一次）、本人用量、成员/邀请、审计、平台管理。应用自身文档见 [docs/web/README.md](docs/web/README.md)。
+
+```bash
+# 后端：终端 1 控制面（:8092，需 PostgreSQL），终端 2 数据面（:8090）
+make console-run          # 首次先 make console-bootstrap（或 console-bootstrap-demo）
+make run
+
+# 前端：终端 3
+cd web
+npm ci                    # 依赖版本已精确锁定（package-lock.json 一并提交）
+npm run dev               # http://127.0.0.1:5173，代理 /api/v1 -> 127.0.0.1:8092、/v1 -> 127.0.0.1:8090
+npm run typecheck         # tsc --noEmit（strict）
+npm test                  # vitest run（API 客户端错误映射与 CSRF 行为）
+npm run build             # 产出 dist/，用 web/nginx.conf 托管（SSE 禁缓冲）
+```
+
+`web/nginx.conf` 是生产示例：静态资源 SPA 回退 + `/api/v1/` 反代 Console + `/v1/` 反代 Gateway（`proxy_buffering off`、`gzip off`、`chunked_transfer_encoding on`、`X-Accel-Buffering: no`、长读超时）。浏览器端 Playwright 覆盖由 T08 负责，不属于 T04。
+
 ---
 
 ## 6. 测试现状
