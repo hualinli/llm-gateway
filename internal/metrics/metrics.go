@@ -12,17 +12,35 @@ var (
 		Help: "Total gateway requests by tenant/model/status",
 	}, []string{"tenant", "model", "status"})
 
+	// 入口级指标：覆盖 auth/limiter 在 proxy 之前就拒绝的请求。
+	// 标签刻意收敛为两个有界维度，不加 tenant/key/request id：
+	// 那些取值上界不可控，会把 Prometheus 时序基数打爆。
+	EntryRequestsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "gateway_entry_requests_total",
+		Help: "Total requests that reached the entry middleware, including auth and limiter rejections that never reach the proxy. Labels are deliberately bounded: route and result_class only (no tenant, key or request id).",
+	}, []string{"route", "result_class"})
+
 	LatencySeconds = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "gateway_latency_seconds",
 		Help:    "End-to-end latency",
 		Buckets: prometheus.DefBuckets,
 	}, []string{"tenant", "model"})
 
+	// TTFTSeconds 是历史名字，测量口径与 FirstEventSeconds 完全相同（同一个观测点），
+	// 保留它只为不打断已有看板/告警；新旧序列在过渡期内同时存在，迁移完成后删旧。
 	TTFTSeconds = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "gateway_ttft_seconds",
-		Help:    "Time to first token",
+		Help:    "Legacy alias of gateway_first_event_seconds: the same measurement (first non-empty business SSE data event). It is NOT time to first content token.",
 		Buckets: []float64{.02, .05, .08, .1, .15, .2, .3, .5, .8, 1},
 	}, []string{"tenant", "model"})
+
+	// first_event = 第一个非空业务 SSE data 事件（role-only 或任意 data 事件都算），
+	// 不是首个内容 token；first_content 目前网关没有实现（见 docs/observability/request-metrics.md）。
+	FirstEventSeconds = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "gateway_first_event_seconds",
+		Help:    "Time from request admission to the first non-empty business SSE data event (role-only or any data event counts; this is NOT the first content token)",
+		Buckets: []float64{.02, .05, .08, .1, .15, .2, .3, .5, .8, 1},
+	}, []string{"model"})
 
 	ActiveStreams = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "gateway_active_streams",

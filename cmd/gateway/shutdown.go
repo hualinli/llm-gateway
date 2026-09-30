@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"llm-gateway/internal/httperr"
 )
 
 type requestDrain struct {
@@ -23,7 +25,7 @@ func (d *requestDrain) middleware(next http.Handler) http.Handler {
 		d.mu.Lock()
 		if d.stopped {
 			d.mu.Unlock()
-			http.Error(w, "gateway is draining", http.StatusServiceUnavailable)
+			httperr.WriteStatus(w, r, http.StatusServiceUnavailable, "gateway is draining")
 			return
 		}
 		d.active++

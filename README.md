@@ -1135,6 +1135,33 @@ docker compose down -v
 
 `-v` 会删除 Redis、PostgreSQL 和 Grafana 的本地卷，用于重新开始干净的 Demo；不要在需要保留数据时执行。
 
+### 5.6 运行模式与诊断端口
+
+三个进程启动时读取 `GATEWAY_PROFILE`（其次 `APP_ENV`）：`prod`/`production` 强制执行生产校验，`demo`（默认）和 `test` 只把未满足的生产检查打成 `WARNING`，其他非空值直接拒绝启动。逐服务的检查清单、诊断 listener 分离规则和明确不覆盖的范围见 [ADR-0001](docs/decisions/ADR-0001-runtime-profiles.md)。
+
+| 变量 | 默认 | 作用 |
+|---|---|---|
+| `GATEWAY_PROFILE` / `APP_ENV` | `demo` | 运行模式；Compose 已为 control/metering/gateway 显式设为 `demo` |
+| `GATEWAY_DIAGNOSTICS_ADDR` | 空 | 设置后 `/metrics` 与 `/debug/pprof/*` 只在该 listener 提供，业务端口不再暴露；生产必填且不得与 `GATEWAY_ADDR` 相同 |
+| `METERING_ADMIN_TOKEN` | 空 | 非空时 `/ledger/count`、`/ledger/balance`、`/reconcile` 要求 `Authorization: Bearer <token>`，否则 401；为空时保持开放并打印启动警告；生产必填且 ≥16 字符 |
+| `METERING_DIAGNOSTICS_ADDR` | 空 | 设置后 `/metrics` 与 `/debug/pprof/*` 迁移到该 listener；生产必填 |
+| `CONTROL_HTTP_ADDR` | `:50052` | Control HTTP 管理面地址 |
+| `CONTROL_DIAGNOSTICS_ADDR` | 空 | 设置后在独立 listener 上同样提供 `/healthz`；生产必填 |
+
+本地 mTLS 证书与集群主密钥由脚本生成，输出可直接 export 的变量（与 `internal/control/tls.go` 读取的名字一致），不打印私钥内容：
+
+```bash
+scripts/dev-certs.sh          # 默认写入 data/dev-certs/，已存在则不覆盖
+scripts/dev-certs.sh --force  # 整体重新生成
+eval "$(scripts/dev-certs.sh | grep '^export ')"
+```
+
+验证生产 fail-fast（缺配置会立即非零退出并列出全部失败项）：
+
+```bash
+GATEWAY_PROFILE=prod go run ./cmd/gateway
+```
+
 ---
 
 ## 6. 测试现状

@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+
+	"llm-gateway/internal/httperr"
 )
 
 // contextKey 用于在 r.Context() 中传递租户身份，proxy/metering 后续会用到
@@ -115,23 +117,23 @@ func Middleware(store Store) func(http.Handler) http.Handler {
 
 			auth := r.Header.Get("Authorization")
 			if auth == "" {
-				http.Error(w, "missing Authorization", http.StatusUnauthorized)
+				httperr.WriteStatus(w, r, http.StatusUnauthorized, "missing Authorization")
 				return
 			}
 			scheme, rawKey, ok := strings.Cut(auth, " ")
 			if !ok || !strings.EqualFold(scheme, "Bearer") {
-				http.Error(w, "invalid Authorization", http.StatusUnauthorized)
+				httperr.WriteStatus(w, r, http.StatusUnauthorized, "invalid Authorization")
 				return
 			}
 			rawKey = strings.TrimSpace(rawKey)
 			if rawKey == "" || strings.IndexAny(rawKey, " \t\r\n") >= 0 {
-				http.Error(w, "invalid Authorization", http.StatusUnauthorized)
+				httperr.WriteStatus(w, r, http.StatusUnauthorized, "invalid Authorization")
 				return
 			}
 
 			tenantID, ok := store.Validate(rawKey)
 			if !ok {
-				http.Error(w, "invalid api key", http.StatusUnauthorized)
+				httperr.WriteStatus(w, r, http.StatusUnauthorized, "invalid api key")
 				return
 			}
 

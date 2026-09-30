@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"llm-gateway/internal/httperr"
 	"llm-gateway/internal/provider"
 )
 
@@ -13,7 +14,7 @@ func NewModelsHandler(registry *provider.Registry) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			w.Header().Set("Allow", http.MethodGet)
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			httperr.WriteStatus(w, r, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
 		names := registry.Models()

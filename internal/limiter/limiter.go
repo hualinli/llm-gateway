@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"llm-gateway/internal/auth"
+	"llm-gateway/internal/httperr"
 	"llm-gateway/internal/metrics"
 
 	"github.com/redis/go-redis/v9"
@@ -188,7 +189,8 @@ func Middleware(l *Limiter) func(http.Handler) http.Handler {
 			wait := time.Since(start)
 			if unavailable {
 				w.Header().Set("Retry-After", "1")
-				http.Error(w, "rate limiter unavailable", http.StatusServiceUnavailable)
+				// 依赖故障（fail-closed）：状态码保持 503，code 取映射结果 unavailable。
+				httperr.WriteStatus(w, r, http.StatusServiceUnavailable, "rate limiter unavailable")
 				return
 			}
 			if !allowed {
@@ -197,7 +199,7 @@ func Middleware(l *Limiter) func(http.Handler) http.Handler {
 					metrics.LimiterQueueWait.WithLabelValues(tenant).Observe(wait.Seconds())
 				}
 				w.Header().Set("Retry-After", "1")
-				http.Error(w, "rate limited", http.StatusTooManyRequests)
+				httperr.WriteStatus(w, r, http.StatusTooManyRequests, "rate limited")
 				return
 			}
 			metrics.LimiterAllowed.WithLabelValues(tenant).Inc()

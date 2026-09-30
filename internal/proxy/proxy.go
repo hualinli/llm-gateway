@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"llm-gateway/internal/auth"
+	"llm-gateway/internal/httperr"
 	"llm-gateway/internal/metering"
 	"llm-gateway/internal/metrics"
 	"llm-gateway/internal/observability"
@@ -101,7 +102,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method != http.MethodPost {
 		metrics.RequestsTotal.WithLabelValues(tenant, "", "405").Inc()
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		httperr.WriteStatus(w, r, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	release, ok := h.admit()
@@ -109,7 +110,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		metrics.ActiveStreamsRejectedTotal.Inc()
 		metrics.RequestsTotal.WithLabelValues(tenant, "", "503").Inc()
 		w.Header().Set("Retry-After", "1")
-		http.Error(w, "too many active streams", http.StatusServiceUnavailable)
+		httperr.WriteStatus(w, r, http.StatusServiceUnavailable, "too many active streams")
 		return
 	}
 	defer release()
@@ -123,7 +124,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		metrics.RequestsTotal.WithLabelValues(tenant, "", "400").Inc()
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		httperr.WriteStatus(w, r, http.StatusBadRequest, err.Error())
 		return
 	}
 	traceID := observability.TraceID(r.Context())
@@ -140,7 +141,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	body, err := ioReadAll(r)
 	if err != nil {
 		metrics.RequestsTotal.WithLabelValues(tenant, "", "400").Inc()
-		http.Error(w, "read body: "+err.Error(), http.StatusBadRequest)
+		httperr.WriteStatus(w, r, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
 
@@ -149,24 +150,24 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// 不如明确拒掉。缺省/非法 JSON 均按非流处理（OpenAI 的 stream 默认也是 false）。
 	if !stream {
 		metrics.RequestsTotal.WithLabelValues(tenant, model, "400").Inc()
-		http.Error(w, `only streaming requests are supported (set "stream": true)`, http.StatusBadRequest)
+		httperr.WriteStatus(w, r, http.StatusBadRequest, `only streaming requests are supported (set "stream": true)`)
 		return
 	}
 	model, err = normalizeModel(model)
 	if err != nil {
 		metrics.RequestsTotal.WithLabelValues(tenant, "", "400").Inc()
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		httperr.WriteStatus(w, r, http.StatusBadRequest, err.Error())
 		return
 	}
 	if !h.registry.HasModel(model) {
 		metrics.RequestsTotal.WithLabelValues(tenant, model, "404").Inc()
-		http.Error(w, fmt.Sprintf("unknown model %q; see GET /v1/models", model), http.StatusNotFound)
+		httperr.WriteStatus(w, r, http.StatusNotFound, fmt.Sprintf("unknown model %q; see GET /v1/models", model))
 		return
 	}
 	providers := h.registry.ProvidersFor(model)
 	if len(providers) == 0 {
 		metrics.RequestsTotal.WithLabelValues(tenant, model, "502").Inc()
-		http.Error(w, "no provider available", http.StatusBadGateway)
+		httperr.WriteStatus(w, r, http.StatusBadGateway, "no provider available")
 		return
 	}
 	// A correlation ID may be supplied or reused by the client. Billing must
@@ -174,7 +175,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// deduplicated. Generate the identity before spending upstream resources.
 	eventID, err := observability.ResolveRequestID("")
 	if err != nil {
-		http.Error(w, "could not allocate execution identity", http.StatusInternalServerError)
+		httperr.WriteStatus(w, r, http.StatusInternalServerError, "could not allocate execution identity")
 		return
 	}
 	eventID = "evt_" + eventID
@@ -233,9 +234,17 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				}
 				h.producer.Enqueue(event)
 			}
-			// 指标：TTFT 取首字节到 start 的差，总延迟取 start 到 now
+			// 指标：TTFT/first_event 取首字节到 start 的差，总延迟取 start 到 now。
+			// 当前观测点是“下游第一次写入”，即 provider 转发的第一个 SSE event
+			// （provider 不会在数据事件前写注释/心跳，sse.Reader 也会丢掉纯注释块），
+			// 语义上等价于第一个非空业务 data 事件，但不区分 role-only 与 content
+			// delta；first_content 的精确测量留给 T01B 的完整事件解析。
+			// gateway_ttft_seconds 与 gateway_first_event_seconds 是同一测量的新旧
+			// 两个序列，过渡期同时记录。
 			if cw.written && !cw.firstByteAt.IsZero() {
-				metrics.TTFTSeconds.WithLabelValues(tenant, model).Observe(cw.firstByteAt.Sub(start).Seconds())
+				firstEvent := cw.firstByteAt.Sub(start).Seconds()
+				metrics.TTFTSeconds.WithLabelValues(tenant, model).Observe(firstEvent)
+				metrics.FirstEventSeconds.WithLabelValues(model).Observe(firstEvent)
 			}
 			metrics.LatencySeconds.WithLabelValues(tenant, model).Observe(time.Since(start).Seconds())
 			metrics.RequestsTotal.WithLabelValues(tenant, model, "200").Inc()
@@ -265,6 +274,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			// HTTP 200 is already committed on the wire, but this is not a
 			// complete successful stream. Keep the wire status metric and add
 			// a separate signal for availability and billing analysis.
+			// 这里刻意不补写统一错误信封：响应已提交，补写只会污染 SSE 流，
+			// 客户端字节数与 T01A 之前完全一致（断流即是信号）。
 			metrics.GatewayStreamIncompleteTotal.WithLabelValues(tenant, model).Inc()
 			metrics.RequestsTotal.WithLabelValues(tenant, model, "200").Inc()
 			return
@@ -277,11 +288,14 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// 可重试（5xx/429/超时/网络错误）：继续试下一个备
 	}
 
-	// 所有备均在首字节前失败或命中终态错误，且未写出过任何字节
+	// 所有备均在首字节前失败或命中终态错误，且未写出过任何字节。
+	// 只有这条“首字节前”的路径能安全改写状态码与响应体为统一错误信封。
 	status := clientStatus(lastErr)
 	metrics.LatencySeconds.WithLabelValues(tenant, model).Observe(time.Since(start).Seconds())
 	metrics.RequestsTotal.WithLabelValues(tenant, model, strconv.Itoa(status)).Inc()
-	http.Error(w, "upstream failed: "+lastErr.Error(), status)
+	// 上游错误详情（可能包含上游响应体/凭据域信息）只进日志，不写进客户端
+	// message：这里已按 provider 逐次记录了 request_id/provider/err。
+	httperr.WriteStatus(w, r, status, "upstream request failed")
 }
 
 // --- helpers ---

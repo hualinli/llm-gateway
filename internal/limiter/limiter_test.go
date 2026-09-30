@@ -2,6 +2,7 @@ package limiter
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"llm-gateway/internal/auth"
+	"llm-gateway/internal/httperr"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -52,6 +54,53 @@ func TestFailClosedWithoutRedisRejectsImmediately(t *testing.T) {
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
+	if code, _ := decodeErrorBody(t, rec.Body.Bytes()); code != httperr.CodeUnavailable {
+		t.Fatalf("code=%q, want %q (body=%s)", code, httperr.CodeUnavailable, rec.Body.String())
+	}
+}
+
+// 被限流的请求（429）同样返回统一 JSON 信封。
+func TestMiddlewareRateLimitedUsesJSONEnvelope(t *testing.T) {
+	l := New(nil, 10, 10, 0)
+	h := Middleware(l)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Fatal("downstream handler ran while rate limited")
+	}))
+	// 已取消的请求 context 让 limiter 直接判 limit（不消耗 Redis 令牌），
+	// 与生产上客户端中断时被计为限流的行为一致。
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	req = req.WithContext(context.WithValue(cancelled, auth.TenantKey, "tenant-a"))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("status=%d, want 429 (body=%s)", rec.Code, rec.Body.String())
+	}
+	if rec.Header().Get("Retry-After") != "1" {
+		t.Fatalf("Retry-After=%q, want 1", rec.Header().Get("Retry-After"))
+	}
+	code, message := decodeErrorBody(t, rec.Body.Bytes())
+	if code != httperr.CodeRateLimited {
+		t.Fatalf("code=%q, want %q (body=%s)", code, httperr.CodeRateLimited, rec.Body.String())
+	}
+	if message != "rate limited" {
+		t.Fatalf("message=%q, want %q", message, "rate limited")
+	}
+}
+
+func decodeErrorBody(t *testing.T, raw []byte) (code, message string) {
+	t.Helper()
+	var body struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(raw, &body); err != nil {
+		t.Fatalf("invalid JSON error body %s: %v", raw, err)
+	}
+	return body.Error.Code, body.Error.Message
 }
 
 func TestRedisLimiterEnforcesBurstAndRefills(t *testing.T) {
