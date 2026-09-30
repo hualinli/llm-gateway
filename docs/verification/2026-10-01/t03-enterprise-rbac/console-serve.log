@@ -1,0 +1,232 @@
+WARNING: sonic/ast only supports (go1.17~1.26 and amd64 CPU) or (go1.20~1.26 and arm64 CPU), but your environment is not suitable and will fallback to encoding/json
+2026/09/30 22:49:40 runtime profile=demo WARNING: demo mode, production checks are not enforced
+2026/09/30 22:49:40 WARNING: production check failed: CONSOLE_DIAGNOSTICS_ADDR: must be set to a listener address different from the business address "127.0.0.1:18092" so /metrics and /debug/pprof/* are not exposed on the API listener
+2026/09/30 22:49:40 WARNING: production check failed: CONSOLE_SECURE_COOKIES: must be true so the gw_session cookie is never sent over plaintext HTTP
+2026/09/30 22:49:40 WARNING: production check failed: CONTROL_TLS_CA_FILE: must be set so the Console verifies the Control server certificate over TLS
+2026/09/30 22:49:40 WARNING: production check failed: CONTROL_TLS_CLIENT_CERT_FILE/CONTROL_TLS_CLIENT_KEY_FILE: must both be set so the Console authenticates to Control with mTLS
+2026/09/30 22:49:40 WARNING: CONTROL_TLS_* is not set; the console -> control channel at 127.0.0.1:15051 is plaintext (local demo only)
+2026/09/30 22:49:40 console: control channel enabled addr=127.0.0.1:15051 console_service="console" tls=false
+2026/10/01 06:49:40.456337 engine.go:702: [Debug] HERTZ: Method=POST   absolutePath=/api/v1/auth/login        --> handlerName=llm-gateway/internal/console.(*server).login-fm (num=4 handlers)
+2026/10/01 06:49:40.456456 engine.go:702: [Debug] HERTZ: Method=GET    absolutePath=/livez                    --> handlerName=llm-gateway/internal/console.(*server).livez-fm (num=4 handlers)
+2026/10/01 06:49:40.456464 engine.go:702: [Debug] HERTZ: Method=GET    absolutePath=/readyz                   --> handlerName=llm-gateway/internal/console.(*server).readyz-fm (num=4 handlers)
+2026/10/01 06:49:40.456473 engine.go:702: [Debug] HERTZ: Method=GET    absolutePath=/api/v1/me                --> handlerName=llm-gateway/internal/console.(*server).me-fm (num=5 handlers)
+2026/10/01 06:49:40.456482 engine.go:702: [Debug] HERTZ: Method=GET    absolutePath=/api/v1/organizations     --> handlerName=llm-gateway/internal/console.(*server).listOrganizations-fm (num=5 handlers)
+2026/10/01 06:49:40.456490 engine.go:702: [Debug] HERTZ: Method=GET    absolutePath=/api/v1/organizations/:org --> handlerName=llm-gateway/internal/console.(*server).getOrganization-fm (num=5 handlers)
+2026/10/01 06:49:40.456498 engine.go:702: [Debug] HERTZ: Method=POST   absolutePath=/api/v1/auth/logout       --> handlerName=llm-gateway/internal/console.(*server).logout-fm (num=6 handlers)
+2026/10/01 06:49:40.456506 engine.go:702: [Debug] HERTZ: Method=POST   absolutePath=/api/v1/organizations     --> handlerName=llm-gateway/internal/console.(*server).createOrganization-fm (num=6 handlers)
+2026/10/01 06:49:40.456513 engine.go:702: [Debug] HERTZ: Method=POST   absolutePath=/api/v1/admin/users       --> handlerName=llm-gateway/internal/console.(*server).createUser-fm (num=7 handlers)
+2026/10/01 06:49:40.456521 engine.go:702: [Debug] HERTZ: Method=POST   absolutePath=/api/v1/admin/users/:user/status --> handlerName=llm-gateway/internal/console.(*server).setUserStatus-fm (num=7 handlers)
+2026/10/01 06:49:40.456534 engine.go:702: [Debug] HERTZ: Method=GET    absolutePath=/api/v1/orgs/:org/members --> handlerName=llm-gateway/internal/console.(*server).listOrgMembers-fm (num=5 handlers)
+2026/10/01 06:49:40.456542 engine.go:702: [Debug] HERTZ: Method=GET    absolutePath=/api/v1/orgs/:org/invitations --> handlerName=llm-gateway/internal/console.(*server).listOrgInvitations-fm (num=5 handlers)
+2026/10/01 06:49:40.456549 engine.go:702: [Debug] HERTZ: Method=POST   absolutePath=/api/v1/orgs/:org/invitations --> handlerName=llm-gateway/internal/console.(*server).createInvitation-fm (num=6 handlers)
+2026/10/01 06:49:40.456565 engine.go:702: [Debug] HERTZ: Method=POST   absolutePath=/api/v1/invitations/:token/accept --> handlerName=llm-gateway/internal/console.(*server).acceptInvitation-fm (num=6 handlers)
+2026/10/01 06:49:40.456573 engine.go:702: [Debug] HERTZ: Method=PATCH  absolutePath=/api/v1/orgs/:org/members/:user --> handlerName=llm-gateway/internal/console.(*server).changeMemberRole-fm (num=6 handlers)
+2026/10/01 06:49:40.456602 engine.go:702: [Debug] HERTZ: Method=DELETE absolutePath=/api/v1/orgs/:org/members/:user --> handlerName=llm-gateway/internal/console.(*server).removeMember-fm (num=6 handlers)
+2026/10/01 06:49:40.456608 engine.go:702: [Debug] HERTZ: Method=POST   absolutePath=/api/v1/orgs/:org/owner-transfer --> handlerName=llm-gateway/internal/console.(*server).transferOwnership-fm (num=6 handlers)
+2026/10/01 06:49:40.456614 engine.go:702: [Debug] HERTZ: Method=GET    absolutePath=/api/v1/orgs/:org/audit   --> handlerName=llm-gateway/internal/console.(*server).listOrgAudit-fm (num=5 handlers)
+2026/10/01 06:49:40.456621 engine.go:702: [Debug] HERTZ: Method=GET    absolutePath=/api/v1/orgs/:org/keys    --> handlerName=llm-gateway/internal/console.(*server).listOrgKeys-fm (num=5 handlers)
+2026/10/01 06:49:40.456626 engine.go:702: [Debug] HERTZ: Method=POST   absolutePath=/api/v1/orgs/:org/keys    --> handlerName=llm-gateway/internal/console.(*server).createOrgKey-fm (num=6 handlers)
+2026/10/01 06:49:40.456632 engine.go:702: [Debug] HERTZ: Method=POST   absolutePath=/api/v1/orgs/:org/keys/:key/revoke --> handlerName=llm-gateway/internal/console.(*server).revokeOrgKey-fm (num=6 handlers)
+2026/10/01 06:49:40.456638 engine.go:702: [Debug] HERTZ: Method=GET    absolutePath=/api/v1/orgs/:org/usage   --> handlerName=llm-gateway/internal/console.(*server).listOrgUsage-fm (num=5 handlers)
+2026/10/01 06:49:40.456708 engine.go:702: [Debug] HERTZ: Method=GET    absolutePath=/metrics                  --> handlerName=github.com/cloudwego/hertz/pkg/common/adaptor.HertzHandler.func1 (num=4 handlers)
+2026/09/30 22:49:40 console policy publication loop started (interval=15s)
+2026/09/30 22:49:40 console listening on 127.0.0.1:18092 (profile=demo session_ttl=12h0m0s secure_cookies=false)
+2026/10/01 06:49:40.456860 engine.go:416: [Info] HERTZ: Using network library=netpoll
+2026/10/01 06:49:40.456960 transport.go:152: [Info] HERTZ: HTTP server listening on address=127.0.0.1:18092
+2026/10/01 06:49:58.002307 engine.go:481: [Error] HERTZ: Error=error when reading request headers: malformed HTTP request. Buffer size=1, contents: "\n", remoteAddr=127.0.0.1:61695
+2026/10/01 06:50:22.288712 engine.go:481: [Error] HERTZ: Error=error when reading request headers: malformed HTTP request. Buffer size=1, contents: "\n", remoteAddr=127.0.0.1:62102
+2026/09/30 22:50:22 console request method=GET route=health status=200 class=ok duration_ms=0.01 bytes=3 request_id=f3bb81f2b161f703b873312247956645
+2026/09/30 22:50:28 console request method=POST route=auth_login status=200 class=ok duration_ms=170.60 bytes=396 request_id=t03-setup-01
+2026/09/30 22:50:29 console request method=POST route=admin_users_create status=201 class=ok duration_ms=169.38 bytes=161 request_id=t03-setup-02
+2026/09/30 22:50:29 console request method=POST route=admin_users_create status=201 class=ok duration_ms=166.45 bytes=161 request_id=t03-setup-03
+2026/09/30 22:50:29 console request method=POST route=admin_users_create status=201 class=ok duration_ms=166.04 bytes=162 request_id=t03-setup-04
+2026/09/30 22:50:29 console request method=POST route=admin_users_create status=201 class=ok duration_ms=166.59 bytes=162 request_id=t03-setup-05
+2026/09/30 22:50:29 console request method=POST route=admin_users_create status=201 class=ok duration_ms=167.00 bytes=161 request_id=t03-setup-06
+2026/09/30 22:50:29 console request method=POST route=admin_users_create status=201 class=ok duration_ms=165.64 bytes=161 request_id=t03-setup-07
+2026/09/30 22:50:30 console request method=POST route=admin_users_create status=201 class=ok duration_ms=165.76 bytes=162 request_id=t03-setup-08
+2026/09/30 22:50:30 console request method=POST route=admin_users_create status=201 class=ok duration_ms=165.69 bytes=162 request_id=t03-setup-09
+2026/09/30 22:50:30 console request method=POST route=admin_users_create status=201 class=ok duration_ms=165.50 bytes=164 request_id=t03-setup-10
+2026/09/30 22:50:30 console request method=POST route=auth_login status=200 class=ok duration_ms=166.86 bytes=423 request_id=t03-setup-11
+2026/09/30 22:50:30 console request method=POST route=auth_login status=200 class=ok duration_ms=168.72 bytes=428 request_id=t03-setup-12
+2026/09/30 22:50:31 console request method=POST route=auth_login status=200 class=ok duration_ms=168.19 bytes=425 request_id=t03-setup-13
+2026/09/30 22:50:31 console request method=POST route=auth_login status=200 class=ok duration_ms=166.86 bytes=423 request_id=t03-setup-14
+2026/09/30 22:50:31 console request method=POST route=auth_login status=200 class=ok duration_ms=167.06 bytes=425 request_id=t03-setup-15
+2026/09/30 22:50:31 console request method=POST route=auth_login status=200 class=ok duration_ms=185.56 bytes=423 request_id=t03-setup-16
+2026/09/30 22:50:31 console request method=POST route=auth_login status=200 class=ok duration_ms=167.83 bytes=425 request_id=t03-setup-17
+2026/09/30 22:50:31 console request method=POST route=auth_login status=200 class=ok duration_ms=167.70 bytes=424 request_id=t03-setup-18
+2026/09/30 22:50:32 console request method=POST route=auth_login status=200 class=ok duration_ms=168.00 bytes=426 request_id=t03-setup-19
+2026/09/30 22:50:32 console request method=POST route=organizations_create status=201 class=ok duration_ms=2.23 bytes=166 request_id=t03-setup-20
+2026/09/30 22:50:32 console request method=POST route=organizations_create status=201 class=ok duration_ms=2.09 bytes=166 request_id=t03-setup-21
+2026/09/30 22:50:32 console request method=POST route=org_invitations_create status=201 class=ok duration_ms=2.93 bytes=282 request_id=t03-setup-22
+2026/09/30 22:50:32 console request method=POST route=invitations_accept status=200 class=ok duration_ms=3.89 bytes=107 request_id=t03-setup-23
+2026/09/30 22:50:32 console request method=POST route=org_invitations_create status=201 class=ok duration_ms=2.35 bytes=284 request_id=t03-setup-24
+2026/09/30 22:50:32 console request method=POST route=invitations_accept status=200 class=ok duration_ms=3.35 bytes=108 request_id=t03-setup-25
+2026/09/30 22:50:32 console request method=POST route=org_invitations_create status=201 class=ok duration_ms=2.22 bytes=292 request_id=t03-setup-26
+2026/09/30 22:50:32 console request method=POST route=invitations_accept status=200 class=ok duration_ms=3.85 bytes=116 request_id=t03-setup-27
+2026/09/30 22:50:32 console request method=POST route=org_invitations_create status=201 class=ok duration_ms=2.33 bytes=282 request_id=t03-setup-28
+2026/09/30 22:50:32 console request method=POST route=invitations_accept status=200 class=ok duration_ms=3.04 bytes=107 request_id=t03-setup-29
+2026/09/30 22:50:32 console request method=POST route=org_invitations_create status=201 class=ok duration_ms=2.65 bytes=284 request_id=t03-setup-30
+2026/09/30 22:50:32 console request method=POST route=invitations_accept status=200 class=ok duration_ms=2.99 bytes=108 request_id=t03-setup-31
+2026/09/30 22:50:32 console request method=POST route=org_invitations_create status=201 class=ok duration_ms=2.78 bytes=292 request_id=t03-setup-32
+2026/09/30 22:50:32 console request method=POST route=invitations_accept status=200 class=ok duration_ms=3.44 bytes=116 request_id=t03-setup-33
+2026/09/30 22:50:32 console request method=GET route=me status=200 class=ok duration_ms=1.01 bytes=590 request_id=t03-setup-34
+2026/09/30 22:50:32 console request method=GET route=me status=200 class=ok duration_ms=0.95 bytes=428 request_id=t03-setup-35
+2026/09/30 22:50:32 console request method=GET route=me status=200 class=ok duration_ms=0.93 bytes=593 request_id=t03-setup-36
+2026/09/30 22:50:32 console request method=GET route=me status=200 class=ok duration_ms=0.88 bytes=590 request_id=t03-setup-37
+2026/09/30 22:50:32 console request method=GET route=me status=200 class=ok duration_ms=0.93 bytes=601 request_id=t03-setup-38
+2026/09/30 22:50:32 console request method=GET route=me status=200 class=ok duration_ms=1.08 bytes=590 request_id=t03-setup-39
+2026/09/30 22:50:32 console request method=GET route=me status=200 class=ok duration_ms=0.99 bytes=593 request_id=t03-setup-40
+2026/09/30 22:50:32 console request method=GET route=me status=200 class=ok duration_ms=0.92 bytes=591 request_id=t03-setup-41
+2026/09/30 22:50:32 console request method=GET route=me status=200 class=ok duration_ms=0.95 bytes=602 request_id=t03-setup-42
+2026/09/30 22:50:32 console request method=GET route=org_members_list status=200 class=ok duration_ms=1.82 bytes=534 request_id=t03-check01-01
+2026/09/30 22:50:32 console request method=GET route=org_members_list status=200 class=ok duration_ms=1.62 bytes=155 request_id=t03-check01-02
+2026/09/30 22:50:32 console request method=GET route=org_members_list status=200 class=ok duration_ms=1.56 bytes=534 request_id=t03-check01-03
+2026/09/30 22:50:32 console request method=GET route=org_members_list status=200 class=ok duration_ms=2.68 bytes=534 request_id=t03-check01-04
+2026/09/30 22:50:32 console request method=GET route=org_members_list status=200 class=ok duration_ms=1.31 bytes=155 request_id=t03-check01-05
+2026/09/30 22:50:32 console request method=GET route=org_members_list status=200 class=ok duration_ms=1.29 bytes=534 request_id=t03-check01-06
+2026/09/30 22:50:32 console request method=GET route=me status=200 class=ok duration_ms=0.86 bytes=590 request_id=t03-check01-07
+2026/09/30 22:50:32 controlclient method=ListApiKeys operation_id=list-keys-tMLaOeSJwT02as7l6oRxkQ attempt=1 code=OK duration=5ms
+2026/09/30 22:50:32 console request method=GET route=other status=200 class=ok duration_ms=6.55 bytes=48 request_id=t03-check02-01
+2026/09/30 22:50:32 console request method=GET route=org_members_list status=404 class=not_found duration_ms=1.32 bytes=95 request_id=t03-check02-02
+2026/09/30 22:50:32 console request method=GET route=org_invitations_list status=404 class=not_found duration_ms=0.97 bytes=95 request_id=t03-check02-03
+2026/09/30 22:50:32 console request method=GET route=other status=404 class=not_found duration_ms=0.97 bytes=95 request_id=t03-check02-04
+2026/09/30 22:50:32 console request method=GET route=org_audit_list status=404 class=not_found duration_ms=1.17 bytes=95 request_id=t03-check02-05
+2026/09/30 22:50:32 console request method=GET route=other status=404 class=not_found duration_ms=1.07 bytes=95 request_id=t03-check02-06
+2026/09/30 22:50:32 console request method=GET route=org_members_list status=404 class=not_found duration_ms=0.84 bytes=95 request_id=t03-check02-07
+2026/09/30 22:50:32 console request method=GET route=org_invitations_list status=404 class=not_found duration_ms=1.55 bytes=95 request_id=t03-check02-08
+2026/09/30 22:50:32 console request method=GET route=org_members_list status=404 class=not_found duration_ms=1.18 bytes=95 request_id=t03-check02-09
+2026/09/30 22:50:32 console request method=GET route=org_members_list status=404 class=not_found duration_ms=1.07 bytes=95 request_id=t03-check02-10
+2026/09/30 22:50:32 controlclient method=CreateApiKey operation_id=t03-20260930T225028Z-e3c5-b-owner-key attempt=1 code=OK duration=4ms
+2026/09/30 22:50:32 console request method=POST route=other status=201 class=ok duration_ms=5.64 bytes=565 request_id=t03-check03-01
+2026/09/30 22:50:32 console request method=PATCH route=org_member_update status=404 class=not_found duration_ms=2.45 bytes=95 request_id=t03-check03-02
+2026/09/30 22:50:32 console request method=DELETE route=org_member_delete status=404 class=not_found duration_ms=2.28 bytes=95 request_id=t03-check03-03
+2026/09/30 22:50:32 console request method=POST route=org_invitations_create status=404 class=not_found duration_ms=1.86 bytes=95 request_id=t03-check03-04
+2026/09/30 22:50:32 console request method=POST route=org_owner_transfer status=404 class=not_found duration_ms=2.42 bytes=95 request_id=t03-check03-05
+2026/09/30 22:50:32 console request method=POST route=other status=404 class=not_found duration_ms=1.56 bytes=95 request_id=t03-check03-06
+2026/09/30 22:50:32 console request method=POST route=other status=404 class=not_found duration_ms=1.50 bytes=95 request_id=t03-check03-07
+2026/09/30 22:50:32 console request method=POST route=org_owner_transfer status=400 class=invalid_request duration_ms=1.32 bytes=115 request_id=t03-check03-08
+2026/09/30 22:50:32 console request method=GET route=other status=404 class=not_found duration_ms=1.05 bytes=95 request_id=t03-check03-09
+2026/09/30 22:50:32 console request method=GET route=org_members_list status=200 class=ok duration_ms=1.34 bytes=534 request_id=t03-check03-10
+2026/09/30 22:50:32 controlclient method=ListApiKeys operation_id=list-keys-sSFDa1GFmbs4POcuudyWCw attempt=1 code=OK duration=1ms
+2026/09/30 22:50:32 console request method=GET route=other status=200 class=ok duration_ms=1.94 bytes=335 request_id=t03-check03-11
+2026/09/30 22:50:32 console request method=POST route=org_invitations_create status=403 class=forbidden duration_ms=2.22 bytes=123 request_id=t03-check04-01
+2026/09/30 22:50:32 console request method=PATCH route=org_member_update status=403 class=forbidden duration_ms=2.10 bytes=123 request_id=t03-check04-02
+2026/09/30 22:50:32 console request method=DELETE route=org_member_delete status=403 class=forbidden duration_ms=2.31 bytes=123 request_id=t03-check04-03
+2026/09/30 22:50:32 console request method=GET route=org_audit_list status=403 class=forbidden duration_ms=1.01 bytes=123 request_id=t03-check04-04
+2026/09/30 22:50:32 console request method=GET route=org_invitations_list status=403 class=forbidden duration_ms=1.09 bytes=123 request_id=t03-check04-05
+2026/09/30 22:50:32 console request method=POST route=org_invitations_create status=403 class=forbidden duration_ms=1.80 bytes=123 request_id=t03-check04-06
+2026/09/30 22:50:32 console request method=PATCH route=org_member_update status=403 class=forbidden duration_ms=2.38 bytes=123 request_id=t03-check04-07
+2026/09/30 22:50:32 console request method=GET route=org_audit_list status=403 class=forbidden duration_ms=0.93 bytes=123 request_id=t03-check04-08
+2026/09/30 22:50:32 console request method=POST route=org_invitations_create status=403 class=forbidden duration_ms=1.97 bytes=123 request_id=t03-check04-09
+2026/09/30 22:50:32 console request method=POST route=org_invitations_create status=403 class=forbidden duration_ms=2.12 bytes=125 request_id=t03-check04-10
+2026/09/30 22:50:32 console request method=POST route=org_invitations_create status=403 class=forbidden duration_ms=1.32 bytes=115 request_id=t03-check04-11
+2026/09/30 22:50:33 console request method=PATCH route=org_member_update status=403 class=forbidden duration_ms=1.35 bytes=115 request_id=t03-check04-12
+2026/09/30 22:50:33 console request method=PATCH route=org_member_update status=400 class=invalid_request duration_ms=1.56 bytes=135 request_id=t03-check04-13
+2026/09/30 22:50:33 console request method=POST route=org_invitations_create status=400 class=invalid_request duration_ms=1.25 bytes=135 request_id=t03-check04-14
+2026/09/30 22:50:33 console request method=POST route=org_invitations_create status=400 class=invalid_request duration_ms=1.01 bytes=139 request_id=t03-check04-15
+2026/09/30 22:50:33 console request method=GET route=other status=403 class=forbidden duration_ms=0.91 bytes=110 request_id=t03-check04-16
+2026/09/30 22:50:33 console request method=POST route=org_invitations_create status=201 class=ok duration_ms=3.05 bytes=281 request_id=t03-check04-17
+2026/09/30 22:50:33 console request method=GET route=other status=403 class=forbidden duration_ms=0.82 bytes=123 request_id=t03-check04-18
+2026/09/30 22:50:33 console request method=POST route=other status=403 class=forbidden duration_ms=1.51 bytes=123 request_id=t03-check04-19
+2026/09/30 22:50:33 console request method=GET route=other status=403 class=forbidden duration_ms=0.94 bytes=123 request_id=t03-check04-20
+2026/09/30 22:50:33 console request method=PATCH route=org_member_update status=403 class=forbidden duration_ms=1.70 bytes=123 request_id=t03-check05-01
+2026/09/30 22:50:33 console request method=DELETE route=org_member_delete status=403 class=forbidden duration_ms=1.85 bytes=123 request_id=t03-check05-02
+2026/09/30 22:50:33 console request method=PATCH route=org_member_update status=403 class=forbidden duration_ms=1.99 bytes=125 request_id=t03-check05-03
+2026/09/30 22:50:33 console request method=POST route=org_owner_transfer status=403 class=forbidden duration_ms=1.91 bytes=123 request_id=t03-check05-04
+2026/09/30 22:50:33 console request method=DELETE route=org_member_delete status=409 class=invalid_request duration_ms=2.45 bytes=113 request_id=t03-check05-05
+2026/09/30 22:50:33 console request method=PATCH route=org_member_update status=409 class=invalid_request duration_ms=2.69 bytes=113 request_id=t03-check05-06
+2026/09/30 22:50:33 console request method=POST route=org_owner_transfer status=400 class=invalid_request duration_ms=1.08 bytes=115 request_id=t03-check05-07
+2026/09/30 22:50:33 console request method=GET route=org_members_list status=200 class=ok duration_ms=1.45 bytes=534 request_id=t03-check05-08
+2026/09/30 22:50:33 console request method=DELETE route=org_member_delete status=409 class=invalid_request duration_ms=3.22 bytes=113 request_id=t03-check05-09
+2026/09/30 22:50:33 console request method=POST route=org_invitations_create status=201 class=ok duration_ms=2.32 bytes=285 request_id=t03-check06-01
+2026/09/30 22:50:33 console request method=GET route=org_invitations_list status=200 class=ok duration_ms=1.79 bytes=1171 request_id=t03-check06-02
+2026/09/30 22:50:33 console request method=POST route=invitations_accept status=403 class=forbidden duration_ms=1.95 bytes=116 request_id=t03-check06-03
+2026/09/30 22:50:33 console request method=POST route=invitations_accept status=200 class=ok duration_ms=3.04 bytes=109 request_id=t03-check06-04
+2026/09/30 22:50:33 console request method=POST route=invitations_accept status=409 class=invalid_request duration_ms=2.00 bytes=103 request_id=t03-check06-05
+2026/09/30 22:50:33 console request method=POST route=invitations_accept status=404 class=not_found duration_ms=2.38 bytes=93 request_id=t03-check06-06
+2026/09/30 22:50:33 console request method=POST route=org_invitations_create status=400 class=invalid_request duration_ms=1.02 bytes=139 request_id=t03-check06-07
+2026/09/30 22:50:33 console request method=GET route=org_members_list status=200 class=ok duration_ms=1.11 bytes=661 request_id=t03-check06-08
+2026/09/30 22:50:33 controlclient method=CreateApiKey operation_id=t03-20260930T225028Z-e3c5-member-own attempt=1 code=OK duration=2ms
+2026/09/30 22:50:33 console request method=POST route=other status=201 class=ok duration_ms=3.42 bytes=565 request_id=t03-check07-01
+2026/09/30 22:50:33 controlclient method=CreateApiKey operation_id=t03-20260930T225028Z-e3c5-member-own attempt=1 code=OK duration=1ms
+2026/09/30 22:50:33 console request method=POST route=other status=201 class=ok duration_ms=2.50 bytes=567 request_id=t03-check07-02
+2026/09/30 22:50:33 controlclient method=CreateApiKey operation_id=t03-20260930T225028Z-e3c5-member-own attempt=1 code=AlreadyExists duration=1ms
+2026/09/30 22:50:33 console request method=POST route=other status=409 class=invalid_request duration_ms=2.66 bytes=126 request_id=t03-check07-03
+2026/09/30 22:50:33 controlclient method=GetOperation operation_id=t03-20260930T225028Z-e3c5-member-own attempt=1 code=OK duration=1ms
+2026/09/30 22:50:33 console request method=GET route=other status=200 class=ok duration_ms=2.66 bytes=334 request_id=t03-check07-04
+2026/09/30 22:50:33 console request method=POST route=other status=403 class=forbidden duration_ms=1.54 bytes=123 request_id=t03-check07-05
+2026/09/30 22:50:33 controlclient method=CreateApiKey operation_id=t03-20260930T225028Z-e3c5-admin-for-viewer attempt=1 code=OK duration=2ms
+2026/09/30 22:50:33 console request method=POST route=other status=201 class=ok duration_ms=3.97 bytes=565 request_id=t03-check07-06
+2026/09/30 22:50:33 controlclient method=ListApiKeys operation_id=list-keys-yqprohFz54jKYdFJpSu4MA attempt=1 code=OK duration=1ms
+2026/09/30 22:50:33 console request method=POST route=other status=404 class=not_found duration_ms=2.39 bytes=90 request_id=t03-check07-07
+2026/09/30 22:50:33 controlclient method=ListApiKeys operation_id=list-keys--w_IZZmDkJZK8WCACSyBKQ attempt=1 code=OK duration=1ms
+2026/09/30 22:50:33 console request method=GET route=other status=200 class=ok duration_ms=1.82 bytes=623 request_id=t03-check07-08
+2026/09/30 22:50:33 controlclient method=ListApiKeys operation_id=list-keys-y_SwuZsvObKPWY9UVv3slA attempt=1 code=OK duration=1ms
+2026/09/30 22:50:33 controlclient method=RevokeApiKey operation_id=key-revoke-KndeSQUZ4sOuda--OGaDVw attempt=1 code=OK duration=2ms
+2026/09/30 22:50:33 console request method=POST route=other status=200 class=ok duration_ms=4.96 bytes=355 request_id=t03-check07-09
+2026/09/30 22:50:33 controlclient method=ListApiKeys operation_id=list-keys-zVvugwMoT8F9BiLCReJqNw attempt=1 code=OK duration=1ms
+2026/09/30 22:50:33 controlclient method=RevokeApiKey operation_id=key-revoke-yasmsVB_BqLS-EDyBojCXA attempt=1 code=OK duration=2ms
+2026/09/30 22:50:33 console request method=POST route=other status=200 class=ok duration_ms=6.42 bytes=355 request_id=t03-check07-10
+2026/09/30 22:50:33 console request method=GET route=other status=403 class=forbidden duration_ms=0.98 bytes=123 request_id=t03-check07-11
+2026/09/30 22:50:33 console request method=POST route=other status=403 class=forbidden duration_ms=1.62 bytes=123 request_id=t03-check07-12
+2026/09/30 22:50:33 controlclient method=ListApiKeys operation_id=list-keys-WeBGTbNvaz82b3946I-UKA attempt=1 code=OK duration=1ms
+2026/09/30 22:50:33 console request method=GET route=other status=200 class=ok duration_ms=1.63 bytes=354 request_id=t03-check07-13
+2026/09/30 22:50:33 controlclient method=ListApiKeys operation_id=list-keys-HPor7dEbeklkaqTFv_TYhA attempt=1 code=OK duration=1ms
+2026/09/30 22:50:33 console request method=GET route=other status=200 class=ok duration_ms=1.58 bytes=642 request_id=t03-check07-14
+2026/09/30 22:50:33 controlclient method=CreateApiKey operation_id=t03-20260930T225028Z-e3c5-gateway-allowed attempt=1 code=OK duration=2ms
+2026/09/30 22:50:33 console request method=POST route=other status=201 class=ok duration_ms=3.89 bytes=565 request_id=t03-check08-02
+2026/09/30 22:50:33 controlclient method=ListApiKeys operation_id=list-keys-FB0f4eUZjJq13YF6zMB_Yg attempt=1 code=OK duration=1ms
+2026/09/30 22:50:33 controlclient method=RevokeApiKey operation_id=key-revoke-uxUJo3IVjgwNuXksLlYlug attempt=1 code=OK duration=2ms
+2026/09/30 22:50:33 console request method=POST route=other status=200 class=ok duration_ms=5.52 bytes=355 request_id=t03-check08-04
+2026/09/30 22:50:33 controlclient method=CreateApiKey operation_id=t03-20260930T225028Z-e3c5-gateway-viewer attempt=1 code=OK duration=2ms
+2026/09/30 22:50:33 console request method=POST route=other status=201 class=ok duration_ms=4.24 bytes=565 request_id=t03-check08-06
+2026/09/30 22:50:33 controlclient method=CreateApiKey operation_id=t03-20260930T225028Z-e3c5-gateway-admin attempt=1 code=OK duration=3ms
+2026/09/30 22:50:33 console request method=POST route=other status=201 class=ok duration_ms=5.32 bytes=565 request_id=t03-check08-08
+2026/09/30 22:50:33 console request method=GET route=other status=200 class=ok duration_ms=3.04 bytes=399 request_id=t03-check08-10
+2026/09/30 22:50:35 console request method=GET route=other status=200 class=ok duration_ms=2.22 bytes=793 request_id=t03-check08-11
+2026/09/30 22:50:35 console request method=GET route=other status=200 class=ok duration_ms=1.58 bytes=793 request_id=t03-check09-01
+2026/09/30 22:50:38 console request method=GET route=other status=200 class=ok duration_ms=2.05 bytes=793 request_id=t03-check09-02
+2026/09/30 22:50:40 console request method=GET route=other status=200 class=ok duration_ms=2.10 bytes=793 request_id=t03-check09-03
+2026/09/30 22:50:40 controlclient method=ApplyOrgPolicy operation_id=policy:12:5:org: attempt=1 code=OK duration=2ms
+2026/09/30 22:50:40 console policy publication: org=12 revision=5 operation_id=policy:12:5:org: version=10 replayed=false
+2026/09/30 22:50:40 controlclient method=ApplyOrgPolicy operation_id=policy:13:4:org: attempt=1 code=OK duration=2ms
+2026/09/30 22:50:40 console policy publication: org=13 revision=4 operation_id=policy:13:4:org: version=11 replayed=false
+2026/09/30 22:50:42 console request method=GET route=other status=200 class=ok duration_ms=2.39 bytes=793 request_id=t03-check09-04
+2026/09/30 22:50:44 console request method=GET route=other status=200 class=ok duration_ms=2.02 bytes=793 request_id=t03-check09-05
+2026/09/30 22:50:46 console request method=GET route=other status=200 class=ok duration_ms=1.96 bytes=793 request_id=t03-check09-06
+2026/09/30 22:50:48 console request method=GET route=other status=200 class=ok duration_ms=2.65 bytes=793 request_id=t03-check09-07
+2026/09/30 22:50:51 console request method=GET route=other status=200 class=ok duration_ms=2.51 bytes=793 request_id=t03-check09-08
+2026/09/30 22:50:53 console request method=GET route=other status=200 class=ok duration_ms=1.84 bytes=793 request_id=t03-check09-09
+2026/09/30 22:50:55 console request method=GET route=other status=200 class=ok duration_ms=2.11 bytes=793 request_id=t03-check09-10
+2026/09/30 22:50:57 console request method=GET route=other status=200 class=ok duration_ms=1.71 bytes=793 request_id=t03-check09-11
+2026/09/30 22:50:57 console request method=GET route=other status=200 class=ok duration_ms=1.06 bytes=1194 request_id=t03-check09-12
+2026/09/30 22:50:57 console request method=GET route=other status=200 class=ok duration_ms=1.31 bytes=793 request_id=t03-check09-13
+2026/09/30 22:50:57 console request method=GET route=other status=403 class=forbidden duration_ms=0.72 bytes=110 request_id=t03-check09-14
+2026/09/30 22:50:57 console request method=GET route=other status=200 class=ok duration_ms=1.21 bytes=1194 request_id=t03-check09-15
+2026/09/30 22:50:57 console request method=GET route=other status=200 class=ok duration_ms=1.67 bytes=1194 request_id=t03-check09-16
+2026/09/30 22:50:57 console request method=GET route=other status=200 class=ok duration_ms=1.54 bytes=1194 request_id=t03-check09-17
+2026/09/30 22:50:57 console request method=GET route=other status=200 class=ok duration_ms=1.14 bytes=407 request_id=t03-check09-18
+2026/09/30 22:50:57 console request method=GET route=org_audit_list status=200 class=ok duration_ms=1.64 bytes=15247 request_id=t03-check10-01
+2026/09/30 22:50:57 console request method=GET route=org_audit_list status=200 class=ok duration_ms=1.20 bytes=4715 request_id=t03-check10-02
+2026/09/30 22:50:57 console request method=PATCH route=org_member_update status=204 class=ok duration_ms=3.23 bytes=0 request_id=t03-check10-03
+2026/09/30 22:50:57 console request method=DELETE route=org_member_delete status=204 class=ok duration_ms=3.37 bytes=0 request_id=t03-check10-04
+2026/09/30 22:50:57 console request method=POST route=org_invitations_create status=201 class=ok duration_ms=2.75 bytes=288 request_id=t03-check10-05
+2026/09/30 22:50:57 console request method=POST route=org_invitations_create status=403 class=forbidden duration_ms=2.20 bytes=123 request_id=t03-check10-06
+2026/09/30 22:50:57 console request method=PATCH route=org_member_update status=403 class=forbidden duration_ms=2.67 bytes=123 request_id=t03-check10-07
+2026/09/30 22:50:57 controlclient method=CreateApiKey operation_id=t03-20260930T225028Z-e3c5-audit-key attempt=1 code=OK duration=2ms
+2026/09/30 22:50:57 console request method=POST route=other status=201 class=ok duration_ms=3.38 bytes=566 request_id=t03-check10-08
+2026/09/30 22:50:57 controlclient method=ListApiKeys operation_id=list-keys-QT5ZsSI9Qo2z07oelXST2w attempt=1 code=OK duration=1ms
+2026/09/30 22:50:57 controlclient method=RevokeApiKey operation_id=key-revoke-EGUOBXGQ8rUTGxYjxGgmhg attempt=1 code=OK duration=2ms
+2026/09/30 22:50:57 console request method=POST route=other status=200 class=ok duration_ms=4.30 bytes=356 request_id=t03-check10-09
+2026/09/30 22:50:57 console request method=GET route=org_audit_list status=200 class=ok duration_ms=1.55 bytes=17706 request_id=t03-check10-10
+2026/09/30 22:50:57 console request method=GET route=org_audit_list status=200 class=ok duration_ms=1.42 bytes=4715 request_id=t03-check10-11
+2026/09/30 22:50:57 console request method=GET route=org_audit_list status=403 class=forbidden duration_ms=0.94 bytes=123 request_id=t03-check10-12
+2026/09/30 22:50:57 console request method=GET route=org_audit_list status=403 class=forbidden duration_ms=0.87 bytes=123 request_id=t03-check10-13
+2026/09/30 22:51:10 controlclient method=ApplyOrgPolicy operation_id=policy:12:7:org: attempt=1 code=OK duration=2ms
+2026/09/30 22:51:10 console policy publication: org=12 revision=7 operation_id=policy:12:7:org: version=14 replayed=false
+2026/10/01 06:51:55 ERROR: [transport] Client received GoAway with error code ENHANCE_YOUR_CALM and debug data equal to ASCII "too_many_pings".
+2026/09/30 22:52:30 console shutting down on terminated
+2026/10/01 06:52:30.055959 engine.go:316: [Info] HERTZ: Begin graceful shutdown, wait at most 10s ...
+2026/10/01 06:52:30.056042 engine.go:334: [Info] HERTZ: Execute OnShutdownHooks finish
+2026/09/30 22:52:30 console exit
+2026/09/30 22:52:30 console policy publication loop stopped

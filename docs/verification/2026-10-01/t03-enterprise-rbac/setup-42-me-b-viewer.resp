@@ -1,0 +1,9 @@
+HTTP 200 (0.001s)
+Server: hertz
+Date: Wed, 30 Sep 2026 22:50:32 GMT
+Content-Type: application/json
+Content-Length: 602
+X-Request-Id: t03-setup-42
+X-Trace-Id: 18f0472a2ef77e820d53068551bbbe97
+
+{"user":{"id":"9","email":"t03-17c0af-b-viewer@t03.test","status":"active","platform_admin":false,"created_at":"2026-09-30T22:50:30Z","updated_at":"2026-09-30T22:50:30Z"},"organizations":[{"organization":{"id":"11","type":"personal","name":"t03-17c0af-b-viewer@t03.test","status":"active","legacy_tenant_id":null,"created_at":"2026-09-30T22:50:32Z"},"role":"owner"},{"organization":{"id":"13","type":"enterprise","name":"t03-17c0af-beta","status":"active","legacy_tenant_id":null,"created_at":"2026-09-30T22:50:32Z"},"role":"billing_viewer"}],"csrf_token":"UT2J…<redacted:18>"}

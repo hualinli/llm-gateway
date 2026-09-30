@@ -1,0 +1,10 @@
+HTTP 400 (0.002s)
+Server: hertz
+Date: Wed, 30 Sep 2026 22:50:33 GMT
+Content-Type: application/json
+Content-Length: 115
+X-Request-Id: t03-check05-07
+X-Trace-Id: aeee72d3b677c308cb8120609f9b5947
+X-Content-Type-Options: nosniff
+
+{"error":{"code":"invalid_request","message":"ownership transfer target is invalid","request_id":"t03-check05-07"}}

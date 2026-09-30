@@ -1,0 +1,10 @@
+HTTP 403 (0.002s)
+Server: hertz
+Date: Wed, 30 Sep 2026 22:50:33 GMT
+Content-Type: application/json
+Content-Length: 123
+X-Request-Id: t03-check07-05
+X-Trace-Id: b4b5b5aceb5efa0bce185c4f003cd871
+X-Content-Type-Options: nosniff
+
+{"error":{"code":"forbidden","message":"action is not permitted for your organization role","request_id":"t03-check07-05"}}

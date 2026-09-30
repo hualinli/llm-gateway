@@ -1,0 +1,9 @@
+HTTP 201 (0.003s)
+Server: hertz
+Date: Wed, 30 Sep 2026 22:50:32 GMT
+Content-Type: application/json
+Content-Length: 284
+X-Request-Id: t03-setup-30
+X-Trace-Id: 57c09a398cad3bffcaf164163566feb5
+
+{"invitation":{"id":"5","organization_id":"13","email":"t03-17c0af-b-member@t03.test","role":"member","status":"pending","expires_at":"2026-10-03T22:50:32Z","accepted_at":null,"created_by":"6","created_at":"2026-09-30T22:50:32Z"},"token":"ULL3…<redacted:43>"}

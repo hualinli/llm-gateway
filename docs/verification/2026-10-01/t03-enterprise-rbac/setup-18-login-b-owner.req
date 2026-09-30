@@ -1,0 +1,6 @@
+POST http://127.0.0.1:18092/api/v1/auth/login
+X-Request-ID: t03-setup-18
+Accept: application/json
+Content-Type: application/json
+
+{"email": "t03-17c0af-b-owner@t03.test", "password": "iCmN…<redacted:20>"}

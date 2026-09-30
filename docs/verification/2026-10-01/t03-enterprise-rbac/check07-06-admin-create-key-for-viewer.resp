@@ -1,0 +1,9 @@
+HTTP 201 (0.004s)
+Server: hertz
+Date: Wed, 30 Sep 2026 22:50:33 GMT
+Content-Type: application/json
+Content-Length: 565
+X-Request-Id: t03-check07-06
+X-Trace-Id: 3deec5297d4b99d415d1624c394b6576
+
+{"key":{"key_id":"key_14581982fe29b46c0c121aa1c2c65413","prefix":"sk-MFEcx...","organization_id":"12","owner_user_id":"5","created_by":"3","status":"active","expires_at":null,"revoked_at":null,"model_allowlist":null,"policy_version":"1","created_at":"2026-09-30T22:50:33Z","tenant_id":"org:12"},"secret":"sk-M…<redacted:46>","secret_returned_once":true,"replayed":false,"resulting_version":"4","notice":"Copy this secret now: it is shown only once and can never be retrieved again. If you lose it, revoke this key and create a new one."}

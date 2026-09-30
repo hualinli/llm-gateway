@@ -1,0 +1,1557 @@
+{
+  "admin_email": "admin@t03.test",
+  "base_url": "http://127.0.0.1:18092",
+  "checks": [
+    {
+      "details": {},
+      "failure": null,
+      "finished_at": "2026-09-30T22:50:32Z",
+      "id": "setup",
+      "notes": [],
+      "requests": [
+        {
+          "error_code": null,
+          "label": "login-admin",
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "request_id": "t03-setup-01",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "admin-create-a-owner",
+          "method": "POST",
+          "path": "/api/v1/admin/users",
+          "request_id": "t03-setup-02",
+          "status": 201
+        },
+        {
+          "error_code": null,
+          "label": "admin-create-a-admin",
+          "method": "POST",
+          "path": "/api/v1/admin/users",
+          "request_id": "t03-setup-03",
+          "status": 201
+        },
+        {
+          "error_code": null,
+          "label": "admin-create-a-member",
+          "method": "POST",
+          "path": "/api/v1/admin/users",
+          "request_id": "t03-setup-04",
+          "status": 201
+        },
+        {
+          "error_code": null,
+          "label": "admin-create-a-viewer",
+          "method": "POST",
+          "path": "/api/v1/admin/users",
+          "request_id": "t03-setup-05",
+          "status": 201
+        },
+        {
+          "error_code": null,
+          "label": "admin-create-b-owner",
+          "method": "POST",
+          "path": "/api/v1/admin/users",
+          "request_id": "t03-setup-06",
+          "status": 201
+        },
+        {
+          "error_code": null,
+          "label": "admin-create-b-admin",
+          "method": "POST",
+          "path": "/api/v1/admin/users",
+          "request_id": "t03-setup-07",
+          "status": 201
+        },
+        {
+          "error_code": null,
+          "label": "admin-create-b-member",
+          "method": "POST",
+          "path": "/api/v1/admin/users",
+          "request_id": "t03-setup-08",
+          "status": 201
+        },
+        {
+          "error_code": null,
+          "label": "admin-create-b-viewer",
+          "method": "POST",
+          "path": "/api/v1/admin/users",
+          "request_id": "t03-setup-09",
+          "status": 201
+        },
+        {
+          "error_code": null,
+          "label": "admin-create-a-invitee",
+          "method": "POST",
+          "path": "/api/v1/admin/users",
+          "request_id": "t03-setup-10",
+          "status": 201
+        },
+        {
+          "error_code": null,
+          "label": "login-a-admin",
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "request_id": "t03-setup-11",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "login-a-invitee",
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "request_id": "t03-setup-12",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "login-a-member",
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "request_id": "t03-setup-13",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "login-a-owner",
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "request_id": "t03-setup-14",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "login-a-viewer",
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "request_id": "t03-setup-15",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "login-b-admin",
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "request_id": "t03-setup-16",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "login-b-member",
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "request_id": "t03-setup-17",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "login-b-owner",
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "request_id": "t03-setup-18",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "login-b-viewer",
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "request_id": "t03-setup-19",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "create-org-A",
+          "method": "POST",
+          "path": "/api/v1/organizations",
+          "request_id": "t03-setup-20",
+          "status": 201
+        },
+        {
+          "error_code": null,
+          "label": "create-org-B",
+          "method": "POST",
+          "path": "/api/v1/organizations",
+          "request_id": "t03-setup-21",
+          "status": 201
+        },
+        {
+          "error_code": null,
+          "label": "invite-a-admin",
+          "method": "POST",
+          "path": "/api/v1/orgs/12/invitations",
+          "request_id": "t03-setup-22",
+          "status": 201
+        },
+        {
+          "error_code": null,
+          "label": "accept-a-admin",
+          "method": "POST",
+          "path": "/api/v1/invitations/nd5QhpQvsfkQwwOA00ZfYGj-ILMvwn3n2ECHO8iVkRM/accept",
+          "request_id": "t03-setup-23",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "invite-a-member",
+          "method": "POST",
+          "path": "/api/v1/orgs/12/invitations",
+          "request_id": "t03-setup-24",
+          "status": 201
+        },
+        {
+          "error_code": null,
+          "label": "accept-a-member",
+          "method": "POST",
+          "path": "/api/v1/invitations/fpuffgf0Zkde09s81WBTetHcsTxMCzZfCe3kKKyI0CI/accept",
+          "request_id": "t03-setup-25",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "invite-a-viewer",
+          "method": "POST",
+          "path": "/api/v1/orgs/12/invitations",
+          "request_id": "t03-setup-26",
+          "status": 201
+        },
+        {
+          "error_code": null,
+          "label": "accept-a-viewer",
+          "method": "POST",
+          "path": "/api/v1/invitations/98KI3iKwLuOWNrq7b2vVGnx5vWSo4SPGHVHpZoACIr0/accept",
+          "request_id": "t03-setup-27",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "invite-b-admin",
+          "method": "POST",
+          "path": "/api/v1/orgs/13/invitations",
+          "request_id": "t03-setup-28",
+          "status": 201
+        },
+        {
+          "error_code": null,
+          "label": "accept-b-admin",
+          "method": "POST",
+          "path": "/api/v1/invitations/SNBYtduiFEAQtTuWF7ztFJN8ce7Oe2z_QS78XZZvwWo/accept",
+          "request_id": "t03-setup-29",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "invite-b-member",
+          "method": "POST",
+          "path": "/api/v1/orgs/13/invitations",
+          "request_id": "t03-setup-30",
+          "status": 201
+        },
+        {
+          "error_code": null,
+          "label": "accept-b-member",
+          "method": "POST",
+          "path": "/api/v1/invitations/ULL3DMLXprA9sWp5wtdOjl-BBE59HR2Xk30EenLKpXU/accept",
+          "request_id": "t03-setup-31",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "invite-b-viewer",
+          "method": "POST",
+          "path": "/api/v1/orgs/13/invitations",
+          "request_id": "t03-setup-32",
+          "status": 201
+        },
+        {
+          "error_code": null,
+          "label": "accept-b-viewer",
+          "method": "POST",
+          "path": "/api/v1/invitations/gEaU4Uzf1395tfIcMVGZ0tUEUV5eZL21PIu1aM_HI9E/accept",
+          "request_id": "t03-setup-33",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "me-a-admin",
+          "method": "GET",
+          "path": "/api/v1/me",
+          "request_id": "t03-setup-34",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "me-a-invitee",
+          "method": "GET",
+          "path": "/api/v1/me",
+          "request_id": "t03-setup-35",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "me-a-member",
+          "method": "GET",
+          "path": "/api/v1/me",
+          "request_id": "t03-setup-36",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "me-a-owner",
+          "method": "GET",
+          "path": "/api/v1/me",
+          "request_id": "t03-setup-37",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "me-a-viewer",
+          "method": "GET",
+          "path": "/api/v1/me",
+          "request_id": "t03-setup-38",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "me-b-admin",
+          "method": "GET",
+          "path": "/api/v1/me",
+          "request_id": "t03-setup-39",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "me-b-member",
+          "method": "GET",
+          "path": "/api/v1/me",
+          "request_id": "t03-setup-40",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "me-b-owner",
+          "method": "GET",
+          "path": "/api/v1/me",
+          "request_id": "t03-setup-41",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "me-b-viewer",
+          "method": "GET",
+          "path": "/api/v1/me",
+          "request_id": "t03-setup-42",
+          "status": 200
+        }
+      ],
+      "skip_reason": null,
+      "started_at": "2026-09-30T22:50:28Z",
+      "status": "PASS",
+      "title": "fixture 创建与登录"
+    },
+    {
+      "details": {},
+      "failure": null,
+      "finished_at": "2026-09-30T22:50:32Z",
+      "id": "check01",
+      "notes": [
+        "两家企业各 4 个账号（owner/admin/member/billing_viewer）；owner 由创建企业确立，其余 3 人经邀请加入"
+      ],
+      "requests": [
+        {
+          "error_code": null,
+          "label": "members-A-owner",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/members",
+          "request_id": "t03-check01-01",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "members-A-member-self",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/members",
+          "request_id": "t03-check01-02",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "members-A-viewer",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/members",
+          "request_id": "t03-check01-03",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "members-B-owner",
+          "method": "GET",
+          "path": "/api/v1/orgs/13/members",
+          "request_id": "t03-check01-04",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "members-B-member-self",
+          "method": "GET",
+          "path": "/api/v1/orgs/13/members",
+          "request_id": "t03-check01-05",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "members-B-viewer",
+          "method": "GET",
+          "path": "/api/v1/orgs/13/members",
+          "request_id": "t03-check01-06",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "me-a-owner",
+          "method": "GET",
+          "path": "/api/v1/me",
+          "request_id": "t03-check01-07",
+          "status": 200
+        }
+      ],
+      "skip_reason": null,
+      "started_at": "2026-09-30T22:50:32Z",
+      "status": "PASS",
+      "title": "登录与角色矩阵读取"
+    },
+    {
+      "details": {},
+      "failure": null,
+      "finished_at": "2026-09-30T22:50:32Z",
+      "id": "check02",
+      "notes": [
+        "跨组织读取统一 404 not_found/organization not found，与非存在组织同形"
+      ],
+      "requests": [
+        {
+          "error_code": null,
+          "label": "probe-control-keys",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/keys?limit=1",
+          "request_id": "t03-check02-01",
+          "status": 200
+        },
+        {
+          "error_code": "not_found",
+          "label": "cross-a-owner-B-members",
+          "method": "GET",
+          "path": "/api/v1/orgs/13/members",
+          "request_id": "t03-check02-02",
+          "status": 404
+        },
+        {
+          "error_code": "not_found",
+          "label": "cross-a-owner-B-invitations",
+          "method": "GET",
+          "path": "/api/v1/orgs/13/invitations",
+          "request_id": "t03-check02-03",
+          "status": 404
+        },
+        {
+          "error_code": "not_found",
+          "label": "cross-a-owner-B-keys",
+          "method": "GET",
+          "path": "/api/v1/orgs/13/keys?limit=1",
+          "request_id": "t03-check02-04",
+          "status": 404
+        },
+        {
+          "error_code": "not_found",
+          "label": "cross-a-owner-B-audit",
+          "method": "GET",
+          "path": "/api/v1/orgs/13/audit?limit=1",
+          "request_id": "t03-check02-05",
+          "status": 404
+        },
+        {
+          "error_code": "not_found",
+          "label": "cross-a-owner-B-usage",
+          "method": "GET",
+          "path": "/api/v1/orgs/13/usage?limit=1",
+          "request_id": "t03-check02-06",
+          "status": 404
+        },
+        {
+          "error_code": "not_found",
+          "label": "cross-b-owner-A-members",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/members",
+          "request_id": "t03-check02-07",
+          "status": 404
+        },
+        {
+          "error_code": "not_found",
+          "label": "cross-b-owner-A-invitations",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/invitations",
+          "request_id": "t03-check02-08",
+          "status": 404
+        },
+        {
+          "error_code": "not_found",
+          "label": "unknown-org-members",
+          "method": "GET",
+          "path": "/api/v1/orgs/99999999/members",
+          "request_id": "t03-check02-09",
+          "status": 404
+        },
+        {
+          "error_code": "not_found",
+          "label": "cross-a-owner-B-members-compare",
+          "method": "GET",
+          "path": "/api/v1/orgs/13/members",
+          "request_id": "t03-check02-10",
+          "status": 404
+        }
+      ],
+      "skip_reason": null,
+      "started_at": "2026-09-30T22:50:32Z",
+      "status": "PASS",
+      "title": "跨组织读取 404 且无元数据泄露"
+    },
+    {
+      "details": {
+        "self_transfer_code": "invalid_request",
+        "self_transfer_message": "ownership transfer target is invalid",
+        "self_transfer_status": 400
+      },
+      "failure": null,
+      "finished_at": "2026-09-30T22:50:32Z",
+      "id": "check03",
+      "notes": [
+        "偏差观察：非成员 self-target owner-transfer → 400 invalid_request（'ownership transfer target is invalid'）；无存在性泄露，但与 ADR-0003 §2.5 的 404 映射顺序不同",
+        "跨组织写入一律 404；B 的成员/角色/邀请/Key 均未被改动"
+      ],
+      "requests": [
+        {
+          "error_code": null,
+          "label": "b-owner-create-key",
+          "method": "POST",
+          "path": "/api/v1/orgs/13/keys",
+          "request_id": "t03-check03-01",
+          "status": 201
+        },
+        {
+          "error_code": "not_found",
+          "label": "cross-write-b-members-patch",
+          "method": "PATCH",
+          "path": "/api/v1/orgs/13/members/8",
+          "request_id": "t03-check03-02",
+          "status": 404
+        },
+        {
+          "error_code": "not_found",
+          "label": "cross-write-b-members-delete",
+          "method": "DELETE",
+          "path": "/api/v1/orgs/13/members/8",
+          "request_id": "t03-check03-03",
+          "status": 404
+        },
+        {
+          "error_code": "not_found",
+          "label": "cross-write-b-invitations-create",
+          "method": "POST",
+          "path": "/api/v1/orgs/13/invitations",
+          "request_id": "t03-check03-04",
+          "status": 404
+        },
+        {
+          "error_code": "not_found",
+          "label": "cross-write-b-owner-transfer",
+          "method": "POST",
+          "path": "/api/v1/orgs/13/owner-transfer",
+          "request_id": "t03-check03-05",
+          "status": 404
+        },
+        {
+          "error_code": "not_found",
+          "label": "cross-write-b-keys-revoke",
+          "method": "POST",
+          "path": "/api/v1/orgs/13/keys/key_8eb9f64246492a64752030221a619baf/revoke",
+          "request_id": "t03-check03-06",
+          "status": 404
+        },
+        {
+          "error_code": "not_found",
+          "label": "cross-write-b-keys-create",
+          "method": "POST",
+          "path": "/api/v1/orgs/13/keys",
+          "request_id": "t03-check03-07",
+          "status": 404
+        },
+        {
+          "error_code": "invalid_request",
+          "label": "cross-write-b-owner-transfer-self",
+          "method": "POST",
+          "path": "/api/v1/orgs/13/owner-transfer",
+          "request_id": "t03-check03-08",
+          "status": 400
+        },
+        {
+          "error_code": "not_found",
+          "label": "cross-recover-b-operation",
+          "method": "GET",
+          "path": "/api/v1/orgs/13/keys?operation_id=t03-20260930T225028Z-e3c5-b-owner-key",
+          "request_id": "t03-check03-09",
+          "status": 404
+        },
+        {
+          "error_code": null,
+          "label": "b-owner-members-after",
+          "method": "GET",
+          "path": "/api/v1/orgs/13/members",
+          "request_id": "t03-check03-10",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "b-owner-keys-after",
+          "method": "GET",
+          "path": "/api/v1/orgs/13/keys?limit=100",
+          "request_id": "t03-check03-11",
+          "status": 200
+        }
+      ],
+      "skip_reason": null,
+      "started_at": "2026-09-30T22:50:32Z",
+      "status": "PASS",
+      "title": "跨组织写入被拒绝且目标组织不变"
+    },
+    {
+      "details": {
+        "owner_invite_owner_status": 201
+      },
+      "failure": null,
+      "finished_at": "2026-09-30T22:50:33Z",
+      "id": "check04",
+      "notes": [
+        "观察：owner 创建 role=owner 的邀请 → 201（属设计：invitations.go checkInvitationGrant；owner 仍然是唯一能发放 owner 角色的路径，admin 发放 owner 为 403）",
+        "Key 端点矩阵：billing_viewer 无 manage_own_keys → 403；member 不能按他人过滤"
+      ],
+      "requests": [
+        {
+          "error_code": "forbidden",
+          "label": "deny-member-invite",
+          "method": "POST",
+          "path": "/api/v1/orgs/12/invitations",
+          "request_id": "t03-check04-01",
+          "status": 403
+        },
+        {
+          "error_code": "forbidden",
+          "label": "deny-member-add-role",
+          "method": "PATCH",
+          "path": "/api/v1/orgs/12/members/5",
+          "request_id": "t03-check04-02",
+          "status": 403
+        },
+        {
+          "error_code": "forbidden",
+          "label": "deny-member-remove",
+          "method": "DELETE",
+          "path": "/api/v1/orgs/12/members/5",
+          "request_id": "t03-check04-03",
+          "status": 403
+        },
+        {
+          "error_code": "forbidden",
+          "label": "deny-member-audit",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/audit",
+          "request_id": "t03-check04-04",
+          "status": 403
+        },
+        {
+          "error_code": "forbidden",
+          "label": "deny-member-list-invitations",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/invitations",
+          "request_id": "t03-check04-05",
+          "status": 403
+        },
+        {
+          "error_code": "forbidden",
+          "label": "deny-viewer-invite",
+          "method": "POST",
+          "path": "/api/v1/orgs/12/invitations",
+          "request_id": "t03-check04-06",
+          "status": 403
+        },
+        {
+          "error_code": "forbidden",
+          "label": "deny-viewer-patch-member",
+          "method": "PATCH",
+          "path": "/api/v1/orgs/12/members/4",
+          "request_id": "t03-check04-07",
+          "status": 403
+        },
+        {
+          "error_code": "forbidden",
+          "label": "deny-viewer-audit",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/audit",
+          "request_id": "t03-check04-08",
+          "status": 403
+        },
+        {
+          "error_code": "forbidden",
+          "label": "deny-admin-invite-admin",
+          "method": "POST",
+          "path": "/api/v1/orgs/12/invitations",
+          "request_id": "t03-check04-09",
+          "status": 403
+        },
+        {
+          "error_code": "forbidden",
+          "label": "deny-admin-invite-owner",
+          "method": "POST",
+          "path": "/api/v1/orgs/12/invitations",
+          "request_id": "t03-check04-10",
+          "status": 403
+        },
+        {
+          "error_code": "forbidden",
+          "label": "deny-owner-invite-platform-admin",
+          "method": "POST",
+          "path": "/api/v1/orgs/12/invitations",
+          "request_id": "t03-check04-11",
+          "status": 403
+        },
+        {
+          "error_code": "forbidden",
+          "label": "deny-owner-grant-platform-admin",
+          "method": "PATCH",
+          "path": "/api/v1/orgs/12/members/4",
+          "request_id": "t03-check04-12",
+          "status": 403
+        },
+        {
+          "error_code": "invalid_request",
+          "label": "deny-owner-grant-bogus-role",
+          "method": "PATCH",
+          "path": "/api/v1/orgs/12/members/4",
+          "request_id": "t03-check04-13",
+          "status": 400
+        },
+        {
+          "error_code": "invalid_request",
+          "label": "deny-owner-invite-bogus-role",
+          "method": "POST",
+          "path": "/api/v1/orgs/12/invitations",
+          "request_id": "t03-check04-14",
+          "status": 400
+        },
+        {
+          "error_code": "invalid_request",
+          "label": "deny-owner-invite-bad-ttl",
+          "method": "POST",
+          "path": "/api/v1/orgs/12/invitations",
+          "request_id": "t03-check04-15",
+          "status": 400
+        },
+        {
+          "error_code": "forbidden",
+          "label": "deny-member-cross-user-usage",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/usage?user=2",
+          "request_id": "t03-check04-16",
+          "status": 403
+        },
+        {
+          "error_code": null,
+          "label": "observe-owner-invite-owner",
+          "method": "POST",
+          "path": "/api/v1/orgs/12/invitations",
+          "request_id": "t03-check04-17",
+          "status": 201
+        },
+        {
+          "error_code": "forbidden",
+          "label": "deny-viewer-list-keys",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/keys",
+          "request_id": "t03-check04-18",
+          "status": 403
+        },
+        {
+          "error_code": "forbidden",
+          "label": "deny-viewer-create-key",
+          "method": "POST",
+          "path": "/api/v1/orgs/12/keys",
+          "request_id": "t03-check04-19",
+          "status": 403
+        },
+        {
+          "error_code": "forbidden",
+          "label": "deny-member-list-other-keys",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/keys?owner_user_id=3",
+          "request_id": "t03-check04-20",
+          "status": 403
+        }
+      ],
+      "skip_reason": null,
+      "started_at": "2026-09-30T22:50:32Z",
+      "status": "PASS",
+      "title": "权限矩阵负例（member/viewer/admin/owner）"
+    },
+    {
+      "details": {
+        "admin_self_transfer_code": "invalid_request",
+        "admin_self_transfer_status": 400
+      },
+      "failure": null,
+      "finished_at": "2026-09-30T22:50:33Z",
+      "id": "check05",
+      "notes": [
+        "偏差观察：admin self-target owner-transfer → 400 invalid_request（'ownership transfer target is invalid'）；PATCH 自升同名角色为 403，两条路径都未改变角色",
+        "最后一个 owner 的离开/自我降级 → 409 conflict；admin 动 owner → 403"
+      ],
+      "requests": [
+        {
+          "error_code": "forbidden",
+          "label": "owner-protect-admin-demote-owner",
+          "method": "PATCH",
+          "path": "/api/v1/orgs/12/members/2",
+          "request_id": "t03-check05-01",
+          "status": 403
+        },
+        {
+          "error_code": "forbidden",
+          "label": "owner-protect-admin-remove-owner",
+          "method": "DELETE",
+          "path": "/api/v1/orgs/12/members/2",
+          "request_id": "t03-check05-02",
+          "status": 403
+        },
+        {
+          "error_code": "forbidden",
+          "label": "owner-protect-admin-self-promote",
+          "method": "PATCH",
+          "path": "/api/v1/orgs/12/members/3",
+          "request_id": "t03-check05-03",
+          "status": 403
+        },
+        {
+          "error_code": "forbidden",
+          "label": "owner-protect-admin-transfer-other",
+          "method": "POST",
+          "path": "/api/v1/orgs/12/owner-transfer",
+          "request_id": "t03-check05-04",
+          "status": 403
+        },
+        {
+          "error_code": "conflict",
+          "label": "owner-protect-owner-leave",
+          "method": "DELETE",
+          "path": "/api/v1/orgs/12/members/2",
+          "request_id": "t03-check05-05",
+          "status": 409
+        },
+        {
+          "error_code": "conflict",
+          "label": "owner-protect-owner-self-demote",
+          "method": "PATCH",
+          "path": "/api/v1/orgs/12/members/2",
+          "request_id": "t03-check05-06",
+          "status": 409
+        },
+        {
+          "error_code": "invalid_request",
+          "label": "owner-protect-admin-self-transfer",
+          "method": "POST",
+          "path": "/api/v1/orgs/12/owner-transfer",
+          "request_id": "t03-check05-07",
+          "status": 400
+        },
+        {
+          "error_code": null,
+          "label": "owner-protect-members-after",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/members",
+          "request_id": "t03-check05-08",
+          "status": 200
+        },
+        {
+          "error_code": "conflict",
+          "label": "owner-protect-leave-envelope",
+          "method": "DELETE",
+          "path": "/api/v1/orgs/12/members/2",
+          "request_id": "t03-check05-09",
+          "status": 409
+        }
+      ],
+      "skip_reason": null,
+      "started_at": "2026-09-30T22:50:33Z",
+      "status": "PASS",
+      "title": "最后 owner 保护与 owner 晋升路径"
+    },
+    {
+      "details": {},
+      "failure": null,
+      "finished_at": "2026-09-30T22:50:33Z",
+      "id": "check06",
+      "notes": [
+        "同 token 二次接受 → 409；接受请求体的 email/role 被完全忽略"
+      ],
+      "requests": [
+        {
+          "error_code": null,
+          "label": "invite-invitee",
+          "method": "POST",
+          "path": "/api/v1/orgs/12/invitations",
+          "request_id": "t03-check06-01",
+          "status": 201
+        },
+        {
+          "error_code": null,
+          "label": "list-invitations-owner",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/invitations",
+          "request_id": "t03-check06-02",
+          "status": 200
+        },
+        {
+          "error_code": "forbidden",
+          "label": "accept-wrong-email",
+          "method": "POST",
+          "path": "/api/v1/invitations/1houk-6tiwaQtmG1zwEAZhzOfx2B4GFoxAHvWkdaeh8/accept",
+          "request_id": "t03-check06-03",
+          "status": 403
+        },
+        {
+          "error_code": null,
+          "label": "accept-invitee-spoofed-body",
+          "method": "POST",
+          "path": "/api/v1/invitations/1houk-6tiwaQtmG1zwEAZhzOfx2B4GFoxAHvWkdaeh8/accept",
+          "request_id": "t03-check06-04",
+          "status": 200
+        },
+        {
+          "error_code": "conflict",
+          "label": "accept-invitee-reuse",
+          "method": "POST",
+          "path": "/api/v1/invitations/1houk-6tiwaQtmG1zwEAZhzOfx2B4GFoxAHvWkdaeh8/accept",
+          "request_id": "t03-check06-05",
+          "status": 409
+        },
+        {
+          "error_code": "not_found",
+          "label": "accept-unknown-token",
+          "method": "POST",
+          "path": "/api/v1/invitations/t03-not-a-real-token-17c0af/accept",
+          "request_id": "t03-check06-06",
+          "status": 404
+        },
+        {
+          "error_code": "invalid_request",
+          "label": "invite-ttl-too-long",
+          "method": "POST",
+          "path": "/api/v1/orgs/12/invitations",
+          "request_id": "t03-check06-07",
+          "status": 400
+        },
+        {
+          "error_code": null,
+          "label": "members-after-invite",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/members",
+          "request_id": "t03-check06-08",
+          "status": 200
+        }
+      ],
+      "skip_reason": null,
+      "started_at": "2026-09-30T22:50:33Z",
+      "status": "PASS",
+      "title": "邀请一次性与 email/role 不可篡改"
+    },
+    {
+      "details": {},
+      "failure": null,
+      "finished_at": "2026-09-30T22:50:33Z",
+      "id": "check07",
+      "notes": [
+        "secret 仅在 create 响应出现一次；?operation_id= 只回元数据（replayed=true）"
+      ],
+      "requests": [
+        {
+          "error_code": null,
+          "label": "member-create-own-key",
+          "method": "POST",
+          "path": "/api/v1/orgs/12/keys",
+          "request_id": "t03-check07-01",
+          "status": 201
+        },
+        {
+          "error_code": null,
+          "label": "member-replay-key",
+          "method": "POST",
+          "path": "/api/v1/orgs/12/keys",
+          "request_id": "t03-check07-02",
+          "status": 201
+        },
+        {
+          "error_code": "conflict",
+          "label": "member-key-op-conflict",
+          "method": "POST",
+          "path": "/api/v1/orgs/12/keys",
+          "request_id": "t03-check07-03",
+          "status": 409
+        },
+        {
+          "error_code": null,
+          "label": "member-recover-by-operation",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/keys?operation_id=t03-20260930T225028Z-e3c5-member-own",
+          "request_id": "t03-check07-04",
+          "status": 200
+        },
+        {
+          "error_code": "forbidden",
+          "label": "member-create-key-for-admin",
+          "method": "POST",
+          "path": "/api/v1/orgs/12/keys",
+          "request_id": "t03-check07-05",
+          "status": 403
+        },
+        {
+          "error_code": null,
+          "label": "admin-create-key-for-viewer",
+          "method": "POST",
+          "path": "/api/v1/orgs/12/keys",
+          "request_id": "t03-check07-06",
+          "status": 201
+        },
+        {
+          "error_code": "not_found",
+          "label": "member-revoke-others-key",
+          "method": "POST",
+          "path": "/api/v1/orgs/12/keys/key_14581982fe29b46c0c121aa1c2c65413/revoke",
+          "request_id": "t03-check07-07",
+          "status": 404
+        },
+        {
+          "error_code": null,
+          "label": "admin-list-keys-after-refused-revoke",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/keys?limit=100",
+          "request_id": "t03-check07-08",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "member-revoke-own-key",
+          "method": "POST",
+          "path": "/api/v1/orgs/12/keys/key_bdb93a4ce98a2f3c2aa1c83e19889fb5/revoke",
+          "request_id": "t03-check07-09",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "member-revoke-own-key-again",
+          "method": "POST",
+          "path": "/api/v1/orgs/12/keys/key_bdb93a4ce98a2f3c2aa1c83e19889fb5/revoke",
+          "request_id": "t03-check07-10",
+          "status": 200
+        },
+        {
+          "error_code": "forbidden",
+          "label": "viewer-list-keys",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/keys",
+          "request_id": "t03-check07-11",
+          "status": 403
+        },
+        {
+          "error_code": "forbidden",
+          "label": "viewer-create-key",
+          "method": "POST",
+          "path": "/api/v1/orgs/12/keys",
+          "request_id": "t03-check07-12",
+          "status": 403
+        },
+        {
+          "error_code": null,
+          "label": "member-list-own-keys",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/keys?limit=100",
+          "request_id": "t03-check07-13",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "admin-list-org-keys",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/keys?limit=100",
+          "request_id": "t03-check07-14",
+          "status": 200
+        }
+      ],
+      "skip_reason": null,
+      "started_at": "2026-09-30T22:50:33Z",
+      "status": "PASS",
+      "title": "Key 归属矩阵与 secret 一次性"
+    },
+    {
+      "details": {},
+      "failure": null,
+      "finished_at": "2026-09-30T22:50:35Z",
+      "id": "check08",
+      "notes": [
+        "Gateway：成员 Key 200（上游 primary）；撤销后 401；billing_viewer Key 403；计量行 org=12 user=4 key=key_b188cd75392ac3c3c40ff46539d81b74；admin Key key_ba5d5e4e82b5de149e846ef9d5527cc2 亦已放行"
+      ],
+      "requests": [
+        {
+          "error_code": null,
+          "label": "gateway-readyz",
+          "method": "GET",
+          "path": "/readyz",
+          "request_id": "t03-check08-01",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "gateway-create-member-key",
+          "method": "POST",
+          "path": "/api/v1/orgs/12/keys",
+          "request_id": "t03-check08-02",
+          "status": 201
+        },
+        {
+          "error_code": null,
+          "label": "gateway-allowed-wait01",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "request_id": "t03-check08-03",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "gateway-revoke-member-key",
+          "method": "POST",
+          "path": "/api/v1/orgs/12/keys/key_b188cd75392ac3c3c40ff46539d81b74/revoke",
+          "request_id": "t03-check08-04",
+          "status": 200
+        },
+        {
+          "error_code": "unauthorized",
+          "label": "gateway-revoked-wait01",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "request_id": "t03-check08-05",
+          "status": 401
+        },
+        {
+          "error_code": null,
+          "label": "gateway-create-viewer-key",
+          "method": "POST",
+          "path": "/api/v1/orgs/12/keys",
+          "request_id": "t03-check08-06",
+          "status": 201
+        },
+        {
+          "error_code": "forbidden",
+          "label": "gateway-viewer-wait01",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "request_id": "t03-check08-07",
+          "status": 403
+        },
+        {
+          "error_code": null,
+          "label": "gateway-create-admin-key",
+          "method": "POST",
+          "path": "/api/v1/orgs/12/keys",
+          "request_id": "t03-check08-08",
+          "status": 201
+        },
+        {
+          "error_code": null,
+          "label": "gateway-admin-allowed-wait01",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "request_id": "t03-check08-09",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "gateway-usage-attribution-wait01",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/usage?limit=100",
+          "request_id": "t03-check08-10",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "gateway-usage-attribution-wait02",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/usage?limit=100",
+          "request_id": "t03-check08-11",
+          "status": 200
+        }
+      ],
+      "skip_reason": null,
+      "started_at": "2026-09-30T22:50:33Z",
+      "status": "PASS",
+      "title": "Gateway access guard 与计量归属"
+    },
+    {
+      "details": {},
+      "failure": null,
+      "finished_at": "2026-09-30T22:50:57Z",
+      "id": "check09",
+      "notes": [
+        "组织 A 有 2 行用量（user_ids=['3', '4']），member 只见 1 行"
+      ],
+      "requests": [
+        {
+          "error_code": null,
+          "label": "usage-wait-second-user01",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/usage?limit=100",
+          "request_id": "t03-check09-01",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "usage-wait-second-user02",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/usage?limit=100",
+          "request_id": "t03-check09-02",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "usage-wait-second-user03",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/usage?limit=100",
+          "request_id": "t03-check09-03",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "usage-wait-second-user04",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/usage?limit=100",
+          "request_id": "t03-check09-04",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "usage-wait-second-user05",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/usage?limit=100",
+          "request_id": "t03-check09-05",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "usage-wait-second-user06",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/usage?limit=100",
+          "request_id": "t03-check09-06",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "usage-wait-second-user07",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/usage?limit=100",
+          "request_id": "t03-check09-07",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "usage-wait-second-user08",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/usage?limit=100",
+          "request_id": "t03-check09-08",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "usage-wait-second-user09",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/usage?limit=100",
+          "request_id": "t03-check09-09",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "usage-wait-second-user10",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/usage?limit=100",
+          "request_id": "t03-check09-10",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "usage-wait-second-user11",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/usage?limit=100",
+          "request_id": "t03-check09-11",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "owner-usage-org",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/usage?limit=100",
+          "request_id": "t03-check09-12",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "member-usage-self",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/usage?limit=100",
+          "request_id": "t03-check09-13",
+          "status": 200
+        },
+        {
+          "error_code": "forbidden",
+          "label": "member-usage-other-user",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/usage?user=2",
+          "request_id": "t03-check09-14",
+          "status": 403
+        },
+        {
+          "error_code": null,
+          "label": "usage-a-admin",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/usage?limit=100",
+          "request_id": "t03-check09-15",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "usage-a-viewer",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/usage?limit=100",
+          "request_id": "t03-check09-16",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "usage-a-owner",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/usage?limit=100",
+          "request_id": "t03-check09-17",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "b-owner-usage-org",
+          "method": "GET",
+          "path": "/api/v1/orgs/13/usage?limit=100",
+          "request_id": "t03-check09-18",
+          "status": 200
+        }
+      ],
+      "skip_reason": null,
+      "started_at": "2026-09-30T22:50:35Z",
+      "status": "PASS",
+      "title": "用量隔离（self vs organization）"
+    },
+    {
+      "details": {},
+      "failure": null,
+      "finished_at": "2026-09-30T22:50:57Z",
+      "id": "check10",
+      "notes": [
+        "B 的审计里有 7 条来自 A actor 的 failure 行（跨组织探测按设计记入被探测组织，ADR-0003 §2.3 的实现注释；不含任何 B 的数据）"
+      ],
+      "requests": [
+        {
+          "error_code": null,
+          "label": "audit-list-A",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/audit?limit=100",
+          "request_id": "t03-check10-01",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "audit-list-B",
+          "method": "GET",
+          "path": "/api/v1/orgs/13/audit?limit=100",
+          "request_id": "t03-check10-02",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "audit-role-change",
+          "method": "PATCH",
+          "path": "/api/v1/orgs/12/members/10",
+          "request_id": "t03-check10-03",
+          "status": 204
+        },
+        {
+          "error_code": null,
+          "label": "audit-member-remove",
+          "method": "DELETE",
+          "path": "/api/v1/orgs/12/members/10",
+          "request_id": "t03-check10-04",
+          "status": 204
+        },
+        {
+          "error_code": null,
+          "label": "audit-invitation-create",
+          "method": "POST",
+          "path": "/api/v1/orgs/12/invitations",
+          "request_id": "t03-check10-05",
+          "status": 201
+        },
+        {
+          "error_code": "forbidden",
+          "label": "audit-invitation-create-failure",
+          "method": "POST",
+          "path": "/api/v1/orgs/12/invitations",
+          "request_id": "t03-check10-06",
+          "status": 403
+        },
+        {
+          "error_code": "forbidden",
+          "label": "audit-role-change-failure",
+          "method": "PATCH",
+          "path": "/api/v1/orgs/12/members/4",
+          "request_id": "t03-check10-07",
+          "status": 403
+        },
+        {
+          "error_code": null,
+          "label": "audit-key-create",
+          "method": "POST",
+          "path": "/api/v1/orgs/12/keys",
+          "request_id": "t03-check10-08",
+          "status": 201
+        },
+        {
+          "error_code": null,
+          "label": "audit-key-revoke",
+          "method": "POST",
+          "path": "/api/v1/orgs/12/keys/key_21b8f6a83c9d5b552f94b99c689deabe/revoke",
+          "request_id": "t03-check10-09",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "audit-list-A",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/audit?limit=100",
+          "request_id": "t03-check10-10",
+          "status": 200
+        },
+        {
+          "error_code": null,
+          "label": "audit-list-B",
+          "method": "GET",
+          "path": "/api/v1/orgs/13/audit?limit=100",
+          "request_id": "t03-check10-11",
+          "status": 200
+        },
+        {
+          "error_code": "forbidden",
+          "label": "audit-read-a-member",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/audit",
+          "request_id": "t03-check10-12",
+          "status": 403
+        },
+        {
+          "error_code": "forbidden",
+          "label": "audit-read-a-viewer",
+          "method": "GET",
+          "path": "/api/v1/orgs/12/audit",
+          "request_id": "t03-check10-13",
+          "status": 403
+        }
+      ],
+      "skip_reason": null,
+      "started_at": "2026-09-30T22:50:57Z",
+      "status": "PASS",
+      "title": "审计归属"
+    },
+    {
+      "details": {},
+      "failure": null,
+      "finished_at": "2026-09-30T22:50:57Z",
+      "id": "check11",
+      "notes": [
+        "扫描了 163 个响应体；14 个 secret/token 均只出现在各自的创建响应里"
+      ],
+      "requests": [],
+      "skip_reason": null,
+      "started_at": "2026-09-30T22:50:57Z",
+      "status": "PASS",
+      "title": "全局泄密扫描"
+    }
+  ],
+  "finished_at": "2026-09-30T22:50:57Z",
+  "fixtures": {
+    "organizations": {
+      "A": {
+        "id": "12",
+        "name": "t03-17c0af-acme"
+      },
+      "B": {
+        "id": "13",
+        "name": "t03-17c0af-beta"
+      }
+    },
+    "run_id": "17c0af",
+    "users": {
+      "a-admin": {
+        "email": "t03-17c0af-a-admin@t03.test",
+        "id": "3"
+      },
+      "a-invitee": {
+        "email": "t03-17c0af-a-invitee@t03.test",
+        "id": "10"
+      },
+      "a-member": {
+        "email": "t03-17c0af-a-member@t03.test",
+        "id": "4"
+      },
+      "a-owner": {
+        "email": "t03-17c0af-a-owner@t03.test",
+        "id": "2"
+      },
+      "a-viewer": {
+        "email": "t03-17c0af-a-viewer@t03.test",
+        "id": "5"
+      },
+      "b-admin": {
+        "email": "t03-17c0af-b-admin@t03.test",
+        "id": "7"
+      },
+      "b-member": {
+        "email": "t03-17c0af-b-member@t03.test",
+        "id": "8"
+      },
+      "b-owner": {
+        "email": "t03-17c0af-b-owner@t03.test",
+        "id": "6"
+      },
+      "b-viewer": {
+        "email": "t03-17c0af-b-viewer@t03.test",
+        "id": "9"
+      }
+    }
+  },
+  "not_verified": [],
+  "product_bugs": [],
+  "result": "PASS",
+  "started_at": "2026-09-30T22:50:28Z",
+  "tool": "scripts/console-rbac-accept.sh",
+  "version": 1
+}

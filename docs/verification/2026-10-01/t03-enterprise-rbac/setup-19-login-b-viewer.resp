@@ -1,0 +1,11 @@
+HTTP 200 (0.169s)
+Server: hertz
+Date: Wed, 30 Sep 2026 22:50:32 GMT
+Content-Type: application/json
+Content-Length: 426
+X-Request-Id: t03-setup-19
+X-Trace-Id: e52cf788295916c4ca57fce58faa5df1
+Set-Cookie: gw_session=1Hpo…<redacted:43>; max-age=43200; path=/; HttpOnly; SameSite=Lax
+Set-Cookie: gw_csrf=UT2J…<redacted:43>; max-age=43200; path=/; HttpOnly; SameSite=Lax
+
+{"user":{"id":"9","email":"t03-17c0af-b-viewer@t03.test","status":"active","platform_admin":false,"created_at":"2026-09-30T22:50:30Z","updated_at":"2026-09-30T22:50:30Z"},"organizations":[{"organization":{"id":"11","type":"personal","name":"t03-17c0af-b-viewer@t03.test","status":"active","legacy_tenant_id":null,"created_at":"2026-09-30T22:50:32Z"},"role":"owner"}],"csrf_token":"UT2J…<redacted:43>"}

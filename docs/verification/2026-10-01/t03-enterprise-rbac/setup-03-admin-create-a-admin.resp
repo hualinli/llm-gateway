@@ -1,0 +1,9 @@
+HTTP 201 (0.167s)
+Server: hertz
+Date: Wed, 30 Sep 2026 22:50:29 GMT
+Content-Type: application/json
+Content-Length: 161
+X-Request-Id: t03-setup-03
+X-Trace-Id: d403eb636454f000d9b5cf7390d4410c
+
+{"id":"3","email":"t03-17c0af-a-admin@t03.test","status":"active","platform_admin":false,"created_at":"2026-09-30T22:50:29Z","updated_at":"2026-09-30T22:50:29Z"}

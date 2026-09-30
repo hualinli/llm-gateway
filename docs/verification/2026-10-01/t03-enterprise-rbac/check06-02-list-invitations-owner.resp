@@ -1,0 +1,9 @@
+HTTP 200 (0.002s)
+Server: hertz
+Date: Wed, 30 Sep 2026 22:50:33 GMT
+Content-Type: application/json
+Content-Length: 1171
+X-Request-Id: t03-check06-02
+X-Trace-Id: db990562b681ef1a2d6b5a6592e8c505
+
+{"items":[{"id":"8","organization_id":"12","email":"t03-17c0af-a-invitee@t03.test","role":"member","status":"pending","expires_at":"2026-09-30T23:50:33Z","accepted_at":null,"created_by":"2","created_at":"2026-09-30T22:50:33Z"},{"id":"7","organization_id":"12","email":"t03-17c0af-owner2@t03.test","role":"owner","status":"pending","expires_at":"2026-10-03T22:50:33Z","accepted_at":null,"created_by":"2","created_at":"2026-09-30T22:50:33Z"},{"id":"3","organization_id":"12","email":"t03-17c0af-a-viewer@t03.test","role":"billing_viewer","status":"accepted","expires_at":"2026-10-03T22:50:32Z","accepted_at":"2026-09-30T22:50:32Z","created_by":"2","created_at":"2026-09-30T22:50:32Z"},{"id":"2","organization_id":"12","email":"t03-17c0af-a-member@t03.test","role":"member","status":"accepted","expires_at":"2026-10-03T22:50:32Z","accepted_at":"2026-09-30T22:50:32Z","created_by":"2","created_at":"2026-09-30T22:50:32Z"},{"id":"1","organization_id":"12","email":"t03-17c0af-a-admin@t03.test","role":"admin","status":"accepted","expires_at":"2026-10-03T22:50:32Z","accepted_at":"2026-09-30T22:50:32Z","created_by":"2","created_at":"2026-09-30T22:50:32Z"}],"next_cursor":null}

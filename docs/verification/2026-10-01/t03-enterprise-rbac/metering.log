@@ -1,0 +1,12 @@
+2026/10/01 06:50:08 runtime profile=demo WARNING: demo mode, production checks are not enforced
+2026/10/01 06:50:08 WARNING: production check failed: METERING_ADMIN_TOKEN: must be at least 16 characters so /ledger/count, /ledger/balance and /reconcile are not anonymous
+2026/10/01 06:50:08 WARNING: production check failed: METERING_DIAGNOSTICS_ADDR: must be set to a listener address different from the business address "127.0.0.1:18091" so metrics/pprof are not exposed on the query listener
+2026/10/01 06:50:08 pg ledger connected
+2026/10/01 06:50:08 metering consumer name=lihualindeMac-Pro.local-89202
+2026/10/01 06:50:08 WARNING: METERING_ADMIN_TOKEN is not set; /ledger/count, /ledger/balance and /reconcile are unauthenticated (demo only)
+2026/10/01 06:50:08 metering consumer group=metering-group consumer=lihualindeMac-Pro.local-89202 stream=usage:events
+2026/10/01 06:50:08 metering listening on 127.0.0.1:18091
+2026/10/01 06:50:08 metering consumer group=metering-group stream=usage:events
+2026/10/01 06:50:33 ledger add event_id=exec_a4dfed942560fb16334e51383e89b979 client_request_id=t03-check08-03 trace_id=a877f78c144d6f7f92231184c1721b2e tenant=org:12 cost=20
+2026/10/01 06:50:33 ledger add event_id=exec_f33d2766d1878282773e3bd4d5fdf3b5 client_request_id=t03-check08-09 trace_id=694f86b8c456e6ffc630c1ebefe7fd84 tenant=org:12 cost=20
+2026/10/01 06:52:30 shutting down metering...

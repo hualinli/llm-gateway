@@ -1,0 +1,9 @@
+HTTP 201 (0.003s)
+Server: hertz
+Date: Wed, 30 Sep 2026 22:50:32 GMT
+Content-Type: application/json
+Content-Length: 292
+X-Request-Id: t03-setup-32
+X-Trace-Id: b70093b7cc15fbec6c600af3648bb9fc
+
+{"invitation":{"id":"6","organization_id":"13","email":"t03-17c0af-b-viewer@t03.test","role":"billing_viewer","status":"pending","expires_at":"2026-10-03T22:50:32Z","accepted_at":null,"created_by":"6","created_at":"2026-09-30T22:50:32Z"},"token":"gEaU…<redacted:43>"}
