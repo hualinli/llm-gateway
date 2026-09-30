@@ -26,7 +26,10 @@ ledger_count() {
 for run in 1 2 3; do
   run_dir="$evidence_dir/run-$run"
   mkdir -p "$run_dir"
-  docker compose --profile demo-mocks start --wait mock-primary mock-backup > "$run_dir/start.log" 2>&1
+  # `docker compose start --wait` is not supported by every Compose 2.x build
+  # (unknown flag on v2.24); `up -d --wait` starts/keeps the profile services and
+  # waits for health, which is what the round needs.
+  docker compose --profile demo-mocks up -d --wait mock-primary mock-backup > "$run_dir/start.log" 2>&1
   before="$(ledger_count)"
   go run ./cmd/democtl request -expect-provider primary > "$run_dir/primary.log" 2>&1
   docker compose --profile demo-mocks stop mock-primary > "$run_dir/stop-primary.log" 2>&1
