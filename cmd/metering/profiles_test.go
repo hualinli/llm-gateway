@@ -46,6 +46,7 @@ func TestMeteringChecksAcceptFullProductionConfig(t *testing.T) {
 func TestMeteringChecksCoverEveryRequiredItem(t *testing.T) {
 	checks := meteringChecks(meteringLookup(goodMeteringEnv()))
 	want := []string{
+		"GATEWAY_FAILPOINTS",
 		"METERING_REQUIRE_POSTGRES",
 		"POSTGRES_DSN",
 		"METERING_ADMIN_TOKEN",
@@ -69,6 +70,11 @@ func TestMeteringChecksRejectRelaxedSettings(t *testing.T) {
 		mutate  func(map[string]string)
 		failing string
 	}{
+		{
+			name:    "failpoints armed in production",
+			mutate:  func(env map[string]string) { env["GATEWAY_FAILPOINTS"] = "settlement.ack_before=kill" },
+			failing: "GATEWAY_FAILPOINTS",
+		},
 		{
 			name:    "postgres not required means in-memory fallback",
 			mutate:  func(env map[string]string) { env["METERING_REQUIRE_POSTGRES"] = "false" },

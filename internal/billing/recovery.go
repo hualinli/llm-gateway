@@ -26,6 +26,17 @@ import (
 //     PostgreSQL in that same transaction: the execution state, the owning
 //     instance's heartbeat (gateway_instances), and the absence of a chargeable
 //     usage receipt;
+//   - the one thing that can replace the owner-liveness fact is the owner's own
+//     durable statement: an execution whose terminal_reason carries the F02-1
+//     abandonment marker ("abandoned:<reason>", written by
+//     PGAccountStore.MarkAttemptAbandoned when the owning process observed that
+//     the attempt ended without a durable decision) is releasable while its
+//     owner is still alive. The window, the no-chargeable-receipt precondition
+//     and the recorded check stay mandatory, the release is still audited
+//     (billing.execution.recovered, with abandonment_reason and
+//     owner_liveness_waived in the detail), and an execution without the marker
+//     keeps the strict behaviour: unknown is never dead, alive is never
+//     abandoned;
 //   - the customer is not charged: the release posts the ordinary
 //     kind=release entry (the reservation goes back), never a debit. The
 //     provider cost of a request whose usage is unknown stays a platform cost,
@@ -415,6 +426,19 @@ type RecoveryChecks struct {
 	// decided it, not because the automatic path could prove it. It is always
 	// false for the automated reaper.
 	ManualOverride bool
+	// AbandonmentReason is the reason half of the durable abandonment marker
+	// the owning gateway wrote at "abandoned:<reason>" ("" when the execution
+	// carries no marker). It is the *evidence* that replaced the owner-liveness
+	// proof: the process that owned the attempt recorded that the attempt ended
+	// without a durable billing decision.
+	AbandonmentReason string
+	// OwnerLivenessWaived records that the release did not require the owner to
+	// be proven dead because AbandonmentReason is set. The liveness read still
+	// happened and is still recorded (OwnerAlive, OwnerAge, ...), it just did
+	// not decide. OwnerLivenessWaived and ManualOverride are mutually exclusive
+	// in a returned result: one is a recorded machine fact, the other a human
+	// decision.
+	OwnerLivenessWaived bool
 	// PlatformPolicy is RecoveryPlatformPolicy: the recorded customer-billing
 	// policy of this release.
 	PlatformPolicy string
@@ -804,10 +828,19 @@ func (r *ExecutionRecovery) recoverCandidate(ctx context.Context, candidate Exec
 // informative but deliberately *not* the ledger payload (that is the constant
 // RecoveryReleaseReason): the structured evidence lives in the audit row, this
 // string is the one-line human explanation on the execution row.
+//
+// An execution that carries the durable abandonment marker is explained by that
+// marker (F02-1): the owner was not proven dead, the owner *itself* recorded
+// that the attempt ended. The release reason names the abandonment reason so the
+// execution row keeps the trail after terminal_reason is overwritten.
 func recoveryReason(candidate Execution, now time.Time, opts RecoveryOptions) string {
 	age := now.UTC().Sub(candidate.UpdatedAt.UTC())
 	if age < 0 {
 		age = 0
+	}
+	if reason := AbandonedReason(candidate); reason != "" {
+		return fmt.Sprintf("recovery: the gateway recorded the attempt as abandoned (%s); execution stuck in %s for %s (window %s); no chargeable receipt; platform absorbs the unknown upstream cost and the customer is not charged",
+			reason, candidate.Status, age.Round(time.Second), opts.MinAge())
 	}
 	owner := "unknown"
 	if candidate.GatewayID != nil && *candidate.GatewayID != "" {

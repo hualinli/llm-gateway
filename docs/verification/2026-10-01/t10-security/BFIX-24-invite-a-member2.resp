@@ -1,0 +1,9 @@
+HTTP 201 (0.003s)
+Server: hertz
+Date: Thu, 01 Oct 2026 06:46:55 GMT
+Content-Type: application/json
+Content-Length: 283
+X-Request-Id: t10-BFIX-24
+X-Trace-Id: c6de2551cb5c59fb15c25634a624d5dd
+
+{"invitation":{"id":"4","organization_id":"4","email":"t10-13427-a-member2@t10.test","role":"member","status":"pending","expires_at":"2026-10-04T06:46:55Z","accepted_at":null,"created_by":"2","created_at":"2026-10-01T06:46:55Z"},"token":"bJ_j…<redacted:43>"}

@@ -25,6 +25,7 @@ import (
 	"llm-gateway/internal/provider"
 	"llm-gateway/internal/proxy"
 	"llm-gateway/internal/ready"
+	"llm-gateway/internal/testsupport/failpoint"
 	pb "llm-gateway/proto/control"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -41,6 +42,17 @@ func main() {
 		log.Fatalf("runtime profile: %v", err)
 	}
 	appenv.Log(profile)
+
+	// T10 test-only fault injection. Attach is a no-op in a build without the
+	// `failpoint` tag; in a `-tags failpoint` build it refuses to arm under the
+	// production profile. The production preflight below independently refuses
+	// GATEWAY_FAILPOINTS in every build, so prod can never arm a failpoint.
+	if err := failpoint.Attach(failpoint.Options{Lookup: appenv.EnvLookup, Profile: profile.String()}); err != nil {
+		log.Fatalf("failpoints: %v", err)
+	}
+	if failpoint.Enabled() {
+		log.Printf("WARNING: this process was built with -tags failpoint and has armed failpoints; it must not serve production traffic")
+	}
 
 	// The control channel config is computed once: the same value drives the
 	// production preflight check and the synchronizer, so a check can never
@@ -334,6 +346,11 @@ func gatewayChecks(lookup appenv.Lookup, controlTLSConfigured bool) []appenv.Che
 	clientKeyFile := strings.TrimSpace(lookup("CONTROL_TLS_CLIENT_KEY_FILE"))
 
 	return []appenv.Check{
+		{
+			Name:   failpoint.EnvVar,
+			Detail: "must be empty: the T10 failpoints stop or kill this process at a money-path window and are only available to the isolated failure runner in demo/test (see internal/testsupport/failpoint)",
+			OK:     strings.TrimSpace(lookup(failpoint.EnvVar)) == "",
+		},
 		{
 			Name:   "LLM_GATEWAY_BOOTSTRAP_API_KEY",
 			Detail: "must be empty: production keys are issued by the control plane, and a raw bootstrap key bypasses it",

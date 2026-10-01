@@ -1,0 +1,545 @@
+{
+  "assertions": [
+    {
+      "assertion": "the broken stream is not a complete stream",
+      "detail": {
+        "body_head": "data: {\"choices\":[{\"delta\":{\"content\":\"cut \",\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0}],\"id\":\"chatcmpl-mock-cut\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"cut",
+        "body_tail": "cut\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"cut-1 \",\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0}],\"id\":\"chatcmpl-mock-cut\",\"object\":\"chat.completion.chunk\"}\n\n",
+        "bytes": 318,
+        "cancelled_by_client": false,
+        "classification": "incomplete",
+        "closed_seconds": 0.035347,
+        "done_seconds": null,
+        "error": null,
+        "events": 2,
+        "first_content_seconds": 0.025837,
+        "first_event_seconds": 0.025581,
+        "has_done": false,
+        "status": 200
+      },
+      "ok": true
+    },
+    {
+      "assertion": "the client saw exactly the events the upstream produced before the break",
+      "detail": {
+        "events": 2
+      },
+      "ok": true
+    },
+    {
+      "assertion": "gateway_stream_incomplete_total counts the break",
+      "detail": {
+        "delta": 1.0
+      },
+      "ok": true
+    },
+    {
+      "assertion": "the break created exactly one execution and no second attempt",
+      "detail": [
+        {
+          "execution_id": "exec_ab72d272ae04caf20dd6a29d248540a6",
+          "gateway_id": "gw-a",
+          "reserved_micro": "89",
+          "status": "executing",
+          "terminal_reason": "abandoned:upstream_stream_broken"
+        }
+      ],
+      "ok": true
+    },
+    {
+      "assertion": "no durable receipt backs the broken stream",
+      "detail": [],
+      "ok": true
+    },
+    {
+      "assertion": "the attempt ended with a durable abandonment marker (no status change, no money movement)",
+      "detail": [
+        {
+          "execution_id": "exec_ab72d272ae04caf20dd6a29d248540a6",
+          "gateway_id": "gw-a",
+          "reserved_micro": "89",
+          "status": "executing",
+          "terminal_reason": "abandoned:upstream_stream_broken"
+        }
+      ],
+      "ok": true
+    },
+    {
+      "assertion": "the abandonment is visible as a metric",
+      "detail": {
+        "delta": 1.0
+      },
+      "ok": true
+    },
+    {
+      "assertion": "the immediate state still holds the reservation (the marker is not a release)",
+      "detail": {
+        "account": {
+          "posted_balance_micro": 50000000,
+          "reserved_micro": 89,
+          "version": 2
+        },
+        "entries": [
+          {
+            "amount_micro": "89",
+            "business_id": "billing_execution:reservation:exec_ab72d272ae04caf20dd6a29d248540a6",
+            "direction": "credit",
+            "kind": "reservation"
+          }
+        ]
+      },
+      "ok": true
+    },
+    {
+      "assertion": "the abandonment itself is audited, with the reason",
+      "detail": [
+        {
+          "action": "billing.execution.reserved",
+          "outcome": "success",
+          "target_id": "exec_ab72d272ae04caf20dd6a29d248540a6"
+        },
+        {
+          "action": "billing.execution.abandoned",
+          "outcome": "success",
+          "target_id": "exec_ab72d272ae04caf20dd6a29d248540a6"
+        }
+      ],
+      "ok": true
+    },
+    {
+      "assertion": "the reservation is released after the window and the funds are returned exactly once",
+      "detail": {
+        "account": {
+          "posted_balance_micro": 50000000,
+          "reserved_micro": 0,
+          "version": 3
+        },
+        "entries": [
+          {
+            "amount_micro": "89",
+            "business_id": "billing_execution:reservation:exec_ab72d272ae04caf20dd6a29d248540a6",
+            "direction": "credit",
+            "kind": "reservation"
+          },
+          {
+            "amount_micro": "89",
+            "business_id": "billing_execution:release:exec_ab72d272ae04caf20dd6a29d248540a6",
+            "direction": "debit",
+            "kind": "release"
+          }
+        ]
+      },
+      "ok": true
+    },
+    {
+      "assertion": "the release is the audited recovery row (billing.execution.recovered)",
+      "detail": [
+        {
+          "action": "billing.execution.reserved",
+          "outcome": "success",
+          "target_id": "exec_ab72d272ae04caf20dd6a29d248540a6"
+        },
+        {
+          "action": "billing.execution.abandoned",
+          "outcome": "success",
+          "target_id": "exec_ab72d272ae04caf20dd6a29d248540a6"
+        },
+        {
+          "action": "billing.execution.recovered",
+          "outcome": "success",
+          "target_id": "exec_ab72d272ae04caf20dd6a29d248540a6"
+        }
+      ],
+      "ok": true
+    },
+    {
+      "assertion": "the release names the abandonment and records the waived liveness check",
+      "detail": {
+        "audit": [
+          [
+            "upstream_stream_broken",
+            "true",
+            "true",
+            "false"
+          ]
+        ],
+        "terminal_reason": "recovery: the gateway recorded the attempt as abandoned (upstream_stream_broken); execution stuck in executing for 5s (window 4s); no chargeable receipt; platform absorbs the unknown upstream cost and the customer is not charged"
+      },
+      "ok": true
+    },
+    {
+      "assertion": "no chargeable receipt exists for the released execution",
+      "detail": [],
+      "ok": true
+    },
+    {
+      "assertion": "uncertain finalization: the client is not given a clean end",
+      "detail": {
+        "body_head": "data: {\"choices\":[{\"delta\":{\"content\":\"ok \",\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0}],\"id\":\"chatcmpl-mock-ok\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"ok-1 ",
+        "body_tail": "ck-ok\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"ok-5 \",\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0}],\"id\":\"chatcmpl-mock-ok\",\"object\":\"chat.completion.chunk\"}\n\n",
+        "bytes": 946,
+        "cancelled_by_client": false,
+        "classification": "incomplete",
+        "closed_seconds": 0.055513,
+        "done_seconds": null,
+        "error": null,
+        "events": 6,
+        "first_content_seconds": 0.023381,
+        "first_event_seconds": 0.023245,
+        "has_done": false,
+        "status": 200
+      },
+      "ok": true
+    },
+    {
+      "assertion": "uncertain finalization: no receipt and no abandonment marker were written",
+      "detail": [
+        {
+          "execution_id": "exec_e93f68e6e8d75c0b51f5e09b13e9345c",
+          "gateway_id": "gw-a",
+          "reserved_micro": "89",
+          "status": "executing",
+          "terminal_reason": ""
+        }
+      ],
+      "ok": true
+    },
+    {
+      "assertion": "uncertain finalization: the reservation is still held after the recovery window",
+      "detail": {
+        "account": {
+          "posted_balance_micro": 50000000,
+          "reserved_micro": 89,
+          "version": 2
+        },
+        "audits": [
+          {
+            "action": "billing.execution.reserved",
+            "outcome": "success",
+            "target_id": "exec_e93f68e6e8d75c0b51f5e09b13e9345c"
+          }
+        ],
+        "entries": [
+          {
+            "amount_micro": "89",
+            "business_id": "billing_execution:reservation:exec_e93f68e6e8d75c0b51f5e09b13e9345c",
+            "direction": "credit",
+            "kind": "reservation"
+          }
+        ]
+      },
+      "ok": true
+    },
+    {
+      "assertion": "late receipt: the execution was released before its terminal usage event arrived",
+      "detail": [
+        {
+          "execution_id": "exec_cc03481279f43b4cdd27eec39355bf4a",
+          "gateway_id": "gw-a",
+          "reserved_micro": "89",
+          "status": "released",
+          "terminal_reason": "recovery: the gateway recorded the attempt as abandoned (runner_late_receipt_probe); execution stuck in executing for 5s (window 4s); no chargeable receipt; platform absorbs the unknown upstream cost and the customer is not charged"
+        }
+      ],
+      "ok": true
+    },
+    {
+      "assertion": "late receipt: the released execution refuses the chargeable receipt (no receipt row)",
+      "detail": [],
+      "ok": true
+    },
+    {
+      "assertion": "late receipt: no money moved for the released execution (exactly one release, no debit)",
+      "detail": {
+        "account": {
+          "posted_balance_micro": 50000000,
+          "reserved_micro": 0,
+          "version": 3
+        },
+        "entries": [
+          {
+            "amount_micro": "89",
+            "business_id": "billing_execution:reservation:exec_cc03481279f43b4cdd27eec39355bf4a",
+            "direction": "credit",
+            "kind": "reservation"
+          },
+          {
+            "amount_micro": "89",
+            "business_id": "billing_execution:release:exec_cc03481279f43b4cdd27eec39355bf4a",
+            "direction": "debit",
+            "kind": "release"
+          }
+        ]
+      },
+      "ok": true
+    },
+    {
+      "assertion": "late receipt: the client is not given a clean end for an unchargeable execution",
+      "detail": {
+        "error": null,
+        "opened": true,
+        "stream": {
+          "body_head": "data: {\"choices\":[{\"delta\":{\"content\":\"ok \",\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0}],\"id\":\"chatcmpl-mock-ok\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"ok-1 ",
+          "body_tail": "k-ok\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"ok-29 \",\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0}],\"id\":\"chatcmpl-mock-ok\",\"object\":\"chat.completion.chunk\"}\n\n",
+          "bytes": 4758,
+          "cancelled_by_client": false,
+          "classification": "incomplete",
+          "closed_seconds": 11.659214,
+          "done_seconds": null,
+          "error": null,
+          "events": 30,
+          "first_content_seconds": 0.019167,
+          "first_event_seconds": 0.018925,
+          "has_done": false,
+          "status": 200
+        }
+      },
+      "ok": true
+    },
+    {
+      "assertion": "late receipt: the refusal is a durable, queryable anomaly and the gateway logged it",
+      "detail": {
+        "anomalies": [
+          [
+            "billing.settlement.exception",
+            "late usage event for an execution that can no longer be charged (the platform does not charge it): billing: the execution is not in a state that allows this transition: execution exec_cc03481279f43b4cdd27eec39355bf4a already ended as released; a durable receipt cannot revive it"
+          ]
+        ],
+        "log": [
+          "2026/10/01 14:39:13 execution_id=exec_e93f68e6e8d75c0b51f5e09b13e9345c event_id=exec_e93f68e6e8d75c0b51f5e09b13e9345c model=t10-ok billing finalization refused (no [DONE] will be released): failpoint injected error: receipt.before_insert",
+          "2026/10/01 14:39:33 execution_id=exec_cc03481279f43b4cdd27eec39355bf4a event_id=exec_cc03481279f43b4cdd27eec39355bf4a model=t10-ok billing finalization refused (no [DONE] will be released): billing: the execution is not in a state that allows this transition: execution exec_cc03481279f43b4cdd27eec39355bf4a already ended as released; a durable receipt cannot revive it"
+        ]
+      },
+      "ok": true
+    }
+  ],
+  "evidence": {
+    "abandoned_metric_delta": 1.0,
+    "account": {
+      "posted_balance_micro": 50000000,
+      "reserved_micro": 89,
+      "version": 2
+    },
+    "after_recovery_window": {
+      "account": {
+        "posted_balance_micro": 50000000,
+        "reserved_micro": 0,
+        "version": 3
+      },
+      "audits": [
+        {
+          "action": "billing.execution.reserved",
+          "outcome": "success",
+          "target_id": "exec_ab72d272ae04caf20dd6a29d248540a6"
+        },
+        {
+          "action": "billing.execution.abandoned",
+          "outcome": "success",
+          "target_id": "exec_ab72d272ae04caf20dd6a29d248540a6"
+        },
+        {
+          "action": "billing.execution.recovered",
+          "outcome": "success",
+          "target_id": "exec_ab72d272ae04caf20dd6a29d248540a6"
+        }
+      ],
+      "entries": [
+        {
+          "amount_micro": "89",
+          "business_id": "billing_execution:reservation:exec_ab72d272ae04caf20dd6a29d248540a6",
+          "direction": "credit",
+          "kind": "reservation"
+        },
+        {
+          "amount_micro": "89",
+          "business_id": "billing_execution:release:exec_ab72d272ae04caf20dd6a29d248540a6",
+          "direction": "debit",
+          "kind": "release"
+        }
+      ],
+      "executions": [
+        {
+          "execution_id": "exec_ab72d272ae04caf20dd6a29d248540a6",
+          "gateway_id": "gw-a",
+          "reserved_micro": "89",
+          "status": "released",
+          "terminal_reason": "recovery: the gateway recorded the attempt as abandoned (upstream_stream_broken); execution stuck in executing for 5s (window 4s); no chargeable receipt; platform absorbs the unknown upstream cost and the customer is not charged"
+        }
+      ],
+      "gateway_instance": [
+        [
+          "gw-a",
+          "2026-10-01 06:39:12.424519+00"
+        ]
+      ],
+      "metering_recovery_lease_seconds": 11,
+      "recovery_audit": [
+        [
+          "upstream_stream_broken",
+          "true",
+          "true",
+          "false"
+        ]
+      ],
+      "recovery_window_seconds": 4
+    },
+    "executions": [
+      {
+        "execution_id": "exec_ab72d272ae04caf20dd6a29d248540a6",
+        "gateway_id": "gw-a",
+        "reserved_micro": "89",
+        "status": "executing",
+        "terminal_reason": "abandoned:upstream_stream_broken"
+      }
+    ],
+    "executions_created": 1,
+    "incomplete_metric_delta": 1.0,
+    "late_receipt_after_release": {
+      "account": {
+        "posted_balance_micro": 50000000,
+        "reserved_micro": 0,
+        "version": 3
+      },
+      "anomalies": [
+        [
+          "billing.settlement.exception",
+          "late usage event for an execution that can no longer be charged (the platform does not charge it): billing: the execution is not in a state that allows this transition: execution exec_cc03481279f43b4cdd27eec39355bf4a already ended as released; a durable receipt cannot revive it"
+        ]
+      ],
+      "client": {
+        "error": null,
+        "opened": true,
+        "stream": {
+          "body_head": "data: {\"choices\":[{\"delta\":{\"content\":\"ok \",\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0}],\"id\":\"chatcmpl-mock-ok\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"ok-1 ",
+          "body_tail": "k-ok\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"ok-29 \",\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0}],\"id\":\"chatcmpl-mock-ok\",\"object\":\"chat.completion.chunk\"}\n\n",
+          "bytes": 4758,
+          "cancelled_by_client": false,
+          "classification": "incomplete",
+          "closed_seconds": 11.659214,
+          "done_seconds": null,
+          "error": null,
+          "events": 30,
+          "first_content_seconds": 0.019167,
+          "first_event_seconds": 0.018925,
+          "has_done": false,
+          "status": 200
+        }
+      },
+      "entries": [
+        {
+          "amount_micro": "89",
+          "business_id": "billing_execution:reservation:exec_cc03481279f43b4cdd27eec39355bf4a",
+          "direction": "credit",
+          "kind": "reservation"
+        },
+        {
+          "amount_micro": "89",
+          "business_id": "billing_execution:release:exec_cc03481279f43b4cdd27eec39355bf4a",
+          "direction": "debit",
+          "kind": "release"
+        }
+      ],
+      "execution_id": "exec_cc03481279f43b4cdd27eec39355bf4a",
+      "executions": [
+        {
+          "execution_id": "exec_cc03481279f43b4cdd27eec39355bf4a",
+          "gateway_id": "gw-a",
+          "reserved_micro": "89",
+          "status": "released",
+          "terminal_reason": "recovery: the gateway recorded the attempt as abandoned (runner_late_receipt_probe); execution stuck in executing for 5s (window 4s); no chargeable receipt; platform absorbs the unknown upstream cost and the customer is not charged"
+        }
+      ],
+      "gateway_refusal_log": [
+        "2026/10/01 14:39:13 execution_id=exec_e93f68e6e8d75c0b51f5e09b13e9345c event_id=exec_e93f68e6e8d75c0b51f5e09b13e9345c model=t10-ok billing finalization refused (no [DONE] will be released): failpoint injected error: receipt.before_insert",
+        "2026/10/01 14:39:33 execution_id=exec_cc03481279f43b4cdd27eec39355bf4a event_id=exec_cc03481279f43b4cdd27eec39355bf4a billing late usage recorded as a settlement anomaly (the execution can no longer be charged: no receipt, no money moved)",
+        "2026/10/01 14:39:33 execution_id=exec_cc03481279f43b4cdd27eec39355bf4a event_id=exec_cc03481279f43b4cdd27eec39355bf4a model=t10-ok billing finalization refused (no [DONE] will be released): billing: the execution is not in a state that allows this transition: execution exec_cc03481279f43b4cdd27eec39355bf4a already ended as released; a durable receipt cannot revive it"
+      ],
+      "marker_injected_by": "SQL (the gateway's own marker writer is case 1)",
+      "receipts": [],
+      "released_before_the_terminal_event": true
+    },
+    "receipts": [],
+    "stream": {
+      "body_head": "data: {\"choices\":[{\"delta\":{\"content\":\"cut \",\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0}],\"id\":\"chatcmpl-mock-cut\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"cut",
+      "body_tail": "cut\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"cut-1 \",\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0}],\"id\":\"chatcmpl-mock-cut\",\"object\":\"chat.completion.chunk\"}\n\n",
+      "bytes": 318,
+      "cancelled_by_client": false,
+      "classification": "incomplete",
+      "closed_seconds": 0.035347,
+      "done_seconds": null,
+      "error": null,
+      "events": 2,
+      "first_content_seconds": 0.025837,
+      "first_event_seconds": 0.025581,
+      "has_done": false,
+      "status": 200
+    },
+    "uncertain_finalization": {
+      "after_window": {
+        "account": {
+          "posted_balance_micro": 50000000,
+          "reserved_micro": 89,
+          "version": 2
+        },
+        "audits": [
+          {
+            "action": "billing.execution.reserved",
+            "outcome": "success",
+            "target_id": "exec_e93f68e6e8d75c0b51f5e09b13e9345c"
+          }
+        ],
+        "entries": [
+          {
+            "amount_micro": "89",
+            "business_id": "billing_execution:reservation:exec_e93f68e6e8d75c0b51f5e09b13e9345c",
+            "direction": "credit",
+            "kind": "reservation"
+          }
+        ],
+        "executions": [
+          {
+            "execution_id": "exec_e93f68e6e8d75c0b51f5e09b13e9345c",
+            "gateway_id": "gw-a",
+            "reserved_micro": "89",
+            "status": "executing",
+            "terminal_reason": ""
+          }
+        ]
+      },
+      "immediate": {
+        "executions": [
+          {
+            "execution_id": "exec_e93f68e6e8d75c0b51f5e09b13e9345c",
+            "gateway_id": "gw-a",
+            "reserved_micro": "89",
+            "status": "executing",
+            "terminal_reason": ""
+          }
+        ],
+        "receipts": []
+      },
+      "note": "the gateway is armed with receipt.before_insert=error: FinalizeReceipt fails before the receipt row exists, so the call site cannot know whether a chargeable fact exists. It must keep the hold.",
+      "stream": {
+        "body_head": "data: {\"choices\":[{\"delta\":{\"content\":\"ok \",\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0}],\"id\":\"chatcmpl-mock-ok\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"ok-1 ",
+        "body_tail": "ck-ok\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"ok-5 \",\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0}],\"id\":\"chatcmpl-mock-ok\",\"object\":\"chat.completion.chunk\"}\n\n",
+        "bytes": 946,
+        "cancelled_by_client": false,
+        "classification": "incomplete",
+        "closed_seconds": 0.055513,
+        "done_seconds": null,
+        "error": null,
+        "events": 6,
+        "first_content_seconds": 0.023381,
+        "first_event_seconds": 0.023245,
+        "has_done": false,
+        "status": 200
+      }
+    }
+  },
+  "id": "F02",
+  "notes": [],
+  "partial_reason": null,
+  "seconds": 27.35,
+  "status": "PASS",
+  "title": "a mid-stream break is incomplete, is never transparently replayed, and its reservation is released by durable evidence, not by a blind TTL"
+}

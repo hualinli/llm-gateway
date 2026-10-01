@@ -1,0 +1,354 @@
+{
+  "assertions": [
+    {
+      "assertion": "a completed stream has its receipt in PostgreSQL before the outage",
+      "detail": [
+        {
+          "charge_micro": "18",
+          "event_id": "exec_e27eca21d4de2f81f2b29eb953a77898",
+          "execution_id": "exec_e27eca21d4de2f81f2b29eb953a77898",
+          "status": "pending_dispatch",
+          "total_tokens": "18"
+        }
+      ],
+      "ok": true
+    },
+    {
+      "assertion": "new requests are refused while Redis is down (limiter fails closed, not open)",
+      "detail": {
+        "body_head": "{\"error\":{\"code\":\"unavailable\",\"message\":\"rate limiter unavailable\",\"request_id\":\"62fd8170f261602fcf4a2989f5bd2460\"}}\n",
+        "body_tail": "{\"error\":{\"code\":\"unavailable\",\"message\":\"rate limiter unavailable\",\"request_id\":\"62fd8170f261602fcf4a2989f5bd2460\"}}\n",
+        "bytes": 118,
+        "cancelled_by_client": false,
+        "classification": "refused",
+        "closed_seconds": 1.753571,
+        "done_seconds": null,
+        "error": null,
+        "events": 0,
+        "first_content_seconds": null,
+        "first_event_seconds": 1.753478,
+        "has_done": false,
+        "status": 503
+      },
+      "ok": true
+    },
+    {
+      "assertion": "the refusal held no funds: every execution it created ended without a charge",
+      "detail": {
+        "account": {
+          "posted_balance_micro": 50000000,
+          "reserved_micro": 89,
+          "version": 4
+        },
+        "new_executions": [
+          {
+            "execution_id": "exec_de53866f40805da59d7013572edbf593",
+            "gateway_id": "gw-a",
+            "reserved_micro": "89",
+            "status": "failed_no_charge",
+            "terminal_reason": "gateway: upstream request failed before the first byte (http_status=503)"
+          }
+        ]
+      },
+      "ok": true
+    },
+    {
+      "assertion": "the in-flight receipt survived the outage untouched",
+      "detail": [
+        {
+          "charge_micro": "18",
+          "event_id": "exec_e27eca21d4de2f81f2b29eb953a77898",
+          "execution_id": "exec_e27eca21d4de2f81f2b29eb953a77898",
+          "status": "pending_dispatch",
+          "total_tokens": "18"
+        }
+      ],
+      "ok": true
+    },
+    {
+      "assertion": "the dispatcher re-published from PostgreSQL after Redis returned",
+      "detail": [
+        {
+          "amount_micro": "89",
+          "business_id": "billing_execution:reservation:exec_e27eca21d4de2f81f2b29eb953a77898",
+          "direction": "credit",
+          "kind": "reservation"
+        },
+        {
+          "amount_micro": "89",
+          "business_id": "billing_execution:reservation:exec_de53866f40805da59d7013572edbf593",
+          "direction": "credit",
+          "kind": "reservation"
+        },
+        {
+          "amount_micro": "89",
+          "business_id": "billing_execution:release:exec_de53866f40805da59d7013572edbf593",
+          "direction": "debit",
+          "kind": "release"
+        },
+        {
+          "amount_micro": "18",
+          "business_id": "billing_receipt:debit:exec_e27eca21d4de2f81f2b29eb953a77898",
+          "direction": "debit",
+          "kind": "debit"
+        },
+        {
+          "amount_micro": "89",
+          "business_id": "billing_execution:release:exec_e27eca21d4de2f81f2b29eb953a77898",
+          "direction": "debit",
+          "kind": "release"
+        }
+      ],
+      "ok": true
+    },
+    {
+      "assertion": "losing the transport did not lose the durable receipt",
+      "detail": [
+        {
+          "charge_micro": "18",
+          "event_id": "exec_c0d2de44ebdfe34911049fa45d11f783",
+          "execution_id": "exec_c0d2de44ebdfe34911049fa45d11f783",
+          "status": "settled",
+          "total_tokens": "18"
+        }
+      ],
+      "ok": true
+    },
+    {
+      "assertion": "the group healed and the receipt settled exactly once after transport loss",
+      "detail": {
+        "entries": [
+          {
+            "amount_micro": "89",
+            "business_id": "billing_execution:reservation:exec_c0d2de44ebdfe34911049fa45d11f783",
+            "direction": "credit",
+            "kind": "reservation"
+          },
+          {
+            "amount_micro": "18",
+            "business_id": "billing_receipt:debit:exec_c0d2de44ebdfe34911049fa45d11f783",
+            "direction": "debit",
+            "kind": "debit"
+          },
+          {
+            "amount_micro": "89",
+            "business_id": "billing_execution:release:exec_c0d2de44ebdfe34911049fa45d11f783",
+            "direction": "debit",
+            "kind": "release"
+          }
+        ],
+        "stream_exists": "1"
+      },
+      "ok": true
+    }
+  ],
+  "evidence": {
+    "after_outage": {
+      "account": {
+        "posted_balance_micro": 49999982,
+        "reserved_micro": 0,
+        "version": 6
+      },
+      "entries": [
+        {
+          "amount_micro": "89",
+          "business_id": "billing_execution:reservation:exec_e27eca21d4de2f81f2b29eb953a77898",
+          "direction": "credit",
+          "kind": "reservation"
+        },
+        {
+          "amount_micro": "89",
+          "business_id": "billing_execution:reservation:exec_de53866f40805da59d7013572edbf593",
+          "direction": "credit",
+          "kind": "reservation"
+        },
+        {
+          "amount_micro": "89",
+          "business_id": "billing_execution:release:exec_de53866f40805da59d7013572edbf593",
+          "direction": "debit",
+          "kind": "release"
+        },
+        {
+          "amount_micro": "18",
+          "business_id": "billing_receipt:debit:exec_e27eca21d4de2f81f2b29eb953a77898",
+          "direction": "debit",
+          "kind": "debit"
+        },
+        {
+          "amount_micro": "89",
+          "business_id": "billing_execution:release:exec_e27eca21d4de2f81f2b29eb953a77898",
+          "direction": "debit",
+          "kind": "release"
+        }
+      ],
+      "receipts": [
+        {
+          "charge_micro": "18",
+          "event_id": "exec_e27eca21d4de2f81f2b29eb953a77898",
+          "execution_id": "exec_e27eca21d4de2f81f2b29eb953a77898",
+          "status": "settled",
+          "total_tokens": "18"
+        }
+      ]
+    },
+    "during_outage": {
+      "account": {
+        "posted_balance_micro": 50000000,
+        "reserved_micro": 89,
+        "version": 4
+      },
+      "executions": [
+        {
+          "execution_id": "exec_e27eca21d4de2f81f2b29eb953a77898",
+          "gateway_id": "gw-a",
+          "reserved_micro": "89",
+          "status": "receipt_recorded",
+          "terminal_reason": ""
+        },
+        {
+          "execution_id": "exec_de53866f40805da59d7013572edbf593",
+          "gateway_id": "gw-a",
+          "reserved_micro": "89",
+          "status": "failed_no_charge",
+          "terminal_reason": "gateway: upstream request failed before the first byte (http_status=503)"
+        }
+      ],
+      "new_executions": [
+        {
+          "execution_id": "exec_de53866f40805da59d7013572edbf593",
+          "gateway_id": "gw-a",
+          "reserved_micro": "89",
+          "status": "failed_no_charge",
+          "terminal_reason": "gateway: upstream request failed before the first byte (http_status=503)"
+        }
+      ],
+      "new_request": {
+        "body_head": "{\"error\":{\"code\":\"unavailable\",\"message\":\"rate limiter unavailable\",\"request_id\":\"62fd8170f261602fcf4a2989f5bd2460\"}}\n",
+        "body_tail": "{\"error\":{\"code\":\"unavailable\",\"message\":\"rate limiter unavailable\",\"request_id\":\"62fd8170f261602fcf4a2989f5bd2460\"}}\n",
+        "bytes": 118,
+        "cancelled_by_client": false,
+        "classification": "refused",
+        "closed_seconds": 1.753571,
+        "done_seconds": null,
+        "error": null,
+        "events": 0,
+        "first_content_seconds": null,
+        "first_event_seconds": 1.753478,
+        "has_done": false,
+        "status": 503
+      },
+      "receipts": [
+        {
+          "charge_micro": "18",
+          "event_id": "exec_e27eca21d4de2f81f2b29eb953a77898",
+          "execution_id": "exec_e27eca21d4de2f81f2b29eb953a77898",
+          "status": "pending_dispatch",
+          "total_tokens": "18"
+        }
+      ],
+      "reserved_before_outage": 89
+    },
+    "stream_before_outage": {
+      "body_head": "data: {\"choices\":[{\"delta\":{\"content\":\"ok \",\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0}],\"id\":\"chatcmpl-mock-ok\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"ok-1 ",
+      "body_tail": "\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"id\":\"chatcmpl-mock-ok\",\"object\":\"chat.completion.chunk\",\"usage\":{\"completion_tokens\":6,\"prompt_tokens\":12,\"total_tokens\":18}}\n\ndata: [DONE]\n\n",
+      "bytes": 1153,
+      "cancelled_by_client": false,
+      "classification": "complete",
+      "closed_seconds": 0.054642,
+      "done_seconds": 0.054641,
+      "error": null,
+      "events": 8,
+      "first_content_seconds": 0.02267,
+      "first_event_seconds": 0.022408,
+      "has_done": true,
+      "status": 200
+    },
+    "transport_loss": {
+      "entries": [
+        {
+          "amount_micro": "89",
+          "business_id": "billing_execution:reservation:exec_c0d2de44ebdfe34911049fa45d11f783",
+          "direction": "credit",
+          "kind": "reservation"
+        },
+        {
+          "amount_micro": "18",
+          "business_id": "billing_receipt:debit:exec_c0d2de44ebdfe34911049fa45d11f783",
+          "direction": "debit",
+          "kind": "debit"
+        },
+        {
+          "amount_micro": "89",
+          "business_id": "billing_execution:release:exec_c0d2de44ebdfe34911049fa45d11f783",
+          "direction": "debit",
+          "kind": "release"
+        }
+      ],
+      "group_after_destroy": "1",
+      "receipts": [
+        {
+          "charge_micro": "18",
+          "event_id": "exec_c0d2de44ebdfe34911049fa45d11f783",
+          "execution_id": "exec_c0d2de44ebdfe34911049fa45d11f783",
+          "status": "settled",
+          "total_tokens": "18"
+        }
+      ],
+      "stream": {
+        "body_head": "data: {\"choices\":[{\"delta\":{\"content\":\"ok \",\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0}],\"id\":\"chatcmpl-mock-ok\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"ok-1 ",
+        "body_tail": "\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"id\":\"chatcmpl-mock-ok\",\"object\":\"chat.completion.chunk\",\"usage\":{\"completion_tokens\":6,\"prompt_tokens\":12,\"total_tokens\":18}}\n\ndata: [DONE]\n\n",
+        "bytes": 1153,
+        "cancelled_by_client": false,
+        "classification": "complete",
+        "closed_seconds": 0.047766,
+        "done_seconds": 0.047762,
+        "error": null,
+        "events": 8,
+        "first_content_seconds": 0.016691,
+        "first_event_seconds": 0.016537,
+        "has_done": true,
+        "status": 200
+      }
+    },
+    "transport_loss_converged": {
+      "entries": [
+        {
+          "amount_micro": "89",
+          "business_id": "billing_execution:reservation:exec_c0d2de44ebdfe34911049fa45d11f783",
+          "direction": "credit",
+          "kind": "reservation"
+        },
+        {
+          "amount_micro": "18",
+          "business_id": "billing_receipt:debit:exec_c0d2de44ebdfe34911049fa45d11f783",
+          "direction": "debit",
+          "kind": "debit"
+        },
+        {
+          "amount_micro": "89",
+          "business_id": "billing_execution:release:exec_c0d2de44ebdfe34911049fa45d11f783",
+          "direction": "debit",
+          "kind": "release"
+        }
+      ],
+      "group_exists": "1",
+      "receipts": [
+        {
+          "charge_micro": "18",
+          "event_id": "exec_c0d2de44ebdfe34911049fa45d11f783",
+          "execution_id": "exec_c0d2de44ebdfe34911049fa45d11f783",
+          "status": "settled",
+          "total_tokens": "18"
+        }
+      ]
+    }
+  },
+  "id": "F08",
+  "notes": [
+    "F08-2: the billing admission runs OUTSIDE the limiter in the middleware chain, so a fail-closed limiter refusal still writes an execution row plus a reservation and a release entry per refused request. No money is held, but a Redis outage produces PostgreSQL churn on the money path."
+  ],
+  "partial_reason": null,
+  "seconds": 5.48,
+  "status": "PASS",
+  "title": "a Redis outage fails the limiter closed, preserves receipts, and PG drives the redispatch"
+}

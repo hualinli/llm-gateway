@@ -1,0 +1,8 @@
+POST http://127.0.0.1:50436/api/v1/orgs/4/invitations
+X-Request-ID: t10-BFIX-15
+Accept: application/json
+Cookie: gw_session=vKQ7…<redacted:18>; gw_csrf=cJiU…<redacted:18>
+X-CSRF-Token: cJiU…<redacted:18>
+Content-Type: application/json
+
+{"email": "t10-13427-a-admin@t10.test", "role": "admin"}

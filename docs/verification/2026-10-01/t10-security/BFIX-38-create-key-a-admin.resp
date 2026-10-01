@@ -1,0 +1,9 @@
+HTTP 201 (0.008s)
+Server: hertz
+Date: Thu, 01 Oct 2026 06:46:56 GMT
+Content-Type: application/json
+Content-Length: 563
+X-Request-Id: t10-BFIX-38
+X-Trace-Id: 4bbcd81d4ea74671a419e47504b8810f
+
+{"key":{"key_id":"key_6d6dc028a08620c5a1b73d4aa11900cf","prefix":"sk-uvi-X...","organization_id":"4","owner_user_id":"5","created_by":"3","status":"active","expires_at":null,"revoked_at":null,"model_allowlist":null,"policy_version":"1","created_at":"2026-10-01T06:46:56Z","tenant_id":"org:4"},"secret":"sk-u…<redacted:46>","secret_returned_once":true,"replayed":false,"resulting_version":"6","notice":"Copy this secret now: it is shown only once and can never be retrieved again. If you lose it, revoke this key and create a new one."}

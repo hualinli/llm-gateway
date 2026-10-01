@@ -1,0 +1,561 @@
+2026/10/01 14:44:28 runtime profile=demo WARNING: demo mode, production checks are not enforced
+2026/10/01 14:44:28 WARNING: production check failed: METERING_DIAGNOSTICS_ADDR: must be set to a listener address different from the business address "127.0.0.1:58871" so metrics/pprof are not exposed on the query listener
+2026/10/01 14:44:28 pg ledger connected
+2026/10/01 14:44:28 metering consumer name=lihualindeMac-Pro.local-9815
+2026/10/01 14:44:28 metering admin token configured: /ledger/count, /ledger/balance and /reconcile require Authorization: Bearer
+2026/10/01 14:44:28 metering consumer group=metering-group consumer=lihualindeMac-Pro.local-9815 stream=usage:events
+2026/10/01 14:44:28 metering reconciliation loop interval=5m0s window=24h0m0s page_size=1000
+2026/10/01 14:44:28 settlement pipeline started: dispatcher[batch=64 concurrency=8 poll=500ms lease=30s redispatch=3s..15m0s max_attempts=8 backoff=1s..5m0s] settlement-consumer=lihualindeMac-Pro.local-9815 stream=usage:events:receipts backlog_interval=15s stale_after=2m0s
+2026/10/01 14:44:28 metering admin endpoints /receipts/backlog and /receipts/exceptions registered
+2026/10/01 14:44:28 settlement consumer group=settlement-group consumer=lihualindeMac-Pro.local-9815 stream=usage:events:receipts
+2026/10/01 14:44:28 execution recovery started: window=40m0s (max_execution=30m0s grace=10m0s) lease=1m0s batch=32 interval=30s sla=24h0m0s
+2026/10/01 14:44:28 execution recovery policy: platform_absorbs_unknown_upstream_cost; a release requires a dead owner (heartbeat older than 1m0s), no chargeable receipt, and the recorded check; the human SLA is 24h0m0s and nothing is released because the SLA elapsed
+2026/10/01 14:44:28 metering admin endpoints /recovery/status and /recovery/review-required registered
+2026/10/01 14:44:28 receipt dispatcher started batch=64 concurrency=8 poll=500ms lease=30s redispatch=3s..15m0s max_attempts=8 backoff=1s..5m0s
+2026/10/01 14:44:28 metering listening on 127.0.0.1:58871
+2026/10/01 14:44:28 metering consumer group=metering-group stream=usage:events
+2026/10/01 14:44:34 ledger add event_id=exec_bffd8fe1690c8937ecc3d1fe72089b5b client_request_id=t10-SEC-02-06 trace_id=34f2d12687a4399d4c1d67c4acda7e6b tenant=org:4 cost=20
+2026/10/01 14:44:34 settlement committed event_id=exec_bffd8fe1690c8937ecc3d1fe72089b5b execution_id=exec_bffd8fe1690c8937ecc3d1fe72089b5b charge_micro=20 lag=47.085ms
+2026/10/01 14:44:39 settlement committed event_id=exec_dcc02b2b42619b0256d71a0156a53190 execution_id=exec_dcc02b2b42619b0256d71a0156a53190 charge_micro=20 lag=78.865ms
+2026/10/01 14:44:39 ledger add event_id=exec_dcc02b2b42619b0256d71a0156a53190 client_request_id=t10-sec10-before trace_id=c50976494948d988c7c2b4013e75fca5 tenant=org:4 cost=20
+2026/10/01 14:44:40 ledger add event_id=exec_65d611065b23545d15de6bddf2528ac9 client_request_id=t10-sec10-recovered trace_id=18a13b1cebd949a256e768a5c77cf3dc tenant=org:4 cost=20
+2026/10/01 14:44:40 ledger add event_id=exec_b9953b8a518b200783eb8b30f5eca95f client_request_id=t10-sec11-before trace_id=83a8124e349351dbb41ef5d482f35245 tenant=org:4 cost=20
+2026/10/01 14:44:40 settlement committed event_id=exec_b9953b8a518b200783eb8b30f5eca95f execution_id=exec_b9953b8a518b200783eb8b30f5eca95f charge_micro=20 lag=171.107ms
+2026/10/01 14:44:40 settlement committed event_id=exec_65d611065b23545d15de6bddf2528ac9 execution_id=exec_65d611065b23545d15de6bddf2528ac9 charge_micro=20 lag=250.713ms
+2026/10/01 14:44:45 ledger add event_id=exec_1fa5556739295f7f0e9dc8796a3a2e40 client_request_id=t10-sec11-inflight trace_id=4332ceb87b923588eea1dc256c7902b5 tenant=org:4 cost=24
+2026/10/01 14:44:45 settlement committed event_id=exec_1fa5556739295f7f0e9dc8796a3a2e40 execution_id=exec_1fa5556739295f7f0e9dc8796a3a2e40 charge_micro=24 lag=471.849ms
+2026/10/01 14:44:45 ledger add event_id=exec_8a8d4843ed4106a0b59742621934d2da client_request_id=t10-sec14-member trace_id=dde80618320234bf7a61739c6270ac9e tenant=org:4 cost=20
+2026/10/01 14:44:45 ledger add event_id=exec_beb49a203e3149c77af5db4a5a4384cc client_request_id=t10-sec14-crossorg trace_id=95cfb1317239bf44a868e9ede9196f90 tenant=org:6 cost=20
+2026/10/01 14:44:45 settlement committed event_id=exec_beb49a203e3149c77af5db4a5a4384cc execution_id=exec_beb49a203e3149c77af5db4a5a4384cc charge_micro=20 lag=32.302ms
+2026/10/01 14:44:45 settlement committed event_id=exec_8a8d4843ed4106a0b59742621934d2da execution_id=exec_8a8d4843ed4106a0b59742621934d2da charge_micro=20 lag=134.288ms
+2026/10/01 14:44:51 ledger add event_id=exec_a00b402178b9d47f91bd0f1e9d1083fd client_request_id=t10-phase-probe trace_id=2705c489cba0c6eb3b0da5ee45e311de tenant=org:4 cost=20
+2026/10/01 14:44:52 settlement committed event_id=exec_a00b402178b9d47f91bd0f1e9d1083fd execution_id=exec_a00b402178b9d47f91bd0f1e9d1083fd charge_micro=20 lag=83.553ms
+2026/10/01 14:44:52 ledger add event_id=exec_d01f6005b9e12479e34780cbe9261d45 client_request_id=t10-phase-probe trace_id=f75a7b37ec481787352dc68da7856f21 tenant=org:4 cost=20
+2026/10/01 14:44:53 settlement committed event_id=exec_d01f6005b9e12479e34780cbe9261d45 execution_id=exec_d01f6005b9e12479e34780cbe9261d45 charge_micro=20 lag=453.917ms
+2026/10/01 14:44:53 ledger add event_id=exec_2018c3c6f7e1879dfc4506697cbeda19 client_request_id=t10-phase-probe trace_id=3bec5361610325e0f8eff7f73c344d69 tenant=org:4 cost=20
+2026/10/01 14:44:53 settlement committed event_id=exec_2018c3c6f7e1879dfc4506697cbeda19 execution_id=exec_2018c3c6f7e1879dfc4506697cbeda19 charge_micro=20 lag=320.773ms
+2026/10/01 14:44:53 ledger add event_id=exec_787804bff17b1c688edb64099a18035d client_request_id=t10-phase-probe trace_id=5b24dd6d44361bae7948324d76f844b6 tenant=org:4 cost=20
+2026/10/01 14:44:54 settlement committed event_id=exec_787804bff17b1c688edb64099a18035d execution_id=exec_787804bff17b1c688edb64099a18035d charge_micro=20 lag=191.241ms
+2026/10/01 14:44:54 settlement committed event_id=exec_6154ebcc9ffe2c3e49c1e293613e4be7 execution_id=exec_6154ebcc9ffe2c3e49c1e293613e4be7 charge_micro=20 lag=51.133ms
+2026/10/01 14:44:54 ledger add event_id=exec_6154ebcc9ffe2c3e49c1e293613e4be7 client_request_id=t10-phase-probe trace_id=e32b031b700765386f51c7d4da5ef155 tenant=org:4 cost=20
+2026/10/01 14:44:55 ledger add event_id=exec_17ed494c719dbc73863fbe8a2b840d56 client_request_id=t10-phase-probe trace_id=114305c9081214afe22798a1fda8e8e3 tenant=org:4 cost=20
+2026/10/01 14:44:55 settlement committed event_id=exec_17ed494c719dbc73863fbe8a2b840d56 execution_id=exec_17ed494c719dbc73863fbe8a2b840d56 charge_micro=20 lag=412.449ms
+2026/10/01 14:44:55 ledger add event_id=exec_72767650d88a4be7bcaa13be0901ef4c client_request_id=t10-phase-probe trace_id=ddbe75b5f0969dcc9e4856123e0c0b28 tenant=org:4 cost=20
+2026/10/01 14:44:55 ledger add event_id=exec_4c3a72a017305406c15e192b8bdb55d5 client_request_id=t10-ctrl02-inflight trace_id=746016672edef1b1e0241516d70f4b26 tenant=org:4 cost=28
+2026/10/01 14:44:56 settlement committed event_id=exec_4c3a72a017305406c15e192b8bdb55d5 execution_id=exec_4c3a72a017305406c15e192b8bdb55d5 charge_micro=28 lag=116.263ms
+2026/10/01 14:44:56 settlement committed event_id=exec_72767650d88a4be7bcaa13be0901ef4c execution_id=exec_72767650d88a4be7bcaa13be0901ef4c charge_micro=20 lag=291.163ms
+2026/10/01 14:44:56 ledger add event_id=exec_7f417b8716b0d386605224e9289f19f7 client_request_id=t10-phase-probe trace_id=89810be63aac99f8b33093341113a700 tenant=org:4 cost=20
+2026/10/01 14:44:56 settlement committed event_id=exec_7f417b8716b0d386605224e9289f19f7 execution_id=exec_7f417b8716b0d386605224e9289f19f7 charge_micro=20 lag=155.723ms
+2026/10/01 14:44:57 settlement committed event_id=exec_110e807ca27b39b46ddb11973163370c execution_id=exec_110e807ca27b39b46ddb11973163370c charge_micro=20 lag=19.03ms
+2026/10/01 14:44:57 ledger add event_id=exec_110e807ca27b39b46ddb11973163370c client_request_id=t10-phase-probe trace_id=3d3425c64e327c899711583952382dce tenant=org:4 cost=20
+2026/10/01 14:44:57 ledger add event_id=exec_303c5d89c58dd1486075477225f6fbc7 client_request_id=t10-phase-probe trace_id=29b229c6eb7747cc8e9db7c551ccf703 tenant=org:4 cost=20
+2026/10/01 14:44:58 settlement committed event_id=exec_303c5d89c58dd1486075477225f6fbc7 execution_id=exec_303c5d89c58dd1486075477225f6fbc7 charge_micro=20 lag=384.404ms
+2026/10/01 14:44:58 ledger add event_id=exec_40600988b81beb22970759ed6a866590 client_request_id=t10-phase-probe trace_id=0854357f0065a6be1cfbe8338e26d90a tenant=org:4 cost=20
+2026/10/01 14:44:58 settlement committed event_id=exec_40600988b81beb22970759ed6a866590 execution_id=exec_40600988b81beb22970759ed6a866590 charge_micro=20 lag=246.806ms
+2026/10/01 14:44:59 settlement committed event_id=exec_4566be96c5cc17e1fdfaf3daca94da96 execution_id=exec_4566be96c5cc17e1fdfaf3daca94da96 charge_micro=20 lag=110.884ms
+2026/10/01 14:44:59 ledger add event_id=exec_4566be96c5cc17e1fdfaf3daca94da96 client_request_id=t10-phase-probe trace_id=9f3ba08bce3913040f0b3900a5aa8087 tenant=org:4 cost=20
+2026/10/01 14:45:22 ledger add event_id=exec_cfc34fbf836dc84961b669edd22c4d89 client_request_id=t10-phase-probe trace_id=8e9862869b0316242a3aa5636726daa4 tenant=org:4 cost=20
+2026/10/01 14:45:22 ledger add event_id=exec_5323f6d56054f0c0597d557700b3ed90 client_request_id=t10-ctrl04-before trace_id=028b4116ba5df514dc8d3cdec04766ee tenant=org:4 cost=20
+2026/10/01 14:45:22 settlement committed event_id=exec_5323f6d56054f0c0597d557700b3ed90 execution_id=exec_5323f6d56054f0c0597d557700b3ed90 charge_micro=20 lag=385.578ms
+2026/10/01 14:45:22 settlement committed event_id=exec_cfc34fbf836dc84961b669edd22c4d89 execution_id=exec_cfc34fbf836dc84961b669edd22c4d89 charge_micro=20 lag=486.622ms
+2026/10/01 14:45:23 ledger add event_id=exec_c99d0ac71e74a9584608402f65f284da client_request_id=t10-ctrl04-outage trace_id=67f9c5290fd3302d386ce6c065966257 tenant=org:4 cost=20
+2026/10/01 14:45:24 settlement committed event_id=exec_c99d0ac71e74a9584608402f65f284da execution_id=exec_c99d0ac71e74a9584608402f65f284da charge_micro=20 lag=416.427ms
+2026/10/01 14:45:24 ledger add event_id=exec_03c1d91a3cfeecf59ee7f4930ed97549 client_request_id=t10-ctrl04-outage trace_id=7069b872c4d22c47a046df35bebf0918 tenant=org:4 cost=20
+2026/10/01 14:45:24 settlement committed event_id=exec_03c1d91a3cfeecf59ee7f4930ed97549 execution_id=exec_03c1d91a3cfeecf59ee7f4930ed97549 charge_micro=20 lag=274.45ms
+2026/10/01 14:45:25 ledger add event_id=exec_c421d5e572af17e7b60ee7ebfdaf62b4 client_request_id=t10-ctrl04-outage trace_id=282e4fba0104e53e1cc86b78cfd92bbc tenant=org:4 cost=20
+2026/10/01 14:45:25 settlement committed event_id=exec_c421d5e572af17e7b60ee7ebfdaf62b4 execution_id=exec_c421d5e572af17e7b60ee7ebfdaf62b4 charge_micro=20 lag=135.611ms
+2026/10/01 14:45:25 ledger add event_id=exec_e5c2d4f816438dfdb253d34d4f0c9e55 client_request_id=t10-ctrl04-outage trace_id=0a1f6f946c5e8d57484e2d9f3f8e8aa4 tenant=org:4 cost=20
+2026/10/01 14:45:26 settlement committed event_id=exec_e5c2d4f816438dfdb253d34d4f0c9e55 execution_id=exec_e5c2d4f816438dfdb253d34d4f0c9e55 charge_micro=20 lag=491.305ms
+2026/10/01 14:45:26 ledger add event_id=exec_1b2851696e79e60f9702b072a563d56d client_request_id=t10-ctrl04-outage trace_id=e46b7c874ecd500adea89ba928559a67 tenant=org:4 cost=20
+2026/10/01 14:45:26 settlement committed event_id=exec_1b2851696e79e60f9702b072a563d56d execution_id=exec_1b2851696e79e60f9702b072a563d56d charge_micro=20 lag=350.412ms
+2026/10/01 14:45:27 ledger add event_id=exec_71a55b0087f10659613b0b29b187f64a client_request_id=t10-ctrl04-outage trace_id=453afba77a56a33880450810d3d69b76 tenant=org:4 cost=20
+2026/10/01 14:45:27 settlement committed event_id=exec_71a55b0087f10659613b0b29b187f64a execution_id=exec_71a55b0087f10659613b0b29b187f64a charge_micro=20 lag=209.419ms
+2026/10/01 14:45:27 ledger add event_id=exec_f8f27b5e12ec48be2890475473211a96 client_request_id=t10-ctrl04-outage trace_id=eb04fc5a2ba186f3c8e3ee9f5e6f13d0 tenant=org:4 cost=20
+2026/10/01 14:45:27 settlement committed event_id=exec_f8f27b5e12ec48be2890475473211a96 execution_id=exec_f8f27b5e12ec48be2890475473211a96 charge_micro=20 lag=62.227ms
+2026/10/01 14:45:28 ledger add event_id=exec_6b9c0e4b59c73853c608990ee1c6edbf client_request_id=t10-ctrl04-outage trace_id=fd3001e56a7d243fd87b66d632d14751 tenant=org:4 cost=20
+2026/10/01 14:45:28 settlement committed event_id=exec_6b9c0e4b59c73853c608990ee1c6edbf execution_id=exec_6b9c0e4b59c73853c608990ee1c6edbf charge_micro=20 lag=432.337ms
+2026/10/01 14:45:29 ledger add event_id=exec_79c67cbb28d1dc31f0d3630160f8e4f8 client_request_id=t10-ctrl04-outage trace_id=4aeee7f63a0a0adf77a5c2fe295fb450 tenant=org:4 cost=20
+2026/10/01 14:45:29 settlement committed event_id=exec_79c67cbb28d1dc31f0d3630160f8e4f8 execution_id=exec_79c67cbb28d1dc31f0d3630160f8e4f8 charge_micro=20 lag=292.26ms
+2026/10/01 14:45:29 ledger add event_id=exec_87541442f45509acc6175cb8f944ff70 client_request_id=t10-ctrl04-outage trace_id=63adafbddc1104655318dec3f9dcd8ae tenant=org:4 cost=20
+2026/10/01 14:45:29 settlement committed event_id=exec_87541442f45509acc6175cb8f944ff70 execution_id=exec_87541442f45509acc6175cb8f944ff70 charge_micro=20 lag=153.619ms
+2026/10/01 14:45:30 settlement committed event_id=exec_3b79f0a1646c485a4bf77059dd8eb2e0 execution_id=exec_3b79f0a1646c485a4bf77059dd8eb2e0 charge_micro=20 lag=20.817ms
+2026/10/01 14:45:30 ledger add event_id=exec_3b79f0a1646c485a4bf77059dd8eb2e0 client_request_id=t10-ctrl04-outage trace_id=74f019050cd65cd16dcf630d3f31b2de tenant=org:4 cost=20
+2026/10/01 14:45:30 ledger add event_id=exec_8b15422a880ee20118b7b50ad1607363 client_request_id=t10-ctrl04-outage trace_id=79b052d7f1987ed6b04d0fb3b6cf3f0e tenant=org:4 cost=20
+2026/10/01 14:45:31 settlement committed event_id=exec_8b15422a880ee20118b7b50ad1607363 execution_id=exec_8b15422a880ee20118b7b50ad1607363 charge_micro=20 lag=385.206ms
+2026/10/01 14:45:31 ledger add event_id=exec_c9cad8831c1c8bb5ffda24126f09fab2 client_request_id=t10-ctrl04-outage trace_id=510823bd41f640ba6da0b3ed7cc76015 tenant=org:4 cost=20
+2026/10/01 14:45:31 settlement committed event_id=exec_c9cad8831c1c8bb5ffda24126f09fab2 execution_id=exec_c9cad8831c1c8bb5ffda24126f09fab2 charge_micro=20 lag=250.984ms
+2026/10/01 14:45:32 settlement committed event_id=exec_796bbb04d82f5b4d3d40f77a6e6cc5ad execution_id=exec_796bbb04d82f5b4d3d40f77a6e6cc5ad charge_micro=20 lag=115.064ms
+2026/10/01 14:45:32 ledger add event_id=exec_796bbb04d82f5b4d3d40f77a6e6cc5ad client_request_id=t10-ctrl04-outage trace_id=c9a47c9b28f670280a7aadbcf402f556 tenant=org:4 cost=20
+2026/10/01 14:45:35 ledger add event_id=exec_8e8b815563231fba48976e554126b785 client_request_id=t10-ctrl04-recovered trace_id=9930beb82a32fe2a311bbc4345c666fd tenant=org:4 cost=20
+2026/10/01 14:45:35 ledger add event_id=exec_3ca768735177289d11849f2efb223aaf client_request_id=t10-wait-key trace_id=b067191a498c7da849aa09d8d650dce4 tenant=org:4 cost=20
+2026/10/01 14:45:35 settlement committed event_id=exec_3ca768735177289d11849f2efb223aaf execution_id=exec_3ca768735177289d11849f2efb223aaf charge_micro=20 lag=218.636ms
+2026/10/01 14:45:35 settlement committed event_id=exec_8e8b815563231fba48976e554126b785 execution_id=exec_8e8b815563231fba48976e554126b785 charge_micro=20 lag=310.306ms
+2026/10/01 14:45:42 ledger add event_id=exec_efe607a71da000e47f29de1e15102499 client_request_id=t10-rev01-inflight trace_id=1ff3bacf9db60e679770a6c13ba6dd75 tenant=org:4 cost=26
+2026/10/01 14:45:42 settlement committed event_id=exec_efe607a71da000e47f29de1e15102499 execution_id=exec_efe607a71da000e47f29de1e15102499 charge_micro=26 lag=282.067ms
+2026/10/01 14:45:43 ledger add event_id=exec_029f40306dc425569f70145fcba49ed0 client_request_id=t10-rev01-fresh trace_id=bce793dffed5fabc2a08bfca0f41d743 tenant=org:4 cost=20
+2026/10/01 14:45:43 settlement committed event_id=exec_029f40306dc425569f70145fcba49ed0 execution_id=exec_029f40306dc425569f70145fcba49ed0 charge_micro=200 lag=52.956ms
+2026/10/01 14:45:43 ledger add event_id=exec_3d6a53051132d7e9129f4239e983cf4c client_request_id=t10-wait-key trace_id=1b53346f45ae970b52d3cef3f2bc4f61 tenant=org:4 cost=20
+2026/10/01 14:45:43 settlement committed event_id=exec_3d6a53051132d7e9129f4239e983cf4c execution_id=exec_3d6a53051132d7e9129f4239e983cf4c charge_micro=200 lag=349.314ms
+2026/10/01 14:45:50 settlement committed event_id=exec_0c655fb7f051d85a8a03721d7e98d8e0 execution_id=exec_0c655fb7f051d85a8a03721d7e98d8e0 charge_micro=260 lag=19.069ms
+2026/10/01 14:45:50 ledger add event_id=exec_0c655fb7f051d85a8a03721d7e98d8e0 client_request_id=t10-rev02-inflight trace_id=74faa8b580741018e8701852634ad13b tenant=org:4 cost=26
+2026/10/01 14:45:50 settlement committed event_id=exec_bc2664fd58447dab9e54d65c5e4eb13f execution_id=exec_bc2664fd58447dab9e54d65c5e4eb13f charge_micro=200 lag=8.652ms
+2026/10/01 14:45:50 ledger add event_id=exec_bc2664fd58447dab9e54d65c5e4eb13f client_request_id=t10-rev03-warmup trace_id=41d60583bc8fe4cf3c89f87ef8257cf5 tenant=org:4 cost=20
+2026/10/01 14:45:57 ledger add event_id=exec_fd5d3e704af8d7d5cbf017795edd2c4d client_request_id=t10-rev03-inflight trace_id=81c2c4f3a8ae5fd29a537f4ff39296dd tenant=org:4 cost=26
+2026/10/01 14:45:57 settlement committed event_id=exec_fd5d3e704af8d7d5cbf017795edd2c4d execution_id=exec_fd5d3e704af8d7d5cbf017795edd2c4d charge_micro=260 lag=212.427ms
+2026/10/01 14:46:01 ledger add event_id=exec_d37247036cbce53e1cd21b56f6ea1d20 client_request_id=ff1981a05f8ad01ca0381abb2a4d5e14 trace_id=acf61727540bc4d75c0f36029bc7bec9 tenant=org:4 cost=20
+2026/10/01 14:46:01 ledger add event_id=exec_b3a77323e63e16d09e6bcf9ba72ab58e client_request_id=a2dd5edc6744258bdab48de04f90e52a trace_id=ab747e61d44880a6db747e5648c61ec1 tenant=org:4 cost=20
+2026/10/01 14:46:01 ledger add event_id=exec_76f6874df869e6b6668a9fe9b5b7befe client_request_id=3cc8ec4fb98d760efe723d7b99046385 trace_id=7145ca972c1e85ef6802ca0b0d567f92 tenant=org:4 cost=20
+2026/10/01 14:46:01 ledger add event_id=exec_7b0e8af37904e3268119c18e4e99ef7c client_request_id=845251fabf7e791f941fc83c563c745b trace_id=a0e9cf3748eb19bc3e3ba05f77bbc42c tenant=org:4 cost=20
+2026/10/01 14:46:01 ledger add event_id=exec_484cb076c7bd4b7ca51004e28e6dff72 client_request_id=9ce0dbe94193d04a52c240970911f9f5 trace_id=6f48ba6da569ef6992fbcb7199d59508 tenant=org:4 cost=20
+2026/10/01 14:46:01 ledger add event_id=exec_10d343bc147fc6839f8e2f367ce5c8ff client_request_id=4058f76e8a485e7b818cf6ec765c1795 trace_id=b2c0f345e7f41bb47aae911682ded601 tenant=org:4 cost=20
+2026/10/01 14:46:01 ledger add event_id=exec_3c3fe3549f300b361f243c5dc9258333 client_request_id=2d9aea0b34b0754ba3988bd90d7bbaa3 trace_id=0edfde1bdefb514a6a452ea5fff22e9c tenant=org:4 cost=20
+2026/10/01 14:46:01 ledger add event_id=exec_0794a22a9c34768e430afd65d96c30aa client_request_id=ba721a00ab4f9b5b0cb85ea8560cb5c0 trace_id=67ba28241d98f2f9f27c5a9d4aa29287 tenant=org:4 cost=20
+2026/10/01 14:46:01 ledger add event_id=exec_9301313f8f954c707435b66102e51d40 client_request_id=1f93bf05d6e716080bdcd517ac6c3ed7 trace_id=ab79e7801fb5b611951662385674af64 tenant=org:4 cost=20
+2026/10/01 14:46:01 ledger add event_id=exec_822697bbe4d86d3fdf5d8657c234f077 client_request_id=2a0fce61a17f9c68c6afc980b63e0750 trace_id=29d451fc524283636f8a903094a78166 tenant=org:4 cost=20
+2026/10/01 14:46:01 ledger add event_id=exec_4a2c6f2362ac0c9cfd695d0cf55c6bb7 client_request_id=e5fc88f334f3be16bb50404d13317046 trace_id=cd29436276939dac3d071b1a84ececbb tenant=org:4 cost=20
+2026/10/01 14:46:01 ledger add event_id=exec_000d7794363438f4e0e049cfdfa5c129 client_request_id=11f1ef155ec5f97fe812c4e3661eb629 trace_id=453b0bf2ef576cb59a928bed37be3428 tenant=org:4 cost=20
+2026/10/01 14:46:01 ledger add event_id=exec_977edf86806d941216f0e6701ad7e720 client_request_id=ee52fed4bc119e8ff9d51d5abdad200c trace_id=40de6d23fe4c1503a95f838188021ed3 tenant=org:4 cost=20
+2026/10/01 14:46:01 ledger add event_id=exec_a4c9128b87c28630c078105c8c438255 client_request_id=0db49fa83abea3609be4b062b64d5ac7 trace_id=7f2c830462417393a8a7c73fa0d99f3d tenant=org:4 cost=20
+2026/10/01 14:46:01 ledger add event_id=exec_c7564a123c1b0eaa249faf937a16cafa client_request_id=2189428632408013ccb32a75b0614345 trace_id=5f301946288ce32011fa690a8ea78e53 tenant=org:4 cost=20
+2026/10/01 14:46:01 ledger add event_id=exec_95bd8047b335a06567228a9c884db6b4 client_request_id=97be48126bfee25e2e07860caf12a50b trace_id=e2adb6eaa77cf04cf672b43064d81afd tenant=org:4 cost=20
+2026/10/01 14:46:02 settlement committed event_id=exec_4a2c6f2362ac0c9cfd695d0cf55c6bb7 execution_id=exec_4a2c6f2362ac0c9cfd695d0cf55c6bb7 charge_micro=20 lag=66.132ms
+2026/10/01 14:46:02 settlement committed event_id=exec_76f6874df869e6b6668a9fe9b5b7befe execution_id=exec_76f6874df869e6b6668a9fe9b5b7befe charge_micro=20 lag=235.314ms
+2026/10/01 14:46:02 settlement committed event_id=exec_0794a22a9c34768e430afd65d96c30aa execution_id=exec_0794a22a9c34768e430afd65d96c30aa charge_micro=20 lag=218.202ms
+2026/10/01 14:46:02 settlement committed event_id=exec_3c3fe3549f300b361f243c5dc9258333 execution_id=exec_3c3fe3549f300b361f243c5dc9258333 charge_micro=20 lag=228.508ms
+2026/10/01 14:46:02 settlement committed event_id=exec_484cb076c7bd4b7ca51004e28e6dff72 execution_id=exec_484cb076c7bd4b7ca51004e28e6dff72 charge_micro=20 lag=246.066ms
+2026/10/01 14:46:02 settlement committed event_id=exec_9301313f8f954c707435b66102e51d40 execution_id=exec_9301313f8f954c707435b66102e51d40 charge_micro=20 lag=140.172ms
+2026/10/01 14:46:02 settlement committed event_id=exec_7b0e8af37904e3268119c18e4e99ef7c execution_id=exec_7b0e8af37904e3268119c18e4e99ef7c charge_micro=20 lag=262.678ms
+2026/10/01 14:46:02 settlement committed event_id=exec_10d343bc147fc6839f8e2f367ce5c8ff execution_id=exec_10d343bc147fc6839f8e2f367ce5c8ff charge_micro=20 lag=261.494ms
+2026/10/01 14:46:02 settlement committed event_id=exec_c7564a123c1b0eaa249faf937a16cafa execution_id=exec_c7564a123c1b0eaa249faf937a16cafa charge_micro=20 lag=126.29ms
+2026/10/01 14:46:02 settlement committed event_id=exec_b3a77323e63e16d09e6bcf9ba72ab58e execution_id=exec_b3a77323e63e16d09e6bcf9ba72ab58e charge_micro=20 lag=301.323ms
+2026/10/01 14:46:02 settlement committed event_id=exec_d37247036cbce53e1cd21b56f6ea1d20 execution_id=exec_d37247036cbce53e1cd21b56f6ea1d20 charge_micro=20 lag=323.5ms
+2026/10/01 14:46:02 settlement committed event_id=exec_822697bbe4d86d3fdf5d8657c234f077 execution_id=exec_822697bbe4d86d3fdf5d8657c234f077 charge_micro=20 lag=181.181ms
+2026/10/01 14:46:02 settlement committed event_id=exec_000d7794363438f4e0e049cfdfa5c129 execution_id=exec_000d7794363438f4e0e049cfdfa5c129 charge_micro=20 lag=175.105ms
+2026/10/01 14:46:02 settlement committed event_id=exec_a4c9128b87c28630c078105c8c438255 execution_id=exec_a4c9128b87c28630c078105c8c438255 charge_micro=20 lag=169.924ms
+2026/10/01 14:46:02 settlement committed event_id=exec_977edf86806d941216f0e6701ad7e720 execution_id=exec_977edf86806d941216f0e6701ad7e720 charge_micro=20 lag=183.526ms
+2026/10/01 14:46:02 settlement committed event_id=exec_95bd8047b335a06567228a9c884db6b4 execution_id=exec_95bd8047b335a06567228a9c884db6b4 charge_micro=20 lag=174.475ms
+2026/10/01 14:46:02 ledger add event_id=exec_a81e0eabf8222596e552daac0a9722df client_request_id=5048f5bf995d47bf59a2c5a7e3f3ccbe trace_id=11bafd7f99e9a147e79f6734d1fa15c5 tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_48d794e7b0b948e21449dc65e438a09d client_request_id=aea03db4d83eb993d5fde1ba445274f1 trace_id=4d03bf622f0de24bb8715465f10102ad tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_5c0e6f68cb6698907a8da24e48e14723 client_request_id=94303861eea4f8b03b1f0f7c101e2361 trace_id=87bd95957119563d180d74bf3c277ee1 tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_f2443af222b979d3a41060d7422562b4 client_request_id=aa8ed9e977ec7d0b66845ed472d3814c trace_id=0f4efe69d3797613b5b3c7d7e26272c6 tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_8d5f97b0b32031d1a8d34721ce4dde86 client_request_id=66eeb57bc7a856187af71d5fdfd0e5dd trace_id=9175d1deda2c662f04081871aad71014 tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_2d25d4809f523a487a1abf0b7df1a9cb client_request_id=7fffe5b91aec4fccfb83b79451866409 trace_id=dbe76ac5cf34636d1f45e8e0cd25e1f2 tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_dc6510da2a6df8220846e85036365ddd client_request_id=3b2b2ca73ebf5d29175b958af8bd0d95 trace_id=5834505472d635544fda2c646708d4e2 tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_88964602be93ee0d2931521e378d82f7 client_request_id=caa0c36edae83a4b699931279fdf24bc trace_id=15ef759fd8e15bebd362dd1129d40e6f tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_800a8cb960d068dd331817b50a7ad438 client_request_id=9ca3441df07ffededbe2587214c593ca trace_id=a72c26374f3021f2380ba348640871ac tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_894b3fbf10fa043f85ecf2a07645d247 client_request_id=fe41ed23ba00a9042f605f8adf13bcc3 trace_id=2a30755bbd1675307091f35fb5c0bb1f tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_c02de38a7fac6a50c6875a2d76f66c0d client_request_id=6753f4f630736f3f0832fead736dc1d7 trace_id=403affc57b1b3385b875f3b1c5fabc35 tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_5fe4d64c1abd40f9c449f368ae1b4516 client_request_id=39d0d9335964d7fb1b10737f9bd8f947 trace_id=e563a00c4a6fb0de3e6b6aa5f163ea6b tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_341729855a3005df157d7207a3966179 client_request_id=8b533b16deb7b329966d55a58c2140ac trace_id=48b5f210011a48f242b1d9bb155b26ee tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_90413e2b315e92741d8d3b4d72e1fa3b client_request_id=dfdd91df60c12d4a52db060c3c2cec47 trace_id=513d046ff776d6d27c7f45be48075989 tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_c78850f14964b28dab20e2c248cdf44c client_request_id=e01f5517bc6422d3a7aa174118e11a05 trace_id=95b2ccc1c14292185715816c7366ba29 tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_3c7b9af743abca3ff7407655d7504fd9 client_request_id=11b6b13099688e5ddc34d80054868efd trace_id=f2997f7370b773c95777f8e060b5236b tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_b7f8d69649fc2af3ee4652cbdfa1cce4 client_request_id=5f20dfcf6575995e397297ff2d77c8cd trace_id=6fbee3b03f8522c093eb617b4eca6e17 tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_17194912fb450b29e26b9fb4c388c85a client_request_id=9eef2eeae19ae2aaef1b47dfb9c1171d trace_id=4e9890459e17e2bea2195c527b773636 tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_c84303bc898c355c52fb052905b5aae9 client_request_id=f55d84fddd14dd905cf14060e859a29b trace_id=703ed8f9f4fce9475225bcc40de43881 tenant=org:4 cost=20
+2026/10/01 14:46:02 settlement committed event_id=exec_5c0e6f68cb6698907a8da24e48e14723 execution_id=exec_5c0e6f68cb6698907a8da24e48e14723 charge_micro=20 lag=460.685ms
+2026/10/01 14:46:02 ledger add event_id=exec_827cce9bbba7965b5b210bdd78b7b89d client_request_id=e4f70a071eaad5fff9ea16cc9ead7618 trace_id=61cd61694aaecffb66c46710e4fb4659 tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_da9fcb91e5fb3163d415e607e0995f34 client_request_id=bd18271596c4bc93b3987caeaf74f9de trace_id=55bdf5c7059d3561f3ab7aafa9f08680 tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_4eb19efecf4974712fc969180a8961b5 client_request_id=51bb5aa53ba44d73292f9f880693b121 trace_id=711d0b91a9b36229afd85a4b76c9129f tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_03996cfa9cfaae4342ebf0e0406acd7c client_request_id=28843d7ceb03ed90a008270d8b140c5e trace_id=209a8577599b16ba43a59f6955e88499 tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_050bc69d80ac6093a7c85c5884169149 client_request_id=7048dcfa207eb5af4f45353ac58b42dd trace_id=f81da64ca360a0d56de4ac778d72b188 tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_a475965a1d8dbb138177c4a6c6b7fe41 client_request_id=f9976aaa9cd5eb8407a0f7ceae27007b trace_id=6203d4dd5f88e6b5b447c4f4e55d1460 tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_36e76ab5f9218541467b7f1453313cd7 client_request_id=f0125ebf93af4e394ebe4be70d76ea54 trace_id=a79b7c56e901febb62e062a52943575e tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_cf8c5a05efb932c3d1ba100cae1a402e client_request_id=bcf5077fe41ba15d910dcc9bf1e38946 trace_id=00956056e8be3f6ecf9084a8e0bca1b0 tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_c43588e2b120fbb08b5ef871ecd7b46e client_request_id=57a6c2a6f766352b0a8930358739741f trace_id=a0abd0a83904d4a8fca7608fc36f6a7c tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_eee44e8c351d813efb6d07f0ffee844c client_request_id=6da015e06c4a6a6f37dea8ab9bb41254 trace_id=c2a78ee808d6a9a9ca1a88e3f2683f9e tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_44fe767e786728b4514901a392f4a7fc client_request_id=c424b42483f20dee647307a36a1dd40c trace_id=84776d387bd89cc352151f6bd430bd3e tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_990eda4cd3c43b7512d1d7681c22e59e client_request_id=6fd499005af9bb0ec49adf9954e38bf7 trace_id=1a1e8f546110c125bb63b8b28c5de0d7 tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_3d0472063209fb03765ecf1309ad9fcc client_request_id=96f7ee51a8901287bf8a4bffba0a9099 trace_id=a9c957982c93390eed65b08e5a5bf98d tenant=org:4 cost=20
+2026/10/01 14:46:02 settlement committed event_id=exec_48d794e7b0b948e21449dc65e438a09d execution_id=exec_48d794e7b0b948e21449dc65e438a09d charge_micro=20 lag=519.147ms
+2026/10/01 14:46:02 settlement committed event_id=exec_17194912fb450b29e26b9fb4c388c85a execution_id=exec_17194912fb450b29e26b9fb4c388c85a charge_micro=20 lag=213.151ms
+2026/10/01 14:46:02 settlement committed event_id=exec_a81e0eabf8222596e552daac0a9722df execution_id=exec_a81e0eabf8222596e552daac0a9722df charge_micro=20 lag=561.66ms
+2026/10/01 14:46:02 settlement committed event_id=exec_dc6510da2a6df8220846e85036365ddd execution_id=exec_dc6510da2a6df8220846e85036365ddd charge_micro=20 lag=532.326ms
+2026/10/01 14:46:02 settlement committed event_id=exec_2d25d4809f523a487a1abf0b7df1a9cb execution_id=exec_2d25d4809f523a487a1abf0b7df1a9cb charge_micro=20 lag=543.759ms
+2026/10/01 14:46:02 settlement committed event_id=exec_8d5f97b0b32031d1a8d34721ce4dde86 execution_id=exec_8d5f97b0b32031d1a8d34721ce4dde86 charge_micro=20 lag=560.512ms
+2026/10/01 14:46:02 settlement committed event_id=exec_f2443af222b979d3a41060d7422562b4 execution_id=exec_f2443af222b979d3a41060d7422562b4 charge_micro=20 lag=571.816ms
+2026/10/01 14:46:02 settlement committed event_id=exec_c78850f14964b28dab20e2c248cdf44c execution_id=exec_c78850f14964b28dab20e2c248cdf44c charge_micro=20 lag=418.856ms
+2026/10/01 14:46:02 settlement committed event_id=exec_88964602be93ee0d2931521e378d82f7 execution_id=exec_88964602be93ee0d2931521e378d82f7 charge_micro=20 lag=563.574ms
+2026/10/01 14:46:02 settlement committed event_id=exec_5fe4d64c1abd40f9c449f368ae1b4516 execution_id=exec_5fe4d64c1abd40f9c449f368ae1b4516 charge_micro=20 lag=448.754ms
+2026/10/01 14:46:02 settlement committed event_id=exec_800a8cb960d068dd331817b50a7ad438 execution_id=exec_800a8cb960d068dd331817b50a7ad438 charge_micro=20 lag=472.839ms
+2026/10/01 14:46:02 settlement committed event_id=exec_90413e2b315e92741d8d3b4d72e1fa3b execution_id=exec_90413e2b315e92741d8d3b4d72e1fa3b charge_micro=20 lag=444.241ms
+2026/10/01 14:46:02 settlement committed event_id=exec_c02de38a7fac6a50c6875a2d76f66c0d execution_id=exec_c02de38a7fac6a50c6875a2d76f66c0d charge_micro=20 lag=468.301ms
+2026/10/01 14:46:02 settlement committed event_id=exec_894b3fbf10fa043f85ecf2a07645d247 execution_id=exec_894b3fbf10fa043f85ecf2a07645d247 charge_micro=20 lag=481.952ms
+2026/10/01 14:46:02 settlement committed event_id=exec_341729855a3005df157d7207a3966179 execution_id=exec_341729855a3005df157d7207a3966179 charge_micro=20 lag=469.401ms
+2026/10/01 14:46:02 settlement committed event_id=exec_c84303bc898c355c52fb052905b5aae9 execution_id=exec_c84303bc898c355c52fb052905b5aae9 charge_micro=20 lag=304.393ms
+2026/10/01 14:46:02 settlement committed event_id=exec_827cce9bbba7965b5b210bdd78b7b89d execution_id=exec_827cce9bbba7965b5b210bdd78b7b89d charge_micro=20 lag=311.468ms
+2026/10/01 14:46:02 settlement committed event_id=exec_3c7b9af743abca3ff7407655d7504fd9 execution_id=exec_3c7b9af743abca3ff7407655d7504fd9 charge_micro=20 lag=479.057ms
+2026/10/01 14:46:02 settlement committed event_id=exec_4eb19efecf4974712fc969180a8961b5 execution_id=exec_4eb19efecf4974712fc969180a8961b5 charge_micro=20 lag=320.413ms
+2026/10/01 14:46:02 settlement committed event_id=exec_da9fcb91e5fb3163d415e607e0995f34 execution_id=exec_da9fcb91e5fb3163d415e607e0995f34 charge_micro=20 lag=336.016ms
+2026/10/01 14:46:02 settlement committed event_id=exec_b7f8d69649fc2af3ee4652cbdfa1cce4 execution_id=exec_b7f8d69649fc2af3ee4652cbdfa1cce4 charge_micro=20 lag=358.555ms
+2026/10/01 14:46:02 settlement committed event_id=exec_03996cfa9cfaae4342ebf0e0406acd7c execution_id=exec_03996cfa9cfaae4342ebf0e0406acd7c charge_micro=20 lag=349.116ms
+2026/10/01 14:46:02 settlement committed event_id=exec_050bc69d80ac6093a7c85c5884169149 execution_id=exec_050bc69d80ac6093a7c85c5884169149 charge_micro=20 lag=352.307ms
+2026/10/01 14:46:02 ledger add event_id=exec_25e3f72a0f0f7e8f05e7d7b51233cabe client_request_id=86ec09b756cfa637fc7f92041c52e290 trace_id=3aec2a038a0acbc428a322b93844f807 tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_33d938348ef66a4219e568951bf00b14 client_request_id=b18560ef1e6efc042257a75629aff175 trace_id=8ae465901db2141448409837ea86ab0b tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_de525b6ecf92508fbc4f20727e35e1cf client_request_id=063c853411156041f73ecc4e93ea525d trace_id=399d56e77eac5a13aa0f5e653bd57dc8 tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_5a52ef58266a0fde07a35b2c36efbad3 client_request_id=a714ba09b3ad18b4e314aa7a2bb1a260 trace_id=3aa482221f47ce1ef4b6095097ccfda1 tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_8830779b522acb9a85c6c5413f4847ef client_request_id=0c9c73c7372880ce0610d7c8084bae9f trace_id=9069012cbf7f68f9b67a0a44198c5f5f tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_47c68804c0a748321c0d9aec4bac962f client_request_id=7fd85b8180e353d30327cefc890c23fc trace_id=6ee036059f2fbd219ecc56a3b7238267 tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_33abef362f8d5f021622a961c80b6544 client_request_id=717cf58ff44c422ddad77344321a5b87 trace_id=dee6f8d2b3d4f04bd1e01ea834c642c2 tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_c87fb0a04cf876852bc2b4db981f9f30 client_request_id=7c3e798c215e0e83fea76f6448faaf07 trace_id=baaa8a7cc7fafe8fbef8ec4a1eb26102 tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_33e39704f2b23e79548dc917b6d5d9bf client_request_id=acab73ef6e2c92ac205fe0fc3215ca70 trace_id=30d28c4f5799b6f66886af20e8659111 tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_006cc1ebfb22b3192c0db76c773d0d94 client_request_id=cca67c51522c0f33de22b21d61a81ed3 trace_id=586b6b4bd43d66e035d7690f0f476f2a tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_39f9b20c35eb5cb0a770dbe46ecca6f9 client_request_id=ccc06bdd0ed73b38e0dc9ad6324e91f9 trace_id=3d57b282aa54492774eee8d2a9350e10 tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_be2d7bee32dfe80aa683554538db3a18 client_request_id=b6c1fad4dab2a2f1ffee77f047b376a7 trace_id=bdcc2c8363baeed715b485208c42a93c tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_a5b1a8cdd4c51714a3a525d35599de40 client_request_id=1080dd0b1dca140216f333bdc034f304 trace_id=4c5e906f8ec756633785c9084e11030b tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_cf6ec431db305decc2979d6bb1f63bfe client_request_id=e3cbcf425c56b8c0e9e72602b2f22564 trace_id=c9031be7efaddac83a83606ffa2bd569 tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_8245ac83fb1b98362647126e2fdfc470 client_request_id=66c6ee6fdff6a2d87671e0650a849ccf trace_id=c0becf65846840e7e3178e604a81d81b tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_f46c2d3154f83755c129d78f9ed73094 client_request_id=21d5d61c25ea28811ce122482758fccb trace_id=5e76f34baafed1726f2d1c070b178f6a tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_53576d5ce62ac0678f7c1b965b54a75a client_request_id=1fd6cdd21148484fd23cf963674431cd trace_id=1974f20589aa2b7991c95a4ab20f2dab tenant=org:4 cost=20
+2026/10/01 14:46:02 ledger add event_id=exec_3d2716feacd02b2faf8e3a4543207c6e client_request_id=221f967f6311760c371dca17d0f76b14 trace_id=1e6ac0670922ed99ea404e51d5797ecb tenant=org:4 cost=20
+2026/10/01 14:46:03 settlement committed event_id=exec_3d0472063209fb03765ecf1309ad9fcc execution_id=exec_3d0472063209fb03765ecf1309ad9fcc charge_micro=20 lag=538.165ms
+2026/10/01 14:46:03 settlement committed event_id=exec_cf8c5a05efb932c3d1ba100cae1a402e execution_id=exec_cf8c5a05efb932c3d1ba100cae1a402e charge_micro=20 lag=587.121ms
+2026/10/01 14:46:03 settlement committed event_id=exec_c43588e2b120fbb08b5ef871ecd7b46e execution_id=exec_c43588e2b120fbb08b5ef871ecd7b46e charge_micro=20 lag=611.031ms
+2026/10/01 14:46:03 ledger add event_id=exec_30576ffa5e83049b1aaa86430c067466 client_request_id=9ef64f35a2e0f0df34392f9e9d047b99 trace_id=07822b713ea4e2cac1b1c5bd7f1bc70b tenant=org:4 cost=20
+2026/10/01 14:46:03 settlement committed event_id=exec_990eda4cd3c43b7512d1d7681c22e59e execution_id=exec_990eda4cd3c43b7512d1d7681c22e59e charge_micro=20 lag=619.536ms
+2026/10/01 14:46:03 ledger add event_id=exec_4f027007d28920910f89f80148f7f4a1 client_request_id=e168b9bbc375ab04c84659e4efe7bd65 trace_id=c08efc9276464d023a6fab64e132a531 tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_b24d048f280941216e9cb4dbe082ff58 client_request_id=623521709880abe172de2306829e5633 trace_id=7d5bc861b14691f6155cdb4f07dd701a tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_ce812917e97103d9c18b56c27f852e09 client_request_id=a6baf339c4851e30d1dec3641151bf49 trace_id=c30d49184918677904eb64939b993a71 tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_770b4dcdf50ece216b119a0d5e2e03d7 client_request_id=1603b76095c7fc6d9cf5bd8acf8de582 trace_id=286fe6baaac6cd7d172ac980c2114620 tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_6c04090f65e81b3e2bed224e03487f58 client_request_id=ff9a5b684d4117a35f22bc776248719a trace_id=fd393535800615f6639688e1423ad708 tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_f33f0f3b473e00db97bad82198b85d0f client_request_id=0fa3b22a23abdeabad230d60fdd622bc trace_id=76245b4553530100a644b13db5b34785 tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_f8e7198f33591a017c992f20810328ab client_request_id=50b8d06ad252d37188b6ddef4794e24e trace_id=3d45c9dc743e2b543988995a87ba888b tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_6fc35b5daaf672284b2617e95652aa3e client_request_id=66e87c8704a6a50dceb356aff0d2f6cb trace_id=069073b19969c093f7aa577ee83a12fd tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_18f125ac5ea19598e146a30849b661f0 client_request_id=bee07c29bd986a98ef4b5dceab1ae359 trace_id=83d12e2e3951e991c3aaa2a86d742d53 tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_a501e5da48a206ce882906f6c4c009b1 client_request_id=050caecccb166e58bf2b0847a19fb041 trace_id=f1d7f0c92b8c731be59d3bf67818e7c0 tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_ff78d44cae4f9421937683d1d3663216 client_request_id=c83cdd39332d756894e9e044aff0295b trace_id=332153358258a1f8b8ce0c87ac528757 tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_6c41cc8bef47c4a69e93e22094d049bd client_request_id=4de0b505a8eb0ba5e05ba84c686f1b92 trace_id=e2d961c306f711eef75ce32de5628ba8 tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_f3e1e6b8db6ccd1eb16f9c8e1721d169 client_request_id=c0b8293a944adc19578f9ac95b4d4aba trace_id=43c53168e54d91794ffca23c82d35d62 tenant=org:4 cost=20
+2026/10/01 14:46:03 settlement committed event_id=exec_36e76ab5f9218541467b7f1453313cd7 execution_id=exec_36e76ab5f9218541467b7f1453313cd7 charge_micro=20 lag=645.703ms
+2026/10/01 14:46:03 settlement committed event_id=exec_eee44e8c351d813efb6d07f0ffee844c execution_id=exec_eee44e8c351d813efb6d07f0ffee844c charge_micro=20 lag=644.908ms
+2026/10/01 14:46:03 settlement committed event_id=exec_a475965a1d8dbb138177c4a6c6b7fe41 execution_id=exec_a475965a1d8dbb138177c4a6c6b7fe41 charge_micro=20 lag=665.255ms
+2026/10/01 14:46:03 settlement committed event_id=exec_44fe767e786728b4514901a392f4a7fc execution_id=exec_44fe767e786728b4514901a392f4a7fc charge_micro=20 lag=654.939ms
+2026/10/01 14:46:03 settlement committed event_id=exec_c87fb0a04cf876852bc2b4db981f9f30 execution_id=exec_c87fb0a04cf876852bc2b4db981f9f30 charge_micro=20 lag=478.47ms
+2026/10/01 14:46:03 settlement committed event_id=exec_25e3f72a0f0f7e8f05e7d7b51233cabe execution_id=exec_25e3f72a0f0f7e8f05e7d7b51233cabe charge_micro=20 lag=523.897ms
+2026/10/01 14:46:03 settlement committed event_id=exec_8830779b522acb9a85c6c5413f4847ef execution_id=exec_8830779b522acb9a85c6c5413f4847ef charge_micro=20 lag=499.514ms
+2026/10/01 14:46:03 settlement committed event_id=exec_de525b6ecf92508fbc4f20727e35e1cf execution_id=exec_de525b6ecf92508fbc4f20727e35e1cf charge_micro=20 lag=527.264ms
+2026/10/01 14:46:03 settlement committed event_id=exec_47c68804c0a748321c0d9aec4bac962f execution_id=exec_47c68804c0a748321c0d9aec4bac962f charge_micro=20 lag=506.761ms
+2026/10/01 14:46:03 settlement committed event_id=exec_33d938348ef66a4219e568951bf00b14 execution_id=exec_33d938348ef66a4219e568951bf00b14 charge_micro=20 lag=542.045ms
+2026/10/01 14:46:03 settlement committed event_id=exec_33abef362f8d5f021622a961c80b6544 execution_id=exec_33abef362f8d5f021622a961c80b6544 charge_micro=20 lag=515.942ms
+2026/10/01 14:46:03 settlement committed event_id=exec_5a52ef58266a0fde07a35b2c36efbad3 execution_id=exec_5a52ef58266a0fde07a35b2c36efbad3 charge_micro=20 lag=532.169ms
+2026/10/01 14:46:03 settlement committed event_id=exec_f46c2d3154f83755c129d78f9ed73094 execution_id=exec_f46c2d3154f83755c129d78f9ed73094 charge_micro=20 lag=385.178ms
+2026/10/01 14:46:03 settlement committed event_id=exec_39f9b20c35eb5cb0a770dbe46ecca6f9 execution_id=exec_39f9b20c35eb5cb0a770dbe46ecca6f9 charge_micro=20 lag=421.394ms
+2026/10/01 14:46:03 settlement committed event_id=exec_be2d7bee32dfe80aa683554538db3a18 execution_id=exec_be2d7bee32dfe80aa683554538db3a18 charge_micro=20 lag=413.312ms
+2026/10/01 14:46:03 settlement committed event_id=exec_33e39704f2b23e79548dc917b6d5d9bf execution_id=exec_33e39704f2b23e79548dc917b6d5d9bf charge_micro=20 lag=447.315ms
+2026/10/01 14:46:03 settlement committed event_id=exec_cf6ec431db305decc2979d6bb1f63bfe execution_id=exec_cf6ec431db305decc2979d6bb1f63bfe charge_micro=20 lag=421.311ms
+2026/10/01 14:46:03 settlement committed event_id=exec_006cc1ebfb22b3192c0db76c773d0d94 execution_id=exec_006cc1ebfb22b3192c0db76c773d0d94 charge_micro=20 lag=463.488ms
+2026/10/01 14:46:03 settlement committed event_id=exec_8245ac83fb1b98362647126e2fdfc470 execution_id=exec_8245ac83fb1b98362647126e2fdfc470 charge_micro=20 lag=443.756ms
+2026/10/01 14:46:03 settlement committed event_id=exec_a5b1a8cdd4c51714a3a525d35599de40 execution_id=exec_a5b1a8cdd4c51714a3a525d35599de40 charge_micro=20 lag=460.38ms
+2026/10/01 14:46:03 settlement committed event_id=exec_6c04090f65e81b3e2bed224e03487f58 execution_id=exec_6c04090f65e81b3e2bed224e03487f58 charge_micro=20 lag=319.532ms
+2026/10/01 14:46:03 settlement committed event_id=exec_770b4dcdf50ece216b119a0d5e2e03d7 execution_id=exec_770b4dcdf50ece216b119a0d5e2e03d7 charge_micro=20 lag=328.774ms
+2026/10/01 14:46:03 settlement committed event_id=exec_b24d048f280941216e9cb4dbe082ff58 execution_id=exec_b24d048f280941216e9cb4dbe082ff58 charge_micro=20 lag=341.984ms
+2026/10/01 14:46:03 settlement committed event_id=exec_53576d5ce62ac0678f7c1b965b54a75a execution_id=exec_53576d5ce62ac0678f7c1b965b54a75a charge_micro=20 lag=379.512ms
+2026/10/01 14:46:03 settlement committed event_id=exec_ce812917e97103d9c18b56c27f852e09 execution_id=exec_ce812917e97103d9c18b56c27f852e09 charge_micro=20 lag=351.273ms
+2026/10/01 14:46:03 settlement committed event_id=exec_30576ffa5e83049b1aaa86430c067466 execution_id=exec_30576ffa5e83049b1aaa86430c067466 charge_micro=20 lag=386.682ms
+2026/10/01 14:46:03 settlement committed event_id=exec_4f027007d28920910f89f80148f7f4a1 execution_id=exec_4f027007d28920910f89f80148f7f4a1 charge_micro=20 lag=377.274ms
+2026/10/01 14:46:03 ledger add event_id=exec_0712e3ea08054a0b72ecb727b8d0aae7 client_request_id=38df76efd401d1192afebfd21b4af208 trace_id=e153cef944208a2201b0e540d85f7783 tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_8287ed90851b4ece5552eeaaced04bb9 client_request_id=785506496a56d8adbd9865900d7d7379 trace_id=0e4d8e6c4dd96f0d5495fd8889b6f696 tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_add431555697a337f3654a8efe8340ff client_request_id=3a23b7a3ac335c64aa9d501738e6a625 trace_id=df829f1ad15a935a53af039b990222e6 tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_5cda280f81ad1f2772811678056fc8ec client_request_id=63c785b4a9c10bb37bfd3d0713c34add trace_id=0f98aee6897e74f53e8a283685e74de5 tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_06059a36db7d842d03a9e3b5e953e2c8 client_request_id=cab817d60923d911fa98bb32de40ad61 trace_id=b10af937d7273cb3f18511d6da214dc5 tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_f5955cbc0d93dd9532d7fc3eedda8fff client_request_id=ae2f1f3e39166024343bd3383abe0891 trace_id=3c6b03303e845add29a121620ea383db tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_f93009daef7b291cc52b770075f863a1 client_request_id=e7fed4d1f942e6ac2f9bf6e9c1b2c4a6 trace_id=8b9156796f7dab06b88236fc98dd8a07 tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_46a7816ef35a93135fdbea02c0c751fb client_request_id=36a5239fc6299d30a36f5473f1353210 trace_id=90f9c70d0c0f0e9981e8cfa7cc6b84af tenant=org:4 cost=20
+2026/10/01 14:46:03 settlement committed event_id=exec_3d2716feacd02b2faf8e3a4543207c6e execution_id=exec_3d2716feacd02b2faf8e3a4543207c6e charge_micro=20 lag=405.766ms
+2026/10/01 14:46:03 ledger add event_id=exec_5adc74751854a63adc6980d626345297 client_request_id=e307f3612c04337b7c15b7dceaa025eb trace_id=37baaa40a4f90ae1386d3079a106d07a tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_0034f72d2bdb0fcb6f6c6846f0367f9b client_request_id=726c9099bd65692b38c1b5bc97a3abaf trace_id=f4ba1583cf81f0fb39c4f6c0c44740de tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_4bcc9c5f719d6facbc01372d127ec750 client_request_id=42f08976fd98e1d53798cd89f4312643 trace_id=e0edf6ed608f5ebe9e3963eb88cde231 tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_0c5568199642fa804a17ef410ccbe1a3 client_request_id=dfed05556c28404bfa9b86dfe0bb5fe3 trace_id=4956162306ff5c0cb44365d70b22face tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_d780e5d691044ad317c0b9b71f189df5 client_request_id=bfb006c7ab6812792fdf933fa7a92b55 trace_id=e29b96d9c84d2f0ecd18a0bb32ee2731 tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_095352ad6982ef41c875ebf0534e04e0 client_request_id=3425df0283927dc0ce74a807818daa64 trace_id=3a263025f01d2ac8a38b374c41201093 tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_b610efc0dbd4ac7b2af2e63195e279d2 client_request_id=a28584d62c30a077aa39bf78fa75a322 trace_id=ebce57753c16b0984e6db5c344b85e28 tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_abcedadce6345579d2f6ceb08fb7043c client_request_id=ffc5bb749ac6422d25fea3fd85e67ada trace_id=749a99f8a027d205ade6b6d3d0e0fcc7 tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_07e0777111a4df419ec4ee1b3e33b79d client_request_id=6589dc57c70c40267aa8cd5a9fbfaa7c trace_id=908edb527f4ad4ff58e5ed8fe0acb35b tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_4773ec1e7010d756d71720a92d9aceb6 client_request_id=f72945f8042626ad50f7d381fd31892f trace_id=f92cd13c9c7a1373547ae96d37c00386 tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_bf796339df37e5a79e945418c145af04 client_request_id=a84c1d1e82d227cc1d0c77c440db5d11 trace_id=f1b8778bcbbddb711a03cd0cd42ffb67 tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_14f6e957b8f45be6e1e5154252e0f685 client_request_id=c5203d8932ae95886ede1cd7058f3c32 trace_id=cda8ec79a4850d39374067ed571c306c tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_f6f07ac63129918b918f17ef99ad4e50 client_request_id=16e9b024e5b01aa06dd01dd940ccdc1a trace_id=eac1479e0fe3a26c2fdcab890c0b255d tenant=org:4 cost=20
+2026/10/01 14:46:03 settlement committed event_id=exec_f3e1e6b8db6ccd1eb16f9c8e1721d169 execution_id=exec_f3e1e6b8db6ccd1eb16f9c8e1721d169 charge_micro=20 lag=506.181ms
+2026/10/01 14:46:03 settlement committed event_id=exec_f33f0f3b473e00db97bad82198b85d0f execution_id=exec_f33f0f3b473e00db97bad82198b85d0f charge_micro=20 lag=570.99ms
+2026/10/01 14:46:03 settlement committed event_id=exec_f8e7198f33591a017c992f20810328ab execution_id=exec_f8e7198f33591a017c992f20810328ab charge_micro=20 lag=583.583ms
+2026/10/01 14:46:03 settlement committed event_id=exec_6c41cc8bef47c4a69e93e22094d049bd execution_id=exec_6c41cc8bef47c4a69e93e22094d049bd charge_micro=20 lag=570.137ms
+2026/10/01 14:46:03 settlement committed event_id=exec_18f125ac5ea19598e146a30849b661f0 execution_id=exec_18f125ac5ea19598e146a30849b661f0 charge_micro=20 lag=606.015ms
+2026/10/01 14:46:03 settlement committed event_id=exec_ff78d44cae4f9421937683d1d3663216 execution_id=exec_ff78d44cae4f9421937683d1d3663216 charge_micro=20 lag=607.625ms
+2026/10/01 14:46:03 settlement committed event_id=exec_a501e5da48a206ce882906f6c4c009b1 execution_id=exec_a501e5da48a206ce882906f6c4c009b1 charge_micro=20 lag=622.535ms
+2026/10/01 14:46:03 settlement committed event_id=exec_6fc35b5daaf672284b2617e95652aa3e execution_id=exec_6fc35b5daaf672284b2617e95652aa3e charge_micro=20 lag=655.106ms
+2026/10/01 14:46:03 ledger add event_id=exec_8994fbebf4fe51b4e2051edce0b96052 client_request_id=06c21140dad6c34d33f15fa25456868d trace_id=e6e6fe2e8c39fc0e4c5eadc8b21f5752 tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_31c5fccbdd35d3007f1b095e64c5a72b client_request_id=c65c29e5b5432d898f1aaaeaa033e8c3 trace_id=e06f40a1f3dafe1d1989e34524faec8c tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_927c0bb693a966673947a40125a74ed9 client_request_id=b90b0ba0058ef6157d6e33a8327020fc trace_id=e86e6038b62021dd04cfcdc1c10a6a43 tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_4586336a9fc0b5fea1cd740220424e4f client_request_id=e1a09aa74ab1508f1702533df03361df trace_id=a3d6f84181dbe78921322def254b5536 tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_2fa31526d4d6fcc93541d7ce5d6b7ff0 client_request_id=68d6da7bc90342ea105eed28cceda43b trace_id=56e0b10914224a2b93101faebdb45728 tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_0ef8665322b36d605875baeda579e8f0 client_request_id=c0e871ed236ac1485df7c801ab09e25d trace_id=e7040ffbb25e2f129c1a209f5675979a tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_2e3b69f2fd10a97997ff5a7ad589d35e client_request_id=ddef6e0d8ca0873d2a6ff0e147e8a3aa trace_id=b22250dde08482bcdbf39568f6d453c9 tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_d2bde3e40d10137ba032ed7c18d96420 client_request_id=bffd516ffeebcd0f4616bee502b0edf3 trace_id=bfd6f8d23e70a9739d77a702d62500d1 tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_183c4ea5ad0ccd38153b6faa91aeeff8 client_request_id=458708ab639bfe5d4da31e5082fe4945 trace_id=86466ad10b1a4b4a5e2745815401c47b tenant=org:4 cost=20
+2026/10/01 14:46:03 settlement committed event_id=exec_5cda280f81ad1f2772811678056fc8ec execution_id=exec_5cda280f81ad1f2772811678056fc8ec charge_micro=20 lag=489.496ms
+2026/10/01 14:46:03 ledger add event_id=exec_680d75cec79aa364cb81c8738c322458 client_request_id=82e77f9f1ad482201bea22d34fdd725b trace_id=064933c6ffac21f0a1f14c96a78bcf78 tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_03b1c5df7eb1afe2139a2f6c35fd004d client_request_id=a82d15e109c0fc892f002e540e3199e8 trace_id=8f47976a901532d65730ffd6acf60553 tenant=org:4 cost=20
+2026/10/01 14:46:03 settlement committed event_id=exec_f5955cbc0d93dd9532d7fc3eedda8fff execution_id=exec_f5955cbc0d93dd9532d7fc3eedda8fff charge_micro=20 lag=492.62ms
+2026/10/01 14:46:03 settlement committed event_id=exec_8287ed90851b4ece5552eeaaced04bb9 execution_id=exec_8287ed90851b4ece5552eeaaced04bb9 charge_micro=20 lag=520.255ms
+2026/10/01 14:46:03 settlement committed event_id=exec_06059a36db7d842d03a9e3b5e953e2c8 execution_id=exec_06059a36db7d842d03a9e3b5e953e2c8 charge_micro=20 lag=505.374ms
+2026/10/01 14:46:03 settlement committed event_id=exec_0712e3ea08054a0b72ecb727b8d0aae7 execution_id=exec_0712e3ea08054a0b72ecb727b8d0aae7 charge_micro=20 lag=538.878ms
+2026/10/01 14:46:03 settlement committed event_id=exec_46a7816ef35a93135fdbea02c0c751fb execution_id=exec_46a7816ef35a93135fdbea02c0c751fb charge_micro=20 lag=505.74ms
+2026/10/01 14:46:03 settlement committed event_id=exec_f93009daef7b291cc52b770075f863a1 execution_id=exec_f93009daef7b291cc52b770075f863a1 charge_micro=20 lag=512.18ms
+2026/10/01 14:46:03 settlement committed event_id=exec_add431555697a337f3654a8efe8340ff execution_id=exec_add431555697a337f3654a8efe8340ff charge_micro=20 lag=547.72ms
+2026/10/01 14:46:03 settlement committed event_id=exec_095352ad6982ef41c875ebf0534e04e0 execution_id=exec_095352ad6982ef41c875ebf0534e04e0 charge_micro=20 lag=390.447ms
+2026/10/01 14:46:03 settlement committed event_id=exec_0c5568199642fa804a17ef410ccbe1a3 execution_id=exec_0c5568199642fa804a17ef410ccbe1a3 charge_micro=20 lag=405.576ms
+2026/10/01 14:46:03 settlement committed event_id=exec_b610efc0dbd4ac7b2af2e63195e279d2 execution_id=exec_b610efc0dbd4ac7b2af2e63195e279d2 charge_micro=20 lag=398.791ms
+2026/10/01 14:46:03 settlement committed event_id=exec_5adc74751854a63adc6980d626345297 execution_id=exec_5adc74751854a63adc6980d626345297 charge_micro=20 lag=447.632ms
+2026/10/01 14:46:03 settlement committed event_id=exec_4bcc9c5f719d6facbc01372d127ec750 execution_id=exec_4bcc9c5f719d6facbc01372d127ec750 charge_micro=20 lag=442.982ms
+2026/10/01 14:46:03 settlement committed event_id=exec_0034f72d2bdb0fcb6f6c6846f0367f9b execution_id=exec_0034f72d2bdb0fcb6f6c6846f0367f9b charge_micro=20 lag=453.074ms
+2026/10/01 14:46:03 settlement committed event_id=exec_d780e5d691044ad317c0b9b71f189df5 execution_id=exec_d780e5d691044ad317c0b9b71f189df5 charge_micro=20 lag=443.15ms
+2026/10/01 14:46:03 settlement committed event_id=exec_abcedadce6345579d2f6ceb08fb7043c execution_id=exec_abcedadce6345579d2f6ceb08fb7043c charge_micro=20 lag=439.288ms
+2026/10/01 14:46:03 settlement committed event_id=exec_4773ec1e7010d756d71720a92d9aceb6 execution_id=exec_4773ec1e7010d756d71720a92d9aceb6 charge_micro=20 lag=347.605ms
+2026/10/01 14:46:03 settlement committed event_id=exec_31c5fccbdd35d3007f1b095e64c5a72b execution_id=exec_31c5fccbdd35d3007f1b095e64c5a72b charge_micro=20 lag=320.439ms
+2026/10/01 14:46:03 settlement committed event_id=exec_f6f07ac63129918b918f17ef99ad4e50 execution_id=exec_f6f07ac63129918b918f17ef99ad4e50 charge_micro=20 lag=338.751ms
+2026/10/01 14:46:03 settlement committed event_id=exec_927c0bb693a966673947a40125a74ed9 execution_id=exec_927c0bb693a966673947a40125a74ed9 charge_micro=20 lag=332.32ms
+2026/10/01 14:46:03 settlement committed event_id=exec_07e0777111a4df419ec4ee1b3e33b79d execution_id=exec_07e0777111a4df419ec4ee1b3e33b79d charge_micro=20 lag=384.776ms
+2026/10/01 14:46:03 settlement committed event_id=exec_8994fbebf4fe51b4e2051edce0b96052 execution_id=exec_8994fbebf4fe51b4e2051edce0b96052 charge_micro=20 lag=353.71ms
+2026/10/01 14:46:03 settlement committed event_id=exec_14f6e957b8f45be6e1e5154252e0f685 execution_id=exec_14f6e957b8f45be6e1e5154252e0f685 charge_micro=20 lag=370.297ms
+2026/10/01 14:46:03 settlement committed event_id=exec_bf796339df37e5a79e945418c145af04 execution_id=exec_bf796339df37e5a79e945418c145af04 charge_micro=20 lag=392.54ms
+2026/10/01 14:46:03 ledger add event_id=exec_bc44ad34bcbce9d68a1522ced669f8e3 client_request_id=3a3977d9272bc9ae6ee22deefdbb665d trace_id=aac1ccc5e39358512f33b06686b985d5 tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_a798f133596b0494daccbc56fc9d10ac client_request_id=9698016cee86f0fd0c850fb1c50ddea4 trace_id=c19c632c0f02f2f0498e5de13cc06e19 tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_2f80d15d9c4c48f1afb2ace04440e436 client_request_id=92ac76e13cd2e223505f62da9f3f401c trace_id=fd41190dc19dea4a27c4a854657a4a53 tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_61e57a0207417d3a1161175fb45d707b client_request_id=4ecd4a7dc7c86b8ff2a3f3a4e3283fb5 trace_id=692de5c2acf98eae250ff252f5856289 tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_0e54594117a1451b5a9d5bb7650d1d95 client_request_id=ed7a3b3452b62ea21247e114ed1aa85c trace_id=07266e73cb7a4550d3418996c3d3b709 tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_1105090e2f6661339a265ede212a02dd client_request_id=1860c66cbdf66042935e7f21bd7329d8 trace_id=75b13c6dee15cea9ab48645795c3d8ff tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_20d11b05a4a2b8779d527ff9f08853cf client_request_id=cfc137514b661e65db5d1d868712c587 trace_id=ca0f7fbae6cde63f8b284c14ced69fa8 tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_696a89cc4f50d2cd1bd5a1f32dcc89c3 client_request_id=41262acdeba747532d3cd173f9c324a6 trace_id=475079d7bb929588daa7984eb5921a6d tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_ebea0aac8c679b3240cc18d21bae1269 client_request_id=38291c0df18d78ab361547c5820c2004 trace_id=b962c8718fa5c26bd9a6113d056ccb3a tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_73395b935e48e11b90b1d15053d0d56d client_request_id=944e9e6b4284ab6b40255f4795de41de trace_id=a7fd75c5b3a2e3422ff65189f795a2cf tenant=org:4 cost=20
+2026/10/01 14:46:03 ledger add event_id=exec_bad0d40314578a8691d15a1f3cdd5765 client_request_id=71e29eed332d137e9140b3c075d1c78d trace_id=bdd6f1dd418589b5aeef40ff8fdd5592 tenant=org:4 cost=20
+2026/10/01 14:46:04 ledger add event_id=exec_614cd80d6d45f9a07d591ee227a2cee7 client_request_id=37c6618a6cda37a694f0685341fca430 trace_id=93c407647bc400b80a99ce90935d5b49 tenant=org:4 cost=20
+2026/10/01 14:46:04 ledger add event_id=exec_340646d5fd3d44f13238e5bb9ce017ec client_request_id=e6a224577cf226fa93271bdf1dc25ec4 trace_id=22d1dd8ad92c99ad498388305ff2da25 tenant=org:4 cost=20
+2026/10/01 14:46:04 ledger add event_id=exec_dd5131070ffa0e48d0c83b361b495efb client_request_id=4eb76451836ecad0dad198abbe420f34 trace_id=50b4e82260706d81e79e6ac1d8e1de0e tenant=org:4 cost=20
+2026/10/01 14:46:04 ledger add event_id=exec_9ca6a49d2c07618a135b9aafeedcd8ad client_request_id=6969f0b39c3952843063e306a0dca8ff trace_id=df2a362676309ebbc440642d8875d2ba tenant=org:4 cost=20
+2026/10/01 14:46:04 ledger add event_id=exec_c9d8c94757e163d7e89f489b8f314b1e client_request_id=044946d948e7061801f043af9140b66f trace_id=a600989e610aca2e09a417314196086b tenant=org:4 cost=20
+2026/10/01 14:46:04 settlement committed event_id=exec_03b1c5df7eb1afe2139a2f6c35fd004d execution_id=exec_03b1c5df7eb1afe2139a2f6c35fd004d charge_micro=20 lag=507.865ms
+2026/10/01 14:46:04 settlement committed event_id=exec_680d75cec79aa364cb81c8738c322458 execution_id=exec_680d75cec79aa364cb81c8738c322458 charge_micro=20 lag=534.034ms
+2026/10/01 14:46:04 settlement committed event_id=exec_2fa31526d4d6fcc93541d7ce5d6b7ff0 execution_id=exec_2fa31526d4d6fcc93541d7ce5d6b7ff0 charge_micro=20 lag=580.686ms
+2026/10/01 14:46:04 settlement committed event_id=exec_4586336a9fc0b5fea1cd740220424e4f execution_id=exec_4586336a9fc0b5fea1cd740220424e4f charge_micro=20 lag=614.177ms
+2026/10/01 14:46:04 settlement committed event_id=exec_d2bde3e40d10137ba032ed7c18d96420 execution_id=exec_d2bde3e40d10137ba032ed7c18d96420 charge_micro=20 lag=589.774ms
+2026/10/01 14:46:04 settlement committed event_id=exec_2e3b69f2fd10a97997ff5a7ad589d35e execution_id=exec_2e3b69f2fd10a97997ff5a7ad589d35e charge_micro=20 lag=599.719ms
+2026/10/01 14:46:04 settlement committed event_id=exec_183c4ea5ad0ccd38153b6faa91aeeff8 execution_id=exec_183c4ea5ad0ccd38153b6faa91aeeff8 charge_micro=20 lag=596.887ms
+2026/10/01 14:46:04 settlement committed event_id=exec_0ef8665322b36d605875baeda579e8f0 execution_id=exec_0ef8665322b36d605875baeda579e8f0 charge_micro=20 lag=635.343ms
+2026/10/01 14:46:04 settlement committed event_id=exec_696a89cc4f50d2cd1bd5a1f32dcc89c3 execution_id=exec_696a89cc4f50d2cd1bd5a1f32dcc89c3 charge_micro=20 lag=455.021ms
+2026/10/01 14:46:04 settlement committed event_id=exec_bc44ad34bcbce9d68a1522ced669f8e3 execution_id=exec_bc44ad34bcbce9d68a1522ced669f8e3 charge_micro=20 lag=521.133ms
+2026/10/01 14:46:04 settlement committed event_id=exec_61e57a0207417d3a1161175fb45d707b execution_id=exec_61e57a0207417d3a1161175fb45d707b charge_micro=20 lag=486.953ms
+2026/10/01 14:46:04 settlement committed event_id=exec_1105090e2f6661339a265ede212a02dd execution_id=exec_1105090e2f6661339a265ede212a02dd charge_micro=20 lag=481.53ms
+2026/10/01 14:46:04 settlement committed event_id=exec_a798f133596b0494daccbc56fc9d10ac execution_id=exec_a798f133596b0494daccbc56fc9d10ac charge_micro=20 lag=527.275ms
+2026/10/01 14:46:04 settlement committed event_id=exec_20d11b05a4a2b8779d527ff9f08853cf execution_id=exec_20d11b05a4a2b8779d527ff9f08853cf charge_micro=20 lag=493.393ms
+2026/10/01 14:46:04 settlement committed event_id=exec_0e54594117a1451b5a9d5bb7650d1d95 execution_id=exec_0e54594117a1451b5a9d5bb7650d1d95 charge_micro=20 lag=513.06ms
+2026/10/01 14:46:04 settlement committed event_id=exec_2f80d15d9c4c48f1afb2ace04440e436 execution_id=exec_2f80d15d9c4c48f1afb2ace04440e436 charge_micro=20 lag=543.294ms
+2026/10/01 14:46:04 settlement committed event_id=exec_c9d8c94757e163d7e89f489b8f314b1e execution_id=exec_c9d8c94757e163d7e89f489b8f314b1e charge_micro=20 lag=366.158ms
+2026/10/01 14:46:04 settlement committed event_id=exec_ebea0aac8c679b3240cc18d21bae1269 execution_id=exec_ebea0aac8c679b3240cc18d21bae1269 charge_micro=20 lag=440.987ms
+2026/10/01 14:46:04 settlement committed event_id=exec_bad0d40314578a8691d15a1f3cdd5765 execution_id=exec_bad0d40314578a8691d15a1f3cdd5765 charge_micro=20 lag=423.734ms
+2026/10/01 14:46:04 settlement committed event_id=exec_73395b935e48e11b90b1d15053d0d56d execution_id=exec_73395b935e48e11b90b1d15053d0d56d charge_micro=20 lag=437.976ms
+2026/10/01 14:46:04 settlement committed event_id=exec_9ca6a49d2c07618a135b9aafeedcd8ad execution_id=exec_9ca6a49d2c07618a135b9aafeedcd8ad charge_micro=20 lag=399.166ms
+2026/10/01 14:46:04 settlement committed event_id=exec_dd5131070ffa0e48d0c83b361b495efb execution_id=exec_dd5131070ffa0e48d0c83b361b495efb charge_micro=20 lag=405.672ms
+2026/10/01 14:46:04 settlement committed event_id=exec_614cd80d6d45f9a07d591ee227a2cee7 execution_id=exec_614cd80d6d45f9a07d591ee227a2cee7 charge_micro=20 lag=425.327ms
+2026/10/01 14:46:04 settlement committed event_id=exec_340646d5fd3d44f13238e5bb9ce017ec execution_id=exec_340646d5fd3d44f13238e5bb9ce017ec charge_micro=20 lag=428.333ms
+2026/10/01 14:46:20 settlement committed event_id=exec_b224d841e30b9d91dab4d30a2b556746 execution_id=exec_b224d841e30b9d91dab4d30a2b556746 charge_micro=20 lag=29.774ms
+2026/10/01 14:46:20 settlement committed event_id=exec_3a3cd7b00d3e7abedb493e532f20ffd6 execution_id=exec_3a3cd7b00d3e7abedb493e532f20ffd6 charge_micro=20 lag=72.721ms
+2026/10/01 14:46:20 settlement committed event_id=exec_5308adc2c06d4b5aafe2b1f82ec68c69 execution_id=exec_5308adc2c06d4b5aafe2b1f82ec68c69 charge_micro=20 lag=83.781ms
+2026/10/01 14:46:20 settlement committed event_id=exec_70502ad015ad13a95d5886a68f07de05 execution_id=exec_70502ad015ad13a95d5886a68f07de05 charge_micro=20 lag=97.785ms
+2026/10/01 14:46:20 settlement committed event_id=exec_26e5cae6f832c723f8369891c559c2b2 execution_id=exec_26e5cae6f832c723f8369891c559c2b2 charge_micro=20 lag=88.035ms
+2026/10/01 14:46:20 settlement committed event_id=exec_4ce8995956e22e822b99af6626decb99 execution_id=exec_4ce8995956e22e822b99af6626decb99 charge_micro=20 lag=102.134ms
+2026/10/01 14:46:20 settlement committed event_id=exec_5432387a7d04e1cd28233e3a43d20cf3 execution_id=exec_5432387a7d04e1cd28233e3a43d20cf3 charge_micro=20 lag=125.562ms
+2026/10/01 14:46:20 settlement committed event_id=exec_139e74fd79cec0dea62dd367d5c2e62e execution_id=exec_139e74fd79cec0dea62dd367d5c2e62e charge_micro=20 lag=116.309ms
+2026/10/01 14:46:20 ledger add event_id=exec_5432387a7d04e1cd28233e3a43d20cf3 client_request_id=86ffc7555f10db433226c93f4f5cb565 trace_id=40ffd8f9246fbe14b1b84774800be776 tenant=org:4 cost=20
+2026/10/01 14:46:20 ledger add event_id=exec_70502ad015ad13a95d5886a68f07de05 client_request_id=e2a0e0806a79fafc11e8678f041abfcd trace_id=c40fe5572fc92c63244e1801149ce422 tenant=org:4 cost=20
+2026/10/01 14:46:20 ledger add event_id=exec_5308adc2c06d4b5aafe2b1f82ec68c69 client_request_id=fabb9d50160b43d63da915cc911c1198 trace_id=14674b243349ca47822c4f6117035190 tenant=org:4 cost=20
+2026/10/01 14:46:20 ledger add event_id=exec_3a3cd7b00d3e7abedb493e532f20ffd6 client_request_id=36a64eefb975f668cdec865786fe6461 trace_id=8762f18ff3bdd76d8afc8ecaedae289d tenant=org:4 cost=20
+2026/10/01 14:46:20 ledger add event_id=exec_4ce8995956e22e822b99af6626decb99 client_request_id=fd4d435a0925d0d17bdf91342dab3947 trace_id=e95cf15e34fa960b4a7cef4c16e7b822 tenant=org:4 cost=20
+2026/10/01 14:46:20 ledger add event_id=exec_139e74fd79cec0dea62dd367d5c2e62e client_request_id=470088ab3fed4e2240803ae7df09ed6e trace_id=652b61a7dc37e79af292461cee44a965 tenant=org:4 cost=20
+2026/10/01 14:46:20 ledger add event_id=exec_26e5cae6f832c723f8369891c559c2b2 client_request_id=4d6ed061f1ce61cd81a9ed22551cc696 trace_id=1a078a429dd2f1349e482b680a908bff tenant=org:4 cost=20
+2026/10/01 14:46:20 ledger add event_id=exec_b224d841e30b9d91dab4d30a2b556746 client_request_id=df8f2767f49d24bd39c9875227e4e7cd trace_id=68f61af7a15b2aa6ef681776f521ec7d tenant=org:4 cost=20
+2026/10/01 14:46:20 ledger add event_id=exec_024ba8e5ca4430948d678fd8646298ff client_request_id=43b17582426553773ba335a657268393 trace_id=6187a5ab94f7904af5225e50f1b5ed6c tenant=org:4 cost=20
+2026/10/01 14:46:20 ledger add event_id=exec_167562a665a23ce39f285349f061bf04 client_request_id=51757b59ef50a46e05581f2aa4749dba trace_id=841165a561f0d0013551c89f6d73bc95 tenant=org:4 cost=20
+2026/10/01 14:46:20 ledger add event_id=exec_96d06a68162de6b3bf0f05ff88f45b66 client_request_id=b5033a693c884a54b1ab1a5bcc1ea8a0 trace_id=9c924f10f3b2855b74f4511ec5f0e7a4 tenant=org:4 cost=20
+2026/10/01 14:46:20 ledger add event_id=exec_e207399fae50b8cca29ca21c8999d907 client_request_id=738007f63e8b066c47a4f330c9c350d5 trace_id=3d77c87f668ea1feadeb5ea5a2d502b3 tenant=org:4 cost=20
+2026/10/01 14:46:20 ledger add event_id=exec_fc8428d36aec3435c64be2965a12bc71 client_request_id=620b685d176cffe668ffb6b531dfa31b trace_id=ab0b6866bcb34a3bf946a0a4fac11d69 tenant=org:4 cost=20
+2026/10/01 14:46:20 ledger add event_id=exec_5fe54f252c579852a97555f52cdc759c client_request_id=e4c85fbb1af8a886718822b0d5da7d0f trace_id=a9b37aabba1ecdd21a06702110de4ecc tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_5249f80f82207e4af65f812e7db22727 client_request_id=8d59eeea6f38011a01d204fe23597ab8 trace_id=145eca41c1bdb3939a6d9cf73e64b0fc tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_b8b90be9cd28a749479cf7688505ee5e client_request_id=d669a0b175821497b0a0e2e9a65a1e1e trace_id=69f7434d758036b526408356731004f8 tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_d6a690eec8931c2b1c5943b790a9834f client_request_id=c40933ccbf7cc0b138d73cdb38ed2fc6 trace_id=e20d72606b14257a76351f36f60a4eea tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_b452be9bcee0097ca102ea398d38df84 client_request_id=e2779d16f8800de7b0f1fd580329b442 trace_id=1e1708f9c304ece82f7aae9d3f1248c7 tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_befe2783f32395977d11b9937349a2c8 client_request_id=02673cd24ba181e9e658eb5de0dfa8da trace_id=aa8d7f82c57ad53edc9ff2ce0405dfc8 tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_7d04ac3a879b2243c3d2e0fb353d191f client_request_id=da6dc42da17898714d8d627d77c6abcd trace_id=d85c8a4729299a5f1c6acc180b2079dc tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_a106be27b4c945e7af8732d282ed0615 client_request_id=e75a2784a515cdb21077d6a299695050 trace_id=73fa7d60a3d1582f615b1361da0e1ffa tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_1278e1e89d46794a713fbd7fd41ebb3d client_request_id=dbcb0050dc500116979f6e70e34bc04c trace_id=11973eb6b27308910c814227ba4a8879 tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_fed0a12cd0c7879bc11ff24c0a0460b6 client_request_id=91f3752ee0fdf168fa060fdd38fb20f2 trace_id=898adc1c59b0784f84a0b43d9a091e2d tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_9e8324cf6b3090a28b6d7e5f1e69cebf client_request_id=eae7f63f3d24eec5c3d0828d80fed58f trace_id=14b10274d4238f7124584b1bd50911d0 tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_49a16823dbe4c386ede4f222f4786d95 client_request_id=eaa482da754b45d7c9d890fa24cae932 trace_id=e351d42c0b1e9df4fb751d4403238ec5 tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_aa32ecefdd072145a6680ce05eee3de2 client_request_id=a65bb29d86e8c3f06ea8fc20aa65513c trace_id=ba35c801eea97446c884f1959f337f34 tenant=org:4 cost=20
+2026/10/01 14:46:21 settlement committed event_id=exec_e207399fae50b8cca29ca21c8999d907 execution_id=exec_e207399fae50b8cca29ca21c8999d907 charge_micro=20 lag=415.67ms
+2026/10/01 14:46:21 ledger add event_id=exec_2b8f1e8bf5235ec200cf2808415f70c9 client_request_id=fcd36f50e9edf7686e0f4da301be326d trace_id=70bdd87d9e4ee81afa1536c9df3858e5 tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_561dcc4180da5c360e229b66be6b5c78 client_request_id=361fdc03e4724a8ceafc6b41183bae37 trace_id=10a1e6e5e0d8e6269eca65bb05dbccf0 tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_8680fc59401de70f1498abdea3ee07ef client_request_id=1cdf9b631c41165df57ecdca80899f18 trace_id=c788d7b40616a970ef7471f24581391b tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_9cee1dfe035a03f272574e3c60d8d210 client_request_id=732c20855f8fea180767812f2c44d59c trace_id=946841449b962e92c5d89243300f44a3 tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_a5623ea8a3c673de9ea7a7988dda4f02 client_request_id=2af1071d33c69d49635fe824b4a99bc1 trace_id=674ce2602f8463c57150411100a33b37 tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_625d6c8dfb03836388437762706250ae client_request_id=31225468045b11c2c96c8bdf5f88c11e trace_id=34a51d1239d7fd9198f4a625bb2f524b tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_f1b7a5826e16e3cf391c0b1cc7b1a654 client_request_id=3fa9586f245518ef0a1bccdfaef4eaab trace_id=e9e5be52ddfbc076a5b64a798aee0894 tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_1949bf5e659f754c1247d3440e58b989 client_request_id=d4a9ce11520d6e98e54b2dff2c9a2923 trace_id=9105ae6f61f7c19633d990e761d78c9d tenant=org:4 cost=20
+2026/10/01 14:46:21 settlement committed event_id=exec_167562a665a23ce39f285349f061bf04 execution_id=exec_167562a665a23ce39f285349f061bf04 charge_micro=20 lag=452.812ms
+2026/10/01 14:46:21 settlement committed event_id=exec_024ba8e5ca4430948d678fd8646298ff execution_id=exec_024ba8e5ca4430948d678fd8646298ff charge_micro=20 lag=497.695ms
+2026/10/01 14:46:21 settlement committed event_id=exec_5249f80f82207e4af65f812e7db22727 execution_id=exec_5249f80f82207e4af65f812e7db22727 charge_micro=20 lag=497.373ms
+2026/10/01 14:46:21 settlement committed event_id=exec_5fe54f252c579852a97555f52cdc759c execution_id=exec_5fe54f252c579852a97555f52cdc759c charge_micro=20 lag=515.441ms
+2026/10/01 14:46:21 settlement committed event_id=exec_96d06a68162de6b3bf0f05ff88f45b66 execution_id=exec_96d06a68162de6b3bf0f05ff88f45b66 charge_micro=20 lag=540.532ms
+2026/10/01 14:46:21 settlement committed event_id=exec_b8b90be9cd28a749479cf7688505ee5e execution_id=exec_b8b90be9cd28a749479cf7688505ee5e charge_micro=20 lag=532.155ms
+2026/10/01 14:46:21 settlement committed event_id=exec_fc8428d36aec3435c64be2965a12bc71 execution_id=exec_fc8428d36aec3435c64be2965a12bc71 charge_micro=20 lag=548.48ms
+2026/10/01 14:46:21 settlement committed event_id=exec_9e8324cf6b3090a28b6d7e5f1e69cebf execution_id=exec_9e8324cf6b3090a28b6d7e5f1e69cebf charge_micro=20 lag=399.9ms
+2026/10/01 14:46:21 settlement committed event_id=exec_befe2783f32395977d11b9937349a2c8 execution_id=exec_befe2783f32395977d11b9937349a2c8 charge_micro=20 lag=439.184ms
+2026/10/01 14:46:21 settlement committed event_id=exec_7d04ac3a879b2243c3d2e0fb353d191f execution_id=exec_7d04ac3a879b2243c3d2e0fb353d191f charge_micro=20 lag=443.645ms
+2026/10/01 14:46:21 settlement committed event_id=exec_b452be9bcee0097ca102ea398d38df84 execution_id=exec_b452be9bcee0097ca102ea398d38df84 charge_micro=20 lag=469.611ms
+2026/10/01 14:46:21 settlement committed event_id=exec_a106be27b4c945e7af8732d282ed0615 execution_id=exec_a106be27b4c945e7af8732d282ed0615 charge_micro=20 lag=454.429ms
+2026/10/01 14:46:21 ledger add event_id=exec_e63e5c4e22cfe7e6ecb2f8847805bd58 client_request_id=989fd50b737e23ebc6dae856353b8240 trace_id=c8d21734b788abaa60b495e5670020ed tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_635c677f46ab3cba657b2081aa0b0546 client_request_id=5c411e01b40fb872c375d34f9638bc57 trace_id=091b1322157fcd772a2287841b20ee76 tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_4f24e4a2f4a4e23f2c90bfa510067ae6 client_request_id=ab85938432b68fe55b93568210c62a48 trace_id=99825b80f7453498ada6e7b333a704a2 tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_7c953080c9bf70c49cc3388524eab8e8 client_request_id=79de31d6d570ca80d44b316127bffa70 trace_id=93e80899129e9c4dec08983c0a7ea7b9 tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_5a7eedd29d40bf8b0f99aaf4b4fb1c21 client_request_id=7afb543169e5c8e2de48ab0665a16783 trace_id=d1d41f48c34e0a5a1c1308e559237f33 tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_c3c3afef65cca868039b0f7a4a06d1ee client_request_id=16ba1f744b073ff4ae80abb8a72bf259 trace_id=070e7b9e0048a09c6d8c8af8e56d93ac tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_c125bedc53e3376e07b5427a9cf478bf client_request_id=d06fe843932fefe333eb989afcc89780 trace_id=af46fe360e3016d5f5d3131400500c0c tenant=org:4 cost=20
+2026/10/01 14:46:21 settlement committed event_id=exec_fed0a12cd0c7879bc11ff24c0a0460b6 execution_id=exec_fed0a12cd0c7879bc11ff24c0a0460b6 charge_micro=20 lag=454.208ms
+2026/10/01 14:46:21 ledger add event_id=exec_28838147fcf27c330d4bfe661240b2d6 client_request_id=b18b370f7a2c331effc2713b74e80ef5 trace_id=81f2b070c6bc6d69ad0496ce3607cb0c tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_a262c8d196a9bfedb357a47bf898f83c client_request_id=116194ef03bbe436a966cfe986452c39 trace_id=0f79ea5b6df7a7d4886305f46af53279 tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_c79f2ce94f3341729ebecf2012f3372c client_request_id=772665e582c4da41b2aed8ead97617fb trace_id=7c09219e080d61813f1deef10f4ba9ab tenant=org:4 cost=20
+2026/10/01 14:46:21 settlement committed event_id=exec_1278e1e89d46794a713fbd7fd41ebb3d execution_id=exec_1278e1e89d46794a713fbd7fd41ebb3d charge_micro=20 lag=466.61ms
+2026/10/01 14:46:21 settlement committed event_id=exec_d6a690eec8931c2b1c5943b790a9834f execution_id=exec_d6a690eec8931c2b1c5943b790a9834f charge_micro=20 lag=518.863ms
+2026/10/01 14:46:21 settlement committed event_id=exec_9cee1dfe035a03f272574e3c60d8d210 execution_id=exec_9cee1dfe035a03f272574e3c60d8d210 charge_micro=20 lag=364.713ms
+2026/10/01 14:46:21 settlement committed event_id=exec_561dcc4180da5c360e229b66be6b5c78 execution_id=exec_561dcc4180da5c360e229b66be6b5c78 charge_micro=20 lag=389.873ms
+2026/10/01 14:46:21 settlement committed event_id=exec_a5623ea8a3c673de9ea7a7988dda4f02 execution_id=exec_a5623ea8a3c673de9ea7a7988dda4f02 charge_micro=20 lag=380.413ms
+2026/10/01 14:46:21 settlement committed event_id=exec_aa32ecefdd072145a6680ce05eee3de2 execution_id=exec_aa32ecefdd072145a6680ce05eee3de2 charge_micro=20 lag=421.351ms
+2026/10/01 14:46:21 settlement committed event_id=exec_49a16823dbe4c386ede4f222f4786d95 execution_id=exec_49a16823dbe4c386ede4f222f4786d95 charge_micro=20 lag=432.267ms
+2026/10/01 14:46:21 settlement committed event_id=exec_8680fc59401de70f1498abdea3ee07ef execution_id=exec_8680fc59401de70f1498abdea3ee07ef charge_micro=20 lag=415.104ms
+2026/10/01 14:46:21 settlement committed event_id=exec_625d6c8dfb03836388437762706250ae execution_id=exec_625d6c8dfb03836388437762706250ae charge_micro=20 lag=409.073ms
+2026/10/01 14:46:21 settlement committed event_id=exec_2b8f1e8bf5235ec200cf2808415f70c9 execution_id=exec_2b8f1e8bf5235ec200cf2808415f70c9 charge_micro=20 lag=446.288ms
+2026/10/01 14:46:21 settlement committed event_id=exec_f1b7a5826e16e3cf391c0b1cc7b1a654 execution_id=exec_f1b7a5826e16e3cf391c0b1cc7b1a654 charge_micro=20 lag=328.446ms
+2026/10/01 14:46:21 ledger add event_id=exec_e05e7a5a5d316ebba0a64c5548001980 client_request_id=664553e1b52d9f9cfe692a853d30812f trace_id=93a9a6985995ffd960e94be06a572c6e tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_b6db610e1bd1aa1b96bdd4fb2e970218 client_request_id=ac7c6d607f014f416f21d4af1745d0aa trace_id=252a6597e8ae6606b62b66d1657baeb8 tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_d6bfad2bfe0cf7a48647af2808464915 client_request_id=e76e4d885c21f347417d14e2c205f8b2 trace_id=9fc552bc8593c3ccedf9c82f886a1496 tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_aa96732415249e2e09c99b262f7a8179 client_request_id=ce374903ae307f66a03fefc02c17e18a trace_id=ac314b70dfd48151c851a4f84b37da47 tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_95e52d7ae435adcc195668d1f87d0f9b client_request_id=24f9f25c18de77c03cc2e6440c858bf8 trace_id=59073d65bff9db679dfd5dae7807a930 tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_597b9bcf1c139277d590e6387d82c7e3 client_request_id=3a2108f17314097cd8c696dcf53bb113 trace_id=53be1505961f5cf9c0b4af52a3846feb tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_60039d998b8788de87556d32fbf4a8c4 client_request_id=c70e0cf4e0d0084ebaa893889e1a2ba7 trace_id=94099244aa4a9ba3ba51892ababe7ec7 tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_ad8967f8a2d67db750d5eb373b850686 client_request_id=8ffb415564b8888e0c56b9f10721ff74 trace_id=bd47e1ccc2935b31cfee780b308ebb49 tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_54ec2feca300d13b415735a144d713f5 client_request_id=a0f9ce121ec7bdc971380aa23179b89c trace_id=96369c5360539b7851780b3721d3f5a7 tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_0190f8000b6dfc81c2d382b1c0315075 client_request_id=3fad9fd99e5199e079bfb03037acc0c2 trace_id=c60e1cf2ab6415ca0068e007fe53dbb5 tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_5e932e7976428b6638a08f6bb9d556ff client_request_id=003d704db00ae0163420730f965bb408 trace_id=b29ba9db2134236914595dc911f96392 tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_2b0e176f43e10f8cc30d5fc0efd7cfdc client_request_id=9e0ff7fd7d9595e14483c62a79f5f990 trace_id=8573b538f8da4be8fc689539141396c4 tenant=org:4 cost=20
+2026/10/01 14:46:21 settlement committed event_id=exec_e63e5c4e22cfe7e6ecb2f8847805bd58 execution_id=exec_e63e5c4e22cfe7e6ecb2f8847805bd58 charge_micro=20 lag=573.909ms
+2026/10/01 14:46:21 ledger add event_id=exec_87f4a316ebf29d1ddc16abb022d4e049 client_request_id=48074c659fa080be7f059751f2264d8a trace_id=26e8ca02bc8bde81e6256934603264bb tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_28ed7d755e26237bd849ecd721cc5b05 client_request_id=1cd497aff0f27348a92d38c03ffe306c trace_id=e5e0b62813af3107391515ce215f8604 tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_65f9698a270d3ad564f623e4a9afc134 client_request_id=2d9af7554773ab3247bf4cd25dcd0b7d trace_id=cfa66af59f16faeadc735b5decf231fb tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_545ae861ca670dbaf9be7b05f2d7ed85 client_request_id=b35275d9d37485df9556bdebd2fb3bf4 trace_id=25544c9ca7acafc3a8911a8c20f33324 tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_2e459dbf9b570879b33ee00051f3b7e6 client_request_id=fabd707720f3b4e507dea6fcfebdf8b8 trace_id=1911a56019f47fe9690264e68721c2d3 tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_80ded4c182fd96b5fe272674a9e829ad client_request_id=fae7389de1122f1aaf63bc6c37d27b1d trace_id=e1b3883cb35d8abccbe40ffc96595cab tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_174d30d7afcb7062412a238564de4bc1 client_request_id=71a1153f01959fec881ce725d889ce13 trace_id=2c016a9c217eeb864c25fae09c617f3a tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_9a8915be8b4a5a7f157b8371c9469e7e client_request_id=1220e70934dc27207f0526fe5177d8db trace_id=771b5c859bdd06f58d15524f4227bb20 tenant=org:4 cost=20
+2026/10/01 14:46:21 ledger add event_id=exec_e8777515f42105839175438af0c52559 client_request_id=84855802b96e88ef5c88ee92ce0d097e trace_id=66889d70f16ad1789559df152fda5710 tenant=org:4 cost=20
+2026/10/01 14:46:21 settlement committed event_id=exec_1949bf5e659f754c1247d3440e58b989 execution_id=exec_1949bf5e659f754c1247d3440e58b989 charge_micro=20 lag=596.638ms
+2026/10/01 14:46:21 settlement committed event_id=exec_5a7eedd29d40bf8b0f99aaf4b4fb1c21 execution_id=exec_5a7eedd29d40bf8b0f99aaf4b4fb1c21 charge_micro=20 lag=598.386ms
+2026/10/01 14:46:22 settlement committed event_id=exec_4f24e4a2f4a4e23f2c90bfa510067ae6 execution_id=exec_4f24e4a2f4a4e23f2c90bfa510067ae6 charge_micro=20 lag=630.059ms
+2026/10/01 14:46:22 settlement committed event_id=exec_c3c3afef65cca868039b0f7a4a06d1ee execution_id=exec_c3c3afef65cca868039b0f7a4a06d1ee charge_micro=20 lag=643.84ms
+2026/10/01 14:46:22 settlement committed event_id=exec_635c677f46ab3cba657b2081aa0b0546 execution_id=exec_635c677f46ab3cba657b2081aa0b0546 charge_micro=20 lag=699.037ms
+2026/10/01 14:46:22 settlement committed event_id=exec_c125bedc53e3376e07b5427a9cf478bf execution_id=exec_c125bedc53e3376e07b5427a9cf478bf charge_micro=20 lag=577.933ms
+2026/10/01 14:46:22 settlement committed event_id=exec_7c953080c9bf70c49cc3388524eab8e8 execution_id=exec_7c953080c9bf70c49cc3388524eab8e8 charge_micro=20 lag=707.065ms
+2026/10/01 14:46:22 settlement committed event_id=exec_28838147fcf27c330d4bfe661240b2d6 execution_id=exec_28838147fcf27c330d4bfe661240b2d6 charge_micro=20 lag=577.187ms
+2026/10/01 14:46:22 settlement committed event_id=exec_aa96732415249e2e09c99b262f7a8179 execution_id=exec_aa96732415249e2e09c99b262f7a8179 charge_micro=20 lag=534.783ms
+2026/10/01 14:46:22 settlement committed event_id=exec_e05e7a5a5d316ebba0a64c5548001980 execution_id=exec_e05e7a5a5d316ebba0a64c5548001980 charge_micro=20 lag=554.515ms
+2026/10/01 14:46:22 settlement committed event_id=exec_a262c8d196a9bfedb357a47bf898f83c execution_id=exec_a262c8d196a9bfedb357a47bf898f83c charge_micro=20 lag=593.552ms
+2026/10/01 14:46:22 settlement committed event_id=exec_b6db610e1bd1aa1b96bdd4fb2e970218 execution_id=exec_b6db610e1bd1aa1b96bdd4fb2e970218 charge_micro=20 lag=567.821ms
+2026/10/01 14:46:22 settlement committed event_id=exec_c79f2ce94f3341729ebecf2012f3372c execution_id=exec_c79f2ce94f3341729ebecf2012f3372c charge_micro=20 lag=605.735ms
+2026/10/01 14:46:22 ledger add event_id=exec_beaa9db3f3c9200274a80a8f9c15a4c9 client_request_id=fcac376fce7462ad8de0e43b20540213 trace_id=8897a60182fc3966ca021b6e093ee70c tenant=org:4 cost=20
+2026/10/01 14:46:22 ledger add event_id=exec_5676cb05408f5af309c5be2983e4e6d2 client_request_id=95cd00163ce26be6066d6b7f49f383a2 trace_id=a4ad35366dc4ced6f0356794b14c8d7e tenant=org:4 cost=20
+2026/10/01 14:46:22 settlement committed event_id=exec_d6bfad2bfe0cf7a48647af2808464915 execution_id=exec_d6bfad2bfe0cf7a48647af2808464915 charge_micro=20 lag=582.988ms
+2026/10/01 14:46:22 ledger add event_id=exec_1a66ff5af31c8321d3aa67b497cf0f64 client_request_id=e0d55f2906467e20f8f75b56567d4980 trace_id=6188120b575bf43e86110394265c7531 tenant=org:4 cost=20
+2026/10/01 14:46:22 ledger add event_id=exec_168fcb07c00cf1192ee9d846f29d2c7e client_request_id=e9c3e5f2a80cb8dba36449bc4fa2c6d1 trace_id=93661d4de25551c329aac3ba21e6d5bc tenant=org:4 cost=20
+2026/10/01 14:46:22 ledger add event_id=exec_0da062bc6cfb83d5db2f2d1009e652fb client_request_id=cc80e22f6ace92533f963701b1c77790 trace_id=4eec0ae951ad0070bdbb969783619b3d tenant=org:4 cost=20
+2026/10/01 14:46:22 ledger add event_id=exec_ff414a96be07a6cc744d2f487954571e client_request_id=a243109baa89c51e8134a03cd3e1fc36 trace_id=3d210909b5a64d282a801098b16ccb1c tenant=org:4 cost=20
+2026/10/01 14:46:22 ledger add event_id=exec_ff1e1a0f1c15643c64073d9deb57364a client_request_id=4a5cbd1b9aa0cc125c69989398ac17f8 trace_id=f165c34fbd1a1f4b63b6edd952554b70 tenant=org:4 cost=20
+2026/10/01 14:46:22 ledger add event_id=exec_73700c09b91cf29cab02b469e94eecc0 client_request_id=17c618027860884cdf2253e6d66b6d1d trace_id=ed3803c288ed026f35faf5185dc2d5bf tenant=org:4 cost=20
+2026/10/01 14:46:22 ledger add event_id=exec_0ee8553f8e1fe9596eac23d0c4b85eca client_request_id=5e1672e8b4bd9605f4716eb8a9b1b4df trace_id=e514fafcb7af4c1b4804e292652c879f tenant=org:4 cost=20
+2026/10/01 14:46:22 ledger add event_id=exec_0a28524ba9f98d6a6a605a5fd038b541 client_request_id=08bb6eed9bf5627e55aef3a38142e603 trace_id=0942794b6b102a63238169551b72281a tenant=org:4 cost=20
+2026/10/01 14:46:22 ledger add event_id=exec_421c9accaeddc65ef1a2594e9828e549 client_request_id=d61f6a3707ca719391106842a0c0662f trace_id=6784aef93df0ce0726d675de9530dcae tenant=org:4 cost=20
+2026/10/01 14:46:22 ledger add event_id=exec_533ae0d31d55f56602fbdd471d5c1f9e client_request_id=97cc871cbdc7055973bff43da4752192 trace_id=fb670674217fc1a15aa67e9182466af5 tenant=org:4 cost=20
+2026/10/01 14:46:22 settlement committed event_id=exec_95e52d7ae435adcc195668d1f87d0f9b execution_id=exec_95e52d7ae435adcc195668d1f87d0f9b charge_micro=20 lag=520.384ms
+2026/10/01 14:46:22 settlement committed event_id=exec_87f4a316ebf29d1ddc16abb022d4e049 execution_id=exec_87f4a316ebf29d1ddc16abb022d4e049 charge_micro=20 lag=398.274ms
+2026/10/01 14:46:22 settlement committed event_id=exec_54ec2feca300d13b415735a144d713f5 execution_id=exec_54ec2feca300d13b415735a144d713f5 charge_micro=20 lag=488.821ms
+2026/10/01 14:46:22 settlement committed event_id=exec_597b9bcf1c139277d590e6387d82c7e3 execution_id=exec_597b9bcf1c139277d590e6387d82c7e3 charge_micro=20 lag=543.894ms
+2026/10/01 14:46:22 settlement committed event_id=exec_60039d998b8788de87556d32fbf4a8c4 execution_id=exec_60039d998b8788de87556d32fbf4a8c4 charge_micro=20 lag=540.987ms
+2026/10/01 14:46:22 settlement committed event_id=exec_5e932e7976428b6638a08f6bb9d556ff execution_id=exec_5e932e7976428b6638a08f6bb9d556ff charge_micro=20 lag=499.51ms
+2026/10/01 14:46:22 settlement committed event_id=exec_ad8967f8a2d67db750d5eb373b850686 execution_id=exec_ad8967f8a2d67db750d5eb373b850686 charge_micro=20 lag=549.883ms
+2026/10/01 14:46:22 settlement committed event_id=exec_2b0e176f43e10f8cc30d5fc0efd7cfdc execution_id=exec_2b0e176f43e10f8cc30d5fc0efd7cfdc charge_micro=20 lag=514.155ms
+2026/10/01 14:46:22 settlement committed event_id=exec_0190f8000b6dfc81c2d382b1c0315075 execution_id=exec_0190f8000b6dfc81c2d382b1c0315075 charge_micro=20 lag=530.139ms
+2026/10/01 14:46:22 settlement committed event_id=exec_28ed7d755e26237bd849ecd721cc5b05 execution_id=exec_28ed7d755e26237bd849ecd721cc5b05 charge_micro=20 lag=445.586ms
+2026/10/01 14:46:22 settlement committed event_id=exec_174d30d7afcb7062412a238564de4bc1 execution_id=exec_174d30d7afcb7062412a238564de4bc1 charge_micro=20 lag=397.583ms
+2026/10/01 14:46:22 settlement committed event_id=exec_80ded4c182fd96b5fe272674a9e829ad execution_id=exec_80ded4c182fd96b5fe272674a9e829ad charge_micro=20 lag=413.384ms
+2026/10/01 14:46:22 settlement committed event_id=exec_9a8915be8b4a5a7f157b8371c9469e7e execution_id=exec_9a8915be8b4a5a7f157b8371c9469e7e charge_micro=20 lag=412.192ms
+2026/10/01 14:46:22 settlement committed event_id=exec_e8777515f42105839175438af0c52559 execution_id=exec_e8777515f42105839175438af0c52559 charge_micro=20 lag=369.465ms
+2026/10/01 14:46:22 settlement committed event_id=exec_2e459dbf9b570879b33ee00051f3b7e6 execution_id=exec_2e459dbf9b570879b33ee00051f3b7e6 charge_micro=20 lag=458.626ms
+2026/10/01 14:46:22 settlement committed event_id=exec_545ae861ca670dbaf9be7b05f2d7ed85 execution_id=exec_545ae861ca670dbaf9be7b05f2d7ed85 charge_micro=20 lag=485.529ms
+2026/10/01 14:46:22 settlement committed event_id=exec_65f9698a270d3ad564f623e4a9afc134 execution_id=exec_65f9698a270d3ad564f623e4a9afc134 charge_micro=20 lag=509.49ms
+2026/10/01 14:46:22 ledger add event_id=exec_693b6ecca76ef4fdfb3382e310e376d6 client_request_id=ba1902938aeeb50877360b5255916b98 trace_id=913823eb691910c4bff6843fcbbd2494 tenant=org:4 cost=20
+2026/10/01 14:46:22 ledger add event_id=exec_7b6020d4626ad7b8841d6373e042349e client_request_id=49f29cb653a63c6c0e867d649ac8d704 trace_id=b5de929f1a98913a7ba825f6aa6e9aa0 tenant=org:4 cost=20
+2026/10/01 14:46:22 ledger add event_id=exec_b397b26ac28671c8959392fb4873423c client_request_id=ca4cfef96296aa4fd3964aafb810204b trace_id=23c1348bf0bbd38c5b71c25f2b09fd97 tenant=org:4 cost=20
+2026/10/01 14:46:22 ledger add event_id=exec_665720da845b887bb861906709bed38b client_request_id=e84c75266b7cb4812724cdb6889582c3 trace_id=3cad60160c4ad615a368b9bfc2488e64 tenant=org:4 cost=20
+2026/10/01 14:46:22 ledger add event_id=exec_b8bdb786a7770980fc217e781f2906e1 client_request_id=d3e65fa4a78e328225de20a20aa42836 trace_id=7277d07ef413b660c014a4f39e82cb31 tenant=org:4 cost=20
+2026/10/01 14:46:22 ledger add event_id=exec_832d1c9f3ca8b56b0890bb164b913313 client_request_id=f49ab0b9f4eaf4adafbca2d046960cdb trace_id=7b6afa97580fe69966eccb6b1a938623 tenant=org:4 cost=20
+2026/10/01 14:46:22 ledger add event_id=exec_a6e1f81f388ec40bc3ad68299de18787 client_request_id=96c12ea7748e1fb9e5a35997e9a4fb38 trace_id=403f051afd7977bd1fdc679bbe5d7fdd tenant=org:4 cost=20
+2026/10/01 14:46:22 ledger add event_id=exec_aa4ad59d3cb5fffa4f0b9acc19e0611e client_request_id=0c000621ccc5bdc3c13b7174b211dd62 trace_id=bb55c5ea495800b5d3dd97c5a095c9ea tenant=org:4 cost=20
+2026/10/01 14:46:22 ledger add event_id=exec_1708a54d5936b40435e8dcea57ab71e0 client_request_id=4d528a5387922957bb4b46cbb6a988f2 trace_id=cdadb3ddc3a3e7c4ca794287aed54744 tenant=org:4 cost=20
+2026/10/01 14:46:22 ledger add event_id=exec_7913a044f2f0188220e0df15a7094bae client_request_id=14c0e104c11f7b9be6373552d3b8f577 trace_id=348b7da44ac99f5cdf152ae918597f0e tenant=org:4 cost=20
+2026/10/01 14:46:22 ledger add event_id=exec_e53bb5885c8dbeb777e4e6c264bea011 client_request_id=cac871eaa68ea166ddc0efae8c89e1f4 trace_id=1ea236fc8beb5df9ca62d046b285fe26 tenant=org:4 cost=20
+2026/10/01 14:46:22 settlement committed event_id=exec_73700c09b91cf29cab02b469e94eecc0 execution_id=exec_73700c09b91cf29cab02b469e94eecc0 charge_micro=20 lag=454.845ms
+2026/10/01 14:46:22 ledger add event_id=exec_6fc1d1af63fe3783e771ec7ea726e597 client_request_id=d89f3d36ba20423b6e307bc7673f65e0 trace_id=062e061ab5bb174639ffc2ebe9f9efae tenant=org:4 cost=20
+2026/10/01 14:46:22 ledger add event_id=exec_fd9409d034b276d9212399b57278c13a client_request_id=360297402eedbec5dfc0dd911ee92ac8 trace_id=4d63f8bdf3ec68d2f4a3c20000b3f343 tenant=org:4 cost=20
+2026/10/01 14:46:22 ledger add event_id=exec_bd2a3fbe0efa03f40022d7add6826fdd client_request_id=6fc2878245ec14c2e5df9e83bb14cba5 trace_id=0c06339e176f44c957a8129441f4fb7e tenant=org:4 cost=20
+2026/10/01 14:46:22 ledger add event_id=exec_cfab469d194b71b55f71e8b2d63e8247 client_request_id=18e3da786380025e4fd9b6f7d58041ce trace_id=5f265264510f17744674fdb5da539c85 tenant=org:4 cost=20
+2026/10/01 14:46:22 ledger add event_id=exec_19d9c1ce2352a870e225071d99393efb client_request_id=0f581fcf8ec62ca4fbf4ddeaa624144d trace_id=9e546a63d90bb8fb5ad4fd9150ad806b tenant=org:4 cost=20
+2026/10/01 14:46:22 ledger add event_id=exec_f50d0ac1b592c995bf2152b571ae0901 client_request_id=f89922e34ae77edb4891311415a44b6c trace_id=d07634fae53872e315c6b774fa0c0ad9 tenant=org:4 cost=20
+2026/10/01 14:46:22 settlement committed event_id=exec_ff414a96be07a6cc744d2f487954571e execution_id=exec_ff414a96be07a6cc744d2f487954571e charge_micro=20 lag=550.521ms
+2026/10/01 14:46:22 ledger add event_id=exec_0eb10afbc6351eac3ae8da7f1fc2dd40 client_request_id=bd94c937488b9e1a9b16064a5dcef349 trace_id=fc8f4c85535a02e448e4bdc90c7194c3 tenant=org:4 cost=20
+2026/10/01 14:46:22 ledger add event_id=exec_e15489925a9ae4058f4720ae120f560b client_request_id=10effe23daa4ffc4ba6e5d6fb518f842 trace_id=f537d9e94f003abf4b2e7ae6dca0a37a tenant=org:4 cost=20
+2026/10/01 14:46:22 settlement committed event_id=exec_ff1e1a0f1c15643c64073d9deb57364a execution_id=exec_ff1e1a0f1c15643c64073d9deb57364a charge_micro=20 lag=563.056ms
+2026/10/01 14:46:22 settlement committed event_id=exec_1a66ff5af31c8321d3aa67b497cf0f64 execution_id=exec_1a66ff5af31c8321d3aa67b497cf0f64 charge_micro=20 lag=620.904ms
+2026/10/01 14:46:22 settlement committed event_id=exec_168fcb07c00cf1192ee9d846f29d2c7e execution_id=exec_168fcb07c00cf1192ee9d846f29d2c7e charge_micro=20 lag=622.049ms
+2026/10/01 14:46:22 settlement committed event_id=exec_0da062bc6cfb83d5db2f2d1009e652fb execution_id=exec_0da062bc6cfb83d5db2f2d1009e652fb charge_micro=20 lag=616.043ms
+2026/10/01 14:46:22 settlement committed event_id=exec_beaa9db3f3c9200274a80a8f9c15a4c9 execution_id=exec_beaa9db3f3c9200274a80a8f9c15a4c9 charge_micro=20 lag=664.578ms
+2026/10/01 14:46:22 settlement committed event_id=exec_5676cb05408f5af309c5be2983e4e6d2 execution_id=exec_5676cb05408f5af309c5be2983e4e6d2 charge_micro=20 lag=667.985ms
+2026/10/01 14:46:22 settlement committed event_id=exec_533ae0d31d55f56602fbdd471d5c1f9e execution_id=exec_533ae0d31d55f56602fbdd471d5c1f9e charge_micro=20 lag=490.467ms
+2026/10/01 14:46:22 settlement committed event_id=exec_665720da845b887bb861906709bed38b execution_id=exec_665720da845b887bb861906709bed38b charge_micro=20 lag=441.834ms
+2026/10/01 14:46:22 settlement committed event_id=exec_0a28524ba9f98d6a6a605a5fd038b541 execution_id=exec_0a28524ba9f98d6a6a605a5fd038b541 charge_micro=20 lag=517.673ms
+2026/10/01 14:46:22 settlement committed event_id=exec_0ee8553f8e1fe9596eac23d0c4b85eca execution_id=exec_0ee8553f8e1fe9596eac23d0c4b85eca charge_micro=20 lag=543.015ms
+2026/10/01 14:46:22 settlement committed event_id=exec_b397b26ac28671c8959392fb4873423c execution_id=exec_b397b26ac28671c8959392fb4873423c charge_micro=20 lag=495.953ms
+2026/10/01 14:46:22 settlement committed event_id=exec_693b6ecca76ef4fdfb3382e310e376d6 execution_id=exec_693b6ecca76ef4fdfb3382e310e376d6 charge_micro=20 lag=515.718ms
+2026/10/01 14:46:22 settlement committed event_id=exec_421c9accaeddc65ef1a2594e9828e549 execution_id=exec_421c9accaeddc65ef1a2594e9828e549 charge_micro=20 lag=545.344ms
+2026/10/01 14:46:22 settlement committed event_id=exec_7b6020d4626ad7b8841d6373e042349e execution_id=exec_7b6020d4626ad7b8841d6373e042349e charge_micro=20 lag=524.811ms
+2026/10/01 14:46:22 settlement committed event_id=exec_7913a044f2f0188220e0df15a7094bae execution_id=exec_7913a044f2f0188220e0df15a7094bae charge_micro=20 lag=385.628ms
+2026/10/01 14:46:22 settlement committed event_id=exec_1708a54d5936b40435e8dcea57ab71e0 execution_id=exec_1708a54d5936b40435e8dcea57ab71e0 charge_micro=20 lag=404.976ms
+2026/10/01 14:46:22 settlement committed event_id=exec_e53bb5885c8dbeb777e4e6c264bea011 execution_id=exec_e53bb5885c8dbeb777e4e6c264bea011 charge_micro=20 lag=398.517ms
+2026/10/01 14:46:22 settlement committed event_id=exec_b8bdb786a7770980fc217e781f2906e1 execution_id=exec_b8bdb786a7770980fc217e781f2906e1 charge_micro=20 lag=469.905ms
+2026/10/01 14:46:22 settlement committed event_id=exec_6fc1d1af63fe3783e771ec7ea726e597 execution_id=exec_6fc1d1af63fe3783e771ec7ea726e597 charge_micro=20 lag=388.979ms
+2026/10/01 14:46:22 settlement committed event_id=exec_832d1c9f3ca8b56b0890bb164b913313 execution_id=exec_832d1c9f3ca8b56b0890bb164b913313 charge_micro=20 lag=469.257ms
+2026/10/01 14:46:22 settlement committed event_id=exec_a6e1f81f388ec40bc3ad68299de18787 execution_id=exec_a6e1f81f388ec40bc3ad68299de18787 charge_micro=20 lag=465.459ms
+2026/10/01 14:46:22 settlement committed event_id=exec_aa4ad59d3cb5fffa4f0b9acc19e0611e execution_id=exec_aa4ad59d3cb5fffa4f0b9acc19e0611e charge_micro=20 lag=470.033ms
+2026/10/01 14:46:22 settlement committed event_id=exec_19d9c1ce2352a870e225071d99393efb execution_id=exec_19d9c1ce2352a870e225071d99393efb charge_micro=20 lag=326.914ms
+2026/10/01 14:46:22 settlement committed event_id=exec_0eb10afbc6351eac3ae8da7f1fc2dd40 execution_id=exec_0eb10afbc6351eac3ae8da7f1fc2dd40 charge_micro=20 lag=313.536ms
+2026/10/01 14:46:22 settlement committed event_id=exec_cfab469d194b71b55f71e8b2d63e8247 execution_id=exec_cfab469d194b71b55f71e8b2d63e8247 charge_micro=20 lag=355.552ms
+2026/10/01 14:46:22 settlement committed event_id=exec_e15489925a9ae4058f4720ae120f560b execution_id=exec_e15489925a9ae4058f4720ae120f560b charge_micro=20 lag=327.861ms
+2026/10/01 14:46:22 settlement committed event_id=exec_fd9409d034b276d9212399b57278c13a execution_id=exec_fd9409d034b276d9212399b57278c13a charge_micro=20 lag=402.731ms
+2026/10/01 14:46:22 settlement committed event_id=exec_bd2a3fbe0efa03f40022d7add6826fdd execution_id=exec_bd2a3fbe0efa03f40022d7add6826fdd charge_micro=20 lag=391.222ms
+2026/10/01 14:46:22 settlement committed event_id=exec_f50d0ac1b592c995bf2152b571ae0901 execution_id=exec_f50d0ac1b592c995bf2152b571ae0901 charge_micro=20 lag=366.961ms
+2026/10/01 14:46:31 settlement committed event_id=exec_02ed8cef9356a11bf4b1082077b0663b execution_id=exec_02ed8cef9356a11bf4b1082077b0663b charge_micro=260 lag=6.474ms
+2026/10/01 14:46:31 ledger add event_id=exec_02ed8cef9356a11bf4b1082077b0663b client_request_id=t10-iso03-3 trace_id=c21a05a1215c191afee7b8533ba9577c tenant=org:4 cost=26
+2026/10/01 14:46:31 ledger add event_id=exec_380e62afd96bd0236e51482553de7def client_request_id=t10-iso03-2 trace_id=eda07819dbd255f8d89c6c47796817e8 tenant=org:4 cost=26
+2026/10/01 14:46:31 ledger add event_id=exec_3ccb2db6ef06151df3f910d3a2296e8c client_request_id=t10-iso03-0 trace_id=dfbaa66954f2dfb554d60b999ea7de37 tenant=org:4 cost=26
+2026/10/01 14:46:31 ledger add event_id=exec_f4b202e7f3df7bd7a65298634d3b5951 client_request_id=t10-iso03-1 trace_id=956a72c068d709d7bdf18a9e74709e0f tenant=org:4 cost=26
+2026/10/01 14:46:31 ledger add event_id=exec_a757c62b45540ecedfdbefc9667d526c client_request_id=t10-iso03-5 trace_id=1405af1607af19a42ada92369201ec31 tenant=org:4 cost=26
+2026/10/01 14:46:31 ledger add event_id=exec_155025bd9fc18802272f2933a814199a client_request_id=t10-iso03-4 trace_id=0f0b96af2fd53d3cee1476909de25c08 tenant=org:4 cost=26
+2026/10/01 14:46:32 shutting down metering...
+2026/10/01 14:46:32 receipt dispatcher stopped

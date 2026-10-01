@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"time"
 
+	"llm-gateway/internal/testsupport/failpoint"
+
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
@@ -123,7 +125,7 @@ func (s *PGAccountStore) FinalizeReceipt(ctx context.Context, params FinalizeRec
 	defer cancel()
 
 	var result FinalizeReceiptResult
-	err := s.commitUnknownTx(ctx, func(tx *sql.Tx) error {
+	err := s.commitUnknownTx(ctx, "receipt", func(tx *sql.Tx) error {
 		var err error
 		result, err = s.finalizeReceiptTx(ctx, tx, params)
 		return err
@@ -195,6 +197,12 @@ func (s *PGAccountStore) finalizeReceiptTx(ctx context.Context, tx *sql.Tx, para
 	}
 
 	overReserved := identity.ChargeMicro > execution.ReservedMicro
+	// T10 window: the execution row lock is held, the price identity is fixed
+	// and no receipt row exists yet. A kill here must leave the execution
+	// recoverable with its reservation intact and no chargeable fact.
+	if err := failpoint.Hit("receipt.before_insert"); err != nil {
+		return FinalizeReceiptResult{}, err
+	}
 	receipt, err := insertReceiptTx(ctx, tx, insertReceiptParams{
 		identity:      identity,
 		digest:        identity.Digest(),
@@ -232,6 +240,13 @@ func (s *PGAccountStore) finalizeReceiptTx(ctx context.Context, tx *sql.Tx, para
 	}
 	if err := insertReceiptAuditTx(ctx, tx, ActionReceiptRecorded, *execution, receipt, params.ActorUserID,
 		params.RequestID, params.TraceID, overReserved, params.Now); err != nil {
+		return FinalizeReceiptResult{}, err
+	}
+	// T10 window: the receipt row, the execution transition to
+	// receipt_recorded and the audit row are all written, but COMMIT has not
+	// run. A kill here must roll the whole receipt back — the client must not
+	// have a durable charge for a transaction that never committed.
+	if err := failpoint.Hit("receipt.after_insert_before_commit"); err != nil {
 		return FinalizeReceiptResult{}, err
 	}
 	return FinalizeReceiptResult{
@@ -296,7 +311,7 @@ func (s *PGAccountStore) RecordUsageException(ctx context.Context, params UsageE
 	defer cancel()
 
 	var result ReceiptResult
-	err := s.commitUnknownTx(ctx, func(tx *sql.Tx) error {
+	err := s.commitUnknownTx(ctx, "receipt.exception", func(tx *sql.Tx) error {
 		var err error
 		result, err = s.recordUsageExceptionTx(ctx, tx, params)
 		return err
@@ -695,7 +710,18 @@ func (e *commitUnknownError) Is(target error) bool { return target == ErrReceipt
 // commitUnknownTx runs fn in a transaction this store owns and reports a failed
 // COMMIT as an unknown outcome instead of a rollback. A body error is a
 // definitive rollback: the transaction cannot have applied.
-func (s *PGAccountStore) commitUnknownTx(ctx context.Context, fn func(*sql.Tx) error) error {
+//
+// op is the T10 failpoint label of the operation whose commit boundary this is
+// ("receipt", "settlement"). A non-empty op exposes exactly three windows:
+//
+//	<op>.before_commit         the body is written, COMMIT has not run
+//	<op>.after_commit          COMMIT returned successfully
+//	<op>.commit_response_lost  COMMIT succeeded but the caller is handed an
+//	                           error, producing the same unknown outcome the
+//	                           driver produces when a COMMIT response is lost
+//	                           (F19) — resolved by the operation's own re-query,
+//	                           never by assuming a rollback
+func (s *PGAccountStore) commitUnknownTx(ctx context.Context, op string, fn func(*sql.Tx) error) error {
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -709,10 +735,23 @@ func (s *PGAccountStore) commitUnknownTx(ctx context.Context, fn func(*sql.Tx) e
 	if err := fn(tx); err != nil {
 		return err
 	}
+	if op != "" {
+		if err := failpoint.Hit(op + ".before_commit"); err != nil {
+			return err
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return &commitUnknownError{err: err}
 	}
 	committed = true
+	if op != "" {
+		if err := failpoint.Hit(op + ".after_commit"); err != nil {
+			return err
+		}
+		if err := failpoint.Hit(op + ".commit_response_lost"); err != nil {
+			return &commitUnknownError{err: err}
+		}
+	}
 	return nil
 }
 

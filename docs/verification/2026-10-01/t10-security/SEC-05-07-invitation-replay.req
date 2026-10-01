@@ -1,0 +1,8 @@
+POST http://127.0.0.1:58872/api/v1/invitations/mnTp…<redacted:43>/accept
+X-Request-ID: t10-SEC-05-07
+Accept: application/json
+Cookie: gw_session=N5k_…<redacted:18>; gw_csrf=kNLm…<redacted:18>
+X-CSRF-Token: kNLm…<redacted:18>
+Content-Type: application/json
+
+{}

@@ -20,6 +20,7 @@ import (
 	"llm-gateway/internal/metering"
 	"llm-gateway/internal/observability"
 	"llm-gateway/internal/ready"
+	"llm-gateway/internal/testsupport/failpoint"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
@@ -33,6 +34,17 @@ func main() {
 		log.Fatalf("runtime profile: %v", err)
 	}
 	appenv.Log(profile)
+
+	// T10 test-only fault injection. Attach is a no-op in a build without the
+	// `failpoint` tag; in a `-tags failpoint` build it refuses to arm under the
+	// production profile, and the preflight below refuses GATEWAY_FAILPOINTS in
+	// every build.
+	if err := failpoint.Attach(failpoint.Options{Lookup: appenv.EnvLookup, Profile: profile.String()}); err != nil {
+		log.Fatalf("failpoints: %v", err)
+	}
+	if failpoint.Enabled() {
+		log.Printf("WARNING: this process was built with -tags failpoint and has armed failpoints; it must not serve production traffic")
+	}
 
 	checks := meteringChecks(appenv.EnvLookup)
 	if err := appenv.Validate(profile, checks); err != nil {
@@ -262,6 +274,11 @@ func meteringChecks(lookup appenv.Lookup) []appenv.Check {
 	diagnosticsAddr := strings.TrimSpace(lookup("METERING_DIAGNOSTICS_ADDR"))
 
 	return []appenv.Check{
+		{
+			Name:   failpoint.EnvVar,
+			Detail: "must be empty: the T10 failpoints stop or kill this process at a settlement/ACK window and are only available to the isolated failure runner in demo/test (see internal/testsupport/failpoint)",
+			OK:     strings.TrimSpace(lookup(failpoint.EnvVar)) == "",
+		},
 		{
 			Name:   "METERING_REQUIRE_POSTGRES",
 			Detail: "must be true: production must not silently fall back to the in-memory ledger",

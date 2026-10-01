@@ -52,6 +52,7 @@ func TestGatewayChecksAcceptFullProductionConfig(t *testing.T) {
 func TestGatewayChecksCoverEveryRequiredItem(t *testing.T) {
 	checks := gatewayChecks(mapLookup(goodGatewayEnv()), true)
 	want := []string{
+		"GATEWAY_FAILPOINTS",
 		"LLM_GATEWAY_BOOTSTRAP_API_KEY",
 		"GATEWAY_ACCESS_GUARD",
 		"GATEWAY_BILLING",
@@ -82,6 +83,11 @@ func TestGatewayChecksRejectRelaxedSettings(t *testing.T) {
 		mutate  func(map[string]string)
 		failing string
 	}{
+		{
+			name:    "failpoints armed in production",
+			mutate:  func(env map[string]string) { env["GATEWAY_FAILPOINTS"] = "receipt.before_insert=kill" },
+			failing: "GATEWAY_FAILPOINTS",
+		},
 		{
 			name:    "legacy bootstrap raw key",
 			mutate:  func(env map[string]string) { env["LLM_GATEWAY_BOOTSTRAP_API_KEY"] = "sk-legacy" },

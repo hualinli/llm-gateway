@@ -1,0 +1,9 @@
+HTTP 200 (0.006s)
+Server: hertz
+Date: Thu, 01 Oct 2026 06:44:45 GMT
+Content-Type: application/json
+Content-Length: 658
+X-Request-Id: t10-SEC-13-31
+X-Trace-Id: 3df40b84f9fb0c551e6887cb6079e15c
+
+{"items":[{"id":"2","model":"t10-model","currency":"CNY","input_price_micro_per_million":"1000000","output_price_micro_per_million":"1000000","provider_input_cost_micro_per_million":null,"provider_output_cost_micro_per_million":null,"effective_at":"2026-10-01T05:44:34Z","created_by":"1","created_at":"2026-10-01T06:44:34Z"},{"id":"1","model":"default","currency":"CNY","input_price_micro_per_million":"1000000","output_price_micro_per_million":"1000000","provider_input_cost_micro_per_million":null,"provider_output_cost_micro_per_million":null,"effective_at":"2026-10-01T05:44:34Z","created_by":"1","created_at":"2026-10-01T06:44:34Z"}],"next_cursor":null}

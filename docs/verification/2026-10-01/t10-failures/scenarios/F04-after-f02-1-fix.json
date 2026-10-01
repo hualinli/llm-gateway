@@ -1,0 +1,305 @@
+{
+  "assertions": [
+    {
+      "assertion": "missing: the stream ended without [DONE] (no clean end without a durable decision)",
+      "detail": {
+        "body_head": "data: {\"choices\":[{\"delta\":{\"content\":\"ok \",\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0}],\"id\":\"chatcmpl-mock-ok\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"ok-1 ",
+        "body_tail": "null,\"index\":0}],\"id\":\"chatcmpl-mock-ok\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"id\":\"chatcmpl-mock-ok\",\"object\":\"chat.completion.chunk\"}\n\n",
+        "bytes": 1070,
+        "cancelled_by_client": false,
+        "classification": "incomplete",
+        "closed_seconds": 0.056303,
+        "done_seconds": null,
+        "error": null,
+        "events": 7,
+        "first_content_seconds": 0.023087,
+        "first_event_seconds": 0.022912,
+        "has_done": false,
+        "status": 200
+      },
+      "ok": true
+    },
+    {
+      "assertion": "negative: the stream ended without [DONE] (no clean end without a durable decision)",
+      "detail": {
+        "body_head": "data: {\"choices\":[{\"delta\":{\"content\":\"ok \",\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0}],\"id\":\"chatcmpl-mock-ok\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"ok-1 ",
+        "body_tail": "ck-ok\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"ok-5 \",\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0}],\"id\":\"chatcmpl-mock-ok\",\"object\":\"chat.completion.chunk\"}\n\n",
+        "bytes": 946,
+        "cancelled_by_client": false,
+        "classification": "incomplete",
+        "closed_seconds": 0.046683,
+        "done_seconds": null,
+        "error": null,
+        "events": 6,
+        "first_content_seconds": 0.015166,
+        "first_event_seconds": 0.015036,
+        "has_done": false,
+        "status": 200
+      },
+      "ok": true
+    },
+    {
+      "assertion": "mismatch: the stream ended without [DONE] (no clean end without a durable decision)",
+      "detail": {
+        "body_head": "data: {\"choices\":[{\"delta\":{\"content\":\"ok \",\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0}],\"id\":\"chatcmpl-mock-ok\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"ok-1 ",
+        "body_tail": "ck-ok\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"ok-5 \",\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0}],\"id\":\"chatcmpl-mock-ok\",\"object\":\"chat.completion.chunk\"}\n\n",
+        "bytes": 946,
+        "cancelled_by_client": false,
+        "classification": "incomplete",
+        "closed_seconds": 0.044969,
+        "done_seconds": null,
+        "error": null,
+        "events": 6,
+        "first_content_seconds": 0.014533,
+        "first_event_seconds": 0.014333,
+        "has_done": false,
+        "status": 200
+      },
+      "ok": true
+    },
+    {
+      "assertion": "exactly one execution per refused boundary",
+      "detail": [
+        {
+          "execution_id": "exec_e34e1bf612894014c8162c33f012eeab",
+          "gateway_id": "gw-a",
+          "reserved_micro": "89",
+          "status": "review_required",
+          "terminal_reason": ""
+        },
+        {
+          "execution_id": "exec_5a1339cf5b3a97411cc7fc4517b5aa5d",
+          "gateway_id": "gw-a",
+          "reserved_micro": "89",
+          "status": "review_required",
+          "terminal_reason": ""
+        },
+        {
+          "execution_id": "exec_0732bb7db3c9c619daef437e5b3c30c7",
+          "gateway_id": "gw-a",
+          "reserved_micro": "89",
+          "status": "review_required",
+          "terminal_reason": ""
+        }
+      ],
+      "ok": true
+    },
+    {
+      "assertion": "every refused boundary left a durable PostgreSQL exception receipt",
+      "detail": [
+        [
+          "exec_e34e1bf612894014c8162c33f012eeab",
+          "exception",
+          "terminal event carries no usage",
+          "0"
+        ],
+        [
+          "exec_5a1339cf5b3a97411cc7fc4517b5aa5d",
+          "exception",
+          "terminal event carries invalid usage",
+          "0"
+        ],
+        [
+          "exec_0732bb7db3c9c619daef437e5b3c30c7",
+          "exception",
+          "terminal event declares a total_tokens that is not the sum of its components",
+          "0"
+        ]
+      ],
+      "ok": true
+    },
+    {
+      "assertion": "every exception receipt carries a reason (never a silent zero)",
+      "detail": [
+        "terminal event carries no usage",
+        "terminal event carries invalid usage",
+        "terminal event declares a total_tokens that is not the sum of its components"
+      ],
+      "ok": true
+    },
+    {
+      "assertion": "the execution is review_required, not settled and not released",
+      "detail": [
+        {
+          "execution_id": "exec_e34e1bf612894014c8162c33f012eeab",
+          "gateway_id": "gw-a",
+          "reserved_micro": "89",
+          "status": "review_required",
+          "terminal_reason": ""
+        },
+        {
+          "execution_id": "exec_5a1339cf5b3a97411cc7fc4517b5aa5d",
+          "gateway_id": "gw-a",
+          "reserved_micro": "89",
+          "status": "review_required",
+          "terminal_reason": ""
+        },
+        {
+          "execution_id": "exec_0732bb7db3c9c619daef437e5b3c30c7",
+          "gateway_id": "gw-a",
+          "reserved_micro": "89",
+          "status": "review_required",
+          "terminal_reason": ""
+        }
+      ],
+      "ok": true
+    },
+    {
+      "assertion": "no money moved for any refused boundary (no debit, no release)",
+      "detail": [
+        {
+          "amount_micro": "89",
+          "business_id": "billing_execution:reservation:exec_e34e1bf612894014c8162c33f012eeab",
+          "direction": "credit",
+          "kind": "reservation"
+        },
+        {
+          "amount_micro": "89",
+          "business_id": "billing_execution:reservation:exec_5a1339cf5b3a97411cc7fc4517b5aa5d",
+          "direction": "credit",
+          "kind": "reservation"
+        },
+        {
+          "amount_micro": "89",
+          "business_id": "billing_execution:reservation:exec_0732bb7db3c9c619daef437e5b3c30c7",
+          "direction": "credit",
+          "kind": "reservation"
+        }
+      ],
+      "ok": true
+    },
+    {
+      "assertion": "the three reasons are distinguishable and name the actual defect",
+      "detail": [
+        "terminal event carries no usage",
+        "terminal event carries invalid usage",
+        "terminal event declares a total_tokens that is not the sum of its components"
+      ],
+      "ok": true
+    }
+  ],
+  "evidence": {
+    "account": {
+      "posted_balance_micro": 50000000,
+      "reserved_micro": 267,
+      "version": 4
+    },
+    "entries": [
+      {
+        "amount_micro": "89",
+        "business_id": "billing_execution:reservation:exec_e34e1bf612894014c8162c33f012eeab",
+        "direction": "credit",
+        "kind": "reservation"
+      },
+      {
+        "amount_micro": "89",
+        "business_id": "billing_execution:reservation:exec_5a1339cf5b3a97411cc7fc4517b5aa5d",
+        "direction": "credit",
+        "kind": "reservation"
+      },
+      {
+        "amount_micro": "89",
+        "business_id": "billing_execution:reservation:exec_0732bb7db3c9c619daef437e5b3c30c7",
+        "direction": "credit",
+        "kind": "reservation"
+      }
+    ],
+    "executions": [
+      {
+        "execution_id": "exec_e34e1bf612894014c8162c33f012eeab",
+        "gateway_id": "gw-a",
+        "reserved_micro": "89",
+        "status": "review_required",
+        "terminal_reason": ""
+      },
+      {
+        "execution_id": "exec_5a1339cf5b3a97411cc7fc4517b5aa5d",
+        "gateway_id": "gw-a",
+        "reserved_micro": "89",
+        "status": "review_required",
+        "terminal_reason": ""
+      },
+      {
+        "execution_id": "exec_0732bb7db3c9c619daef437e5b3c30c7",
+        "gateway_id": "gw-a",
+        "reserved_micro": "89",
+        "status": "review_required",
+        "terminal_reason": ""
+      }
+    ],
+    "incomplete_metric": 3.0,
+    "receipts": [
+      [
+        "exec_e34e1bf612894014c8162c33f012eeab",
+        "exception",
+        "terminal event carries no usage",
+        "0"
+      ],
+      [
+        "exec_5a1339cf5b3a97411cc7fc4517b5aa5d",
+        "exception",
+        "terminal event carries invalid usage",
+        "0"
+      ],
+      [
+        "exec_0732bb7db3c9c619daef437e5b3c30c7",
+        "exception",
+        "terminal event declares a total_tokens that is not the sum of its components",
+        "0"
+      ]
+    ],
+    "streams": {
+      "mismatch": {
+        "body_head": "data: {\"choices\":[{\"delta\":{\"content\":\"ok \",\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0}],\"id\":\"chatcmpl-mock-ok\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"ok-1 ",
+        "body_tail": "ck-ok\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"ok-5 \",\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0}],\"id\":\"chatcmpl-mock-ok\",\"object\":\"chat.completion.chunk\"}\n\n",
+        "bytes": 946,
+        "cancelled_by_client": false,
+        "classification": "incomplete",
+        "closed_seconds": 0.044969,
+        "done_seconds": null,
+        "error": null,
+        "events": 6,
+        "first_content_seconds": 0.014533,
+        "first_event_seconds": 0.014333,
+        "has_done": false,
+        "status": 200
+      },
+      "missing": {
+        "body_head": "data: {\"choices\":[{\"delta\":{\"content\":\"ok \",\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0}],\"id\":\"chatcmpl-mock-ok\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"ok-1 ",
+        "body_tail": "null,\"index\":0}],\"id\":\"chatcmpl-mock-ok\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"id\":\"chatcmpl-mock-ok\",\"object\":\"chat.completion.chunk\"}\n\n",
+        "bytes": 1070,
+        "cancelled_by_client": false,
+        "classification": "incomplete",
+        "closed_seconds": 0.056303,
+        "done_seconds": null,
+        "error": null,
+        "events": 7,
+        "first_content_seconds": 0.023087,
+        "first_event_seconds": 0.022912,
+        "has_done": false,
+        "status": 200
+      },
+      "negative": {
+        "body_head": "data: {\"choices\":[{\"delta\":{\"content\":\"ok \",\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0}],\"id\":\"chatcmpl-mock-ok\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"ok-1 ",
+        "body_tail": "ck-ok\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"ok-5 \",\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0}],\"id\":\"chatcmpl-mock-ok\",\"object\":\"chat.completion.chunk\"}\n\n",
+        "bytes": 946,
+        "cancelled_by_client": false,
+        "classification": "incomplete",
+        "closed_seconds": 0.046683,
+        "done_seconds": null,
+        "error": null,
+        "events": 6,
+        "first_content_seconds": 0.015166,
+        "first_event_seconds": 0.015036,
+        "has_done": false,
+        "status": 200
+      }
+    }
+  },
+  "id": "F04",
+  "notes": [],
+  "partial_reason": null,
+  "seconds": 0.87,
+  "status": "PASS",
+  "title": "missing, negative and self-contradicting usage all become a PostgreSQL exception, never a zero charge"
+}

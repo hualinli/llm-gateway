@@ -55,7 +55,7 @@ func (s *PGAccountStore) SettleReceipt(ctx context.Context, params SettleReceipt
 	defer cancel()
 
 	var result SettlementResult
-	err := s.commitUnknownTx(ctx, func(tx *sql.Tx) error {
+	err := s.commitUnknownTx(ctx, "settlement", func(tx *sql.Tx) error {
 		var err error
 		result, err = s.settleReceiptTx(ctx, tx, params)
 		return err

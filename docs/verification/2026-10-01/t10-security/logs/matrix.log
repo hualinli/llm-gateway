@@ -1,0 +1,144 @@
+== fixtures ==
+[FIX] PASS — org A=4 org B=6
+
+== F16 安全负向矩阵 ==
+
+[SEC-01] 无 token / 缺失凭据（Console+Gateway）
+[SEC-01] PASS
+
+[SEC-02] 错误 scheme / 畸形凭据
+[SEC-02] PASS
+
+[SEC-03] 篡改 session 与 CSRF
+[SEC-03] PASS
+
+[SEC-04] 过期 session（短 TTL 实例）
+[SEC-04] PASS
+
+[SEC-05] 邀请 token 篡改/未知/错 email/重复接受
+[SEC-05] PASS
+
+[SEC-06] 跨组织读取枚举（orgs/users/keys/usage/audit/statements/exceptions）
+    note: 10 个跨组织读取全部 404 且与不存在的组织逐字节同形
+[SEC-06] PASS
+
+[SEC-07] 跨组织写入被拒且目标组织不变
+    note: 6 个跨组织写入全部 404，B 的成员与 Key 状态逐字段不变
+[SEC-07] PASS
+
+[SEC-08] 角色提权（member→admin、admin→owner、自升平台管理员）
+[SEC-08] PASS
+
+[SEC-09] 每个 unsafe 路由的缺/错 CSRF + 无状态变更
+    note: 14 个 unsafe 路由 × (缺 CSRF, 错 CSRF) 全部 403，且成员/Key/资金/价格/邀请无变化
+[SEC-09] PASS
+
+[SEC-10] 禁用用户 + 活跃 session（旧 session 立即失效）
+[SEC-10] PASS
+
+[SEC-11] 被移出成员 + 有效 Key（在途流排水、新请求 403）
+    note: 在途流排水完成（4.74s），新请求 403 access forbidden
+[SEC-11] PASS
+
+[SEC-12] billing_viewer 写操作全拒、只读面可用
+[SEC-12] PASS
+
+[SEC-13] /api/v1/admin/* 非平台管理员全拒
+    note: 6 个 admin 路由 × 4 个组织角色 = 403；未认证 = 401；平台管理员 = 200
+[SEC-13] PASS
+
+[SEC-14] Gateway 凭据归属不可被请求头改写
+    note: 伪造 X-Organization-ID/X-Tenant-ID 未改变归属（metering_events.org_id=B）
+[SEC-14] PASS
+
+== F10 控制面失效与恢复 ==
+
+[CTRL-01] desired==applied 基线（PG 权威实例视图）
+    note: Control 侧实例陈旧租约=30s；Gateway 侧配置租约=8s（两者不同）
+[CTRL-01] PASS
+
+[CTRL-02] 控制面分区：stale 不谎报 active、租约到期拒新请求、在途流排水
+    note: 分区 8s 后新请求 401；/gateways health=stale、desired=14、applied=13；在途流排水完成
+[CTRL-02] PASS
+
+[CTRL-03] 控制面恢复：desired/applied 收敛、新请求恢复
+    note: 控制面恢复后 3.11s 内 desired==applied==14，stale=0，新请求 200
+[CTRL-03] PASS
+
+[CTRL-04] Control 重启：撤销不复活、实例视图durable
+    note: 撤销传播 0.037s；Control 停机+租约到期 401；重启后合法 Key 200、已撤销 Key 仍 401
+[CTRL-04] PASS
+
+== F12 长流期间的改价/撤销/移除 ==
+
+[REV-01] 长流期间改价：在途钉住原价、新请求用新价
+    note: 在途流钉住价格 v2、计费 26 micro；改价后新请求用 v3、计费 200 micro
+[REV-01] PASS
+
+[REV-02] 长流期间撤销 Key：在途排水、新请求 ≤5s 被拒
+    note: 撤销在 5.644s 内对新请求生效（目标 ≤5s），在途流排水完成（6.83s）
+[REV-02] PASS
+
+[REV-03] 移除成员后的资金正确性（每条执行恰好一条 debit）
+    note: 移除成员后在途流仍收到 [DONE]（6.83s）；新请求 403；2 条执行各恰好一条 debit
+[REV-03] PASS
+
+[REV-04] F12 后对账一致：四层 + 执行/收据/扣款 1:1
+    note: 对账一致：executions=receipts=44，debit=44，账户投影==流水重算
+[REV-04] PASS
+
+== 管理面/数据面隔离 ==
+
+[ISO-01] Gateway SSE 基线（loadtest closed-loop）
+    note: 基线：96/96 完成，first_content p95=59.523ms，无 incomplete，status={'200': 96}
+[ISO-01] PASS
+
+[ISO-02] Console 报表压测下 Gateway SSE 不受影响
+    note: Console 2237 次报表请求（status={200: 2237}，p95=613.5ms）；Gateway 96/96 完成，first_content p95 59.523ms→58.772ms；PG 连接 console≤6 gateway≥16
+[ISO-02] PASS
+
+[ISO-03] Console 重启不打断在途 Gateway 流
+    note: Console 重启（0.59s）期间 6 条在途流全部收到 [DONE]（耗时 [8.24, 8.24, 8.25, 8.26, 8.24, 8.27]）
+[ISO-03] PASS
+
+[ISO-04] Console 池饱和不等于 Gateway 池被耗尽
+    note: Console 池上限 10（硬编码），Gateway 两个池各 8；采样中 console=6、gateway=16、全部后端=27 —— Console 饱和没有耗尽 Gateway 池
+[ISO-04] PASS
+
+== 全局泄密扫描 ==
+
+[SEC-15] 响应与进程日志的 secret 扫描
+    note: 218 个响应 + 14 个进程日志：41 个 secret 值只在其创建响应里出现 20 次，其余零出现
+[SEC-15] PASS
+
+== 结果 ==
+FIX      PASS fixtures
+SEC-01   PASS 无 token / 缺失凭据（Console+Gateway）
+SEC-02   PASS 错误 scheme / 畸形凭据
+SEC-03   PASS 篡改 session 与 CSRF
+SEC-04   PASS 过期 session（短 TTL 实例）
+SEC-05   PASS 邀请 token 篡改/未知/错 email/重复接受
+SEC-06   PASS 跨组织读取枚举（orgs/users/keys/usage/audit/statements/exceptions）
+SEC-07   PASS 跨组织写入被拒且目标组织不变
+SEC-08   PASS 角色提权（member→admin、admin→owner、自升平台管理员）
+SEC-09   PASS 每个 unsafe 路由的缺/错 CSRF + 无状态变更
+SEC-10   PASS 禁用用户 + 活跃 session（旧 session 立即失效）
+SEC-11   PASS 被移出成员 + 有效 Key（在途流排水、新请求 403）
+SEC-12   PASS billing_viewer 写操作全拒、只读面可用
+SEC-13   PASS /api/v1/admin/* 非平台管理员全拒
+SEC-14   PASS Gateway 凭据归属不可被请求头改写
+CTRL-01  PASS desired==applied 基线（PG 权威实例视图）
+CTRL-02  PASS 控制面分区：stale 不谎报 active、租约到期拒新请求、在途流排水
+CTRL-03  PASS 控制面恢复：desired/applied 收敛、新请求恢复
+CTRL-04  PASS Control 重启：撤销不复活、实例视图durable
+REV-01   PASS 长流期间改价：在途钉住原价、新请求用新价
+REV-02   PASS 长流期间撤销 Key：在途排水、新请求 ≤5s 被拒
+REV-03   PASS 移除成员后的资金正确性（每条执行恰好一条 debit）
+REV-04   PASS F12 后对账一致：四层 + 执行/收据/扣款 1:1
+ISO-01   PASS Gateway SSE 基线（loadtest closed-loop）
+ISO-02   PASS Console 报表压测下 Gateway SSE 不受影响
+ISO-03   PASS Console 重启不打断在途 Gateway 流
+ISO-04   PASS Console 池饱和不等于 Gateway 池被耗尽
+SEC-15   PASS 响应与进程日志的 secret 扫描
+
+checks=28 pass=28 fail=0 skip=0 findings=0 summary=/Users/lihualin/Projects/llm-gateway/.worktrees/t10/docs/verification/2026-10-01/t10-security/summary.json

@@ -1,0 +1,9 @@
+HTTP 201 (0.004s)
+Server: hertz
+Date: Thu, 01 Oct 2026 06:46:56 GMT
+Content-Type: application/json
+Content-Length: 689
+X-Request-Id: t10-BFIX-44
+X-Trace-Id: bc50f57e095314cd5227aab8f9ca1d2d
+
+{"entry":{"id":"2","organization_id":"6","kind":"adjustment","direction":"credit","amount_micro":"5000000","business_id":"t10-fund-6","reason":"t10 security matrix funding","operator_user_id":"1","request_id":"t10-BFIX-44","posted_at":"2026-10-01T06:46:56Z","created_at":"2026-10-01T06:46:56Z"},"account":{"organization_id":"6","currency":"CNY","posted_balance_micro":"5000000","reserved_micro":"0","available_micro":"5000000","status":"active","version":"2","created_at":"2026-10-01T06:46:56Z","updated_at":"2026-10-01T06:46:56Z","available_note":"available_micro = posted_balance_micro - reserved_micro. A negative available amount is a debt, not a spendable balance."},"replayed":false}

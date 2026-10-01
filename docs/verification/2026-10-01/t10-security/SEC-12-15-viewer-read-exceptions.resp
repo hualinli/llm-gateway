@@ -1,0 +1,9 @@
+HTTP 200 (0.003s)
+Server: hertz
+Date: Thu, 01 Oct 2026 06:44:45 GMT
+Content-Type: application/json
+Content-Length: 438
+X-Request-Id: t10-SEC-12-15
+X-Trace-Id: 022a2bb9671f6ceb1771dcac969a239b
+
+{"items":[],"next_cursor":null,"totals":{"open":"0","resolved":"0","dismissed":"0","oldest_open_at":null,"oldest_open_age_seconds":null},"note":"A money exception is a durable PostgreSQL fact, not a log line: the Redis DLQ is only a bounded diagnostic cache. Resolving one records who decided what and when (billing_exception_events is append-only), and never moves money by itself — a correction is a separate reversing ledger entry."}

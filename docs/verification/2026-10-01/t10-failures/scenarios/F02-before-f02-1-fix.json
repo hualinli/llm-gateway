@@ -1,0 +1,144 @@
+{
+  "assertions": [
+    {
+      "assertion": "the broken stream is not a complete stream",
+      "detail": {
+        "body_head": "data: {\"choices\":[{\"delta\":{\"content\":\"cut \",\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0}],\"id\":\"chatcmpl-mock-cut\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"cut",
+        "body_tail": "cut\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"cut-1 \",\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0}],\"id\":\"chatcmpl-mock-cut\",\"object\":\"chat.completion.chunk\"}\n\n",
+        "bytes": 318,
+        "cancelled_by_client": false,
+        "classification": "incomplete",
+        "closed_seconds": 0.030671,
+        "done_seconds": null,
+        "error": null,
+        "events": 2,
+        "first_content_seconds": 0.025512,
+        "first_event_seconds": 0.025332,
+        "has_done": false,
+        "status": 200
+      },
+      "ok": true
+    },
+    {
+      "assertion": "the client saw exactly the events the upstream produced before the break",
+      "detail": {
+        "events": 2
+      },
+      "ok": true
+    },
+    {
+      "assertion": "gateway_stream_incomplete_total counts the break",
+      "detail": {
+        "delta": 1.0
+      },
+      "ok": true
+    },
+    {
+      "assertion": "the break created exactly one execution and no second attempt",
+      "detail": [
+        {
+          "execution_id": "exec_f64fc97c6858aa119e5a6ed0581b383c",
+          "gateway_id": "gw-a",
+          "reserved_micro": "89",
+          "status": "executing",
+          "terminal_reason": ""
+        }
+      ],
+      "ok": true
+    },
+    {
+      "assertion": "no durable receipt backs the broken stream",
+      "detail": [],
+      "ok": true
+    },
+    {
+      "assertion": "the reservation is still held and the execution has no durable anomaly of its own",
+      "detail": [
+        {
+          "execution_id": "exec_f64fc97c6858aa119e5a6ed0581b383c",
+          "gateway_id": "gw-a",
+          "reserved_micro": "89",
+          "status": "executing",
+          "terminal_reason": ""
+        }
+      ],
+      "ok": true
+    },
+    {
+      "assertion": "the recovery janitor ran and released nothing while the owner is alive",
+      "detail": {
+        "audits": [
+          {
+            "action": "billing.execution.reserved",
+            "outcome": "success",
+            "target_id": "exec_f64fc97c6858aa119e5a6ed0581b383c"
+          }
+        ],
+        "release_entries": [],
+        "runs": "15"
+      },
+      "ok": true
+    }
+  ],
+  "evidence": {
+    "account": {
+      "posted_balance_micro": 50000000,
+      "reserved_micro": 89,
+      "version": 2
+    },
+    "after_recovery_window": {
+      "account": {
+        "posted_balance_micro": 50000000,
+        "reserved_micro": 89,
+        "version": 2
+      },
+      "executions": [
+        {
+          "execution_id": "exec_f64fc97c6858aa119e5a6ed0581b383c",
+          "gateway_id": "gw-a",
+          "reserved_micro": "89",
+          "status": "executing",
+          "terminal_reason": ""
+        }
+      ],
+      "recovery_metrics": {
+        "runs": "15"
+      },
+      "recovery_refusals": [],
+      "recovery_window_seconds": 4
+    },
+    "executions": [
+      {
+        "execution_id": "exec_f64fc97c6858aa119e5a6ed0581b383c",
+        "gateway_id": "gw-a",
+        "reserved_micro": "89",
+        "status": "executing",
+        "terminal_reason": ""
+      }
+    ],
+    "executions_created": 1,
+    "incomplete_metric_delta": 1.0,
+    "receipts": [],
+    "stream": {
+      "body_head": "data: {\"choices\":[{\"delta\":{\"content\":\"cut \",\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0}],\"id\":\"chatcmpl-mock-cut\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"cut",
+      "body_tail": "cut\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"cut-1 \",\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0}],\"id\":\"chatcmpl-mock-cut\",\"object\":\"chat.completion.chunk\"}\n\n",
+      "bytes": 318,
+      "cancelled_by_client": false,
+      "classification": "incomplete",
+      "closed_seconds": 0.030671,
+      "done_seconds": null,
+      "error": null,
+      "events": 2,
+      "first_content_seconds": 0.025512,
+      "first_event_seconds": 0.025332,
+      "has_done": false,
+      "status": 200
+    }
+  },
+  "id": "F02",
+  "notes": [],
+  "partial_reason": "a mid-stream break writes no PostgreSQL state at all: the execution stays 'executing' and the reservation is held. T07B recovery refuses it while the owning gateway is alive ('instance_alive'), so nothing bounds the hold until that process restarts. See the README finding F02-1.",
+  "seconds": 9.29,
+  "status": "PARTIAL",
+  "title": "a mid-stream break is incomplete, is never transparently replayed, and leaves no orphan reservation"
+}

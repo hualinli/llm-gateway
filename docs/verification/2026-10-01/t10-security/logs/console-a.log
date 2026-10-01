@@ -1,0 +1,108 @@
+WARNING: sonic/ast only supports (go1.17~1.26 and amd64 CPU) or (go1.20~1.26 and arm64 CPU), but your environment is not suitable and will fallback to encoding/json
+2026/10/01 06:46:51 runtime profile=demo WARNING: demo mode, production checks are not enforced
+2026/10/01 06:46:51 WARNING: production check failed: CONSOLE_DIAGNOSTICS_ADDR: must be set to a listener address different from the business address "127.0.0.1:50436" so /metrics and /debug/pprof/* are not exposed on the API listener
+2026/10/01 06:46:51 WARNING: production check failed: CONSOLE_SECURE_COOKIES: must be true so the gw_session cookie is never sent over plaintext HTTP
+2026/10/01 06:46:51 WARNING: production check failed: CONTROL_TLS_CA_FILE: must be set so the Console verifies the Control server certificate over TLS
+2026/10/01 06:46:51 WARNING: production check failed: CONTROL_TLS_CLIENT_CERT_FILE/CONTROL_TLS_CLIENT_KEY_FILE: must both be set so the Console authenticates to Control with mTLS
+2026/10/01 06:46:51 WARNING: CONTROL_TLS_* is not set; the console -> control channel at 127.0.0.1:50428 is plaintext (local demo only)
+2026/10/01 06:46:51 console: control channel enabled addr=127.0.0.1:50428 console_service="console" tls=false
+2026/10/01 14:46:51.886611 engine.go:702: [Debug] HERTZ: Method=POST   absolutePath=/api/v1/auth/login        --> handlerName=llm-gateway/internal/console.(*server).login-fm (num=4 handlers)
+2026/10/01 14:46:51.886703 engine.go:702: [Debug] HERTZ: Method=GET    absolutePath=/livez                    --> handlerName=llm-gateway/internal/console.(*server).livez-fm (num=4 handlers)
+2026/10/01 14:46:51.886711 engine.go:702: [Debug] HERTZ: Method=GET    absolutePath=/readyz                   --> handlerName=llm-gateway/internal/console.(*server).readyz-fm (num=4 handlers)
+2026/10/01 14:46:51.886719 engine.go:702: [Debug] HERTZ: Method=GET    absolutePath=/api/v1/me                --> handlerName=llm-gateway/internal/console.(*server).me-fm (num=5 handlers)
+2026/10/01 14:46:51.886726 engine.go:702: [Debug] HERTZ: Method=GET    absolutePath=/api/v1/organizations     --> handlerName=llm-gateway/internal/console.(*server).listOrganizations-fm (num=5 handlers)
+2026/10/01 14:46:51.886734 engine.go:702: [Debug] HERTZ: Method=GET    absolutePath=/api/v1/organizations/:org --> handlerName=llm-gateway/internal/console.(*server).getOrganization-fm (num=5 handlers)
+2026/10/01 14:46:51.886749 engine.go:702: [Debug] HERTZ: Method=POST   absolutePath=/api/v1/auth/logout       --> handlerName=llm-gateway/internal/console.(*server).logout-fm (num=6 handlers)
+2026/10/01 14:46:51.886757 engine.go:702: [Debug] HERTZ: Method=POST   absolutePath=/api/v1/organizations     --> handlerName=llm-gateway/internal/console.(*server).createOrganization-fm (num=6 handlers)
+2026/10/01 14:46:51.886764 engine.go:702: [Debug] HERTZ: Method=POST   absolutePath=/api/v1/admin/users       --> handlerName=llm-gateway/internal/console.(*server).createUser-fm (num=7 handlers)
+2026/10/01 14:46:51.886771 engine.go:702: [Debug] HERTZ: Method=POST   absolutePath=/api/v1/admin/users/:user/status --> handlerName=llm-gateway/internal/console.(*server).setUserStatus-fm (num=7 handlers)
+2026/10/01 14:46:51.886787 engine.go:702: [Debug] HERTZ: Method=GET    absolutePath=/api/v1/orgs/:org/members --> handlerName=llm-gateway/internal/console.(*server).listOrgMembers-fm (num=5 handlers)
+2026/10/01 14:46:51.886796 engine.go:702: [Debug] HERTZ: Method=GET    absolutePath=/api/v1/orgs/:org/invitations --> handlerName=llm-gateway/internal/console.(*server).listOrgInvitations-fm (num=5 handlers)
+2026/10/01 14:46:51.886803 engine.go:702: [Debug] HERTZ: Method=POST   absolutePath=/api/v1/orgs/:org/invitations --> handlerName=llm-gateway/internal/console.(*server).createInvitation-fm (num=6 handlers)
+2026/10/01 14:46:51.886810 engine.go:702: [Debug] HERTZ: Method=POST   absolutePath=/api/v1/invitations/:token/accept --> handlerName=llm-gateway/internal/console.(*server).acceptInvitation-fm (num=6 handlers)
+2026/10/01 14:46:51.886817 engine.go:702: [Debug] HERTZ: Method=PATCH  absolutePath=/api/v1/orgs/:org/members/:user --> handlerName=llm-gateway/internal/console.(*server).changeMemberRole-fm (num=6 handlers)
+2026/10/01 14:46:51.886857 engine.go:702: [Debug] HERTZ: Method=DELETE absolutePath=/api/v1/orgs/:org/members/:user --> handlerName=llm-gateway/internal/console.(*server).removeMember-fm (num=6 handlers)
+2026/10/01 14:46:51.886863 engine.go:702: [Debug] HERTZ: Method=POST   absolutePath=/api/v1/orgs/:org/owner-transfer --> handlerName=llm-gateway/internal/console.(*server).transferOwnership-fm (num=6 handlers)
+2026/10/01 14:46:51.886869 engine.go:702: [Debug] HERTZ: Method=GET    absolutePath=/api/v1/orgs/:org/audit   --> handlerName=llm-gateway/internal/console.(*server).listOrgAudit-fm (num=5 handlers)
+2026/10/01 14:46:51.886876 engine.go:702: [Debug] HERTZ: Method=GET    absolutePath=/api/v1/orgs/:org/keys    --> handlerName=llm-gateway/internal/console.(*server).listOrgKeys-fm (num=5 handlers)
+2026/10/01 14:46:51.886882 engine.go:702: [Debug] HERTZ: Method=POST   absolutePath=/api/v1/orgs/:org/keys    --> handlerName=llm-gateway/internal/console.(*server).createOrgKey-fm (num=6 handlers)
+2026/10/01 14:46:51.886888 engine.go:702: [Debug] HERTZ: Method=POST   absolutePath=/api/v1/orgs/:org/keys/:key/revoke --> handlerName=llm-gateway/internal/console.(*server).revokeOrgKey-fm (num=6 handlers)
+2026/10/01 14:46:51.886896 engine.go:702: [Debug] HERTZ: Method=GET    absolutePath=/api/v1/orgs/:org/usage   --> handlerName=llm-gateway/internal/console.(*server).listOrgUsage-fm (num=5 handlers)
+2026/10/01 14:46:51.886903 engine.go:702: [Debug] HERTZ: Method=GET    absolutePath=/api/v1/admin/prices      --> handlerName=llm-gateway/internal/console.(*server).listAdminPrices-fm (num=6 handlers)
+2026/10/01 14:46:51.886908 engine.go:702: [Debug] HERTZ: Method=POST   absolutePath=/api/v1/admin/prices      --> handlerName=llm-gateway/internal/console.(*server).createAdminPrice-fm (num=7 handlers)
+2026/10/01 14:46:51.886921 engine.go:702: [Debug] HERTZ: Method=GET    absolutePath=/api/v1/orgs/:org/billing/account --> handlerName=llm-gateway/internal/console.(*server).getOrgBillingAccount-fm (num=5 handlers)
+2026/10/01 14:46:51.886927 engine.go:702: [Debug] HERTZ: Method=GET    absolutePath=/api/v1/orgs/:org/billing/entries --> handlerName=llm-gateway/internal/console.(*server).listOrgBillingEntries-fm (num=5 handlers)
+2026/10/01 14:46:51.886934 engine.go:702: [Debug] HERTZ: Method=POST   absolutePath=/api/v1/admin/billing/accounts/:org/adjustments --> handlerName=llm-gateway/internal/console.(*server).adjustBillingAccount-fm (num=7 handlers)
+2026/10/01 14:46:51.886940 engine.go:702: [Debug] HERTZ: Method=GET    absolutePath=/api/v1/orgs/:org/billing/statements --> handlerName=llm-gateway/internal/console.(*server).getOrgBillingStatement-fm (num=5 handlers)
+2026/10/01 14:46:51.886945 engine.go:702: [Debug] HERTZ: Method=GET    absolutePath=/api/v1/orgs/:org/billing/exceptions --> handlerName=llm-gateway/internal/console.(*server).listOrgBillingExceptions-fm (num=5 handlers)
+2026/10/01 14:46:51.886949 engine.go:702: [Debug] HERTZ: Method=GET    absolutePath=/api/v1/orgs/:org/billing/exceptions/:exception --> handlerName=llm-gateway/internal/console.(*server).getOrgBillingException-fm (num=5 handlers)
+2026/10/01 14:46:51.886958 engine.go:702: [Debug] HERTZ: Method=POST   absolutePath=/api/v1/admin/billing/exceptions/:exception/resolution --> handlerName=llm-gateway/internal/console.(*server).resolveBillingException-fm (num=7 handlers)
+2026/10/01 06:46:51 console policy publication loop started (interval=2s)
+2026/10/01 14:46:51.887079 engine.go:702: [Debug] HERTZ: Method=GET    absolutePath=/metrics                  --> handlerName=github.com/cloudwego/hertz/pkg/common/adaptor.HertzHandler.func1 (num=4 handlers)
+2026/10/01 06:46:51 console listening on 127.0.0.1:50436 (profile=demo session_ttl=12h0m0s secure_cookies=false)
+2026/10/01 14:46:51.887199 engine.go:416: [Info] HERTZ: Using network library=netpoll
+2026/10/01 14:46:51.887299 transport.go:152: [Info] HERTZ: HTTP server listening on address=127.0.0.1:50436
+2026/10/01 06:46:52 console request method=GET route=health status=200 class=ok duration_ms=0.63 bytes=3 request_id=2e8f48d5c8c90564906d5f09866f2793
+2026/10/01 06:46:52 console request method=POST route=auth_login status=200 class=ok duration_ms=172.68 bytes=400 request_id=t10-BFIX-01
+2026/10/01 06:46:53 console request method=POST route=admin_users_create status=201 class=ok duration_ms=175.17 bytes=160 request_id=t10-BFIX-02
+2026/10/01 06:46:53 console request method=POST route=admin_users_create status=201 class=ok duration_ms=169.71 bytes=160 request_id=t10-BFIX-03
+2026/10/01 06:46:53 console request method=POST route=admin_users_create status=201 class=ok duration_ms=165.97 bytes=161 request_id=t10-BFIX-04
+2026/10/01 06:46:53 console request method=POST route=admin_users_create status=201 class=ok duration_ms=167.24 bytes=161 request_id=t10-BFIX-05
+2026/10/01 06:46:53 console request method=POST route=admin_users_create status=201 class=ok duration_ms=168.08 bytes=162 request_id=t10-BFIX-06
+2026/10/01 06:46:54 console request method=POST route=admin_users_create status=201 class=ok duration_ms=175.71 bytes=163 request_id=t10-BFIX-07
+2026/10/01 06:46:54 console request method=POST route=admin_users_create status=201 class=ok duration_ms=182.38 bytes=162 request_id=t10-BFIX-08
+2026/10/01 06:46:54 console request method=POST route=admin_users_create status=201 class=ok duration_ms=166.89 bytes=160 request_id=t10-BFIX-09
+2026/10/01 06:46:54 console request method=POST route=admin_users_create status=201 class=ok duration_ms=186.90 bytes=162 request_id=t10-BFIX-10
+2026/10/01 06:46:54 console request method=POST route=auth_login status=200 class=ok duration_ms=168.97 bytes=421 request_id=t10-BFIX-11
+2026/10/01 06:46:54 console request method=POST route=organizations_create status=201 class=ok duration_ms=2.61 bytes=164 request_id=t10-BFIX-12
+2026/10/01 06:46:54 console request method=POST route=auth_login status=200 class=ok duration_ms=187.82 bytes=421 request_id=t10-BFIX-13
+2026/10/01 06:46:54 console request method=POST route=organizations_create status=201 class=ok duration_ms=2.38 bytes=164 request_id=t10-BFIX-14
+2026/10/01 06:46:55 console request method=POST route=org_invitations_create status=201 class=ok duration_ms=3.99 bytes=280 request_id=t10-BFIX-15
+2026/10/01 06:46:55 console request method=POST route=auth_login status=200 class=ok duration_ms=168.09 bytes=421 request_id=t10-BFIX-16
+2026/10/01 06:46:55 console request method=POST route=invitations_accept status=200 class=ok duration_ms=7.42 bytes=106 request_id=t10-BFIX-17
+2026/10/01 06:46:55 console request method=POST route=org_invitations_create status=201 class=ok duration_ms=3.75 bytes=282 request_id=t10-BFIX-18
+2026/10/01 06:46:55 console request method=POST route=auth_login status=200 class=ok duration_ms=176.56 bytes=423 request_id=t10-BFIX-19
+2026/10/01 06:46:55 console request method=POST route=invitations_accept status=200 class=ok duration_ms=5.17 bytes=107 request_id=t10-BFIX-20
+2026/10/01 06:46:55 console request method=POST route=org_invitations_create status=201 class=ok duration_ms=3.00 bytes=290 request_id=t10-BFIX-21
+2026/10/01 06:46:55 console request method=POST route=auth_login status=200 class=ok duration_ms=192.13 bytes=423 request_id=t10-BFIX-22
+2026/10/01 06:46:55 console request method=POST route=invitations_accept status=200 class=ok duration_ms=4.41 bytes=115 request_id=t10-BFIX-23
+2026/10/01 06:46:55 console request method=POST route=org_invitations_create status=201 class=ok duration_ms=2.70 bytes=283 request_id=t10-BFIX-24
+2026/10/01 06:46:55 console request method=POST route=auth_login status=200 class=ok duration_ms=169.59 bytes=426 request_id=t10-BFIX-25
+2026/10/01 06:46:55 controlclient method=ApplyOrgPolicy operation_id=policy:4:4:org: attempt=1 code=OK duration=8ms
+2026/10/01 06:46:55 console policy publication: org=4 revision=4 operation_id=policy:4:4:org: version=2 replayed=false
+2026/10/01 06:46:55 console request method=POST route=invitations_accept status=200 class=ok duration_ms=3.39 bytes=107 request_id=t10-BFIX-26
+2026/10/01 06:46:55 console request method=POST route=org_invitations_create status=201 class=ok duration_ms=3.21 bytes=284 request_id=t10-BFIX-27
+2026/10/01 06:46:56 console request method=POST route=auth_login status=200 class=ok duration_ms=172.05 bytes=428 request_id=t10-BFIX-28
+2026/10/01 06:46:56 console request method=POST route=invitations_accept status=200 class=ok duration_ms=3.86 bytes=107 request_id=t10-BFIX-29
+2026/10/01 06:46:56 console request method=POST route=org_invitations_create status=201 class=ok duration_ms=4.41 bytes=282 request_id=t10-BFIX-30
+2026/10/01 06:46:56 console request method=POST route=auth_login status=200 class=ok duration_ms=168.88 bytes=425 request_id=t10-BFIX-31
+2026/10/01 06:46:56 console request method=POST route=invitations_accept status=200 class=ok duration_ms=3.69 bytes=108 request_id=t10-BFIX-32
+2026/10/01 06:46:56 console request method=POST route=auth_login status=200 class=ok duration_ms=172.80 bytes=426 request_id=t10-BFIX-33
+2026/10/01 06:46:56 console request method=POST route=org_invitations_create status=201 class=ok duration_ms=4.08 bytes=283 request_id=t10-BFIX-34
+2026/10/01 06:46:56 controlclient method=CreateApiKey operation_id=key-create-fZamdRdUy5MLBKkPlXDzng attempt=1 code=OK duration=8ms
+2026/10/01 06:46:56 console request method=POST route=other status=201 class=ok duration_ms=10.65 bytes=563 request_id=t10-BFIX-35
+2026/10/01 06:46:56 controlclient method=CreateApiKey operation_id=key-create-nrffFzZD3GkaE5GTbRq4fA attempt=1 code=OK duration=5ms
+2026/10/01 06:46:56 console request method=POST route=other status=201 class=ok duration_ms=6.88 bytes=563 request_id=t10-BFIX-36
+2026/10/01 06:46:56 controlclient method=CreateApiKey operation_id=key-create-8Av07ONiF9orIf8DkKXMLA attempt=1 code=OK duration=4ms
+2026/10/01 06:46:56 console request method=POST route=other status=201 class=ok duration_ms=5.41 bytes=563 request_id=t10-BFIX-37
+2026/10/01 06:46:56 controlclient method=CreateApiKey operation_id=key-create-lvC1x_ZIrP15aay3PEigPQ attempt=1 code=OK duration=4ms
+2026/10/01 06:46:56 console request method=POST route=other status=201 class=ok duration_ms=6.85 bytes=563 request_id=t10-BFIX-38
+2026/10/01 06:46:56 controlclient method=CreateApiKey operation_id=key-create-RzvG6rOAjB_o5mMUTr62dQ attempt=1 code=OK duration=4ms
+2026/10/01 06:46:56 console request method=POST route=other status=201 class=ok duration_ms=5.70 bytes=565 request_id=t10-BFIX-39
+2026/10/01 06:46:56 controlclient method=CreateApiKey operation_id=key-create-Omi8opVwylhRdAWuS1fpoA attempt=1 code=OK duration=4ms
+2026/10/01 06:46:56 console request method=POST route=other status=201 class=ok duration_ms=5.61 bytes=563 request_id=t10-BFIX-40
+2026/10/01 06:46:56 console request method=POST route=other status=201 class=ok duration_ms=2.31 bytes=312 request_id=t10-BFIX-41
+2026/10/01 06:46:56 console request method=POST route=other status=201 class=ok duration_ms=1.84 bytes=314 request_id=t10-BFIX-42
+2026/10/01 06:46:56 console request method=POST route=other status=201 class=ok duration_ms=6.49 bytes=692 request_id=t10-BFIX-43
+2026/10/01 06:46:56 console request method=POST route=other status=201 class=ok duration_ms=3.62 bytes=689 request_id=t10-BFIX-44
+2026/10/01 06:46:56 console request method=POST route=other status=201 class=ok duration_ms=2.21 bytes=316 request_id=t10-BFIX-45
+2026/10/01 06:46:57 controlclient method=ApplyOrgPolicy operation_id=policy:4:6:org: attempt=1 code=OK duration=4ms
+2026/10/01 06:46:57 console policy publication: org=4 revision=6 operation_id=policy:4:6:org: version=9 replayed=false
+2026/10/01 06:46:57 controlclient method=ApplyOrgPolicy operation_id=policy:6:2:org: attempt=1 code=OK duration=3ms
+2026/10/01 06:46:57 console policy publication: org=6 revision=2 operation_id=policy:6:2:org: version=10 replayed=false
+2026/10/01 14:47:42 ERROR: [transport] Client received GoAway with error code ENHANCE_YOUR_CALM and debug data equal to ASCII "too_many_pings".
+2026/10/01 06:50:48 console shutting down on terminated
+2026/10/01 14:50:48.845104 engine.go:316: [Info] HERTZ: Begin graceful shutdown, wait at most 10s ...
+2026/10/01 14:50:48.845224 engine.go:334: [Info] HERTZ: Execute OnShutdownHooks finish
+2026/10/01 06:50:48 console exit
+2026/10/01 06:50:48 console policy publication loop stopped

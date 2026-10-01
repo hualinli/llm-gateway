@@ -1,0 +1,8 @@
+
+--- stderr ---
+2026/10/01 14:46:20 mode=closed c=8 n=96 rate=0.000/s queue=32 timeout=1m0s slow-client=normal shape=s large-event=off target=http://127.0.0.1:58864/v1/chat/completions
+2026/10/01 14:46:22 scheduled=96 started=96 completed=96 rejected=0 transport_error=0 incomplete=0 cancelled=0 parse_error=0 loadgen_dropped=0 (0.000%; queue_full=0 no_free_slot=0) peak_active=8 abandoned=0
+2026/10/01 14:46:22 planned_rate=0.000/s arrival_rate=56.185/s achieved_start_rate=56.776/s success_rate=52.378/s wall=1.833s
+2026/10/01 14:46:22 dispatch_lag p50=79ns p95=135ns max=180ns; scheduled_to_terminal p50=146.938485ms p95=170.999037ms max=180.244767ms
+2026/10/01 14:46:22 first_event p50=33.65296ms p95=58.762662ms (n=96); first_content p50=33.679032ms p95=58.772097ms (n=96); stream_duration p50=146.86816ms p95=170.926045ms; avg_events=9.0 avg_bytes=2268
+2026/10/01 14:46:22 capacity_round_valid=true (rule: generator-side drops above 0.1% of scheduled arrivals, and arrivals delivered below 99% of the planned rate, invalidate that round for capacity conclusions; re-run with more generator resources or a separate load host (BENCHMARK-AND-ACCEPTANCE-2026-10-01 §2.1))

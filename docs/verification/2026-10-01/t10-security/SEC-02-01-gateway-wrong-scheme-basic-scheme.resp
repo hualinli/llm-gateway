@@ -1,0 +1,9 @@
+HTTP 401 (0.001s)
+Content-Type: application/json
+X-Content-Type-Options: nosniff
+X-Request-Id: t10-SEC-02-01
+X-Trace-Id: d2086228f1f0ba57e16276c0406375e7
+Date: Thu, 01 Oct 2026 06:44:34 GMT
+Content-Length: 97
+
+{"error":{"code":"unauthorized","message":"invalid Authorization","request_id":"t10-SEC-02-01"}}

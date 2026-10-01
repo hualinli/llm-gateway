@@ -1,0 +1,5 @@
+POST http://127.0.0.1:58872/api/v1/orgs/4/keys/key_e0d21c1e8c69148027ee8e2d90798082/revoke
+X-Request-ID: t10-SEC-09-28
+Accept: application/json
+Cookie: gw_session=2aq8…<redacted:18>; gw_csrf=Fn-5…<redacted:18>
+

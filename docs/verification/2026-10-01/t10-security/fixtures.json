@@ -1,0 +1,106 @@
+{
+  "orgs": {
+    "A": "4",
+    "B": "6"
+  },
+  "users": {
+    "platform-admin": {
+      "email": "admin@t10bk.test",
+      "user_id": "1",
+      "platform_admin": true
+    },
+    "a-owner": {
+      "email": "t10-13427-a-owner@t10.test",
+      "user_id": "2",
+      "platform_admin": false
+    },
+    "a-admin": {
+      "email": "t10-13427-a-admin@t10.test",
+      "user_id": "3",
+      "platform_admin": false
+    },
+    "a-member": {
+      "email": "t10-13427-a-member@t10.test",
+      "user_id": "4",
+      "platform_admin": false
+    },
+    "a-viewer": {
+      "email": "t10-13427-a-viewer@t10.test",
+      "user_id": "5",
+      "platform_admin": false
+    },
+    "a-member2": {
+      "email": "t10-13427-a-member2@t10.test",
+      "user_id": "6",
+      "platform_admin": false
+    },
+    "a-disabled": {
+      "email": "t10-13427-a-disabled@t10.test",
+      "user_id": "7",
+      "platform_admin": false
+    },
+    "a-invitee": {
+      "email": "t10-13427-a-invitee@t10.test",
+      "user_id": "8",
+      "platform_admin": false
+    },
+    "b-owner": {
+      "email": "t10-13427-b-owner@t10.test",
+      "user_id": "9",
+      "platform_admin": false
+    },
+    "b-member": {
+      "email": "t10-13427-b-member@t10.test",
+      "user_id": "10",
+      "platform_admin": false
+    }
+  },
+  "keys": {
+    "a-member": {
+      "key_id": "key_7aeab7e32c144dbb75c07a3ba944d45c",
+      "prefix": "sk-WJ-Bd...",
+      "owner_user_id": "4"
+    },
+    "a-member2": {
+      "key_id": "key_7c00dc7d270289187ad03301817f83f8",
+      "prefix": "sk-NjuGk...",
+      "owner_user_id": "6"
+    },
+    "a-disabled": {
+      "key_id": "key_b10776bef9ff20caa7e309df095faa72",
+      "prefix": "sk-jp5Ei...",
+      "owner_user_id": "7"
+    },
+    "a-viewer": {
+      "key_id": "key_6d6dc028a08620c5a1b73d4aa11900cf",
+      "prefix": "sk-uvi-X...",
+      "owner_user_id": "5"
+    },
+    "b-member": {
+      "key_id": "key_b7cbe34a241b9e63675d5aba7328d73b",
+      "prefix": "sk-wqmhX...",
+      "owner_user_id": "10"
+    },
+    "a-owner": {
+      "key_id": "key_15fcaa73bcd3163de4086b1f0701c9ba",
+      "prefix": "sk-B8Qkp...",
+      "owner_user_id": "2"
+    }
+  },
+  "prices": {
+    "default": {
+      "id": "1",
+      "v1_effective_at": "2026-10-01T05:46:56Z"
+    },
+    "t10-model": {
+      "id": "2",
+      "v1_effective_at": "2026-10-01T05:46:56Z"
+    }
+  },
+  "invitations": {
+    "pending": {
+      "email": "t10-13427-a-invitee@t10.test",
+      "user_id": "8"
+    }
+  }
+}

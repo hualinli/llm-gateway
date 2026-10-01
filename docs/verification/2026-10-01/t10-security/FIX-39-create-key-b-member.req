@@ -1,0 +1,8 @@
+POST http://127.0.0.1:58872/api/v1/orgs/6/keys
+X-Request-ID: t10-FIX-39
+Accept: application/json
+Cookie: gw_session=79uV…<redacted:18>; gw_csrf=z8ez…<redacted:18>
+X-CSRF-Token: z8ez…<redacted:18>
+Content-Type: application/json
+
+{}

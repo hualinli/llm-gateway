@@ -1,0 +1,6 @@
+GET http://127.0.0.1:58872/api/v1/me
+X-Request-ID: t10-SEC-03-01
+Accept: application/json
+Cookie: gw_session=zBIO…<redacted:43>; gw_csrf=4cFh…<redacted:18>
+X-CSRF-Token: 4cFh…<redacted:18>
+

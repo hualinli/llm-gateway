@@ -1,0 +1,4455 @@
+{
+  "run_id": "20261001T064402Z-9162",
+  "generated_at": "2026-10-01T06:46:31Z",
+  "checks": [
+    {
+      "id": "FIX",
+      "title": "fixtures",
+      "status": "PASS",
+      "started_at": "2026-10-01T06:44:30Z",
+      "finished_at": "2026-10-01T06:44:34Z",
+      "notes": [],
+      "details": {},
+      "failure": null,
+      "skip_reason": null,
+      "exchanges": [
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "status": 200,
+          "error_code": null,
+          "label": "login-platform-admin",
+          "elapsed": 0.1776
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/users",
+          "status": 201,
+          "error_code": null,
+          "label": "create-user-a-owner",
+          "elapsed": 0.1873
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/users",
+          "status": 201,
+          "error_code": null,
+          "label": "create-user-a-admin",
+          "elapsed": 0.1683
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/users",
+          "status": 201,
+          "error_code": null,
+          "label": "create-user-a-member",
+          "elapsed": 0.1677
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/users",
+          "status": 201,
+          "error_code": null,
+          "label": "create-user-a-viewer",
+          "elapsed": 0.1698
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/users",
+          "status": 201,
+          "error_code": null,
+          "label": "create-user-a-member2",
+          "elapsed": 0.1674
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/users",
+          "status": 201,
+          "error_code": null,
+          "label": "create-user-a-disabled",
+          "elapsed": 0.1684
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/users",
+          "status": 201,
+          "error_code": null,
+          "label": "create-user-a-invitee",
+          "elapsed": 0.1669
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/users",
+          "status": 201,
+          "error_code": null,
+          "label": "create-user-b-owner",
+          "elapsed": 0.1702
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/users",
+          "status": 201,
+          "error_code": null,
+          "label": "create-user-b-member",
+          "elapsed": 0.1697
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "status": 200,
+          "error_code": null,
+          "label": "login-a-owner",
+          "elapsed": 0.1691
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/organizations",
+          "status": 201,
+          "error_code": null,
+          "label": "create-org-acme",
+          "elapsed": 0.007
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "status": 200,
+          "error_code": null,
+          "label": "login-b-owner",
+          "elapsed": 0.1707
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/organizations",
+          "status": 201,
+          "error_code": null,
+          "label": "create-org-beta",
+          "elapsed": 0.0029
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/orgs/4/invitations",
+          "status": 201,
+          "error_code": null,
+          "label": "invite-a-admin",
+          "elapsed": 0.0044
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "status": 200,
+          "error_code": null,
+          "label": "login-a-admin",
+          "elapsed": 0.1721
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/invitations/9n1R8jQRfrulCxF_nBz2s88Wz3VVb2QsWZltlWJecYk/accept",
+          "status": 200,
+          "error_code": null,
+          "label": "accept-a-admin",
+          "elapsed": 0.006
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/orgs/4/invitations",
+          "status": 201,
+          "error_code": null,
+          "label": "invite-a-member",
+          "elapsed": 0.0031
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "status": 200,
+          "error_code": null,
+          "label": "login-a-member",
+          "elapsed": 0.188
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/invitations/bZ29dzYh_m99kjMGIISmtR-XYAj4f3J7ea3BIN4Lrdw/accept",
+          "status": 200,
+          "error_code": null,
+          "label": "accept-a-member",
+          "elapsed": 0.0073
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/orgs/4/invitations",
+          "status": 201,
+          "error_code": null,
+          "label": "invite-a-viewer",
+          "elapsed": 0.0037
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "status": 200,
+          "error_code": null,
+          "label": "login-a-viewer",
+          "elapsed": 0.1753
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/invitations/gV9NW3_6vjt-m88L_YdMHLVTjHL1EmMfk3xE1pba_yI/accept",
+          "status": 200,
+          "error_code": null,
+          "label": "accept-a-viewer",
+          "elapsed": 0.0042
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/orgs/4/invitations",
+          "status": 201,
+          "error_code": null,
+          "label": "invite-a-member2",
+          "elapsed": 0.0039
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "status": 200,
+          "error_code": null,
+          "label": "login-a-member2",
+          "elapsed": 0.1772
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/invitations/gdbOOGGdjs4oEADSigV8-PT_BSCCSfye2DZxd7j3Hz8/accept",
+          "status": 200,
+          "error_code": null,
+          "label": "accept-a-member2",
+          "elapsed": 0.0047
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/orgs/4/invitations",
+          "status": 201,
+          "error_code": null,
+          "label": "invite-a-disabled",
+          "elapsed": 0.0036
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "status": 200,
+          "error_code": null,
+          "label": "login-a-disabled",
+          "elapsed": 0.1715
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/invitations/-pUDMFwndl14oCOL0M8IRxlqpxUq8PtjaWq97U5k4IE/accept",
+          "status": 200,
+          "error_code": null,
+          "label": "accept-a-disabled",
+          "elapsed": 0.0044
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/orgs/6/invitations",
+          "status": 201,
+          "error_code": null,
+          "label": "invite-b-member",
+          "elapsed": 0.0034
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "status": 200,
+          "error_code": null,
+          "label": "login-b-member",
+          "elapsed": 0.1887
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/invitations/esFuQNmiwgJGvTeQNjzEzifs9mmKNXuPXypBOScZIEo/accept",
+          "status": 200,
+          "error_code": null,
+          "label": "accept-b-member",
+          "elapsed": 0.0048
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "status": 200,
+          "error_code": null,
+          "label": "login-a-invitee",
+          "elapsed": 0.1696
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/orgs/4/invitations",
+          "status": 201,
+          "error_code": null,
+          "label": "invite-pending",
+          "elapsed": 0.0034
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/orgs/4/keys",
+          "status": 201,
+          "error_code": null,
+          "label": "create-key-a-member",
+          "elapsed": 0.0116
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/orgs/4/keys",
+          "status": 201,
+          "error_code": null,
+          "label": "create-key-a-member2",
+          "elapsed": 0.0076
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/orgs/4/keys",
+          "status": 201,
+          "error_code": null,
+          "label": "create-key-a-disabled",
+          "elapsed": 0.0062
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/orgs/4/keys",
+          "status": 201,
+          "error_code": null,
+          "label": "create-key-a-admin",
+          "elapsed": 0.0081
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/orgs/6/keys",
+          "status": 201,
+          "error_code": null,
+          "label": "create-key-b-member",
+          "elapsed": 0.0063
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/orgs/4/keys",
+          "status": 201,
+          "error_code": null,
+          "label": "create-key-a-owner",
+          "elapsed": 0.0066
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/prices",
+          "status": 201,
+          "error_code": null,
+          "label": "price-default",
+          "elapsed": 0.0028
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/prices",
+          "status": 201,
+          "error_code": null,
+          "label": "price-t10-model",
+          "elapsed": 0.0023
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/billing/accounts/4/adjustments",
+          "status": 201,
+          "error_code": null,
+          "label": "fund-4",
+          "elapsed": 0.0072
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/billing/accounts/6/adjustments",
+          "status": 201,
+          "error_code": null,
+          "label": "fund-6",
+          "elapsed": 0.0047
+        }
+      ]
+    },
+    {
+      "id": "SEC-01",
+      "title": "无 token / 缺失凭据（Console+Gateway）",
+      "status": "PASS",
+      "started_at": "2026-10-01T06:44:34Z",
+      "finished_at": "2026-10-01T06:44:34Z",
+      "notes": [],
+      "details": {},
+      "failure": null,
+      "skip_reason": null,
+      "exchanges": [
+        {
+          "method": "GET",
+          "path": "/api/v1/me",
+          "status": 401,
+          "error_code": "unauthorized",
+          "label": "console-no-session-me",
+          "elapsed": 0.0008
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/organizations",
+          "status": 401,
+          "error_code": "unauthorized",
+          "label": "console-no-session-organizations",
+          "elapsed": 0.0007
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/orgs/4/members",
+          "status": 401,
+          "error_code": "unauthorized",
+          "label": "console-no-session-org-members",
+          "elapsed": 0.0006
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/orgs/4/keys",
+          "status": 401,
+          "error_code": "unauthorized",
+          "label": "console-no-session-org-keys",
+          "elapsed": 0.0006
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/orgs/4/usage",
+          "status": 401,
+          "error_code": "unauthorized",
+          "label": "console-no-session-org-usage",
+          "elapsed": 0.0006
+        },
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "status": 401,
+          "error_code": "unauthorized",
+          "label": "gateway-no-auth-no-header",
+          "elapsed": 0.0007
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "status": 400,
+          "error_code": "invalid_request",
+          "label": "login-missing-body",
+          "elapsed": 0.0007
+        }
+      ]
+    },
+    {
+      "id": "SEC-02",
+      "title": "错误 scheme / 畸形凭据",
+      "status": "PASS",
+      "started_at": "2026-10-01T06:44:34Z",
+      "finished_at": "2026-10-01T06:44:34Z",
+      "notes": [],
+      "details": {},
+      "failure": null,
+      "skip_reason": null,
+      "exchanges": [
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "status": 401,
+          "error_code": "unauthorized",
+          "label": "gateway-wrong-scheme-basic-scheme",
+          "elapsed": 0.0008
+        },
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "status": 401,
+          "error_code": "unauthorized",
+          "label": "gateway-wrong-scheme-token-scheme",
+          "elapsed": 0.0007
+        },
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "status": 401,
+          "error_code": "unauthorized",
+          "label": "gateway-wrong-scheme-raw-key-no-scheme",
+          "elapsed": 0.0008
+        },
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "status": 401,
+          "error_code": "unauthorized",
+          "label": "gateway-wrong-scheme-empty-bearer",
+          "elapsed": 0.001
+        },
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "status": 401,
+          "error_code": "unauthorized",
+          "label": "gateway-wrong-scheme-garbage-bearer",
+          "elapsed": 0.0007
+        },
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "status": 200,
+          "error_code": null,
+          "label": "gateway-lowercase-bearer",
+          "elapsed": 0.0632
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/me",
+          "status": 401,
+          "error_code": "unauthorized",
+          "label": "console-junk-cookie",
+          "elapsed": 0.0011
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/me",
+          "status": 401,
+          "error_code": "unauthorized",
+          "label": "console-key-as-session",
+          "elapsed": 0.0013
+        }
+      ]
+    },
+    {
+      "id": "SEC-03",
+      "title": "篡改 session 与 CSRF",
+      "status": "PASS",
+      "started_at": "2026-10-01T06:44:34Z",
+      "finished_at": "2026-10-01T06:44:34Z",
+      "notes": [],
+      "details": {},
+      "failure": null,
+      "skip_reason": null,
+      "exchanges": [
+        {
+          "method": "GET",
+          "path": "/api/v1/me",
+          "status": 401,
+          "error_code": "unauthorized",
+          "label": "tampered-last-char",
+          "elapsed": 0.0011
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/me",
+          "status": 401,
+          "error_code": "unauthorized",
+          "label": "tampered-truncated",
+          "elapsed": 0.0012
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/me",
+          "status": 401,
+          "error_code": "unauthorized",
+          "label": "tampered-extended",
+          "elapsed": 0.0023
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/me",
+          "status": 401,
+          "error_code": "unauthorized",
+          "label": "tampered-prefix-only",
+          "elapsed": 0.0012
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/organizations",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "tampered-csrf",
+          "elapsed": 0.0019
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/me",
+          "status": 200,
+          "error_code": null,
+          "label": "control-valid-session",
+          "elapsed": 0.0024
+        }
+      ]
+    },
+    {
+      "id": "SEC-04",
+      "title": "过期 session（短 TTL 实例）",
+      "status": "PASS",
+      "started_at": "2026-10-01T06:44:34Z",
+      "finished_at": "2026-10-01T06:44:38Z",
+      "notes": [],
+      "details": {},
+      "failure": null,
+      "skip_reason": null,
+      "exchanges": [
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "status": 200,
+          "error_code": null,
+          "label": "short-ttl-login",
+          "elapsed": 0.1982
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/me",
+          "status": 200,
+          "error_code": null,
+          "label": "short-ttl-immediate",
+          "elapsed": 0.0022
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/me",
+          "status": 401,
+          "error_code": "unauthorized",
+          "label": "short-ttl-expired",
+          "elapsed": 0.0015
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "status": 200,
+          "error_code": null,
+          "label": "short-ttl-relogin-main",
+          "elapsed": 0.1678
+        }
+      ]
+    },
+    {
+      "id": "SEC-05",
+      "title": "邀请 token 篡改/未知/错 email/重复接受",
+      "status": "PASS",
+      "started_at": "2026-10-01T06:44:38Z",
+      "finished_at": "2026-10-01T06:44:38Z",
+      "notes": [],
+      "details": {},
+      "failure": null,
+      "skip_reason": null,
+      "exchanges": [
+        {
+          "method": "POST",
+          "path": "/api/v1/invitations/WelfH70SGaHhSkUIJAoZEWIKT2O0FhrWVQfejkVAAAA/accept",
+          "status": 404,
+          "error_code": "not_found",
+          "label": "invitation-tampered",
+          "elapsed": 0.0032
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/invitations/t10-unknown-F008kqDXHhg/accept",
+          "status": 404,
+          "error_code": "not_found",
+          "label": "invitation-unknown",
+          "elapsed": 0.0031
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/invitations/WelfH70SGaHhSkUIJAoZEWIKT2O0FhrWVQfejkV5jhY/accept",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "invitation-wrong-email",
+          "elapsed": 0.0023
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/orgs/4/invitations",
+          "status": 200,
+          "error_code": null,
+          "label": "invitation-still-pending",
+          "elapsed": 0.0021
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/orgs/4/invitations",
+          "status": 201,
+          "error_code": null,
+          "label": "invitation-create-second",
+          "elapsed": 0.0032
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/invitations/mnTpgFdo6v8KwFgngz0PjRf3Ao91IO0FelULmkl25CY/accept",
+          "status": 200,
+          "error_code": null,
+          "label": "invitation-accept-second",
+          "elapsed": 0.0041
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/invitations/mnTpgFdo6v8KwFgngz0PjRf3Ao91IO0FelULmkl25CY/accept",
+          "status": 409,
+          "error_code": "conflict",
+          "label": "invitation-replay",
+          "elapsed": 0.0027
+        }
+      ]
+    },
+    {
+      "id": "SEC-06",
+      "title": "跨组织读取枚举（orgs/users/keys/usage/audit/statements/exceptions）",
+      "status": "PASS",
+      "started_at": "2026-10-01T06:44:38Z",
+      "finished_at": "2026-10-01T06:44:38Z",
+      "notes": [
+        "10 个跨组织读取全部 404 且与不存在的组织逐字节同形"
+      ],
+      "details": {
+        "identical_404_count": 10
+      },
+      "failure": null,
+      "skip_reason": null,
+      "exchanges": [
+        {
+          "method": "GET",
+          "path": "/api/v1/orgs/99999999/members",
+          "status": 404,
+          "error_code": "not_found",
+          "label": "nonexistent-org-99999999",
+          "elapsed": 0.0019
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/organizations/6",
+          "status": 404,
+          "error_code": "not_found",
+          "label": "cross-org-read-organization",
+          "elapsed": 0.0025
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/orgs/6/members",
+          "status": 404,
+          "error_code": "not_found",
+          "label": "cross-org-read-members",
+          "elapsed": 0.0016
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/orgs/6/invitations",
+          "status": 404,
+          "error_code": "not_found",
+          "label": "cross-org-read-invitations",
+          "elapsed": 0.0017
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/orgs/6/keys",
+          "status": 404,
+          "error_code": "not_found",
+          "label": "cross-org-read-keys",
+          "elapsed": 0.0017
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/orgs/6/usage",
+          "status": 404,
+          "error_code": "not_found",
+          "label": "cross-org-read-usage",
+          "elapsed": 0.0019
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/orgs/6/audit",
+          "status": 404,
+          "error_code": "not_found",
+          "label": "cross-org-read-audit",
+          "elapsed": 0.0022
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/orgs/6/billing/account",
+          "status": 404,
+          "error_code": "not_found",
+          "label": "cross-org-read-account",
+          "elapsed": 0.0014
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/orgs/6/billing/entries",
+          "status": 404,
+          "error_code": "not_found",
+          "label": "cross-org-read-entries",
+          "elapsed": 0.0014
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/orgs/6/billing/statements?month=2026-10",
+          "status": 404,
+          "error_code": "not_found",
+          "label": "cross-org-read-statements",
+          "elapsed": 0.0016
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/orgs/6/billing/exceptions",
+          "status": 404,
+          "error_code": "not_found",
+          "label": "cross-org-read-exceptions",
+          "elapsed": 0.0018
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/orgs/4/members",
+          "status": 200,
+          "error_code": null,
+          "label": "own-org-members",
+          "elapsed": 0.0027
+        }
+      ]
+    },
+    {
+      "id": "SEC-07",
+      "title": "跨组织写入被拒且目标组织不变",
+      "status": "PASS",
+      "started_at": "2026-10-01T06:44:38Z",
+      "finished_at": "2026-10-01T06:44:38Z",
+      "notes": [
+        "6 个跨组织写入全部 404，B 的成员与 Key 状态逐字段不变"
+      ],
+      "details": {},
+      "failure": null,
+      "skip_reason": null,
+      "exchanges": [
+        {
+          "method": "GET",
+          "path": "/api/v1/orgs/6/members",
+          "status": 200,
+          "error_code": null,
+          "label": "snapshot-members-b-before",
+          "elapsed": 0.0032
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/orgs/6/keys",
+          "status": 200,
+          "error_code": null,
+          "label": "snapshot-keys-b-before",
+          "elapsed": 0.003
+        },
+        {
+          "method": "PATCH",
+          "path": "/api/v1/orgs/6/members/10",
+          "status": 404,
+          "error_code": "not_found",
+          "label": "cross-org-write-patch-member",
+          "elapsed": 0.0044
+        },
+        {
+          "method": "DELETE",
+          "path": "/api/v1/orgs/6/members/10",
+          "status": 404,
+          "error_code": "not_found",
+          "label": "cross-org-write-delete-member",
+          "elapsed": 0.0037
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/orgs/6/invitations",
+          "status": 404,
+          "error_code": "not_found",
+          "label": "cross-org-write-create-invitation",
+          "elapsed": 0.0027
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/orgs/6/owner-transfer",
+          "status": 404,
+          "error_code": "not_found",
+          "label": "cross-org-write-owner-transfer",
+          "elapsed": 0.0028
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/orgs/6/keys",
+          "status": 404,
+          "error_code": "not_found",
+          "label": "cross-org-write-create-key",
+          "elapsed": 0.0024
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/orgs/6/keys/key_fa0059ad54533e18a38d04136e098b78/revoke",
+          "status": 404,
+          "error_code": "not_found",
+          "label": "cross-org-write-revoke-key",
+          "elapsed": 0.0023
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/orgs/6/members",
+          "status": 200,
+          "error_code": null,
+          "label": "snapshot-members-b-after",
+          "elapsed": 0.0018
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/orgs/6/keys",
+          "status": 200,
+          "error_code": null,
+          "label": "snapshot-keys-b-after",
+          "elapsed": 0.0021
+        }
+      ]
+    },
+    {
+      "id": "SEC-08",
+      "title": "角色提权（member→admin、admin→owner、自升平台管理员）",
+      "status": "PASS",
+      "started_at": "2026-10-01T06:44:38Z",
+      "finished_at": "2026-10-01T06:44:39Z",
+      "notes": [],
+      "details": {},
+      "failure": null,
+      "skip_reason": null,
+      "exchanges": [
+        {
+          "method": "PATCH",
+          "path": "/api/v1/orgs/4/members/4",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "member-self-promote",
+          "elapsed": 0.0027
+        },
+        {
+          "method": "PATCH",
+          "path": "/api/v1/orgs/4/members/3",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "admin-self-promote-owner",
+          "elapsed": 0.0029
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/orgs/4/owner-transfer",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "admin-self-transfer",
+          "elapsed": 0.0031
+        },
+        {
+          "method": "PATCH",
+          "path": "/api/v1/orgs/4/members/2",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "admin-demote-owner",
+          "elapsed": 0.0044
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/users",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "promote-platform-admin-a-member",
+          "elapsed": 0.002
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/users",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "promote-platform-admin-a-admin",
+          "elapsed": 0.0016
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/users",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "promote-platform-admin-a-owner",
+          "elapsed": 0.0012
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/orgs/4/invitations",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "invite-platform-admin",
+          "elapsed": 0.0018
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/orgs/4/members",
+          "status": 200,
+          "error_code": null,
+          "label": "snapshot-members-a-after-escalation",
+          "elapsed": 0.0018
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/users",
+          "status": 201,
+          "error_code": null,
+          "label": "platform-admin-create-admin",
+          "elapsed": 0.1729
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "status": 200,
+          "error_code": null,
+          "label": "login-platform-admin-2",
+          "elapsed": 0.1678
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/orgs/4/members",
+          "status": 404,
+          "error_code": "not_found",
+          "label": "platform-admin-org-members",
+          "elapsed": 0.0022
+        }
+      ]
+    },
+    {
+      "id": "SEC-09",
+      "title": "每个 unsafe 路由的缺/错 CSRF + 无状态变更",
+      "status": "PASS",
+      "started_at": "2026-10-01T06:44:39Z",
+      "finished_at": "2026-10-01T06:44:39Z",
+      "notes": [
+        "14 个 unsafe 路由 × (缺 CSRF, 错 CSRF) 全部 403，且成员/Key/资金/价格/邀请无变化"
+      ],
+      "details": {
+        "unsafe_routes": 14,
+        "csrf_probes": 28
+      },
+      "failure": null,
+      "skip_reason": null,
+      "exchanges": [
+        {
+          "method": "POST",
+          "path": "/api/v1/orgs/4/invitations",
+          "status": 201,
+          "error_code": null,
+          "label": "csrf-invitation",
+          "elapsed": 0.0035
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/orgs/4/members",
+          "status": 200,
+          "error_code": null,
+          "label": "snapshot-members-before-csrf",
+          "elapsed": 0.0031
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/orgs/4/keys",
+          "status": 200,
+          "error_code": null,
+          "label": "snapshot-keys-before-csrf",
+          "elapsed": 0.0033
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/orgs/4/billing/account",
+          "status": 200,
+          "error_code": null,
+          "label": "snapshot-account-before-csrf",
+          "elapsed": 0.0023
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/orgs/4/billing/entries?limit=100",
+          "status": 200,
+          "error_code": null,
+          "label": "snapshot-entries-before-csrf",
+          "elapsed": 0.003
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/admin/prices",
+          "status": 200,
+          "error_code": null,
+          "label": "prices-before-csrf",
+          "elapsed": 0.0025
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/orgs/4/invitations",
+          "status": 200,
+          "error_code": null,
+          "label": "invitations-before-csrf",
+          "elapsed": 0.0024
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/logout",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "csrf-logout-missing",
+          "elapsed": 0.0017
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/logout",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "csrf-logout-wrong",
+          "elapsed": 0.0015
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/organizations",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "csrf-create-org-missing",
+          "elapsed": 0.0016
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/organizations",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "csrf-create-org-wrong",
+          "elapsed": 0.0021
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/users",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "csrf-admin-create-user-missing",
+          "elapsed": 0.0015
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/users",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "csrf-admin-create-user-wrong",
+          "elapsed": 0.0016
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/users/4/status",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "csrf-admin-user-status-missing",
+          "elapsed": 0.0012
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/users/4/status",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "csrf-admin-user-status-wrong",
+          "elapsed": 0.0017
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/orgs/4/invitations",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "csrf-create-invitation-missing",
+          "elapsed": 0.0013
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/orgs/4/invitations",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "csrf-create-invitation-wrong",
+          "elapsed": 0.002
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/invitations/Pi90cPAPw2FBr_wX1fX5L8gkCa4Q-Z4wajRhL1Wrj3Y/accept",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "csrf-accept-invitation-missing",
+          "elapsed": 0.0017
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/invitations/Pi90cPAPw2FBr_wX1fX5L8gkCa4Q-Z4wajRhL1Wrj3Y/accept",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "csrf-accept-invitation-wrong",
+          "elapsed": 0.0017
+        },
+        {
+          "method": "PATCH",
+          "path": "/api/v1/orgs/4/members/4",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "csrf-change-member-role-missing",
+          "elapsed": 0.0017
+        },
+        {
+          "method": "PATCH",
+          "path": "/api/v1/orgs/4/members/4",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "csrf-change-member-role-wrong",
+          "elapsed": 0.0026
+        },
+        {
+          "method": "DELETE",
+          "path": "/api/v1/orgs/4/members/4",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "csrf-remove-member-missing",
+          "elapsed": 0.0016
+        },
+        {
+          "method": "DELETE",
+          "path": "/api/v1/orgs/4/members/4",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "csrf-remove-member-wrong",
+          "elapsed": 0.002
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/orgs/4/owner-transfer",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "csrf-owner-transfer-missing",
+          "elapsed": 0.0015
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/orgs/4/owner-transfer",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "csrf-owner-transfer-wrong",
+          "elapsed": 0.0016
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/orgs/4/keys",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "csrf-create-key-missing",
+          "elapsed": 0.0012
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/orgs/4/keys",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "csrf-create-key-wrong",
+          "elapsed": 0.0016
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/orgs/4/keys/key_e0d21c1e8c69148027ee8e2d90798082/revoke",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "csrf-revoke-key-missing",
+          "elapsed": 0.001
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/orgs/4/keys/key_e0d21c1e8c69148027ee8e2d90798082/revoke",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "csrf-revoke-key-wrong",
+          "elapsed": 0.0018
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/prices",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "csrf-create-price-missing",
+          "elapsed": 0.0012
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/prices",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "csrf-create-price-wrong",
+          "elapsed": 0.0017
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/billing/accounts/4/adjustments",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "csrf-adjust-account-missing",
+          "elapsed": 0.0012
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/billing/accounts/4/adjustments",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "csrf-adjust-account-wrong",
+          "elapsed": 0.0017
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/billing/exceptions/99999999/resolution",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "csrf-resolve-exception-missing",
+          "elapsed": 0.0013
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/billing/exceptions/99999999/resolution",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "csrf-resolve-exception-wrong",
+          "elapsed": 0.0018
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/orgs/4/members",
+          "status": 200,
+          "error_code": null,
+          "label": "snapshot-members-after-csrf",
+          "elapsed": 0.0018
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/orgs/4/keys",
+          "status": 200,
+          "error_code": null,
+          "label": "snapshot-keys-after-csrf",
+          "elapsed": 0.0024
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/orgs/4/billing/account",
+          "status": 200,
+          "error_code": null,
+          "label": "snapshot-account-after-csrf",
+          "elapsed": 0.0025
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/orgs/4/billing/entries?limit=100",
+          "status": 200,
+          "error_code": null,
+          "label": "snapshot-entries-after-csrf",
+          "elapsed": 0.0026
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/admin/prices",
+          "status": 200,
+          "error_code": null,
+          "label": "prices-after-csrf",
+          "elapsed": 0.0019
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/orgs/4/invitations",
+          "status": 200,
+          "error_code": null,
+          "label": "invitations-after-csrf",
+          "elapsed": 0.0028
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/orgs/4/invitations",
+          "status": 201,
+          "error_code": null,
+          "label": "csrf-correct-control",
+          "elapsed": 0.0036
+        }
+      ]
+    },
+    {
+      "id": "SEC-10",
+      "title": "禁用用户 + 活跃 session（旧 session 立即失效）",
+      "status": "PASS",
+      "started_at": "2026-10-01T06:44:39Z",
+      "finished_at": "2026-10-01T06:44:40Z",
+      "notes": [],
+      "details": {},
+      "failure": null,
+      "skip_reason": null,
+      "exchanges": [
+        {
+          "method": "GET",
+          "path": "/api/v1/me",
+          "status": 200,
+          "error_code": null,
+          "label": "disabled-before-me",
+          "elapsed": 0.0016
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/users/7/status",
+          "status": 200,
+          "error_code": null,
+          "label": "disable-user",
+          "elapsed": 0.0029
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/me",
+          "status": 401,
+          "error_code": "unauthorized",
+          "label": "disabled-after-me",
+          "elapsed": 0.0015
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/users/7/status",
+          "status": 200,
+          "error_code": null,
+          "label": "enable-user",
+          "elapsed": 0.0036
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/me",
+          "status": 401,
+          "error_code": "unauthorized",
+          "label": "reenabled-old-session",
+          "elapsed": 0.0012
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "status": 200,
+          "error_code": null,
+          "label": "reenabled-fresh-login",
+          "elapsed": 0.1688
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/me",
+          "status": 200,
+          "error_code": null,
+          "label": "reenabled-new-session",
+          "elapsed": 0.0016
+        }
+      ]
+    },
+    {
+      "id": "SEC-11",
+      "title": "被移出成员 + 有效 Key（在途流排水、新请求 403）",
+      "status": "PASS",
+      "started_at": "2026-10-01T06:44:40Z",
+      "finished_at": "2026-10-01T06:44:45Z",
+      "notes": [
+        "在途流排水完成（4.74s），新请求 403 access forbidden"
+      ],
+      "details": {},
+      "failure": null,
+      "skip_reason": null,
+      "exchanges": [
+        {
+          "method": "DELETE",
+          "path": "/api/v1/orgs/4/members/6",
+          "status": 204,
+          "error_code": null,
+          "label": "remove-member",
+          "elapsed": 0.0049
+        }
+      ]
+    },
+    {
+      "id": "SEC-12",
+      "title": "billing_viewer 写操作全拒、只读面可用",
+      "status": "PASS",
+      "started_at": "2026-10-01T06:44:45Z",
+      "finished_at": "2026-10-01T06:44:45Z",
+      "notes": [],
+      "details": {},
+      "failure": null,
+      "skip_reason": null,
+      "exchanges": [
+        {
+          "method": "POST",
+          "path": "/api/v1/orgs/4/invitations",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "viewer-write-invite",
+          "elapsed": 0.0026
+        },
+        {
+          "method": "PATCH",
+          "path": "/api/v1/orgs/4/members/4",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "viewer-write-change-role",
+          "elapsed": 0.0029
+        },
+        {
+          "method": "DELETE",
+          "path": "/api/v1/orgs/4/members/4",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "viewer-write-remove-member",
+          "elapsed": 0.0028
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/orgs/4/owner-transfer",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "viewer-write-owner-transfer",
+          "elapsed": 0.0032
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/orgs/4/keys",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "viewer-write-create-key",
+          "elapsed": 0.0023
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/orgs/4/keys/key_e0d21c1e8c69148027ee8e2d90798082/revoke",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "viewer-write-revoke-key",
+          "elapsed": 0.0023
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/prices",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "viewer-write-create-price",
+          "elapsed": 0.0017
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/billing/accounts/4/adjustments",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "viewer-write-adjust",
+          "elapsed": 0.0017
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/billing/exceptions/99999999/resolution",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "viewer-write-resolve-exception",
+          "elapsed": 0.0016
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/users",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "viewer-write-admin-users",
+          "elapsed": 0.0016
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/orgs/4/audit",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "viewer-audit",
+          "elapsed": 0.0017
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/orgs/4/billing/account",
+          "status": 200,
+          "error_code": null,
+          "label": "viewer-read-account",
+          "elapsed": 0.0017
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/orgs/4/billing/entries?limit=10",
+          "status": 200,
+          "error_code": null,
+          "label": "viewer-read-entries",
+          "elapsed": 0.0025
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/orgs/4/billing/statements?month=2026-10",
+          "status": 200,
+          "error_code": null,
+          "label": "viewer-read-statements",
+          "elapsed": 0.0042
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/orgs/4/billing/exceptions",
+          "status": 200,
+          "error_code": null,
+          "label": "viewer-read-exceptions",
+          "elapsed": 0.0033
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/orgs/4/usage?limit=10",
+          "status": 200,
+          "error_code": null,
+          "label": "viewer-read-usage",
+          "elapsed": 0.0036
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/orgs/4/usage?limit=5",
+          "status": 200,
+          "error_code": null,
+          "label": "viewer-usage-scope",
+          "elapsed": 0.0024
+        }
+      ]
+    },
+    {
+      "id": "SEC-13",
+      "title": "/api/v1/admin/* 非平台管理员全拒",
+      "status": "PASS",
+      "started_at": "2026-10-01T06:44:45Z",
+      "finished_at": "2026-10-01T06:44:45Z",
+      "notes": [
+        "6 个 admin 路由 × 4 个组织角色 = 403；未认证 = 401；平台管理员 = 200"
+      ],
+      "details": {
+        "admin_routes": 6,
+        "actors_checked": 4
+      },
+      "failure": null,
+      "skip_reason": null,
+      "exchanges": [
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/users",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "a-owner-admin-users",
+          "elapsed": 0.0018
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/users/4/status",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "a-owner-admin-user-status",
+          "elapsed": 0.0017
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/admin/prices",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "a-owner-admin-prices-get",
+          "elapsed": 0.0014
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/prices",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "a-owner-admin-prices-post",
+          "elapsed": 0.002
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/billing/accounts/4/adjustments",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "a-owner-admin-adjustments",
+          "elapsed": 0.0017
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/billing/exceptions/99999999/resolution",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "a-owner-admin-exception-resolution",
+          "elapsed": 0.0017
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/users",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "a-admin-admin-users",
+          "elapsed": 0.0017
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/users/4/status",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "a-admin-admin-user-status",
+          "elapsed": 0.0018
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/admin/prices",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "a-admin-admin-prices-get",
+          "elapsed": 0.0014
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/prices",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "a-admin-admin-prices-post",
+          "elapsed": 0.0017
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/billing/accounts/4/adjustments",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "a-admin-admin-adjustments",
+          "elapsed": 0.0019
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/billing/exceptions/99999999/resolution",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "a-admin-admin-exception-resolution",
+          "elapsed": 0.0015
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/users",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "a-member-admin-users",
+          "elapsed": 0.002
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/users/4/status",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "a-member-admin-user-status",
+          "elapsed": 0.0014
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/admin/prices",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "a-member-admin-prices-get",
+          "elapsed": 0.0014
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/prices",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "a-member-admin-prices-post",
+          "elapsed": 0.0017
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/billing/accounts/4/adjustments",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "a-member-admin-adjustments",
+          "elapsed": 0.0017
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/billing/exceptions/99999999/resolution",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "a-member-admin-exception-resolution",
+          "elapsed": 0.0018
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/users",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "a-viewer-admin-users",
+          "elapsed": 0.002
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/users/4/status",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "a-viewer-admin-user-status",
+          "elapsed": 0.0019
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/admin/prices",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "a-viewer-admin-prices-get",
+          "elapsed": 0.0012
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/prices",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "a-viewer-admin-prices-post",
+          "elapsed": 0.0018
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/billing/accounts/4/adjustments",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "a-viewer-admin-adjustments",
+          "elapsed": 0.0018
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/billing/exceptions/99999999/resolution",
+          "status": 403,
+          "error_code": "forbidden",
+          "label": "a-viewer-admin-exception-resolution",
+          "elapsed": 0.0021
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/users",
+          "status": 401,
+          "error_code": "unauthorized",
+          "label": "anonymous-admin-users",
+          "elapsed": 0.0007
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/users/4/status",
+          "status": 401,
+          "error_code": "unauthorized",
+          "label": "anonymous-admin-user-status",
+          "elapsed": 0.0007
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/admin/prices",
+          "status": 401,
+          "error_code": "unauthorized",
+          "label": "anonymous-admin-prices-get",
+          "elapsed": 0.0007
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/prices",
+          "status": 401,
+          "error_code": "unauthorized",
+          "label": "anonymous-admin-prices-post",
+          "elapsed": 0.0013
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/billing/accounts/4/adjustments",
+          "status": 401,
+          "error_code": "unauthorized",
+          "label": "anonymous-admin-adjustments",
+          "elapsed": 0.0008
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/billing/exceptions/99999999/resolution",
+          "status": 401,
+          "error_code": "unauthorized",
+          "label": "anonymous-admin-exception-resolution",
+          "elapsed": 0.0018
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/admin/prices",
+          "status": 200,
+          "error_code": null,
+          "label": "platform-admin-prices",
+          "elapsed": 0.0059
+        }
+      ]
+    },
+    {
+      "id": "SEC-14",
+      "title": "Gateway 凭据归属不可被请求头改写",
+      "status": "PASS",
+      "started_at": "2026-10-01T06:44:45Z",
+      "finished_at": "2026-10-01T06:44:48Z",
+      "notes": [
+        "伪造 X-Organization-ID/X-Tenant-ID 未改变归属（metering_events.org_id=B）"
+      ],
+      "details": {},
+      "failure": null,
+      "skip_reason": null,
+      "exchanges": []
+    },
+    {
+      "id": "CTRL-01",
+      "title": "desired==applied 基线（PG 权威实例视图）",
+      "status": "PASS",
+      "started_at": "2026-10-01T06:44:48Z",
+      "finished_at": "2026-10-01T06:44:48Z",
+      "notes": [
+        "Control 侧实例陈旧租约=30s；Gateway 侧配置租约=8s（两者不同）"
+      ],
+      "details": {
+        "initial_view": {
+          "instance_id": "gw-t10",
+          "health": "active",
+          "desired_version": 13,
+          "applied_version": 13,
+          "in_sync": true,
+          "version_lag": 0,
+          "state": "applied",
+          "started_at": "2026-10-01T06:44:27.558712Z",
+          "last_report_at": "2026-10-01T06:44:47.566Z",
+          "report_age_ms": 525,
+          "durable": true,
+          "liveness_last_seen_at": "2026-10-01T14:44:47.562747+08:00",
+          "liveness_started_at": "2026-10-01T14:44:27.55866+08:00",
+          "sources": [
+            "durable_status",
+            "control_memory_report",
+            "data_plane_liveness"
+          ],
+          "_view": {
+            "desired_version": 13,
+            "stale_after_seconds": 30,
+            "authoritative": true,
+            "status_store": "postgres"
+          }
+        },
+        "control_stale_lease_seconds": 30,
+        "gateway_config_lease_seconds": 8
+      },
+      "failure": null,
+      "skip_reason": null,
+      "exchanges": []
+    },
+    {
+      "id": "CTRL-02",
+      "title": "控制面分区：stale 不谎报 active、租约到期拒新请求、在途流排水",
+      "status": "PASS",
+      "started_at": "2026-10-01T06:44:48Z",
+      "finished_at": "2026-10-01T06:45:18Z",
+      "notes": [
+        "分区 8s 后新请求 401；/gateways health=stale、desired=14、applied=13；在途流排水完成"
+      ],
+      "details": {
+        "desired_pushed": 14,
+        "frozen_applied": 13,
+        "frozen_desired": 13,
+        "stale_view": {
+          "instance_id": "gw-t10",
+          "health": "stale",
+          "desired_version": 14,
+          "applied_version": 13,
+          "in_sync": false,
+          "version_lag": 1,
+          "state": "applied",
+          "started_at": "2026-10-01T06:44:27.558712Z",
+          "last_report_at": "2026-10-01T06:44:48.567Z",
+          "report_age_ms": 30161,
+          "durable": true,
+          "liveness_last_seen_at": "2026-10-01T14:45:17.564421+08:00",
+          "liveness_started_at": "2026-10-01T14:44:27.55866+08:00",
+          "sources": [
+            "durable_status",
+            "control_memory_report",
+            "data_plane_liveness"
+          ],
+          "_view": {
+            "desired_version": 14,
+            "stale_after_seconds": 30,
+            "authoritative": true,
+            "status_store": "postgres"
+          }
+        },
+        "inflight_stream_seconds": 7.831
+      },
+      "failure": null,
+      "skip_reason": null,
+      "exchanges": []
+    },
+    {
+      "id": "CTRL-03",
+      "title": "控制面恢复：desired/applied 收敛、新请求恢复",
+      "status": "PASS",
+      "started_at": "2026-10-01T06:45:18Z",
+      "finished_at": "2026-10-01T06:45:22Z",
+      "notes": [
+        "控制面恢复后 3.11s 内 desired==applied==14，stale=0，新请求 200"
+      ],
+      "details": {
+        "recovery_seconds": 3.11,
+        "view_after_recovery": {
+          "instance_id": "gw-t10",
+          "health": "active",
+          "desired_version": 14,
+          "applied_version": 14,
+          "in_sync": true,
+          "version_lag": 0,
+          "state": "applied",
+          "started_at": "2026-10-01T06:44:27.558712Z",
+          "last_report_at": "2026-10-01T06:45:21.993Z",
+          "report_age_ms": 134,
+          "durable": true,
+          "liveness_last_seen_at": "2026-10-01T14:45:17.564421+08:00",
+          "liveness_started_at": "2026-10-01T14:44:27.55866+08:00",
+          "sources": [
+            "durable_status",
+            "control_memory_report",
+            "data_plane_liveness"
+          ],
+          "_view": {
+            "desired_version": 14,
+            "stale_after_seconds": 30,
+            "authoritative": true,
+            "status_store": "postgres"
+          }
+        }
+      },
+      "failure": null,
+      "skip_reason": null,
+      "exchanges": []
+    },
+    {
+      "id": "CTRL-04",
+      "title": "Control 重启：撤销不复活、实例视图durable",
+      "status": "PASS",
+      "started_at": "2026-10-01T06:45:22Z",
+      "finished_at": "2026-10-01T06:45:35Z",
+      "notes": [
+        "撤销传播 0.037s；Control 停机+租约到期 401；重启后合法 Key 200、已撤销 Key 仍 401"
+      ],
+      "details": {
+        "revocation_propagation_seconds": 0.037,
+        "view_after_control_restart": {
+          "instance_id": "gw-t10",
+          "health": "active",
+          "desired_version": 15,
+          "applied_version": 15,
+          "in_sync": true,
+          "version_lag": 0,
+          "state": "applied",
+          "started_at": "2026-10-01T06:44:27.558712Z",
+          "last_report_at": "2026-10-01T06:45:22.328Z",
+          "report_age_ms": 10768,
+          "durable": true,
+          "liveness_last_seen_at": "2026-10-01T14:45:27.564509+08:00",
+          "liveness_started_at": "2026-10-01T14:44:27.55866+08:00",
+          "sources": [
+            "durable_status",
+            "data_plane_liveness"
+          ],
+          "_view": {
+            "desired_version": 15,
+            "stale_after_seconds": 30,
+            "authoritative": true,
+            "status_store": "postgres"
+          }
+        }
+      },
+      "failure": null,
+      "skip_reason": null,
+      "exchanges": [
+        {
+          "method": "POST",
+          "path": "/api/v1/orgs/4/keys/key_5342ede0528f8aaeb8b187475fff5513/revoke",
+          "status": 200,
+          "error_code": null,
+          "label": "revoke-owner-key",
+          "elapsed": 0.0088
+        }
+      ]
+    },
+    {
+      "id": "REV-01",
+      "title": "长流期间改价：在途钉住原价、新请求用新价",
+      "status": "PASS",
+      "started_at": "2026-10-01T06:45:35Z",
+      "finished_at": "2026-10-01T06:45:43Z",
+      "notes": [
+        "在途流钉住价格 v2、计费 26 micro；改价后新请求用 v3、计费 200 micro"
+      ],
+      "details": {
+        "inflight_receipt": {
+          "execution_id": "exec_efe607a71da000e47f29de1e15102499",
+          "price_version_id": "2",
+          "charge_micro": 26,
+          "prompt_tokens": 12,
+          "output_tokens": 14,
+          "status": "settled",
+          "created_at": "2026-10-01 06:45:42.586243+00"
+        },
+        "price_versions": {
+          "v1": "2",
+          "v2": "3"
+        },
+        "fresh_receipt": {
+          "execution_id": "exec_029f40306dc425569f70145fcba49ed0",
+          "price_version_id": "3",
+          "charge_micro": 200,
+          "tokens": 20
+        }
+      },
+      "failure": null,
+      "skip_reason": null,
+      "exchanges": [
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/prices",
+          "status": 201,
+          "error_code": null,
+          "label": "price-change-midflight",
+          "elapsed": 0.0031
+        }
+      ]
+    },
+    {
+      "id": "REV-02",
+      "title": "长流期间撤销 Key：在途排水、新请求 ≤5s 被拒",
+      "status": "PASS",
+      "started_at": "2026-10-01T06:45:43Z",
+      "finished_at": "2026-10-01T06:45:50Z",
+      "notes": [
+        "撤销在 5.644s 内对新请求生效（目标 ≤5s），在途流排水完成（6.83s）"
+      ],
+      "details": {
+        "propagation_seconds": 5.644
+      },
+      "failure": null,
+      "skip_reason": null,
+      "exchanges": [
+        {
+          "method": "POST",
+          "path": "/api/v1/orgs/4/keys",
+          "status": 201,
+          "error_code": null,
+          "label": "create-revocation-key",
+          "elapsed": 0.0121
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/orgs/4/keys/key_30205ce90b1452b65d2bb7f0429715f2/revoke",
+          "status": 200,
+          "error_code": null,
+          "label": "revoke-midflight",
+          "elapsed": 0.0085
+        }
+      ]
+    },
+    {
+      "id": "REV-03",
+      "title": "移除成员后的资金正确性（每条执行恰好一条 debit）",
+      "status": "PASS",
+      "started_at": "2026-10-01T06:45:50Z",
+      "finished_at": "2026-10-01T06:45:58Z",
+      "notes": [
+        "移除成员后在途流仍收到 [DONE]（6.83s）；新请求 403；2 条执行各恰好一条 debit"
+      ],
+      "details": {
+        "removed_member_receipts": [
+          "exec_bc2664fd58447dab9e54d65c5e4eb13f|settled|1",
+          "exec_fd5d3e704af8d7d5cbf017795edd2c4d|settled|1"
+        ],
+        "inflight_seconds": 6.835
+      },
+      "failure": null,
+      "skip_reason": null,
+      "exchanges": [
+        {
+          "method": "POST",
+          "path": "/api/v1/admin/users",
+          "status": 201,
+          "error_code": null,
+          "label": "rev03-create-user",
+          "elapsed": 0.1894
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/orgs/4/invitations",
+          "status": 201,
+          "error_code": null,
+          "label": "rev03-invite",
+          "elapsed": 0.0027
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "status": 200,
+          "error_code": null,
+          "label": "rev03-login",
+          "elapsed": 0.1714
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/invitations/8DVUvXUNFSYwTAdStfWQkWIRpv9ziBpqrwDGA0IR3L8/accept",
+          "status": 200,
+          "error_code": null,
+          "label": "rev03-accept",
+          "elapsed": 0.0045
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/orgs/4/keys",
+          "status": 201,
+          "error_code": null,
+          "label": "rev03-key",
+          "elapsed": 0.0057
+        },
+        {
+          "method": "DELETE",
+          "path": "/api/v1/orgs/4/members/12",
+          "status": 204,
+          "error_code": null,
+          "label": "rev03-remove-member",
+          "elapsed": 0.0057
+        }
+      ]
+    },
+    {
+      "id": "REV-04",
+      "title": "F12 后对账一致：四层 + 执行/收据/扣款 1:1",
+      "status": "PASS",
+      "started_at": "2026-10-01T06:45:58Z",
+      "finished_at": "2026-10-01T06:45:59Z",
+      "notes": [
+        "对账一致：executions=receipts=44，debit=44，账户投影==流水重算"
+      ],
+      "details": {
+        "counts": {
+          "executions": 44,
+          "executions_by_status": [
+            "settled|44"
+          ],
+          "settled_executions": 44,
+          "receipts": 44,
+          "debits": 44,
+          "reservations": 44,
+          "releases": 44,
+          "account_vs_ledger_mismatch": [],
+          "open_receipts": []
+        },
+        "reconcile": {
+          "version": 2,
+          "generated_at": "2026-10-01T06:45:58.550981Z",
+          "window": {
+            "from": "2026-09-30T06:45:58.550972Z",
+            "to": "2026-10-01T06:45:58.550972Z",
+            "to_exclusive": true,
+            "page_size": 1000,
+            "max_samples": 20,
+            "max_pages": 1000,
+            "postgres": true,
+            "redis": true
+          },
+          "layers": [
+            {
+              "layer": "executions",
+              "basis": "created_at",
+              "checked": 44,
+              "diffs": 0,
+              "pages": 0,
+              "rows_fetched": 0,
+              "samples": [],
+              "samples_truncated": false,
+              "truncated": false,
+              "high_water": {
+                "time": "2026-10-01T06:45:58.550972Z"
+              },
+              "consistent": true
+            },
+            {
+              "layer": "receipts",
+              "basis": "created_at",
+              "checked": 44,
+              "secondary_checked": 44,
+              "diffs": 0,
+              "pages": 0,
+              "rows_fetched": 0,
+              "samples": [],
+              "samples_truncated": false,
+              "truncated": false,
+              "high_water": {
+                "time": "2026-10-01T06:45:58.550972Z"
+              },
+              "consistent": true
+            },
+            {
+              "layer": "entries",
+              "basis": "posted_at",
+              "checked": 134,
+              "diffs": 0,
+              "pages": 0,
+              "rows_fetched": 0,
+              "samples": [],
+              "samples_truncated": false,
+              "truncated": false,
+              "high_water": {
+                "time": "2026-10-01T06:45:58.550972Z"
+              },
+              "consistent": true
+            },
+            {
+              "layer": "accounts",
+              "basis": "org_id",
+              "checked": 2,
+              "diffs": 0,
+              "pages": 1,
+              "rows_fetched": 2,
+              "samples": [],
+              "samples_truncated": false,
+              "truncated": false,
+              "high_water": {
+                "time": "2026-10-01T06:45:58.550972Z"
+              },
+              "consistent": true
+            }
+          ],
+          "transport": {
+            "stream": "usage:events",
+            "consumer_group": "metering-group",
+            "stream_length": 44,
+            "pending_count": 0,
+            "dlq_length": 0,
+            "coverage_start": "2026-10-01T06:44:34.313Z",
+            "coverage_end": "2026-10-01T06:45:58.550972Z",
+            "entries_read": 44,
+            "unique_events": 44,
+            "duplicate_entries": 0,
+            "invalid_entries": 0,
+            "billed_events": 44,
+            "missing_billing_facts": 0,
+            "payload_mismatches": 0,
+            "ledger_only_informational": 0
+          },
+          "backlog": {
+            "receipts_pending_dispatch": 0,
+            "receipts_dispatched": 0,
+            "receipts_stuck": 0,
+            "receipt_exceptions": 0,
+            "exceptions_open": 0,
+            "exceptions_resolved": 0,
+            "exceptions_dismissed": 0,
+            "stuck_after_seconds": 900
+          },
+          "exceptions_recorded": 0,
+          "pending_messages": 0,
+          "dlq_messages": 0
+        }
+      },
+      "failure": null,
+      "skip_reason": null,
+      "exchanges": []
+    },
+    {
+      "id": "ISO-01",
+      "title": "Gateway SSE 基线（loadtest closed-loop）",
+      "status": "PASS",
+      "started_at": "2026-10-01T06:45:59Z",
+      "finished_at": "2026-10-01T06:46:03Z",
+      "notes": [
+        "基线：96/96 完成，first_content p95=59.523ms，无 incomplete，status={'200': 96}"
+      ],
+      "details": {
+        "org_rpm_override": {
+          "requests_per_minute": 60000,
+          "burst": 6000
+        },
+        "warmup": {
+          "scheduled": 32,
+          "started": 32,
+          "completed": 32,
+          "rejected": 0,
+          "transport_error": 0,
+          "incomplete": 0,
+          "cancelled": 0,
+          "parse_error": 0,
+          "loadgen_dropped": 0,
+          "peak_active": 8,
+          "status": {
+            "200": 32
+          },
+          "first_event": {
+            "count": 32,
+            "p50_ms": 28.746,
+            "p95_ms": 75.965,
+            "p99_ms": 80.044,
+            "max_ms": 80.044
+          },
+          "first_content": {
+            "count": 32,
+            "p50_ms": 28.752,
+            "p95_ms": 75.971,
+            "p99_ms": 80.046,
+            "max_ms": 80.046
+          },
+          "stream_duration": {
+            "count": 32,
+            "p50_ms": 139.883,
+            "p95_ms": 185.694,
+            "p99_ms": 190.155,
+            "max_ms": 190.155
+          },
+          "ttft": {
+            "count": 32,
+            "p50_ms": 28.746,
+            "p95_ms": 75.965,
+            "p99_ms": 80.044,
+            "max_ms": 80.044
+          },
+          "success_per_second": 52.541963184841414,
+          "capacity_round_valid": true,
+          "capacity_invalid_reasons": []
+        },
+        "baseline": {
+          "scheduled": 96,
+          "started": 96,
+          "completed": 96,
+          "rejected": 0,
+          "transport_error": 0,
+          "incomplete": 0,
+          "cancelled": 0,
+          "parse_error": 0,
+          "loadgen_dropped": 0,
+          "peak_active": 8,
+          "status": {
+            "200": 96
+          },
+          "first_event": {
+            "count": 96,
+            "p50_ms": 30.741,
+            "p95_ms": 59.515,
+            "p99_ms": 61.94,
+            "max_ms": 61.94
+          },
+          "first_content": {
+            "count": 96,
+            "p50_ms": 30.757,
+            "p95_ms": 59.523,
+            "p99_ms": 61.975,
+            "max_ms": 61.975
+          },
+          "stream_duration": {
+            "count": 96,
+            "p50_ms": 142.714,
+            "p95_ms": 170.143,
+            "p99_ms": 171.864,
+            "max_ms": 171.864
+          },
+          "ttft": {
+            "count": 96,
+            "p50_ms": 30.741,
+            "p95_ms": 59.515,
+            "p99_ms": 61.94,
+            "max_ms": 61.94
+          },
+          "success_per_second": 54.26367929134529,
+          "capacity_round_valid": true,
+          "capacity_invalid_reasons": []
+        }
+      },
+      "failure": null,
+      "skip_reason": null,
+      "exchanges": []
+    },
+    {
+      "id": "ISO-02",
+      "title": "Console 报表压测下 Gateway SSE 不受影响",
+      "status": "PASS",
+      "started_at": "2026-10-01T06:46:03Z",
+      "finished_at": "2026-10-01T06:46:23Z",
+      "notes": [
+        "Console 2237 次报表请求（status={200: 2237}，p95=613.5ms）；Gateway 96/96 完成，first_content p95 59.523ms→58.772ms；PG 连接 console≤6 gateway≥16"
+      ],
+      "details": {
+        "console_load": {
+          "requests": 2237,
+          "statuses": {
+            "200": 2237
+          },
+          "p50_ms": 259.2,
+          "p95_ms": 613.5,
+          "max_ms": 1222.6
+        },
+        "gateway_under_load": {
+          "scheduled": 96,
+          "started": 96,
+          "completed": 96,
+          "rejected": 0,
+          "transport_error": 0,
+          "incomplete": 0,
+          "cancelled": 0,
+          "parse_error": 0,
+          "loadgen_dropped": 0,
+          "peak_active": 8,
+          "status": {
+            "200": 96
+          },
+          "first_event": {
+            "count": 96,
+            "p50_ms": 33.653,
+            "p95_ms": 58.763,
+            "p99_ms": 68.293,
+            "max_ms": 68.293
+          },
+          "first_content": {
+            "count": 96,
+            "p50_ms": 33.679,
+            "p95_ms": 58.772,
+            "p99_ms": 68.303,
+            "max_ms": 68.303
+          },
+          "stream_duration": {
+            "count": 96,
+            "p50_ms": 146.868,
+            "p95_ms": 170.926,
+            "p99_ms": 180.199,
+            "max_ms": 180.199
+          },
+          "ttft": {
+            "count": 96,
+            "p50_ms": 33.653,
+            "p95_ms": 58.763,
+            "p99_ms": 68.293,
+            "max_ms": 68.293
+          },
+          "success_per_second": 52.3760651277078,
+          "capacity_round_valid": true,
+          "capacity_invalid_reasons": []
+        },
+        "pg_samples": [
+          {
+            "by_application": {
+              "psql": 1,
+              "t10-console": 5,
+              "t10-console-short": 1,
+              "t10-control": 2,
+              "t10-gateway": 16,
+              "t10-metering": 2,
+              "<lock_waiters>": 0
+            },
+            "by_state": {
+              "active": 1,
+              "idle": 26
+            }
+          },
+          {
+            "by_application": {
+              "psql": 1,
+              "t10-console": 5,
+              "t10-console-short": 1,
+              "t10-control": 2,
+              "t10-gateway": 16,
+              "t10-metering": 2,
+              "<lock_waiters>": 0
+            },
+            "by_state": {
+              "active": 2,
+              "idle": 25
+            }
+          },
+          {
+            "by_application": {
+              "psql": 1,
+              "t10-console": 5,
+              "t10-console-short": 1,
+              "t10-control": 2,
+              "t10-gateway": 16,
+              "t10-metering": 2,
+              "<lock_waiters>": 0
+            },
+            "by_state": {
+              "active": 2,
+              "idle": 25
+            }
+          },
+          {
+            "by_application": {
+              "psql": 1,
+              "t10-console": 5,
+              "t10-console-short": 1,
+              "t10-control": 2,
+              "t10-gateway": 16,
+              "t10-metering": 2,
+              "<lock_waiters>": 0
+            },
+            "by_state": {
+              "active": 1,
+              "idle": 26
+            }
+          },
+          {
+            "by_application": {
+              "psql": 1,
+              "t10-console": 5,
+              "t10-console-short": 1,
+              "t10-control": 2,
+              "t10-gateway": 16,
+              "t10-metering": 2,
+              "<lock_waiters>": 0
+            },
+            "by_state": {
+              "active": 1,
+              "idle": 26
+            }
+          },
+          {
+            "by_application": {
+              "psql": 1,
+              "t10-console": 5,
+              "t10-console-short": 1,
+              "t10-control": 2,
+              "t10-gateway": 16,
+              "t10-metering": 2,
+              "<lock_waiters>": 0
+            },
+            "by_state": {
+              "active": 2,
+              "idle": 25
+            }
+          }
+        ],
+        "first_content_p95_ms": {
+          "baseline": 59.523,
+          "under_console_load": 58.772
+        },
+        "pg_connections": {
+          "gateway": [
+            16,
+            16,
+            16,
+            16,
+            16,
+            16
+          ],
+          "console": [
+            6,
+            6,
+            6,
+            6,
+            6,
+            6
+          ]
+        },
+        "contention": {
+          "console_p95_ms": 613.5,
+          "gateway_first_content_p95_ms_baseline": 59.523,
+          "gateway_first_content_p95_ms_loaded": 58.772,
+          "lock_waiters_max": 0
+        }
+      },
+      "failure": null,
+      "skip_reason": null,
+      "exchanges": []
+    },
+    {
+      "id": "ISO-03",
+      "title": "Console 重启不打断在途 Gateway 流",
+      "status": "PASS",
+      "started_at": "2026-10-01T06:46:23Z",
+      "finished_at": "2026-10-01T06:46:31Z",
+      "notes": [
+        "Console 重启（0.59s）期间 6 条在途流全部收到 [DONE]（耗时 [8.24, 8.24, 8.25, 8.26, 8.24, 8.27]）"
+      ],
+      "details": {
+        "restart_seconds": 0.59,
+        "stream_durations": [
+          8.24,
+          8.24,
+          8.25,
+          8.26,
+          8.24,
+          8.27
+        ]
+      },
+      "failure": null,
+      "skip_reason": null,
+      "exchanges": []
+    },
+    {
+      "id": "ISO-04",
+      "title": "Console 池饱和不等于 Gateway 池被耗尽",
+      "status": "PASS",
+      "started_at": "2026-10-01T06:46:31Z",
+      "finished_at": "2026-10-01T06:46:31Z",
+      "notes": [
+        "Console 池上限 10（硬编码），Gateway 两个池各 8；采样中 console=6、gateway=16、全部后端=27 —— Console 饱和没有耗尽 Gateway 池"
+      ],
+      "details": {
+        "gateway_conns_max": 16,
+        "console_conns_max": 6,
+        "all_backends_max": 27
+      },
+      "failure": null,
+      "skip_reason": null,
+      "exchanges": []
+    },
+    {
+      "id": "SEC-15",
+      "title": "响应与进程日志的 secret 扫描",
+      "status": "PASS",
+      "started_at": "2026-10-01T06:46:31Z",
+      "finished_at": "2026-10-01T06:46:31Z",
+      "notes": [
+        "218 个响应 + 14 个进程日志：41 个 secret 值只在其创建响应里出现 20 次，其余零出现"
+      ],
+      "details": {
+        "responses_scanned": 218,
+        "logs_scanned": 14,
+        "secret_values_tracked": 41,
+        "allowed_single_occurrences": 20
+      },
+      "failure": null,
+      "skip_reason": null,
+      "exchanges": []
+    }
+  ],
+  "findings": [],
+  "extra": {
+    "exchanges": [
+      {
+        "cid": "FIX",
+        "seq": 1,
+        "label": "login-platform-admin",
+        "method": "POST",
+        "path": "/api/v1/auth/login",
+        "status": 200
+      },
+      {
+        "cid": "FIX",
+        "seq": 2,
+        "label": "create-user-a-owner",
+        "method": "POST",
+        "path": "/api/v1/admin/users",
+        "status": 201
+      },
+      {
+        "cid": "FIX",
+        "seq": 3,
+        "label": "create-user-a-admin",
+        "method": "POST",
+        "path": "/api/v1/admin/users",
+        "status": 201
+      },
+      {
+        "cid": "FIX",
+        "seq": 4,
+        "label": "create-user-a-member",
+        "method": "POST",
+        "path": "/api/v1/admin/users",
+        "status": 201
+      },
+      {
+        "cid": "FIX",
+        "seq": 5,
+        "label": "create-user-a-viewer",
+        "method": "POST",
+        "path": "/api/v1/admin/users",
+        "status": 201
+      },
+      {
+        "cid": "FIX",
+        "seq": 6,
+        "label": "create-user-a-member2",
+        "method": "POST",
+        "path": "/api/v1/admin/users",
+        "status": 201
+      },
+      {
+        "cid": "FIX",
+        "seq": 7,
+        "label": "create-user-a-disabled",
+        "method": "POST",
+        "path": "/api/v1/admin/users",
+        "status": 201
+      },
+      {
+        "cid": "FIX",
+        "seq": 8,
+        "label": "create-user-a-invitee",
+        "method": "POST",
+        "path": "/api/v1/admin/users",
+        "status": 201
+      },
+      {
+        "cid": "FIX",
+        "seq": 9,
+        "label": "create-user-b-owner",
+        "method": "POST",
+        "path": "/api/v1/admin/users",
+        "status": 201
+      },
+      {
+        "cid": "FIX",
+        "seq": 10,
+        "label": "create-user-b-member",
+        "method": "POST",
+        "path": "/api/v1/admin/users",
+        "status": 201
+      },
+      {
+        "cid": "FIX",
+        "seq": 11,
+        "label": "login-a-owner",
+        "method": "POST",
+        "path": "/api/v1/auth/login",
+        "status": 200
+      },
+      {
+        "cid": "FIX",
+        "seq": 12,
+        "label": "create-org-acme",
+        "method": "POST",
+        "path": "/api/v1/organizations",
+        "status": 201
+      },
+      {
+        "cid": "FIX",
+        "seq": 13,
+        "label": "login-b-owner",
+        "method": "POST",
+        "path": "/api/v1/auth/login",
+        "status": 200
+      },
+      {
+        "cid": "FIX",
+        "seq": 14,
+        "label": "create-org-beta",
+        "method": "POST",
+        "path": "/api/v1/organizations",
+        "status": 201
+      },
+      {
+        "cid": "FIX",
+        "seq": 15,
+        "label": "invite-a-admin",
+        "method": "POST",
+        "path": "/api/v1/orgs/4/invitations",
+        "status": 201
+      },
+      {
+        "cid": "FIX",
+        "seq": 16,
+        "label": "login-a-admin",
+        "method": "POST",
+        "path": "/api/v1/auth/login",
+        "status": 200
+      },
+      {
+        "cid": "FIX",
+        "seq": 17,
+        "label": "accept-a-admin",
+        "method": "POST",
+        "path": "/api/v1/invitations/9n1R8jQRfrulCxF_nBz2s88Wz3VVb2QsWZltlWJecYk/accept",
+        "status": 200
+      },
+      {
+        "cid": "FIX",
+        "seq": 18,
+        "label": "invite-a-member",
+        "method": "POST",
+        "path": "/api/v1/orgs/4/invitations",
+        "status": 201
+      },
+      {
+        "cid": "FIX",
+        "seq": 19,
+        "label": "login-a-member",
+        "method": "POST",
+        "path": "/api/v1/auth/login",
+        "status": 200
+      },
+      {
+        "cid": "FIX",
+        "seq": 20,
+        "label": "accept-a-member",
+        "method": "POST",
+        "path": "/api/v1/invitations/bZ29dzYh_m99kjMGIISmtR-XYAj4f3J7ea3BIN4Lrdw/accept",
+        "status": 200
+      },
+      {
+        "cid": "FIX",
+        "seq": 21,
+        "label": "invite-a-viewer",
+        "method": "POST",
+        "path": "/api/v1/orgs/4/invitations",
+        "status": 201
+      },
+      {
+        "cid": "FIX",
+        "seq": 22,
+        "label": "login-a-viewer",
+        "method": "POST",
+        "path": "/api/v1/auth/login",
+        "status": 200
+      },
+      {
+        "cid": "FIX",
+        "seq": 23,
+        "label": "accept-a-viewer",
+        "method": "POST",
+        "path": "/api/v1/invitations/gV9NW3_6vjt-m88L_YdMHLVTjHL1EmMfk3xE1pba_yI/accept",
+        "status": 200
+      },
+      {
+        "cid": "FIX",
+        "seq": 24,
+        "label": "invite-a-member2",
+        "method": "POST",
+        "path": "/api/v1/orgs/4/invitations",
+        "status": 201
+      },
+      {
+        "cid": "FIX",
+        "seq": 25,
+        "label": "login-a-member2",
+        "method": "POST",
+        "path": "/api/v1/auth/login",
+        "status": 200
+      },
+      {
+        "cid": "FIX",
+        "seq": 26,
+        "label": "accept-a-member2",
+        "method": "POST",
+        "path": "/api/v1/invitations/gdbOOGGdjs4oEADSigV8-PT_BSCCSfye2DZxd7j3Hz8/accept",
+        "status": 200
+      },
+      {
+        "cid": "FIX",
+        "seq": 27,
+        "label": "invite-a-disabled",
+        "method": "POST",
+        "path": "/api/v1/orgs/4/invitations",
+        "status": 201
+      },
+      {
+        "cid": "FIX",
+        "seq": 28,
+        "label": "login-a-disabled",
+        "method": "POST",
+        "path": "/api/v1/auth/login",
+        "status": 200
+      },
+      {
+        "cid": "FIX",
+        "seq": 29,
+        "label": "accept-a-disabled",
+        "method": "POST",
+        "path": "/api/v1/invitations/-pUDMFwndl14oCOL0M8IRxlqpxUq8PtjaWq97U5k4IE/accept",
+        "status": 200
+      },
+      {
+        "cid": "FIX",
+        "seq": 30,
+        "label": "invite-b-member",
+        "method": "POST",
+        "path": "/api/v1/orgs/6/invitations",
+        "status": 201
+      },
+      {
+        "cid": "FIX",
+        "seq": 31,
+        "label": "login-b-member",
+        "method": "POST",
+        "path": "/api/v1/auth/login",
+        "status": 200
+      },
+      {
+        "cid": "FIX",
+        "seq": 32,
+        "label": "accept-b-member",
+        "method": "POST",
+        "path": "/api/v1/invitations/esFuQNmiwgJGvTeQNjzEzifs9mmKNXuPXypBOScZIEo/accept",
+        "status": 200
+      },
+      {
+        "cid": "FIX",
+        "seq": 33,
+        "label": "login-a-invitee",
+        "method": "POST",
+        "path": "/api/v1/auth/login",
+        "status": 200
+      },
+      {
+        "cid": "FIX",
+        "seq": 34,
+        "label": "invite-pending",
+        "method": "POST",
+        "path": "/api/v1/orgs/4/invitations",
+        "status": 201
+      },
+      {
+        "cid": "FIX",
+        "seq": 35,
+        "label": "create-key-a-member",
+        "method": "POST",
+        "path": "/api/v1/orgs/4/keys",
+        "status": 201
+      },
+      {
+        "cid": "FIX",
+        "seq": 36,
+        "label": "create-key-a-member2",
+        "method": "POST",
+        "path": "/api/v1/orgs/4/keys",
+        "status": 201
+      },
+      {
+        "cid": "FIX",
+        "seq": 37,
+        "label": "create-key-a-disabled",
+        "method": "POST",
+        "path": "/api/v1/orgs/4/keys",
+        "status": 201
+      },
+      {
+        "cid": "FIX",
+        "seq": 38,
+        "label": "create-key-a-admin",
+        "method": "POST",
+        "path": "/api/v1/orgs/4/keys",
+        "status": 201
+      },
+      {
+        "cid": "FIX",
+        "seq": 39,
+        "label": "create-key-b-member",
+        "method": "POST",
+        "path": "/api/v1/orgs/6/keys",
+        "status": 201
+      },
+      {
+        "cid": "FIX",
+        "seq": 40,
+        "label": "create-key-a-owner",
+        "method": "POST",
+        "path": "/api/v1/orgs/4/keys",
+        "status": 201
+      },
+      {
+        "cid": "FIX",
+        "seq": 41,
+        "label": "price-default",
+        "method": "POST",
+        "path": "/api/v1/admin/prices",
+        "status": 201
+      },
+      {
+        "cid": "FIX",
+        "seq": 42,
+        "label": "price-t10-model",
+        "method": "POST",
+        "path": "/api/v1/admin/prices",
+        "status": 201
+      },
+      {
+        "cid": "FIX",
+        "seq": 43,
+        "label": "fund-4",
+        "method": "POST",
+        "path": "/api/v1/admin/billing/accounts/4/adjustments",
+        "status": 201
+      },
+      {
+        "cid": "FIX",
+        "seq": 44,
+        "label": "fund-6",
+        "method": "POST",
+        "path": "/api/v1/admin/billing/accounts/6/adjustments",
+        "status": 201
+      },
+      {
+        "cid": "SEC-01",
+        "seq": 1,
+        "label": "console-no-session-me",
+        "method": "GET",
+        "path": "/api/v1/me",
+        "status": 401
+      },
+      {
+        "cid": "SEC-01",
+        "seq": 2,
+        "label": "console-no-session-organizations",
+        "method": "GET",
+        "path": "/api/v1/organizations",
+        "status": 401
+      },
+      {
+        "cid": "SEC-01",
+        "seq": 3,
+        "label": "console-no-session-org-members",
+        "method": "GET",
+        "path": "/api/v1/orgs/4/members",
+        "status": 401
+      },
+      {
+        "cid": "SEC-01",
+        "seq": 4,
+        "label": "console-no-session-org-keys",
+        "method": "GET",
+        "path": "/api/v1/orgs/4/keys",
+        "status": 401
+      },
+      {
+        "cid": "SEC-01",
+        "seq": 5,
+        "label": "console-no-session-org-usage",
+        "method": "GET",
+        "path": "/api/v1/orgs/4/usage",
+        "status": 401
+      },
+      {
+        "cid": "SEC-01",
+        "seq": 6,
+        "label": "gateway-no-auth-no-header",
+        "method": "POST",
+        "path": "/v1/chat/completions",
+        "status": 401
+      },
+      {
+        "cid": "SEC-01",
+        "seq": 7,
+        "label": "login-missing-body",
+        "method": "POST",
+        "path": "/api/v1/auth/login",
+        "status": 400
+      },
+      {
+        "cid": "SEC-02",
+        "seq": 1,
+        "label": "gateway-wrong-scheme-basic-scheme",
+        "method": "POST",
+        "path": "/v1/chat/completions",
+        "status": 401
+      },
+      {
+        "cid": "SEC-02",
+        "seq": 2,
+        "label": "gateway-wrong-scheme-token-scheme",
+        "method": "POST",
+        "path": "/v1/chat/completions",
+        "status": 401
+      },
+      {
+        "cid": "SEC-02",
+        "seq": 3,
+        "label": "gateway-wrong-scheme-raw-key-no-scheme",
+        "method": "POST",
+        "path": "/v1/chat/completions",
+        "status": 401
+      },
+      {
+        "cid": "SEC-02",
+        "seq": 4,
+        "label": "gateway-wrong-scheme-empty-bearer",
+        "method": "POST",
+        "path": "/v1/chat/completions",
+        "status": 401
+      },
+      {
+        "cid": "SEC-02",
+        "seq": 5,
+        "label": "gateway-wrong-scheme-garbage-bearer",
+        "method": "POST",
+        "path": "/v1/chat/completions",
+        "status": 401
+      },
+      {
+        "cid": "SEC-02",
+        "seq": 6,
+        "label": "gateway-lowercase-bearer",
+        "method": "POST",
+        "path": "/v1/chat/completions",
+        "status": 200
+      },
+      {
+        "cid": "SEC-02",
+        "seq": 7,
+        "label": "console-junk-cookie",
+        "method": "GET",
+        "path": "/api/v1/me",
+        "status": 401
+      },
+      {
+        "cid": "SEC-02",
+        "seq": 8,
+        "label": "console-key-as-session",
+        "method": "GET",
+        "path": "/api/v1/me",
+        "status": 401
+      },
+      {
+        "cid": "SEC-03",
+        "seq": 1,
+        "label": "tampered-last-char",
+        "method": "GET",
+        "path": "/api/v1/me",
+        "status": 401
+      },
+      {
+        "cid": "SEC-03",
+        "seq": 2,
+        "label": "tampered-truncated",
+        "method": "GET",
+        "path": "/api/v1/me",
+        "status": 401
+      },
+      {
+        "cid": "SEC-03",
+        "seq": 3,
+        "label": "tampered-extended",
+        "method": "GET",
+        "path": "/api/v1/me",
+        "status": 401
+      },
+      {
+        "cid": "SEC-03",
+        "seq": 4,
+        "label": "tampered-prefix-only",
+        "method": "GET",
+        "path": "/api/v1/me",
+        "status": 401
+      },
+      {
+        "cid": "SEC-03",
+        "seq": 5,
+        "label": "tampered-csrf",
+        "method": "POST",
+        "path": "/api/v1/organizations",
+        "status": 403
+      },
+      {
+        "cid": "SEC-03",
+        "seq": 6,
+        "label": "control-valid-session",
+        "method": "GET",
+        "path": "/api/v1/me",
+        "status": 200
+      },
+      {
+        "cid": "SEC-04",
+        "seq": 1,
+        "label": "short-ttl-login",
+        "method": "POST",
+        "path": "/api/v1/auth/login",
+        "status": 200
+      },
+      {
+        "cid": "SEC-04",
+        "seq": 2,
+        "label": "short-ttl-immediate",
+        "method": "GET",
+        "path": "/api/v1/me",
+        "status": 200
+      },
+      {
+        "cid": "SEC-04",
+        "seq": 3,
+        "label": "short-ttl-expired",
+        "method": "GET",
+        "path": "/api/v1/me",
+        "status": 401
+      },
+      {
+        "cid": "SEC-04",
+        "seq": 4,
+        "label": "short-ttl-relogin-main",
+        "method": "POST",
+        "path": "/api/v1/auth/login",
+        "status": 200
+      },
+      {
+        "cid": "SEC-05",
+        "seq": 1,
+        "label": "invitation-tampered",
+        "method": "POST",
+        "path": "/api/v1/invitations/WelfH70SGaHhSkUIJAoZEWIKT2O0FhrWVQfejkVAAAA/accept",
+        "status": 404
+      },
+      {
+        "cid": "SEC-05",
+        "seq": 2,
+        "label": "invitation-unknown",
+        "method": "POST",
+        "path": "/api/v1/invitations/t10-unknown-F008kqDXHhg/accept",
+        "status": 404
+      },
+      {
+        "cid": "SEC-05",
+        "seq": 3,
+        "label": "invitation-wrong-email",
+        "method": "POST",
+        "path": "/api/v1/invitations/WelfH70SGaHhSkUIJAoZEWIKT2O0FhrWVQfejkV5jhY/accept",
+        "status": 403
+      },
+      {
+        "cid": "SEC-05",
+        "seq": 4,
+        "label": "invitation-still-pending",
+        "method": "GET",
+        "path": "/api/v1/orgs/4/invitations",
+        "status": 200
+      },
+      {
+        "cid": "SEC-05",
+        "seq": 5,
+        "label": "invitation-create-second",
+        "method": "POST",
+        "path": "/api/v1/orgs/4/invitations",
+        "status": 201
+      },
+      {
+        "cid": "SEC-05",
+        "seq": 6,
+        "label": "invitation-accept-second",
+        "method": "POST",
+        "path": "/api/v1/invitations/mnTpgFdo6v8KwFgngz0PjRf3Ao91IO0FelULmkl25CY/accept",
+        "status": 200
+      },
+      {
+        "cid": "SEC-05",
+        "seq": 7,
+        "label": "invitation-replay",
+        "method": "POST",
+        "path": "/api/v1/invitations/mnTpgFdo6v8KwFgngz0PjRf3Ao91IO0FelULmkl25CY/accept",
+        "status": 409
+      },
+      {
+        "cid": "SEC-06",
+        "seq": 1,
+        "label": "nonexistent-org-99999999",
+        "method": "GET",
+        "path": "/api/v1/orgs/99999999/members",
+        "status": 404
+      },
+      {
+        "cid": "SEC-06",
+        "seq": 2,
+        "label": "cross-org-read-organization",
+        "method": "GET",
+        "path": "/api/v1/organizations/6",
+        "status": 404
+      },
+      {
+        "cid": "SEC-06",
+        "seq": 3,
+        "label": "cross-org-read-members",
+        "method": "GET",
+        "path": "/api/v1/orgs/6/members",
+        "status": 404
+      },
+      {
+        "cid": "SEC-06",
+        "seq": 4,
+        "label": "cross-org-read-invitations",
+        "method": "GET",
+        "path": "/api/v1/orgs/6/invitations",
+        "status": 404
+      },
+      {
+        "cid": "SEC-06",
+        "seq": 5,
+        "label": "cross-org-read-keys",
+        "method": "GET",
+        "path": "/api/v1/orgs/6/keys",
+        "status": 404
+      },
+      {
+        "cid": "SEC-06",
+        "seq": 6,
+        "label": "cross-org-read-usage",
+        "method": "GET",
+        "path": "/api/v1/orgs/6/usage",
+        "status": 404
+      },
+      {
+        "cid": "SEC-06",
+        "seq": 7,
+        "label": "cross-org-read-audit",
+        "method": "GET",
+        "path": "/api/v1/orgs/6/audit",
+        "status": 404
+      },
+      {
+        "cid": "SEC-06",
+        "seq": 8,
+        "label": "cross-org-read-account",
+        "method": "GET",
+        "path": "/api/v1/orgs/6/billing/account",
+        "status": 404
+      },
+      {
+        "cid": "SEC-06",
+        "seq": 9,
+        "label": "cross-org-read-entries",
+        "method": "GET",
+        "path": "/api/v1/orgs/6/billing/entries",
+        "status": 404
+      },
+      {
+        "cid": "SEC-06",
+        "seq": 10,
+        "label": "cross-org-read-statements",
+        "method": "GET",
+        "path": "/api/v1/orgs/6/billing/statements?month=2026-10",
+        "status": 404
+      },
+      {
+        "cid": "SEC-06",
+        "seq": 11,
+        "label": "cross-org-read-exceptions",
+        "method": "GET",
+        "path": "/api/v1/orgs/6/billing/exceptions",
+        "status": 404
+      },
+      {
+        "cid": "SEC-06",
+        "seq": 12,
+        "label": "own-org-members",
+        "method": "GET",
+        "path": "/api/v1/orgs/4/members",
+        "status": 200
+      },
+      {
+        "cid": "SEC-07",
+        "seq": 1,
+        "label": "snapshot-members-b-before",
+        "method": "GET",
+        "path": "/api/v1/orgs/6/members",
+        "status": 200
+      },
+      {
+        "cid": "SEC-07",
+        "seq": 2,
+        "label": "snapshot-keys-b-before",
+        "method": "GET",
+        "path": "/api/v1/orgs/6/keys",
+        "status": 200
+      },
+      {
+        "cid": "SEC-07",
+        "seq": 3,
+        "label": "cross-org-write-patch-member",
+        "method": "PATCH",
+        "path": "/api/v1/orgs/6/members/10",
+        "status": 404
+      },
+      {
+        "cid": "SEC-07",
+        "seq": 4,
+        "label": "cross-org-write-delete-member",
+        "method": "DELETE",
+        "path": "/api/v1/orgs/6/members/10",
+        "status": 404
+      },
+      {
+        "cid": "SEC-07",
+        "seq": 5,
+        "label": "cross-org-write-create-invitation",
+        "method": "POST",
+        "path": "/api/v1/orgs/6/invitations",
+        "status": 404
+      },
+      {
+        "cid": "SEC-07",
+        "seq": 6,
+        "label": "cross-org-write-owner-transfer",
+        "method": "POST",
+        "path": "/api/v1/orgs/6/owner-transfer",
+        "status": 404
+      },
+      {
+        "cid": "SEC-07",
+        "seq": 7,
+        "label": "cross-org-write-create-key",
+        "method": "POST",
+        "path": "/api/v1/orgs/6/keys",
+        "status": 404
+      },
+      {
+        "cid": "SEC-07",
+        "seq": 8,
+        "label": "cross-org-write-revoke-key",
+        "method": "POST",
+        "path": "/api/v1/orgs/6/keys/key_fa0059ad54533e18a38d04136e098b78/revoke",
+        "status": 404
+      },
+      {
+        "cid": "SEC-07",
+        "seq": 9,
+        "label": "snapshot-members-b-after",
+        "method": "GET",
+        "path": "/api/v1/orgs/6/members",
+        "status": 200
+      },
+      {
+        "cid": "SEC-07",
+        "seq": 10,
+        "label": "snapshot-keys-b-after",
+        "method": "GET",
+        "path": "/api/v1/orgs/6/keys",
+        "status": 200
+      },
+      {
+        "cid": "SEC-08",
+        "seq": 1,
+        "label": "member-self-promote",
+        "method": "PATCH",
+        "path": "/api/v1/orgs/4/members/4",
+        "status": 403
+      },
+      {
+        "cid": "SEC-08",
+        "seq": 2,
+        "label": "admin-self-promote-owner",
+        "method": "PATCH",
+        "path": "/api/v1/orgs/4/members/3",
+        "status": 403
+      },
+      {
+        "cid": "SEC-08",
+        "seq": 3,
+        "label": "admin-self-transfer",
+        "method": "POST",
+        "path": "/api/v1/orgs/4/owner-transfer",
+        "status": 403
+      },
+      {
+        "cid": "SEC-08",
+        "seq": 4,
+        "label": "admin-demote-owner",
+        "method": "PATCH",
+        "path": "/api/v1/orgs/4/members/2",
+        "status": 403
+      },
+      {
+        "cid": "SEC-08",
+        "seq": 5,
+        "label": "promote-platform-admin-a-member",
+        "method": "POST",
+        "path": "/api/v1/admin/users",
+        "status": 403
+      },
+      {
+        "cid": "SEC-08",
+        "seq": 6,
+        "label": "promote-platform-admin-a-admin",
+        "method": "POST",
+        "path": "/api/v1/admin/users",
+        "status": 403
+      },
+      {
+        "cid": "SEC-08",
+        "seq": 7,
+        "label": "promote-platform-admin-a-owner",
+        "method": "POST",
+        "path": "/api/v1/admin/users",
+        "status": 403
+      },
+      {
+        "cid": "SEC-08",
+        "seq": 8,
+        "label": "invite-platform-admin",
+        "method": "POST",
+        "path": "/api/v1/orgs/4/invitations",
+        "status": 403
+      },
+      {
+        "cid": "SEC-08",
+        "seq": 9,
+        "label": "snapshot-members-a-after-escalation",
+        "method": "GET",
+        "path": "/api/v1/orgs/4/members",
+        "status": 200
+      },
+      {
+        "cid": "SEC-08",
+        "seq": 10,
+        "label": "platform-admin-create-admin",
+        "method": "POST",
+        "path": "/api/v1/admin/users",
+        "status": 201
+      },
+      {
+        "cid": "SEC-08",
+        "seq": 11,
+        "label": "login-platform-admin-2",
+        "method": "POST",
+        "path": "/api/v1/auth/login",
+        "status": 200
+      },
+      {
+        "cid": "SEC-08",
+        "seq": 12,
+        "label": "platform-admin-org-members",
+        "method": "GET",
+        "path": "/api/v1/orgs/4/members",
+        "status": 404
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 1,
+        "label": "csrf-invitation",
+        "method": "POST",
+        "path": "/api/v1/orgs/4/invitations",
+        "status": 201
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 2,
+        "label": "snapshot-members-before-csrf",
+        "method": "GET",
+        "path": "/api/v1/orgs/4/members",
+        "status": 200
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 3,
+        "label": "snapshot-keys-before-csrf",
+        "method": "GET",
+        "path": "/api/v1/orgs/4/keys",
+        "status": 200
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 4,
+        "label": "snapshot-account-before-csrf",
+        "method": "GET",
+        "path": "/api/v1/orgs/4/billing/account",
+        "status": 200
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 5,
+        "label": "snapshot-entries-before-csrf",
+        "method": "GET",
+        "path": "/api/v1/orgs/4/billing/entries?limit=100",
+        "status": 200
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 6,
+        "label": "prices-before-csrf",
+        "method": "GET",
+        "path": "/api/v1/admin/prices",
+        "status": 200
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 7,
+        "label": "invitations-before-csrf",
+        "method": "GET",
+        "path": "/api/v1/orgs/4/invitations",
+        "status": 200
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 8,
+        "label": "csrf-logout-missing",
+        "method": "POST",
+        "path": "/api/v1/auth/logout",
+        "status": 403
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 9,
+        "label": "csrf-logout-wrong",
+        "method": "POST",
+        "path": "/api/v1/auth/logout",
+        "status": 403
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 10,
+        "label": "csrf-create-org-missing",
+        "method": "POST",
+        "path": "/api/v1/organizations",
+        "status": 403
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 11,
+        "label": "csrf-create-org-wrong",
+        "method": "POST",
+        "path": "/api/v1/organizations",
+        "status": 403
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 12,
+        "label": "csrf-admin-create-user-missing",
+        "method": "POST",
+        "path": "/api/v1/admin/users",
+        "status": 403
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 13,
+        "label": "csrf-admin-create-user-wrong",
+        "method": "POST",
+        "path": "/api/v1/admin/users",
+        "status": 403
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 14,
+        "label": "csrf-admin-user-status-missing",
+        "method": "POST",
+        "path": "/api/v1/admin/users/4/status",
+        "status": 403
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 15,
+        "label": "csrf-admin-user-status-wrong",
+        "method": "POST",
+        "path": "/api/v1/admin/users/4/status",
+        "status": 403
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 16,
+        "label": "csrf-create-invitation-missing",
+        "method": "POST",
+        "path": "/api/v1/orgs/4/invitations",
+        "status": 403
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 17,
+        "label": "csrf-create-invitation-wrong",
+        "method": "POST",
+        "path": "/api/v1/orgs/4/invitations",
+        "status": 403
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 18,
+        "label": "csrf-accept-invitation-missing",
+        "method": "POST",
+        "path": "/api/v1/invitations/Pi90cPAPw2FBr_wX1fX5L8gkCa4Q-Z4wajRhL1Wrj3Y/accept",
+        "status": 403
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 19,
+        "label": "csrf-accept-invitation-wrong",
+        "method": "POST",
+        "path": "/api/v1/invitations/Pi90cPAPw2FBr_wX1fX5L8gkCa4Q-Z4wajRhL1Wrj3Y/accept",
+        "status": 403
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 20,
+        "label": "csrf-change-member-role-missing",
+        "method": "PATCH",
+        "path": "/api/v1/orgs/4/members/4",
+        "status": 403
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 21,
+        "label": "csrf-change-member-role-wrong",
+        "method": "PATCH",
+        "path": "/api/v1/orgs/4/members/4",
+        "status": 403
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 22,
+        "label": "csrf-remove-member-missing",
+        "method": "DELETE",
+        "path": "/api/v1/orgs/4/members/4",
+        "status": 403
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 23,
+        "label": "csrf-remove-member-wrong",
+        "method": "DELETE",
+        "path": "/api/v1/orgs/4/members/4",
+        "status": 403
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 24,
+        "label": "csrf-owner-transfer-missing",
+        "method": "POST",
+        "path": "/api/v1/orgs/4/owner-transfer",
+        "status": 403
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 25,
+        "label": "csrf-owner-transfer-wrong",
+        "method": "POST",
+        "path": "/api/v1/orgs/4/owner-transfer",
+        "status": 403
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 26,
+        "label": "csrf-create-key-missing",
+        "method": "POST",
+        "path": "/api/v1/orgs/4/keys",
+        "status": 403
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 27,
+        "label": "csrf-create-key-wrong",
+        "method": "POST",
+        "path": "/api/v1/orgs/4/keys",
+        "status": 403
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 28,
+        "label": "csrf-revoke-key-missing",
+        "method": "POST",
+        "path": "/api/v1/orgs/4/keys/key_e0d21c1e8c69148027ee8e2d90798082/revoke",
+        "status": 403
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 29,
+        "label": "csrf-revoke-key-wrong",
+        "method": "POST",
+        "path": "/api/v1/orgs/4/keys/key_e0d21c1e8c69148027ee8e2d90798082/revoke",
+        "status": 403
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 30,
+        "label": "csrf-create-price-missing",
+        "method": "POST",
+        "path": "/api/v1/admin/prices",
+        "status": 403
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 31,
+        "label": "csrf-create-price-wrong",
+        "method": "POST",
+        "path": "/api/v1/admin/prices",
+        "status": 403
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 32,
+        "label": "csrf-adjust-account-missing",
+        "method": "POST",
+        "path": "/api/v1/admin/billing/accounts/4/adjustments",
+        "status": 403
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 33,
+        "label": "csrf-adjust-account-wrong",
+        "method": "POST",
+        "path": "/api/v1/admin/billing/accounts/4/adjustments",
+        "status": 403
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 34,
+        "label": "csrf-resolve-exception-missing",
+        "method": "POST",
+        "path": "/api/v1/admin/billing/exceptions/99999999/resolution",
+        "status": 403
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 35,
+        "label": "csrf-resolve-exception-wrong",
+        "method": "POST",
+        "path": "/api/v1/admin/billing/exceptions/99999999/resolution",
+        "status": 403
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 36,
+        "label": "snapshot-members-after-csrf",
+        "method": "GET",
+        "path": "/api/v1/orgs/4/members",
+        "status": 200
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 37,
+        "label": "snapshot-keys-after-csrf",
+        "method": "GET",
+        "path": "/api/v1/orgs/4/keys",
+        "status": 200
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 38,
+        "label": "snapshot-account-after-csrf",
+        "method": "GET",
+        "path": "/api/v1/orgs/4/billing/account",
+        "status": 200
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 39,
+        "label": "snapshot-entries-after-csrf",
+        "method": "GET",
+        "path": "/api/v1/orgs/4/billing/entries?limit=100",
+        "status": 200
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 40,
+        "label": "prices-after-csrf",
+        "method": "GET",
+        "path": "/api/v1/admin/prices",
+        "status": 200
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 41,
+        "label": "invitations-after-csrf",
+        "method": "GET",
+        "path": "/api/v1/orgs/4/invitations",
+        "status": 200
+      },
+      {
+        "cid": "SEC-09",
+        "seq": 42,
+        "label": "csrf-correct-control",
+        "method": "POST",
+        "path": "/api/v1/orgs/4/invitations",
+        "status": 201
+      },
+      {
+        "cid": "SEC-10",
+        "seq": 1,
+        "label": "disabled-before-me",
+        "method": "GET",
+        "path": "/api/v1/me",
+        "status": 200
+      },
+      {
+        "cid": "SEC-10",
+        "seq": 2,
+        "label": "disable-user",
+        "method": "POST",
+        "path": "/api/v1/admin/users/7/status",
+        "status": 200
+      },
+      {
+        "cid": "SEC-10",
+        "seq": 3,
+        "label": "disabled-after-me",
+        "method": "GET",
+        "path": "/api/v1/me",
+        "status": 401
+      },
+      {
+        "cid": "SEC-10",
+        "seq": 4,
+        "label": "enable-user",
+        "method": "POST",
+        "path": "/api/v1/admin/users/7/status",
+        "status": 200
+      },
+      {
+        "cid": "SEC-10",
+        "seq": 5,
+        "label": "reenabled-old-session",
+        "method": "GET",
+        "path": "/api/v1/me",
+        "status": 401
+      },
+      {
+        "cid": "SEC-10",
+        "seq": 6,
+        "label": "reenabled-fresh-login",
+        "method": "POST",
+        "path": "/api/v1/auth/login",
+        "status": 200
+      },
+      {
+        "cid": "SEC-10",
+        "seq": 7,
+        "label": "reenabled-new-session",
+        "method": "GET",
+        "path": "/api/v1/me",
+        "status": 200
+      },
+      {
+        "cid": "SEC-11",
+        "seq": 1,
+        "label": "remove-member",
+        "method": "DELETE",
+        "path": "/api/v1/orgs/4/members/6",
+        "status": 204
+      },
+      {
+        "cid": "SEC-12",
+        "seq": 1,
+        "label": "viewer-write-invite",
+        "method": "POST",
+        "path": "/api/v1/orgs/4/invitations",
+        "status": 403
+      },
+      {
+        "cid": "SEC-12",
+        "seq": 2,
+        "label": "viewer-write-change-role",
+        "method": "PATCH",
+        "path": "/api/v1/orgs/4/members/4",
+        "status": 403
+      },
+      {
+        "cid": "SEC-12",
+        "seq": 3,
+        "label": "viewer-write-remove-member",
+        "method": "DELETE",
+        "path": "/api/v1/orgs/4/members/4",
+        "status": 403
+      },
+      {
+        "cid": "SEC-12",
+        "seq": 4,
+        "label": "viewer-write-owner-transfer",
+        "method": "POST",
+        "path": "/api/v1/orgs/4/owner-transfer",
+        "status": 403
+      },
+      {
+        "cid": "SEC-12",
+        "seq": 5,
+        "label": "viewer-write-create-key",
+        "method": "POST",
+        "path": "/api/v1/orgs/4/keys",
+        "status": 403
+      },
+      {
+        "cid": "SEC-12",
+        "seq": 6,
+        "label": "viewer-write-revoke-key",
+        "method": "POST",
+        "path": "/api/v1/orgs/4/keys/key_e0d21c1e8c69148027ee8e2d90798082/revoke",
+        "status": 403
+      },
+      {
+        "cid": "SEC-12",
+        "seq": 7,
+        "label": "viewer-write-create-price",
+        "method": "POST",
+        "path": "/api/v1/admin/prices",
+        "status": 403
+      },
+      {
+        "cid": "SEC-12",
+        "seq": 8,
+        "label": "viewer-write-adjust",
+        "method": "POST",
+        "path": "/api/v1/admin/billing/accounts/4/adjustments",
+        "status": 403
+      },
+      {
+        "cid": "SEC-12",
+        "seq": 9,
+        "label": "viewer-write-resolve-exception",
+        "method": "POST",
+        "path": "/api/v1/admin/billing/exceptions/99999999/resolution",
+        "status": 403
+      },
+      {
+        "cid": "SEC-12",
+        "seq": 10,
+        "label": "viewer-write-admin-users",
+        "method": "POST",
+        "path": "/api/v1/admin/users",
+        "status": 403
+      },
+      {
+        "cid": "SEC-12",
+        "seq": 11,
+        "label": "viewer-audit",
+        "method": "GET",
+        "path": "/api/v1/orgs/4/audit",
+        "status": 403
+      },
+      {
+        "cid": "SEC-12",
+        "seq": 12,
+        "label": "viewer-read-account",
+        "method": "GET",
+        "path": "/api/v1/orgs/4/billing/account",
+        "status": 200
+      },
+      {
+        "cid": "SEC-12",
+        "seq": 13,
+        "label": "viewer-read-entries",
+        "method": "GET",
+        "path": "/api/v1/orgs/4/billing/entries?limit=10",
+        "status": 200
+      },
+      {
+        "cid": "SEC-12",
+        "seq": 14,
+        "label": "viewer-read-statements",
+        "method": "GET",
+        "path": "/api/v1/orgs/4/billing/statements?month=2026-10",
+        "status": 200
+      },
+      {
+        "cid": "SEC-12",
+        "seq": 15,
+        "label": "viewer-read-exceptions",
+        "method": "GET",
+        "path": "/api/v1/orgs/4/billing/exceptions",
+        "status": 200
+      },
+      {
+        "cid": "SEC-12",
+        "seq": 16,
+        "label": "viewer-read-usage",
+        "method": "GET",
+        "path": "/api/v1/orgs/4/usage?limit=10",
+        "status": 200
+      },
+      {
+        "cid": "SEC-12",
+        "seq": 17,
+        "label": "viewer-usage-scope",
+        "method": "GET",
+        "path": "/api/v1/orgs/4/usage?limit=5",
+        "status": 200
+      },
+      {
+        "cid": "SEC-13",
+        "seq": 1,
+        "label": "a-owner-admin-users",
+        "method": "POST",
+        "path": "/api/v1/admin/users",
+        "status": 403
+      },
+      {
+        "cid": "SEC-13",
+        "seq": 2,
+        "label": "a-owner-admin-user-status",
+        "method": "POST",
+        "path": "/api/v1/admin/users/4/status",
+        "status": 403
+      },
+      {
+        "cid": "SEC-13",
+        "seq": 3,
+        "label": "a-owner-admin-prices-get",
+        "method": "GET",
+        "path": "/api/v1/admin/prices",
+        "status": 403
+      },
+      {
+        "cid": "SEC-13",
+        "seq": 4,
+        "label": "a-owner-admin-prices-post",
+        "method": "POST",
+        "path": "/api/v1/admin/prices",
+        "status": 403
+      },
+      {
+        "cid": "SEC-13",
+        "seq": 5,
+        "label": "a-owner-admin-adjustments",
+        "method": "POST",
+        "path": "/api/v1/admin/billing/accounts/4/adjustments",
+        "status": 403
+      },
+      {
+        "cid": "SEC-13",
+        "seq": 6,
+        "label": "a-owner-admin-exception-resolution",
+        "method": "POST",
+        "path": "/api/v1/admin/billing/exceptions/99999999/resolution",
+        "status": 403
+      },
+      {
+        "cid": "SEC-13",
+        "seq": 7,
+        "label": "a-admin-admin-users",
+        "method": "POST",
+        "path": "/api/v1/admin/users",
+        "status": 403
+      },
+      {
+        "cid": "SEC-13",
+        "seq": 8,
+        "label": "a-admin-admin-user-status",
+        "method": "POST",
+        "path": "/api/v1/admin/users/4/status",
+        "status": 403
+      },
+      {
+        "cid": "SEC-13",
+        "seq": 9,
+        "label": "a-admin-admin-prices-get",
+        "method": "GET",
+        "path": "/api/v1/admin/prices",
+        "status": 403
+      },
+      {
+        "cid": "SEC-13",
+        "seq": 10,
+        "label": "a-admin-admin-prices-post",
+        "method": "POST",
+        "path": "/api/v1/admin/prices",
+        "status": 403
+      },
+      {
+        "cid": "SEC-13",
+        "seq": 11,
+        "label": "a-admin-admin-adjustments",
+        "method": "POST",
+        "path": "/api/v1/admin/billing/accounts/4/adjustments",
+        "status": 403
+      },
+      {
+        "cid": "SEC-13",
+        "seq": 12,
+        "label": "a-admin-admin-exception-resolution",
+        "method": "POST",
+        "path": "/api/v1/admin/billing/exceptions/99999999/resolution",
+        "status": 403
+      },
+      {
+        "cid": "SEC-13",
+        "seq": 13,
+        "label": "a-member-admin-users",
+        "method": "POST",
+        "path": "/api/v1/admin/users",
+        "status": 403
+      },
+      {
+        "cid": "SEC-13",
+        "seq": 14,
+        "label": "a-member-admin-user-status",
+        "method": "POST",
+        "path": "/api/v1/admin/users/4/status",
+        "status": 403
+      },
+      {
+        "cid": "SEC-13",
+        "seq": 15,
+        "label": "a-member-admin-prices-get",
+        "method": "GET",
+        "path": "/api/v1/admin/prices",
+        "status": 403
+      },
+      {
+        "cid": "SEC-13",
+        "seq": 16,
+        "label": "a-member-admin-prices-post",
+        "method": "POST",
+        "path": "/api/v1/admin/prices",
+        "status": 403
+      },
+      {
+        "cid": "SEC-13",
+        "seq": 17,
+        "label": "a-member-admin-adjustments",
+        "method": "POST",
+        "path": "/api/v1/admin/billing/accounts/4/adjustments",
+        "status": 403
+      },
+      {
+        "cid": "SEC-13",
+        "seq": 18,
+        "label": "a-member-admin-exception-resolution",
+        "method": "POST",
+        "path": "/api/v1/admin/billing/exceptions/99999999/resolution",
+        "status": 403
+      },
+      {
+        "cid": "SEC-13",
+        "seq": 19,
+        "label": "a-viewer-admin-users",
+        "method": "POST",
+        "path": "/api/v1/admin/users",
+        "status": 403
+      },
+      {
+        "cid": "SEC-13",
+        "seq": 20,
+        "label": "a-viewer-admin-user-status",
+        "method": "POST",
+        "path": "/api/v1/admin/users/4/status",
+        "status": 403
+      },
+      {
+        "cid": "SEC-13",
+        "seq": 21,
+        "label": "a-viewer-admin-prices-get",
+        "method": "GET",
+        "path": "/api/v1/admin/prices",
+        "status": 403
+      },
+      {
+        "cid": "SEC-13",
+        "seq": 22,
+        "label": "a-viewer-admin-prices-post",
+        "method": "POST",
+        "path": "/api/v1/admin/prices",
+        "status": 403
+      },
+      {
+        "cid": "SEC-13",
+        "seq": 23,
+        "label": "a-viewer-admin-adjustments",
+        "method": "POST",
+        "path": "/api/v1/admin/billing/accounts/4/adjustments",
+        "status": 403
+      },
+      {
+        "cid": "SEC-13",
+        "seq": 24,
+        "label": "a-viewer-admin-exception-resolution",
+        "method": "POST",
+        "path": "/api/v1/admin/billing/exceptions/99999999/resolution",
+        "status": 403
+      },
+      {
+        "cid": "SEC-13",
+        "seq": 25,
+        "label": "anonymous-admin-users",
+        "method": "POST",
+        "path": "/api/v1/admin/users",
+        "status": 401
+      },
+      {
+        "cid": "SEC-13",
+        "seq": 26,
+        "label": "anonymous-admin-user-status",
+        "method": "POST",
+        "path": "/api/v1/admin/users/4/status",
+        "status": 401
+      },
+      {
+        "cid": "SEC-13",
+        "seq": 27,
+        "label": "anonymous-admin-prices-get",
+        "method": "GET",
+        "path": "/api/v1/admin/prices",
+        "status": 401
+      },
+      {
+        "cid": "SEC-13",
+        "seq": 28,
+        "label": "anonymous-admin-prices-post",
+        "method": "POST",
+        "path": "/api/v1/admin/prices",
+        "status": 401
+      },
+      {
+        "cid": "SEC-13",
+        "seq": 29,
+        "label": "anonymous-admin-adjustments",
+        "method": "POST",
+        "path": "/api/v1/admin/billing/accounts/4/adjustments",
+        "status": 401
+      },
+      {
+        "cid": "SEC-13",
+        "seq": 30,
+        "label": "anonymous-admin-exception-resolution",
+        "method": "POST",
+        "path": "/api/v1/admin/billing/exceptions/99999999/resolution",
+        "status": 401
+      },
+      {
+        "cid": "SEC-13",
+        "seq": 31,
+        "label": "platform-admin-prices",
+        "method": "GET",
+        "path": "/api/v1/admin/prices",
+        "status": 200
+      },
+      {
+        "cid": "CTRL-04",
+        "seq": 1,
+        "label": "revoke-owner-key",
+        "method": "POST",
+        "path": "/api/v1/orgs/4/keys/key_5342ede0528f8aaeb8b187475fff5513/revoke",
+        "status": 200
+      },
+      {
+        "cid": "REV-01",
+        "seq": 1,
+        "label": "price-change-midflight",
+        "method": "POST",
+        "path": "/api/v1/admin/prices",
+        "status": 201
+      },
+      {
+        "cid": "REV-02",
+        "seq": 1,
+        "label": "create-revocation-key",
+        "method": "POST",
+        "path": "/api/v1/orgs/4/keys",
+        "status": 201
+      },
+      {
+        "cid": "REV-02",
+        "seq": 2,
+        "label": "revoke-midflight",
+        "method": "POST",
+        "path": "/api/v1/orgs/4/keys/key_30205ce90b1452b65d2bb7f0429715f2/revoke",
+        "status": 200
+      },
+      {
+        "cid": "REV-03",
+        "seq": 1,
+        "label": "rev03-create-user",
+        "method": "POST",
+        "path": "/api/v1/admin/users",
+        "status": 201
+      },
+      {
+        "cid": "REV-03",
+        "seq": 2,
+        "label": "rev03-invite",
+        "method": "POST",
+        "path": "/api/v1/orgs/4/invitations",
+        "status": 201
+      },
+      {
+        "cid": "REV-03",
+        "seq": 3,
+        "label": "rev03-login",
+        "method": "POST",
+        "path": "/api/v1/auth/login",
+        "status": 200
+      },
+      {
+        "cid": "REV-03",
+        "seq": 4,
+        "label": "rev03-accept",
+        "method": "POST",
+        "path": "/api/v1/invitations/8DVUvXUNFSYwTAdStfWQkWIRpv9ziBpqrwDGA0IR3L8/accept",
+        "status": 200
+      },
+      {
+        "cid": "REV-03",
+        "seq": 5,
+        "label": "rev03-key",
+        "method": "POST",
+        "path": "/api/v1/orgs/4/keys",
+        "status": 201
+      },
+      {
+        "cid": "REV-03",
+        "seq": 6,
+        "label": "rev03-remove-member",
+        "method": "DELETE",
+        "path": "/api/v1/orgs/4/members/12",
+        "status": 204
+      }
+    ]
+  }
+}

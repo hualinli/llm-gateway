@@ -1,0 +1,11 @@
+HTTP 200 (0.170s)
+Server: hertz
+Date: Thu, 01 Oct 2026 06:44:33 GMT
+Content-Type: application/json
+Content-Length: 426
+X-Request-Id: t10-FIX-33
+X-Trace-Id: 2e73d5952ce4a86dc61817dbd27d0ede
+Set-Cookie: gw_session=N5k_…<redacted:43>; max-age=1800; path=/; HttpOnly; SameSite=Lax
+Set-Cookie: gw_csrf=kNLm…<redacted:43>; max-age=1800; path=/; HttpOnly; SameSite=Lax
+
+{"user":{"id":"8","email":"t10-z9162-a-invitee@t10.test","status":"active","platform_admin":false,"created_at":"2026-10-01T06:44:31Z","updated_at":"2026-10-01T06:44:31Z"},"organizations":[{"organization":{"id":"13","type":"personal","name":"t10-z9162-a-invitee@t10.test","status":"active","legacy_tenant_id":null,"created_at":"2026-10-01T06:44:33Z"},"role":"owner"}],"csrf_token":"kNLm…<redacted:43>"}

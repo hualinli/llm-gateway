@@ -1,0 +1,99 @@
+2026/10/01 14:46:50 runtime profile=demo WARNING: demo mode, production checks are not enforced
+2026/10/01 14:46:50 WARNING: production check failed: GATEWAY_MAX_ACTIVE_STREAMS: must be explicitly set to a positive integer; 0 means unlimited and is not allowed in production
+2026/10/01 14:46:50 WARNING: production check failed: CONTROL_TLS_CA_FILE: must be set so the gateway verifies the control-plane server certificate over TLS
+2026/10/01 14:46:50 WARNING: production check failed: CONTROL_TLS_CLIENT_CERT_FILE/CONTROL_TLS_CLIENT_KEY_FILE: must both be set so the gateway authenticates to the control plane with mTLS
+2026/10/01 14:46:50 limiter: redis=127.0.0.1:50427 rate=1000 burst=2000 queue=500ms on-redis-error=closed
+2026/10/01 14:46:50 gateway max active streams=0 (0 means unlimited)
+2026/10/01 14:46:50 access guard: pg pool max_open=8 max_idle=8 conn_max_lifetime=5m0s query_timeout=300ms statement_timeout=300ms
+2026/10/01 14:46:50 access guard mode=pg
+2026/10/01 14:46:50 billing: mode=pg pool max_open=8 max_idle=8 conn_max_lifetime=5m0s admission_timeout=2s receipt_timeout=1s verify_timeout=1s finalize_timeout=2s heartbeat_interval=10s
+2026/10/01 14:46:50 billing: policy messages<=256 message_bytes<=65536 input_bytes<=262144 output_tokens default=4096 max=32768 overhead per_message=16 per_request=8
+2026/10/01 14:46:50 gateway instance=gw-a started_at=2026-10-01T06:46:50.710898Z
+2026/10/01 14:46:50 WARNING: GATEWAY_MAX_ACTIVE_STREAMS_PER_ORG is 0 (unlimited): per-organization concurrency is not bounded on this instance
+2026/10/01 14:46:50 gateway diagnostics listening on 127.0.0.1:50431 (/metrics, /debug/pprof/*)
+2026/10/01 14:46:50 gateway listening on 127.0.0.1:50430
+2026/10/01 14:46:50 control: hot reload to v1
+2026/10/01 14:46:55 control: hot reload to v2
+2026/10/01 14:46:56 control: hot reload to v3
+2026/10/01 14:46:56 control: hot reload to v4
+2026/10/01 14:46:56 control: hot reload to v5
+2026/10/01 14:46:56 control: hot reload to v6
+2026/10/01 14:46:56 control: hot reload to v7
+2026/10/01 14:46:56 control: hot reload to v8
+2026/10/01 14:46:56 billing admission model=t10bk-model result=admitted latency=9.785126ms
+2026/10/01 14:46:56 billing finalization model=t10bk-model result=ok latency=4.995677ms
+2026/10/01 14:46:56 request_id=t10bk-setup-0 trace_id=e3ae735898f53ab552acb8bcad0b7336 provider=primary model=t10bk-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:56 billing admission model=t10bk-model result=admitted latency=5.061634ms
+2026/10/01 14:46:57 billing finalization model=t10bk-model result=ok latency=3.850657ms
+2026/10/01 14:46:57 request_id=t10bk-setup-1 trace_id=f9c6ecf0ccd2c58eeaad773be0d970eb provider=primary model=t10bk-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:57 billing admission model=t10bk-model result=admitted latency=6.130666ms
+2026/10/01 14:46:57 billing finalization model=t10bk-model result=ok latency=3.507273ms
+2026/10/01 14:46:57 request_id=t10bk-setup-2 trace_id=ac06aa2fd8e762f219f85cbdd4144f89 provider=primary model=t10bk-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:57 billing admission model=t10bk-model result=admitted latency=5.791133ms
+2026/10/01 14:46:57 billing finalization model=t10bk-model result=ok latency=4.30062ms
+2026/10/01 14:46:57 request_id=t10bk-setup-3 trace_id=61569bfb0a9bb1c79c489c8aa808298c provider=primary model=t10bk-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:57 billing admission model=t10bk-model result=admitted latency=6.662219ms
+2026/10/01 14:46:57 billing finalization model=t10bk-model result=ok latency=3.815345ms
+2026/10/01 14:46:57 request_id=t10bk-setup-4 trace_id=011850aaaf8f50e326c0954e2118ed6c provider=primary model=t10bk-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:57 billing admission model=t10bk-model result=admitted latency=5.277482ms
+2026/10/01 14:46:57 billing finalization model=t10bk-model result=ok latency=3.473755ms
+2026/10/01 14:46:57 request_id=t10bk-setup-5 trace_id=599976a7ed049f4fa33c642c263680e9 provider=primary model=t10bk-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:57 billing admission model=t10bk-model result=admitted latency=5.011996ms
+2026/10/01 14:46:57 billing finalization model=t10bk-model result=ok latency=3.564744ms
+2026/10/01 14:46:57 request_id=t10bk-setup-6 trace_id=313ef8a80ff8d05039e67ff2b7159048 provider=primary model=t10bk-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:57 billing admission model=t10bk-model result=admitted latency=4.443758ms
+2026/10/01 14:46:57 billing finalization model=t10bk-model result=ok latency=3.052688ms
+2026/10/01 14:46:57 request_id=t10bk-setup-7 trace_id=a731e6901c7f4812b5bd1d2bc52624b8 provider=primary model=t10bk-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:57 billing admission model=t10bk-model result=admitted latency=4.589425ms
+2026/10/01 14:46:57 billing finalization model=t10bk-model result=ok latency=4.030682ms
+2026/10/01 14:46:57 request_id=t10bk-setup-8 trace_id=f44bc8b9a4248b9e052c22044fed5d02 provider=primary model=t10bk-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:57 billing admission model=t10bk-model result=admitted latency=5.588822ms
+2026/10/01 14:46:57 billing finalization model=t10bk-model result=ok latency=3.725961ms
+2026/10/01 14:46:57 request_id=t10bk-setup-9 trace_id=989f6780947eff7ce97a7177656116ff provider=primary model=t10bk-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:57 billing admission model=t10bk-model result=admitted latency=5.141801ms
+2026/10/01 14:46:57 billing finalization model=t10bk-model result=ok latency=3.067996ms
+2026/10/01 14:46:57 request_id=t10bk-setup-10 trace_id=9cec1c5c2c0202c66d95fdbedfeb74f3 provider=primary model=t10bk-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:57 billing admission model=t10bk-model result=admitted latency=5.546064ms
+2026/10/01 14:46:57 billing finalization model=t10bk-model result=ok latency=2.926225ms
+2026/10/01 14:46:57 request_id=t10bk-setup-11 trace_id=c9cecb696caecd9680aa816bb687a64f provider=primary model=t10bk-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:57 control: hot reload to v9
+2026/10/01 14:46:57 control: hot reload to v10
+2026/10/01 14:46:59 billing admission model=t10bk-model result=admitted latency=6.499825ms
+2026/10/01 14:46:59 billing finalization model=t10bk-model result=ok latency=2.589437ms
+2026/10/01 14:46:59 request_id=t10bk-rpo-0 trace_id=95905c21d073a421ff58124ed029f71b provider=primary model=t10bk-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:59 billing admission model=t10bk-model result=admitted latency=4.016263ms
+2026/10/01 14:46:59 billing finalization model=t10bk-model result=ok latency=2.58846ms
+2026/10/01 14:46:59 request_id=t10bk-rpo-1 trace_id=42b9c17b04bb014a4963b7d986dcf124 provider=primary model=t10bk-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:59 billing admission model=t10bk-model result=admitted latency=3.253304ms
+2026/10/01 14:46:59 billing finalization model=t10bk-model result=ok latency=2.807846ms
+2026/10/01 14:46:59 request_id=t10bk-rpo-2 trace_id=978f8ae246a7247169140cb2f1f3eab4 provider=primary model=t10bk-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:59 billing admission model=t10bk-model result=admitted latency=3.702877ms
+2026/10/01 14:46:59 billing finalization model=t10bk-model result=ok latency=3.333964ms
+2026/10/01 14:46:59 request_id=t10bk-rpo-3 trace_id=603f4df3fc605c669ca0edd8a3be2eaa provider=primary model=t10bk-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:59 billing admission model=t10bk-model result=admitted latency=3.621488ms
+2026/10/01 14:46:59 billing finalization model=t10bk-model result=ok latency=2.940017ms
+2026/10/01 14:46:59 request_id=t10bk-rpo-4 trace_id=7e73c20e83e9e24f1a85669e5f09a684 provider=primary model=t10bk-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:47:00 billing admission model=t10bk-model result=admitted latency=5.266027ms
+2026/10/01 14:47:00 billing finalization model=t10bk-model result=ok latency=3.126361ms
+2026/10/01 14:47:00 request_id=t10bk-rpo-5 trace_id=59680aba778fc8a8aa2a642824c2bc92 provider=primary model=t10bk-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:47:00 billing admission model=t10bk-model result=admitted latency=5.687077ms
+2026/10/01 14:47:00 billing finalization model=t10bk-model result=ok latency=2.536056ms
+2026/10/01 14:47:00 request_id=t10bk-rpo-6 trace_id=56213361fde6194ea42c5b3b359b20ee provider=primary model=t10bk-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:47:00 billing admission model=t10bk-model result=admitted latency=4.527372ms
+2026/10/01 14:47:00 billing finalization model=t10bk-model result=ok latency=3.341383ms
+2026/10/01 14:47:00 request_id=t10bk-rpo-7 trace_id=71039e443c6475b5ee26f349661dc47f provider=primary model=t10bk-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:47:00 billing admission model=t10bk-model result=admitted latency=5.245553ms
+2026/10/01 14:47:00 billing finalization model=t10bk-model result=ok latency=3.382861ms
+2026/10/01 14:47:00 request_id=t10bk-rpo-8 trace_id=b818540d86fc220ed241740a98cb9278 provider=primary model=t10bk-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:47:00 billing admission model=t10bk-model result=admitted latency=6.054278ms
+2026/10/01 14:47:00 billing finalization model=t10bk-model result=ok latency=3.35122ms
+2026/10/01 14:47:00 request_id=t10bk-rpo-9 trace_id=a0e0072835e79f6432fe670f7a029d36 provider=primary model=t10bk-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:47:00 billing admission model=t10bk-model result=admitted latency=5.304756ms
+2026/10/01 14:47:00 billing finalization model=t10bk-model result=ok latency=3.504816ms
+2026/10/01 14:47:00 request_id=t10bk-rpo-10 trace_id=bc276e3db659ccb04cbb25ce2ed479d3 provider=primary model=t10bk-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:47:00 billing admission model=t10bk-model result=admitted latency=5.205634ms
+2026/10/01 14:47:00 billing finalization model=t10bk-model result=ok latency=3.190957ms
+2026/10/01 14:47:00 request_id=t10bk-rpo-11 trace_id=871c1905d8d2acbdbd981f786c20e259 provider=primary model=t10bk-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:50:48 control sync ended: rpc error: code = Unavailable desc = error reading from server: EOF
+2026/10/01 14:50:48 shutting down...
+2026/10/01 14:50:48 exit

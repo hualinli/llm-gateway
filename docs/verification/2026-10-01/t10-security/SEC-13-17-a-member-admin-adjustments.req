@@ -1,0 +1,9 @@
+POST http://127.0.0.1:58872/api/v1/admin/billing/accounts/4/adjustments
+X-Request-ID: t10-SEC-13-17
+Accept: application/json
+Cookie: gw_session=zBIO…<redacted:18>; gw_csrf=4cFh…<redacted:18>
+X-CSRF-Token: 4cFh…<redacted:18>
+Idempotency-Key: t10-sec13
+Content-Type: application/json
+
+{"amount_micro": "1", "direction": "credit", "reason": "sec13 probe"}

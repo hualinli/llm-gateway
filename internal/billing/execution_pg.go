@@ -113,7 +113,10 @@ func (s *PGAccountStore) Reserve(ctx context.Context, params ReserveParams) (Res
 	defer cancel()
 
 	var result ReserveResult
-	err := s.withTx(ctx, func(tx *sql.Tx) error {
+	// T10 failpoint label: this transaction's commit boundary is the admission
+	// window (admission.before_commit / admission.after_commit /
+	// admission.commit_response_lost).
+	err := s.withTxNamed(ctx, "admission", func(tx *sql.Tx) error {
 		var err error
 		result, err = s.reserveTx(ctx, tx, params)
 		return err
