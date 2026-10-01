@@ -23,3 +23,12 @@ web/coverage/
 web/.vite/
 web/*.tsbuildinfo
 web/npm-debug.log*
+
+# 误提交的构建产物（go build 输出，不入库）
+/console
+/metering
+/gateway
+/control
+/migrate
+/upstream-mock
+/loadtest
