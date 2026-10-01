@@ -1,0 +1,301 @@
+{
+  "accounts": 1,
+  "concurrency": 4,
+  "op": "ensure",
+  "per_variant": {
+    "reserve_with_ensure": {
+      "latency_ms": {
+        "count": 3282,
+        "max": 10.883,
+        "mean": 1.88,
+        "min": 0.344,
+        "p50": 1.718,
+        "p95": 3.599,
+        "p99": 4.887
+      },
+      "throughput_per_second": 1094.0,
+      "transactions": 3282
+    },
+    "reserve_without_ensure": {
+      "latency_ms": {
+        "count": 3249,
+        "max": 11.112,
+        "mean": 1.66,
+        "min": 0.312,
+        "p50": 1.493,
+        "p95": 3.21,
+        "p99": 4.395
+      },
+      "throughput_per_second": 1083.0,
+      "transactions": 3249
+    }
+  },
+  "run": {
+    "concurrency": 4,
+    "failed": 0.0,
+    "latency_average_ms": 1.835,
+    "log_lines": 6531,
+    "per_script_count": {
+      "reserve_with_ensure": 3282,
+      "reserve_without_ensure": 3249
+    },
+    "per_script_latency_ms": {
+      "reserve_with_ensure": {
+        "count": 3282,
+        "max": 10.883,
+        "mean": 1.88,
+        "min": 0.344,
+        "p50": 1.718,
+        "p95": 3.599,
+        "p99": 4.887
+      },
+      "reserve_without_ensure": {
+        "count": 3249,
+        "max": 11.112,
+        "mean": 1.66,
+        "min": 0.312,
+        "p50": 1.493,
+        "p95": 3.21,
+        "p99": 4.395
+      }
+    },
+    "pg": {
+      "active_max": 3,
+      "active_mean": 1.3,
+      "cpu_usec_delta": 6298070,
+      "errors": 0,
+      "idle_in_tx_max": 0,
+      "lock_waiters_max": 1,
+      "lock_waiters_mean": 0.1,
+      "lwlock_waiters_max": 1,
+      "samples": 10
+    },
+    "pg_stat_statements_delta": [
+      {
+        "calls": 6531,
+        "mean_exec_time_ms": 0.1277,
+        "query": "INSERT INTO billing_executions (execution_id, org_id, user_id, key_id, gateway_id, price_version_id, model, status, reserved_micro, input_tokens_upper, output_t",
+        "shared_blks_hit": 124145,
+        "shared_blks_read": 0,
+        "total_exec_time_ms": 834.08
+      },
+      {
+        "calls": 6531,
+        "mean_exec_time_ms": 0.1054,
+        "query": "INSERT INTO billing_entries (org_id, kind, amount_micro, direction, business_id, payload_digest, reason, operator_user_id, request_id, posted_at, created_at) VA",
+        "shared_blks_hit": 104597,
+        "shared_blks_read": 0,
+        "total_exec_time_ms": 688.61
+      },
+      {
+        "calls": 6531,
+        "mean_exec_time_ms": 0.0536,
+        "query": "UPDATE billing_accounts SET posted_balance_micro = posted_balance_micro, reserved_micro = reserved_micro + $2, version = version + $3, updated_at = now() WHERE ",
+        "shared_blks_hit": 37038,
+        "shared_blks_read": 0,
+        "total_exec_time_ms": 350.27
+      },
+      {
+        "calls": 6531,
+        "mean_exec_time_ms": 0.0333,
+        "query": "INSERT INTO console_audit_events (actor_user_id, actor_org_id, action, target_type, target_id, outcome, detail, request_id, trace_id, created_at) VALUES ($4, $1",
+        "shared_blks_hit": 52070,
+        "shared_blks_read": 3,
+        "total_exec_time_ms": 217.43
+      },
+      {
+        "calls": 3282,
+        "mean_exec_time_ms": 0.0373,
+        "query": "INSERT INTO billing_accounts (org_id, currency, posted_balance_micro, reserved_micro, status, version, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, n",
+        "shared_blks_hit": 6880,
+        "shared_blks_read": 0,
+        "total_exec_time_ms": 122.48
+      },
+      {
+        "calls": 13062,
+        "mean_exec_time_ms": 0.0076,
+        "query": "SELECT $2 FROM ONLY \"public\".\"organizations\" x WHERE \"id\" OPERATOR(pg_catalog.=) $1 FOR KEY SHARE OF x",
+        "shared_blks_hit": 52248,
+        "shared_blks_read": 0,
+        "total_exec_time_ms": 99.75
+      },
+      {
+        "calls": 6531,
+        "mean_exec_time_ms": 0.0101,
+        "query": "SELECT execution_id, org_id, user_id, key_id, gateway_id, price_version_id, model, status, reserved_micro, input_tokens_upper, output_tokens_upper, request_id, ",
+        "shared_blks_hit": 12779,
+        "shared_blks_read": 0,
+        "total_exec_time_ms": 65.85
+      },
+      {
+        "calls": 6531,
+        "mean_exec_time_ms": 0.0086,
+        "query": "SELECT id, model, currency, input_price_micro_per_million, output_price_micro_per_million, provider_input_cost_micro_per_million, provider_output_cost_micro_per",
+        "shared_blks_hit": 13074,
+        "shared_blks_read": 0,
+        "total_exec_time_ms": 56.32
+      },
+      {
+        "calls": 6531,
+        "mean_exec_time_ms": 0.0032,
+        "query": "SELECT $2 FROM ONLY \"public\".\"price_versions\" x WHERE \"id\" OPERATOR(pg_catalog.=) $1 FOR KEY SHARE OF x",
+        "shared_blks_hit": 19593,
+        "shared_blks_read": 0,
+        "total_exec_time_ms": 20.57
+      },
+      {
+        "calls": 10,
+        "mean_exec_time_ms": 0.2486,
+        "query": "SELECT count(*) FILTER (WHERE wait_event_type = $1), count(*) FILTER (WHERE state = $2), count(*) FILTER (WHERE wait_event_type = $3), count(*) FILTER (WHERE st",
+        "shared_blks_hit": 10,
+        "shared_blks_read": 0,
+        "total_exec_time_ms": 2.49
+      },
+      {
+        "calls": 1,
+        "mean_exec_time_ms": 0.233,
+        "query": "SELECT query, calls, total_exec_time, shared_blks_hit, shared_blks_read FROM pg_stat_statements",
+        "shared_blks_hit": 0,
+        "shared_blks_read": 0,
+        "total_exec_time_ms": 0.23
+      },
+      {
+        "calls": 1,
+        "mean_exec_time_ms": 0.0163,
+        "query": "SET application_name = 't11-sampler'",
+        "shared_blks_hit": 0,
+        "shared_blks_read": 0,
+        "total_exec_time_ms": 0.02
+      }
+    ],
+    "seconds": 3.0,
+    "seed_attempts": 1,
+    "statement_latencies_ms": {
+      "INSERT INTO billing_accounts": {
+        "avg_ms": 0.177,
+        "failures": 0
+      },
+      "INSERT INTO billing_entries": {
+        "avg_ms": 0.349,
+        "failures": 0
+      },
+      "INSERT INTO billing_executions": {
+        "avg_ms": 0.316,
+        "failures": 0
+      },
+      "INSERT INTO console_audit_events": {
+        "avg_ms": 0.213,
+        "failures": 0
+      },
+      "SELECT execution_id, org_id, user_id, key_id, gateway_id, price_version_id,": {
+        "avg_ms": 0.151,
+        "failures": 0
+      },
+      "SELECT id, model, currency,": {
+        "avg_ms": 0.158,
+        "failures": 0
+      },
+      "SELECT org_id, currency, posted_balance_micro, reserved_micro,": {
+        "avg_ms": 0.184,
+        "failures": 0
+      },
+      "UPDATE billing_accounts": {
+        "avg_ms": 0.267,
+        "failures": 0
+      },
+      "\\set n :n + 1": {
+        "avg_ms": 0.013,
+        "failures": 0
+      },
+      "\\set org 800001": {
+        "avg_ms": 0.009,
+        "failures": 0
+      }
+    },
+    "statement_latencies_per_script": {
+      "0": {
+        "INSERT INTO billing_accounts": {
+          "avg_ms": 0.177,
+          "failures": 0
+        },
+        "INSERT INTO billing_entries": {
+          "avg_ms": 0.347,
+          "failures": 0
+        },
+        "INSERT INTO billing_executions": {
+          "avg_ms": 0.322,
+          "failures": 0
+        },
+        "INSERT INTO console_audit_events": {
+          "avg_ms": 0.222,
+          "failures": 0
+        },
+        "SELECT execution_id, org_id, user_id, key_id, gateway_id, price_version_id,": {
+          "avg_ms": 0.164,
+          "failures": 0
+        },
+        "SELECT id, model, currency,": {
+          "avg_ms": 0.164,
+          "failures": 0
+        },
+        "SELECT org_id, currency, posted_balance_micro, reserved_micro,": {
+          "avg_ms": 0.203,
+          "failures": 0
+        },
+        "UPDATE billing_accounts": {
+          "avg_ms": 0.256,
+          "failures": 0
+        },
+        "\\set n :n + 1": {
+          "avg_ms": 0.014,
+          "failures": 0
+        },
+        "\\set org 800001": {
+          "avg_ms": 0.011,
+          "failures": 0
+        }
+      },
+      "1": {
+        "INSERT INTO billing_entries": {
+          "avg_ms": 0.349,
+          "failures": 0
+        },
+        "INSERT INTO billing_executions": {
+          "avg_ms": 0.316,
+          "failures": 0
+        },
+        "INSERT INTO console_audit_events": {
+          "avg_ms": 0.213,
+          "failures": 0
+        },
+        "SELECT execution_id, org_id, user_id, key_id, gateway_id, price_version_id,": {
+          "avg_ms": 0.151,
+          "failures": 0
+        },
+        "SELECT id, model, currency,": {
+          "avg_ms": 0.158,
+          "failures": 0
+        },
+        "SELECT org_id, currency, posted_balance_micro, reserved_micro,": {
+          "avg_ms": 0.184,
+          "failures": 0
+        },
+        "UPDATE billing_accounts": {
+          "avg_ms": 0.267,
+          "failures": 0
+        },
+        "\\set n :n + 1": {
+          "avg_ms": 0.013,
+          "failures": 0
+        },
+        "\\set org 800001": {
+          "avg_ms": 0.009,
+          "failures": 0
+        }
+      }
+    },
+    "stdout_tail": "  0.164           0  SELECT execution_id, org_id, user_id, key_id, gateway_id, price_version_id,\n         0.322           0  INSERT INTO billing_executions\n         0.347           0  INSERT INTO billing_entries\n         0.256           0  UPDATE billing_accounts\n         0.222           0  INSERT INTO console_audit_events\nSQL script 2: /tmp/t11-hotspot/reserve_without_ensure.sql\n - weight: 1 (targets 50.0% of total)\n - 3249 transactions (49.7% of total, tps = 1084.670755)\n - number of failed transactions: 0 (0.000%)\n - latency average = 1.660 ms\n - latency stddev = 0.852 ms\n - statement latencies in milliseconds and failures:\n         0.013           0  \\set n :n + 1\n         0.009           0  \\set org 800001\n         0.184           0  SELECT org_id, currency, posted_balance_micro, reserved_micro,\n         0.158           0  SELECT id, model, currency,\n         0.151           0  SELECT execution_id, org_id, user_id, key_id, gateway_id, price_version_id,\n         0.316           0  INSERT INTO billing_executions\n         0.349           0  INSERT INTO billing_entries\n         0.267           0  UPDATE billing_accounts\n         0.213           0  INSERT INTO console_audit_events\n",
+    "tps": 2180.358479,
+    "transactions": 6531.0
+  }
+}

@@ -1,0 +1,13 @@
+Limit  (cost=0.42..484.39 rows=51 width=141) (actual time=0.013..0.031 rows=51 loops=1)
+  Buffers: shared hit=38
+  ->  Index Scan using idx_billing_entries_org_posted on billing_entries b  (cost=0.42..568569.03 rows=59916 width=141) (actual time=0.012..0.029 rows=51 loops=1)
+        Index Cond: ((org_id = 1) AND (posted_at >= '2026-09-01 00:00:00+00'::timestamp with time zone) AND (posted_at < '2026-10-02 00:00:00+00'::timestamp with time zone))
+        Buffers: shared hit=38
+        SubPlan 1
+          ->  Index Scan using usage_receipts_pkey on usage_receipts r  (cost=0.42..8.44 rows=1 width=8) (never executed)
+                Index Cond: (execution_id = SUBSTRING(b.business_id FROM 23))
+Planning:
+  Buffers: shared hit=60 read=18
+  I/O Timings: shared read=0.054
+Planning Time: 0.266 ms
+Execution Time: 0.043 ms

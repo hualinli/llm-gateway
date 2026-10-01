@@ -1,0 +1,2150 @@
+{
+  "after": {
+    "achieved_start_rate": 40.09993377477892,
+    "arrival_rate": 39.999683940341974,
+    "cancelled": 0,
+    "capacity_invalid_reasons": [],
+    "capacity_round_valid": true,
+    "completed": 400,
+    "dispatch_lag": {
+      "Avg": 321214,
+      "Count": 400,
+      "Max": 1972127,
+      "Min": 3782,
+      "P50": 199484,
+      "P95": 1073851,
+      "P99": 1545487
+    },
+    "exit_code": 0,
+    "first_content": {
+      "Avg": 30068489,
+      "Count": 400,
+      "Max": 53041939,
+      "Min": 25666897,
+      "P50": 29223334,
+      "P95": 36222747,
+      "P99": 42292986
+    },
+    "incomplete": 0,
+    "loadgen_dropped": 0,
+    "loadgen_dropped_percent": 0,
+    "parse_error": 0,
+    "peak_active": 7,
+    "planned_arrivals": 400,
+    "planned_rate": 40.0,
+    "raw": "raw/load-pg-outage-settle-after.json",
+    "rejected": 0,
+    "scheduled": 400,
+    "scheduled_to_terminal": {
+      "Avg": 142829191,
+      "Count": 400,
+      "Max": 166821701,
+      "Min": 135701706,
+      "P50": 142145502,
+      "P95": 151376318,
+      "P99": 157239242
+    },
+    "seconds": 10.13,
+    "started": 400,
+    "status_counts": {
+      "200": 400
+    },
+    "tag": "pg-outage-settle-after",
+    "total_dur": {
+      "Avg": 142452261,
+      "Count": 400,
+      "Max": 166649640,
+      "Min": 135567828,
+      "P50": 141693658,
+      "P95": 150835958,
+      "P99": 156327203
+    },
+    "tps": 39.549679510348696,
+    "transport_error": 0
+  },
+  "baseline": {
+    "achieved_start_rate": 40.12505718894308,
+    "arrival_rate": 39.999666385227634,
+    "cancelled": 0,
+    "capacity_invalid_reasons": [],
+    "capacity_round_valid": true,
+    "completed": 320,
+    "dispatch_lag": {
+      "Avg": 271637,
+      "Count": 320,
+      "Max": 1462384,
+      "Min": 5566,
+      "P50": 163666,
+      "P95": 870283,
+      "P99": 1189564
+    },
+    "exit_code": 0,
+    "first_content": {
+      "Avg": 31994066,
+      "Count": 320,
+      "Max": 58118134,
+      "Min": 26517203,
+      "P50": 30477020,
+      "P95": 41553852,
+      "P99": 48165708
+    },
+    "incomplete": 0,
+    "loadgen_dropped": 0,
+    "loadgen_dropped_percent": 0,
+    "parse_error": 0,
+    "peak_active": 8,
+    "planned_arrivals": 320,
+    "planned_rate": 40.0,
+    "raw": "raw/load-pg-outage-settle-baseline.json",
+    "rejected": 0,
+    "scheduled": 320,
+    "scheduled_to_terminal": {
+      "Avg": 145816352,
+      "Count": 320,
+      "Max": 176993062,
+      "Min": 136673128,
+      "P50": 144718493,
+      "P95": 157959194,
+      "P99": 164322356
+    },
+    "seconds": 8.14,
+    "started": 320,
+    "status_counts": {
+      "200": 320
+    },
+    "tag": "pg-outage-settle-baseline",
+    "total_dur": {
+      "Avg": 145478110,
+      "Count": 320,
+      "Max": 176618530,
+      "Min": 136365323,
+      "P50": 144519026,
+      "P95": 157300112,
+      "P99": 164220825
+    },
+    "tps": 39.39807640051756,
+    "transport_error": 0
+  },
+  "dependency_back_seconds": 0.291,
+  "drain_seconds": 0.671,
+  "fault": {
+    "achieved_start_rate": 40.0942972524728,
+    "arrival_rate": 39.99406150934161,
+    "cancelled": 0,
+    "capacity_invalid_reasons": [],
+    "capacity_round_valid": true,
+    "completed": 0,
+    "dispatch_lag": {
+      "Avg": 1087855,
+      "Count": 400,
+      "Max": 2130217,
+      "Min": 10562,
+      "P50": 1178900,
+      "P95": 1956049,
+      "P99": 2068705
+    },
+    "exit_code": 0,
+    "first_content": {
+      "Avg": 0,
+      "Count": 0,
+      "Max": 0,
+      "Min": 0,
+      "P50": 0,
+      "P95": 0,
+      "P99": 0
+    },
+    "incomplete": 0,
+    "loadgen_dropped": 0,
+    "loadgen_dropped_percent": 0,
+    "parse_error": 0,
+    "peak_active": 2,
+    "planned_arrivals": 400,
+    "planned_rate": 40.0,
+    "raw": "raw/load-pg-outage-settle-fault.json",
+    "rejected": 400,
+    "scheduled": 400,
+    "scheduled_to_terminal": {
+      "Avg": 2077007,
+      "Count": 400,
+      "Max": 43736868,
+      "Min": 514868,
+      "P50": 1903386,
+      "P95": 3247305,
+      "P99": 14525083
+    },
+    "seconds": 9.99,
+    "started": 400,
+    "status_counts": {
+      "503": 400
+    },
+    "tag": "pg-outage-settle-fault",
+    "total_dur": {
+      "Avg": 0,
+      "Count": 0,
+      "Max": 0,
+      "Min": 0,
+      "P50": 0,
+      "P95": 0,
+      "P99": 0
+    },
+    "tps": 0,
+    "transport_error": 0
+  },
+  "fault_started_at": "2026-10-01T08:15:33Z",
+  "final_drain_seconds": 0.664,
+  "final_state": {
+    "active_backends": 0,
+    "due_receipts": 0,
+    "executions": {
+      "failed_no_charge": 34,
+      "settled": 3488
+    },
+    "held_reservations": 0,
+    "lock_waiters": 0,
+    "oldest_due_age_s": 0.0,
+    "oldest_unsettled_age_s": 0.0,
+    "receipts": {
+      "settled": 3488
+    },
+    "reserved_micro": "0",
+    "unsettled_receipts": 0
+  },
+  "janitor": {
+    "converged": true,
+    "final_held": 0,
+    "first_held": 0,
+    "peak_held": 0,
+    "seconds": 0.004
+  },
+  "money": {
+    "account": {
+      "baseline_posted": 5000000000,
+      "baseline_reserved": 0,
+      "ledger_posted": "-69760",
+      "ledger_reserved": "0",
+      "posted": 4999930240,
+      "posted_movement": -69760,
+      "projection_matches_ledger": true,
+      "reserved": 0
+    },
+    "debit_equals_charge": true,
+    "debit_micro": "69760",
+    "duplicate_debits": 0,
+    "duplicate_reservations": 0,
+    "executions": {
+      "failed_no_charge": 34,
+      "settled": 3488
+    },
+    "held_reservations_at_end": 0,
+    "receipts": {
+      "settled": 3488
+    },
+    "settled_charge_micro": "69760",
+    "settled_executions_without_receipt": 0,
+    "settled_receipts_without_debit": 0
+  },
+  "name": "pg-outage-settle",
+  "receipt_attempts": [
+    {
+      "attempts": 1,
+      "count": 1825,
+      "status": "settled"
+    },
+    {
+      "attempts": 2,
+      "count": 191,
+      "status": "settled"
+    },
+    {
+      "attempts": 3,
+      "count": 397,
+      "status": "settled"
+    },
+    {
+      "attempts": 4,
+      "count": 1075,
+      "status": "settled"
+    }
+  ],
+  "refusal_classes": {
+    "503": 400
+  },
+  "rto": {
+    "attempts": 1,
+    "seconds": 0.161,
+    "status": 200
+  },
+  "rto_seconds": 0.161,
+  "seconds": 30.32,
+  "started_at": "2026-10-01T08:15:25Z",
+  "state_after_drain": {
+    "active_backends": 0,
+    "due_receipts": 0,
+    "executions": {
+      "failed_no_charge": 34,
+      "settled": 3088
+    },
+    "held_reservations": 0,
+    "lock_waiters": 0,
+    "oldest_due_age_s": 0.0,
+    "oldest_unsettled_age_s": 0.0,
+    "receipts": {
+      "settled": 3088
+    },
+    "reserved_micro": "0",
+    "unsettled_receipts": 0
+  },
+  "status": "PASS",
+  "timeline": [
+    {
+      "at": "2026-10-01T08:15:25Z",
+      "metrics": {
+        "metering_billing_recovery_candidates_total": [
+          "metering_billing_recovery_candidates_total{result=\"empty\"} 89",
+          "metering_billing_recovery_candidates_total{result=\"scan_error\"} 11"
+        ],
+        "metering_receipt_backlog": [
+          "metering_receipt_backlog{status=\"claimed\"} 0",
+          "metering_receipt_backlog{status=\"dispatched\"} 0",
+          "metering_receipt_backlog{status=\"due\"} 12",
+          "metering_receipt_backlog{status=\"exception\"} 0",
+          "metering_receipt_backlog{status=\"pending_dispatch\"} 12",
+          "metering_receipt_backlog{status=\"settled\"} 2700"
+        ],
+        "metering_receipt_dispatch_total": [
+          "metering_receipt_dispatch_total{result=\"claim_error\"} 42",
+          "metering_receipt_dispatch_total{result=\"empty\"} 44",
+          "metering_receipt_dispatch_total{result=\"published\"} 6976"
+        ],
+        "metering_receipt_dlq_total": [
+          "metering_receipt_dlq_total 0"
+        ],
+        "metering_receipt_oldest_due_age_seconds": [
+          "metering_receipt_oldest_due_age_seconds 0.279295"
+        ],
+        "metering_receipt_settled_total": [
+          "metering_receipt_settled_total 2767"
+        ]
+      },
+      "pg": {
+        "active_backends": 0,
+        "due_receipts": 0,
+        "executions": {
+          "failed_no_charge": 34,
+          "settled": 2767
+        },
+        "held_reservations": 0,
+        "lock_waiters": 0,
+        "oldest_due_age_s": 0.0,
+        "oldest_unsettled_age_s": 0.0,
+        "receipts": {
+          "settled": 2767
+        },
+        "reserved_micro": "0",
+        "unsettled_receipts": 0
+      },
+      "phase": "baseline",
+      "redis": {
+        "pending": 582,
+        "ping_ms": 0.782,
+        "stream_len": 6976
+      }
+    },
+    {
+      "at": "2026-10-01T08:15:25Z",
+      "metrics": {
+        "metering_billing_recovery_candidates_total": [
+          "metering_billing_recovery_candidates_total{result=\"empty\"} 89",
+          "metering_billing_recovery_candidates_total{result=\"scan_error\"} 11"
+        ],
+        "metering_receipt_backlog": [
+          "metering_receipt_backlog{status=\"claimed\"} 0",
+          "metering_receipt_backlog{status=\"dispatched\"} 0",
+          "metering_receipt_backlog{status=\"due\"} 0",
+          "metering_receipt_backlog{status=\"exception\"} 0",
+          "metering_receipt_backlog{status=\"pending_dispatch\"} 0",
+          "metering_receipt_backlog{status=\"settled\"} 2767"
+        ],
+        "metering_receipt_dispatch_total": [
+          "metering_receipt_dispatch_total{result=\"claim_error\"} 42",
+          "metering_receipt_dispatch_total{result=\"empty\"} 45",
+          "metering_receipt_dispatch_total{result=\"published\"} 6994"
+        ],
+        "metering_receipt_dlq_total": [
+          "metering_receipt_dlq_total 0"
+        ],
+        "metering_receipt_oldest_due_age_seconds": [
+          "metering_receipt_oldest_due_age_seconds 0"
+        ],
+        "metering_receipt_settled_total": [
+          "metering_receipt_settled_total 2780"
+        ]
+      },
+      "pg": {
+        "active_backends": 0,
+        "due_receipts": 3,
+        "executions": {
+          "executing": 5,
+          "failed_no_charge": 34,
+          "receipt_recorded": 9,
+          "settled": 2779
+        },
+        "held_reservations": 5,
+        "lock_waiters": 0,
+        "oldest_due_age_s": 0.048,
+        "oldest_unsettled_age_s": 0.248,
+        "receipts": {
+          "dispatched": 6,
+          "pending_dispatch": 3,
+          "settled": 2779
+        },
+        "reserved_micro": "53950",
+        "unsettled_receipts": 9
+      },
+      "phase": "baseline",
+      "redis": {
+        "pending": 587,
+        "ping_ms": 0.611,
+        "stream_len": 6994
+      }
+    },
+    {
+      "at": "2026-10-01T08:15:26Z",
+      "metrics": {
+        "metering_billing_recovery_candidates_total": [
+          "metering_billing_recovery_candidates_total{result=\"empty\"} 90",
+          "metering_billing_recovery_candidates_total{result=\"scan_error\"} 11"
+        ],
+        "metering_receipt_backlog": [
+          "metering_receipt_backlog{status=\"claimed\"} 0",
+          "metering_receipt_backlog{status=\"dispatched\"} 0",
+          "metering_receipt_backlog{status=\"due\"} 0",
+          "metering_receipt_backlog{status=\"exception\"} 0",
+          "metering_receipt_backlog{status=\"pending_dispatch\"} 0",
+          "metering_receipt_backlog{status=\"settled\"} 2767"
+        ],
+        "metering_receipt_dispatch_total": [
+          "metering_receipt_dispatch_total{result=\"claim_error\"} 42",
+          "metering_receipt_dispatch_total{result=\"empty\"} 45",
+          "metering_receipt_dispatch_total{result=\"published\"} 7017"
+        ],
+        "metering_receipt_dlq_total": [
+          "metering_receipt_dlq_total 0"
+        ],
+        "metering_receipt_oldest_due_age_seconds": [
+          "metering_receipt_oldest_due_age_seconds 0"
+        ],
+        "metering_receipt_settled_total": [
+          "metering_receipt_settled_total 2808"
+        ]
+      },
+      "pg": {
+        "active_backends": 0,
+        "due_receipts": 6,
+        "executions": {
+          "executing": 6,
+          "failed_no_charge": 34,
+          "receipt_recorded": 6,
+          "settled": 2808
+        },
+        "held_reservations": 6,
+        "lock_waiters": 0,
+        "oldest_due_age_s": 0.144,
+        "oldest_unsettled_age_s": 0.14,
+        "receipts": {
+          "pending_dispatch": 6,
+          "settled": 2808
+        },
+        "reserved_micro": "49800",
+        "unsettled_receipts": 6
+      },
+      "phase": "baseline",
+      "redis": {
+        "pending": 582,
+        "ping_ms": 0.611,
+        "stream_len": 7017
+      }
+    },
+    {
+      "at": "2026-10-01T08:15:27Z",
+      "metrics": {
+        "metering_billing_recovery_candidates_total": [
+          "metering_billing_recovery_candidates_total{result=\"empty\"} 91",
+          "metering_billing_recovery_candidates_total{result=\"scan_error\"} 11"
+        ],
+        "metering_receipt_backlog": [
+          "metering_receipt_backlog{status=\"claimed\"} 0",
+          "metering_receipt_backlog{status=\"dispatched\"} 0",
+          "metering_receipt_backlog{status=\"due\"} 0",
+          "metering_receipt_backlog{status=\"exception\"} 0",
+          "metering_receipt_backlog{status=\"pending_dispatch\"} 0",
+          "metering_receipt_backlog{status=\"settled\"} 2767"
+        ],
+        "metering_receipt_dispatch_total": [
+          "metering_receipt_dispatch_total{result=\"claim_error\"} 42",
+          "metering_receipt_dispatch_total{result=\"empty\"} 45",
+          "metering_receipt_dispatch_total{result=\"published\"} 7040"
+        ],
+        "metering_receipt_dlq_total": [
+          "metering_receipt_dlq_total 0"
+        ],
+        "metering_receipt_oldest_due_age_seconds": [
+          "metering_receipt_oldest_due_age_seconds 0"
+        ],
+        "metering_receipt_settled_total": [
+          "metering_receipt_settled_total 2831"
+        ]
+      },
+      "pg": {
+        "active_backends": 0,
+        "due_receipts": 10,
+        "executions": {
+          "executing": 6,
+          "failed_no_charge": 34,
+          "receipt_recorded": 10,
+          "settled": 2831
+        },
+        "held_reservations": 6,
+        "lock_waiters": 0,
+        "oldest_due_age_s": 0.228,
+        "oldest_unsettled_age_s": 0.227,
+        "receipts": {
+          "pending_dispatch": 10,
+          "settled": 2831
+        },
+        "reserved_micro": "66400",
+        "unsettled_receipts": 10
+      },
+      "phase": "baseline",
+      "redis": {
+        "pending": 582,
+        "ping_ms": 0.338,
+        "stream_len": 7040
+      }
+    },
+    {
+      "at": "2026-10-01T08:15:27Z",
+      "metrics": {
+        "metering_billing_recovery_candidates_total": [
+          "metering_billing_recovery_candidates_total{result=\"empty\"} 91",
+          "metering_billing_recovery_candidates_total{result=\"scan_error\"} 11"
+        ],
+        "metering_receipt_backlog": [
+          "metering_receipt_backlog{status=\"claimed\"} 0",
+          "metering_receipt_backlog{status=\"dispatched\"} 0",
+          "metering_receipt_backlog{status=\"due\"} 12",
+          "metering_receipt_backlog{status=\"exception\"} 0",
+          "metering_receipt_backlog{status=\"pending_dispatch\"} 12",
+          "metering_receipt_backlog{status=\"settled\"} 2831"
+        ],
+        "metering_receipt_dispatch_total": [
+          "metering_receipt_dispatch_total{result=\"claim_error\"} 42",
+          "metering_receipt_dispatch_total{result=\"empty\"} 45",
+          "metering_receipt_dispatch_total{result=\"published\"} 7063"
+        ],
+        "metering_receipt_dlq_total": [
+          "metering_receipt_dlq_total 0"
+        ],
+        "metering_receipt_oldest_due_age_seconds": [
+          "metering_receipt_oldest_due_age_seconds 0.297176"
+        ],
+        "metering_receipt_settled_total": [
+          "metering_receipt_settled_total 2854"
+        ]
+      },
+      "pg": {
+        "active_backends": 2,
+        "due_receipts": 1,
+        "executions": {
+          "executing": 5,
+          "failed_no_charge": 34,
+          "receipt_recorded": 14,
+          "settled": 2854
+        },
+        "held_reservations": 5,
+        "lock_waiters": 0,
+        "oldest_due_age_s": 0.015,
+        "oldest_unsettled_age_s": 0.312,
+        "receipts": {
+          "dispatched": 8,
+          "pending_dispatch": 5,
+          "settled": 2854
+        },
+        "reserved_micro": "78850",
+        "unsettled_receipts": 13
+      },
+      "phase": "baseline",
+      "redis": {
+        "pending": 583,
+        "ping_ms": 0.697,
+        "stream_len": 7075
+      }
+    },
+    {
+      "at": "2026-10-01T08:15:28Z",
+      "metrics": {
+        "metering_billing_recovery_candidates_total": [
+          "metering_billing_recovery_candidates_total{result=\"empty\"} 92",
+          "metering_billing_recovery_candidates_total{result=\"scan_error\"} 11"
+        ],
+        "metering_receipt_backlog": [
+          "metering_receipt_backlog{status=\"claimed\"} 0",
+          "metering_receipt_backlog{status=\"dispatched\"} 0",
+          "metering_receipt_backlog{status=\"due\"} 12",
+          "metering_receipt_backlog{status=\"exception\"} 0",
+          "metering_receipt_backlog{status=\"pending_dispatch\"} 12",
+          "metering_receipt_backlog{status=\"settled\"} 2831"
+        ],
+        "metering_receipt_dispatch_total": [
+          "metering_receipt_dispatch_total{result=\"claim_error\"} 42",
+          "metering_receipt_dispatch_total{result=\"empty\"} 45",
+          "metering_receipt_dispatch_total{result=\"published\"} 7098"
+        ],
+        "metering_receipt_dlq_total": [
+          "metering_receipt_dlq_total 0"
+        ],
+        "metering_receipt_oldest_due_age_seconds": [
+          "metering_receipt_oldest_due_age_seconds 0.297176"
+        ],
+        "metering_receipt_settled_total": [
+          "metering_receipt_settled_total 2889"
+        ]
+      },
+      "pg": {
+        "active_backends": 0,
+        "due_receipts": 5,
+        "executions": {
+          "executing": 6,
+          "failed_no_charge": 34,
+          "receipt_recorded": 6,
+          "settled": 2888
+        },
+        "held_reservations": 6,
+        "lock_waiters": 0,
+        "oldest_due_age_s": 0.102,
+        "oldest_unsettled_age_s": 0.379,
+        "receipts": {
+          "dispatched": 1,
+          "pending_dispatch": 5,
+          "settled": 2888
+        },
+        "reserved_micro": "49800",
+        "unsettled_receipts": 6
+      },
+      "phase": "baseline",
+      "redis": {
+        "pending": 582,
+        "ping_ms": 0.571,
+        "stream_len": 7098
+      }
+    },
+    {
+      "at": "2026-10-01T08:15:29Z",
+      "metrics": {
+        "metering_billing_recovery_candidates_total": [
+          "metering_billing_recovery_candidates_total{result=\"empty\"} 93",
+          "metering_billing_recovery_candidates_total{result=\"scan_error\"} 11"
+        ],
+        "metering_receipt_backlog": [
+          "metering_receipt_backlog{status=\"claimed\"} 0",
+          "metering_receipt_backlog{status=\"dispatched\"} 0",
+          "metering_receipt_backlog{status=\"due\"} 12",
+          "metering_receipt_backlog{status=\"exception\"} 0",
+          "metering_receipt_backlog{status=\"pending_dispatch\"} 12",
+          "metering_receipt_backlog{status=\"settled\"} 2831"
+        ],
+        "metering_receipt_dispatch_total": [
+          "metering_receipt_dispatch_total{result=\"claim_error\"} 42",
+          "metering_receipt_dispatch_total{result=\"empty\"} 45",
+          "metering_receipt_dispatch_total{result=\"published\"} 7121"
+        ],
+        "metering_receipt_dlq_total": [
+          "metering_receipt_dlq_total 0"
+        ],
+        "metering_receipt_oldest_due_age_seconds": [
+          "metering_receipt_oldest_due_age_seconds 0.297176"
+        ],
+        "metering_receipt_settled_total": [
+          "metering_receipt_settled_total 2912"
+        ]
+      },
+      "pg": {
+        "active_backends": 0,
+        "due_receipts": 8,
+        "executions": {
+          "executing": 6,
+          "failed_no_charge": 34,
+          "receipt_recorded": 8,
+          "settled": 2912
+        },
+        "held_reservations": 6,
+        "lock_waiters": 0,
+        "oldest_due_age_s": 0.188,
+        "oldest_unsettled_age_s": 0.186,
+        "receipts": {
+          "pending_dispatch": 8,
+          "settled": 2912
+        },
+        "reserved_micro": "58100",
+        "unsettled_receipts": 8
+      },
+      "phase": "baseline",
+      "redis": {
+        "pending": 582,
+        "ping_ms": 0.393,
+        "stream_len": 7121
+      }
+    },
+    {
+      "at": "2026-10-01T08:15:29Z",
+      "metrics": {
+        "metering_billing_recovery_candidates_total": [
+          "metering_billing_recovery_candidates_total{result=\"empty\"} 93",
+          "metering_billing_recovery_candidates_total{result=\"scan_error\"} 11"
+        ],
+        "metering_receipt_backlog": [
+          "metering_receipt_backlog{status=\"claimed\"} 0",
+          "metering_receipt_backlog{status=\"dispatched\"} 0",
+          "metering_receipt_backlog{status=\"due\"} 11",
+          "metering_receipt_backlog{status=\"exception\"} 0",
+          "metering_receipt_backlog{status=\"pending_dispatch\"} 11",
+          "metering_receipt_backlog{status=\"settled\"} 2912"
+        ],
+        "metering_receipt_dispatch_total": [
+          "metering_receipt_dispatch_total{result=\"claim_error\"} 42",
+          "metering_receipt_dispatch_total{result=\"empty\"} 45",
+          "metering_receipt_dispatch_total{result=\"published\"} 7145"
+        ],
+        "metering_receipt_dlq_total": [
+          "metering_receipt_dlq_total 0"
+        ],
+        "metering_receipt_oldest_due_age_seconds": [
+          "metering_receipt_oldest_due_age_seconds 0.275264"
+        ],
+        "metering_receipt_settled_total": [
+          "metering_receipt_settled_total 2936"
+        ]
+      },
+      "pg": {
+        "active_backends": 0,
+        "due_receipts": 10,
+        "executions": {
+          "executing": 5,
+          "failed_no_charge": 34,
+          "receipt_recorded": 11,
+          "settled": 2936
+        },
+        "held_reservations": 5,
+        "lock_waiters": 0,
+        "oldest_due_age_s": 0.243,
+        "oldest_unsettled_age_s": 0.242,
+        "receipts": {
+          "pending_dispatch": 11,
+          "settled": 2936
+        },
+        "reserved_micro": "66400",
+        "unsettled_receipts": 11
+      },
+      "phase": "baseline",
+      "redis": {
+        "pending": 583,
+        "ping_ms": 0.824,
+        "stream_len": 7153
+      }
+    },
+    {
+      "at": "2026-10-01T08:15:30Z",
+      "metrics": {
+        "metering_billing_recovery_candidates_total": [
+          "metering_billing_recovery_candidates_total{result=\"empty\"} 94",
+          "metering_billing_recovery_candidates_total{result=\"scan_error\"} 11"
+        ],
+        "metering_receipt_backlog": [
+          "metering_receipt_backlog{status=\"claimed\"} 0",
+          "metering_receipt_backlog{status=\"dispatched\"} 0",
+          "metering_receipt_backlog{status=\"due\"} 11",
+          "metering_receipt_backlog{status=\"exception\"} 0",
+          "metering_receipt_backlog{status=\"pending_dispatch\"} 11",
+          "metering_receipt_backlog{status=\"settled\"} 2912"
+        ],
+        "metering_receipt_dispatch_total": [
+          "metering_receipt_dispatch_total{result=\"claim_error\"} 42",
+          "metering_receipt_dispatch_total{result=\"empty\"} 45",
+          "metering_receipt_dispatch_total{result=\"published\"} 7179"
+        ],
+        "metering_receipt_dlq_total": [
+          "metering_receipt_dlq_total 0"
+        ],
+        "metering_receipt_oldest_due_age_seconds": [
+          "metering_receipt_oldest_due_age_seconds 0.275264"
+        ],
+        "metering_receipt_settled_total": [
+          "metering_receipt_settled_total 2965"
+        ]
+      },
+      "pg": {
+        "active_backends": 1,
+        "due_receipts": 3,
+        "executions": {
+          "executing": 6,
+          "failed_no_charge": 34,
+          "receipt_recorded": 9,
+          "settled": 2964
+        },
+        "held_reservations": 6,
+        "lock_waiters": 0,
+        "oldest_due_age_s": 0.059,
+        "oldest_unsettled_age_s": 0.353,
+        "receipts": {
+          "dispatched": 6,
+          "pending_dispatch": 3,
+          "settled": 2964
+        },
+        "reserved_micro": "62250",
+        "unsettled_receipts": 9
+      },
+      "phase": "baseline",
+      "redis": {
+        "pending": 583,
+        "ping_ms": 0.357,
+        "stream_len": 7179
+      }
+    },
+    {
+      "at": "2026-10-01T08:15:31Z",
+      "metrics": {
+        "metering_billing_recovery_candidates_total": [
+          "metering_billing_recovery_candidates_total{result=\"empty\"} 95",
+          "metering_billing_recovery_candidates_total{result=\"scan_error\"} 11"
+        ],
+        "metering_receipt_backlog": [
+          "metering_receipt_backlog{status=\"claimed\"} 0",
+          "metering_receipt_backlog{status=\"dispatched\"} 0",
+          "metering_receipt_backlog{status=\"due\"} 11",
+          "metering_receipt_backlog{status=\"exception\"} 0",
+          "metering_receipt_backlog{status=\"pending_dispatch\"} 11",
+          "metering_receipt_backlog{status=\"settled\"} 2912"
+        ],
+        "metering_receipt_dispatch_total": [
+          "metering_receipt_dispatch_total{result=\"claim_error\"} 42",
+          "metering_receipt_dispatch_total{result=\"empty\"} 45",
+          "metering_receipt_dispatch_total{result=\"published\"} 7202"
+        ],
+        "metering_receipt_dlq_total": [
+          "metering_receipt_dlq_total 0"
+        ],
+        "metering_receipt_oldest_due_age_seconds": [
+          "metering_receipt_oldest_due_age_seconds 0.275264"
+        ],
+        "metering_receipt_settled_total": [
+          "metering_receipt_settled_total 2993"
+        ]
+      },
+      "pg": {
+        "active_backends": 0,
+        "due_receipts": 6,
+        "executions": {
+          "executing": 6,
+          "failed_no_charge": 34,
+          "receipt_recorded": 6,
+          "settled": 2993
+        },
+        "held_reservations": 6,
+        "lock_waiters": 0,
+        "oldest_due_age_s": 0.142,
+        "oldest_unsettled_age_s": 0.141,
+        "receipts": {
+          "pending_dispatch": 6,
+          "settled": 2993
+        },
+        "reserved_micro": "49800",
+        "unsettled_receipts": 6
+      },
+      "phase": "baseline",
+      "redis": {
+        "pending": 582,
+        "ping_ms": 0.874,
+        "stream_len": 7202
+      }
+    },
+    {
+      "at": "2026-10-01T08:15:31Z",
+      "metrics": {
+        "metering_billing_recovery_candidates_total": [
+          "metering_billing_recovery_candidates_total{result=\"empty\"} 95",
+          "metering_billing_recovery_candidates_total{result=\"scan_error\"} 11"
+        ],
+        "metering_receipt_backlog": [
+          "metering_receipt_backlog{status=\"claimed\"} 0",
+          "metering_receipt_backlog{status=\"dispatched\"} 0",
+          "metering_receipt_backlog{status=\"due\"} 10",
+          "metering_receipt_backlog{status=\"exception\"} 0",
+          "metering_receipt_backlog{status=\"pending_dispatch\"} 10",
+          "metering_receipt_backlog{status=\"settled\"} 2993"
+        ],
+        "metering_receipt_dispatch_total": [
+          "metering_receipt_dispatch_total{result=\"claim_error\"} 42",
+          "metering_receipt_dispatch_total{result=\"empty\"} 45",
+          "metering_receipt_dispatch_total{result=\"published\"} 7225"
+        ],
+        "metering_receipt_dlq_total": [
+          "metering_receipt_dlq_total 0"
+        ],
+        "metering_receipt_oldest_due_age_seconds": [
+          "metering_receipt_oldest_due_age_seconds 0.252688"
+        ],
+        "metering_receipt_settled_total": [
+          "metering_receipt_settled_total 3016"
+        ]
+      },
+      "pg": {
+        "active_backends": 0,
+        "due_receipts": 9,
+        "executions": {
+          "executing": 5,
+          "failed_no_charge": 34,
+          "receipt_recorded": 10,
+          "reserved": 1,
+          "settled": 3016
+        },
+        "held_reservations": 6,
+        "lock_waiters": 0,
+        "oldest_due_age_s": 0.221,
+        "oldest_unsettled_age_s": 0.22,
+        "receipts": {
+          "pending_dispatch": 10,
+          "settled": 3016
+        },
+        "reserved_micro": "66400",
+        "unsettled_receipts": 10
+      },
+      "phase": "baseline",
+      "redis": {
+        "pending": 582,
+        "ping_ms": 0.382,
+        "stream_len": 7225
+      }
+    },
+    {
+      "at": "2026-10-01T08:15:32Z",
+      "metrics": {
+        "metering_billing_recovery_candidates_total": [
+          "metering_billing_recovery_candidates_total{result=\"empty\"} 96",
+          "metering_billing_recovery_candidates_total{result=\"scan_error\"} 11"
+        ],
+        "metering_receipt_backlog": [
+          "metering_receipt_backlog{status=\"claimed\"} 0",
+          "metering_receipt_backlog{status=\"dispatched\"} 0",
+          "metering_receipt_backlog{status=\"due\"} 10",
+          "metering_receipt_backlog{status=\"exception\"} 0",
+          "metering_receipt_backlog{status=\"pending_dispatch\"} 10",
+          "metering_receipt_backlog{status=\"settled\"} 2993"
+        ],
+        "metering_receipt_dispatch_total": [
+          "metering_receipt_dispatch_total{result=\"claim_error\"} 42",
+          "metering_receipt_dispatch_total{result=\"empty\"} 45",
+          "metering_receipt_dispatch_total{result=\"published\"} 7260"
+        ],
+        "metering_receipt_dlq_total": [
+          "metering_receipt_dlq_total 0"
+        ],
+        "metering_receipt_oldest_due_age_seconds": [
+          "metering_receipt_oldest_due_age_seconds 0.252688"
+        ],
+        "metering_receipt_settled_total": [
+          "metering_receipt_settled_total 3041"
+        ]
+      },
+      "pg": {
+        "active_backends": 1,
+        "due_receipts": 1,
+        "executions": {
+          "executing": 6,
+          "failed_no_charge": 34,
+          "receipt_recorded": 11,
+          "settled": 3041
+        },
+        "held_reservations": 6,
+        "lock_waiters": 0,
+        "oldest_due_age_s": 0.01,
+        "oldest_unsettled_age_s": 0.308,
+        "receipts": {
+          "dispatched": 10,
+          "pending_dispatch": 1,
+          "settled": 3041
+        },
+        "reserved_micro": "70550",
+        "unsettled_receipts": 11
+      },
+      "phase": "baseline",
+      "redis": {
+        "pending": 588,
+        "ping_ms": 0.573,
+        "stream_len": 7260
+      }
+    },
+    {
+      "at": "2026-10-01T08:15:33Z",
+      "metrics": {
+        "metering_billing_recovery_candidates_total": [
+          "metering_billing_recovery_candidates_total{result=\"empty\"} 97",
+          "metering_billing_recovery_candidates_total{result=\"scan_error\"} 11"
+        ],
+        "metering_receipt_backlog": [
+          "metering_receipt_backlog{status=\"claimed\"} 0",
+          "metering_receipt_backlog{status=\"dispatched\"} 0",
+          "metering_receipt_backlog{status=\"due\"} 10",
+          "metering_receipt_backlog{status=\"exception\"} 0",
+          "metering_receipt_backlog{status=\"pending_dispatch\"} 10",
+          "metering_receipt_backlog{status=\"settled\"} 2993"
+        ],
+        "metering_receipt_dispatch_total": [
+          "metering_receipt_dispatch_total{result=\"claim_error\"} 42",
+          "metering_receipt_dispatch_total{result=\"empty\"} 45",
+          "metering_receipt_dispatch_total{result=\"published\"} 7282"
+        ],
+        "metering_receipt_dlq_total": [
+          "metering_receipt_dlq_total 0"
+        ],
+        "metering_receipt_oldest_due_age_seconds": [
+          "metering_receipt_oldest_due_age_seconds 0.252688"
+        ],
+        "metering_receipt_settled_total": [
+          "metering_receipt_settled_total 3073"
+        ]
+      },
+      "pg": {
+        "active_backends": 0,
+        "due_receipts": 5,
+        "executions": {
+          "executing": 5,
+          "failed_no_charge": 34,
+          "receipt_recorded": 6,
+          "settled": 3073
+        },
+        "held_reservations": 5,
+        "lock_waiters": 0,
+        "oldest_due_age_s": 0.117,
+        "oldest_unsettled_age_s": 0.115,
+        "receipts": {
+          "pending_dispatch": 6,
+          "settled": 3073
+        },
+        "reserved_micro": "45650",
+        "unsettled_receipts": 6
+      },
+      "phase": "baseline",
+      "redis": {
+        "pending": 582,
+        "ping_ms": 0.67,
+        "stream_len": 7282
+      }
+    },
+    {
+      "at": "2026-10-01T08:15:33Z",
+      "error": "connection failed: connection to server at \"127.0.0.1\", port 57214 failed: could not receive data from server: Connection refused",
+      "phase": "fault"
+    },
+    {
+      "at": "2026-10-01T08:15:34Z",
+      "error": "connection failed: connection to server at \"127.0.0.1\", port 57214 failed: Connection refused\n\tIs the server running on that host and accepting TCP/IP connections?",
+      "phase": "fault"
+    },
+    {
+      "at": "2026-10-01T08:15:35Z",
+      "error": "connection failed: connection to server at \"127.0.0.1\", port 57214 failed: could not receive data from server: Connection refused",
+      "phase": "fault"
+    },
+    {
+      "at": "2026-10-01T08:15:35Z",
+      "error": "connection failed: connection to server at \"127.0.0.1\", port 57214 failed: could not receive data from server: Connection refused",
+      "phase": "fault"
+    },
+    {
+      "at": "2026-10-01T08:15:36Z",
+      "error": "connection failed: connection to server at \"127.0.0.1\", port 57214 failed: could not receive data from server: Connection refused",
+      "phase": "fault"
+    },
+    {
+      "at": "2026-10-01T08:15:37Z",
+      "error": "connection failed: connection to server at \"127.0.0.1\", port 57214 failed: could not receive data from server: Connection refused",
+      "phase": "fault"
+    },
+    {
+      "at": "2026-10-01T08:15:37Z",
+      "error": "connection failed: connection to server at \"127.0.0.1\", port 57214 failed: could not receive data from server: Connection refused",
+      "phase": "fault"
+    },
+    {
+      "at": "2026-10-01T08:15:38Z",
+      "error": "connection failed: connection to server at \"127.0.0.1\", port 57214 failed: could not receive data from server: Connection refused",
+      "phase": "fault"
+    },
+    {
+      "at": "2026-10-01T08:15:39Z",
+      "error": "connection failed: connection to server at \"127.0.0.1\", port 57214 failed: Connection refused\n\tIs the server running on that host and accepting TCP/IP connections?",
+      "phase": "fault"
+    },
+    {
+      "at": "2026-10-01T08:15:39Z",
+      "error": "connection failed: connection to server at \"127.0.0.1\", port 57214 failed: could not receive data from server: Connection refused",
+      "phase": "fault"
+    },
+    {
+      "at": "2026-10-01T08:15:40Z",
+      "error": "connection failed: connection to server at \"127.0.0.1\", port 57214 failed: could not receive data from server: Connection refused",
+      "phase": "fault"
+    },
+    {
+      "at": "2026-10-01T08:15:40Z",
+      "error": "connection failed: connection to server at \"127.0.0.1\", port 57214 failed: Connection refused\n\tIs the server running on that host and accepting TCP/IP connections?",
+      "phase": "fault"
+    },
+    {
+      "at": "2026-10-01T08:15:41Z",
+      "error": "connection failed: connection to server at \"127.0.0.1\", port 57214 failed: could not receive data from server: Connection refused",
+      "phase": "fault"
+    },
+    {
+      "at": "2026-10-01T08:15:42Z",
+      "error": "connection failed: connection to server at \"127.0.0.1\", port 57214 failed: could not receive data from server: Connection refused",
+      "phase": "fault"
+    },
+    {
+      "at": "2026-10-01T08:15:42Z",
+      "error": "connection failed: connection to server at \"127.0.0.1\", port 57214 failed: Connection refused\n\tIs the server running on that host and accepting TCP/IP connections?",
+      "phase": "fault"
+    },
+    {
+      "at": "2026-10-01T08:15:43Z",
+      "error": "connection failed: connection to server at \"127.0.0.1\", port 57214 failed: could not receive data from server: Connection refused",
+      "phase": "fault"
+    },
+    {
+      "at": "2026-10-01T08:15:44Z",
+      "metrics": {
+        "metering_billing_recovery_candidates_total": [
+          "metering_billing_recovery_candidates_total{result=\"empty\"} 98",
+          "metering_billing_recovery_candidates_total{result=\"scan_error\"} 21"
+        ],
+        "metering_receipt_backlog": [
+          "metering_receipt_backlog{status=\"claimed\"} 0",
+          "metering_receipt_backlog{status=\"dispatched\"} 0",
+          "metering_receipt_backlog{status=\"due\"} 10",
+          "metering_receipt_backlog{status=\"exception\"} 0",
+          "metering_receipt_backlog{status=\"pending_dispatch\"} 10",
+          "metering_receipt_backlog{status=\"settled\"} 3073"
+        ],
+        "metering_receipt_dispatch_total": [
+          "metering_receipt_dispatch_total{result=\"claim_error\"} 83",
+          "metering_receipt_dispatch_total{result=\"empty\"} 45",
+          "metering_receipt_dispatch_total{result=\"published\"} 7298"
+        ],
+        "metering_receipt_dlq_total": [
+          "metering_receipt_dlq_total 0"
+        ],
+        "metering_receipt_oldest_due_age_seconds": [
+          "metering_receipt_oldest_due_age_seconds 0.247452"
+        ],
+        "metering_receipt_settled_total": [
+          "metering_receipt_settled_total 3087"
+        ]
+      },
+      "pg": {
+        "active_backends": 0,
+        "due_receipts": 1,
+        "executions": {
+          "failed_no_charge": 34,
+          "receipt_recorded": 1,
+          "settled": 3087
+        },
+        "held_reservations": 0,
+        "lock_waiters": 0,
+        "oldest_due_age_s": 0.14,
+        "oldest_unsettled_age_s": 0.139,
+        "receipts": {
+          "pending_dispatch": 1,
+          "settled": 3087
+        },
+        "reserved_micro": "4153",
+        "unsettled_receipts": 1
+      },
+      "phase": "drain",
+      "redis": {
+        "pending": 584,
+        "ping_ms": 0.763,
+        "stream_len": 7298
+      }
+    },
+    {
+      "at": "2026-10-01T08:15:44Z",
+      "metrics": {
+        "metering_billing_recovery_candidates_total": [
+          "metering_billing_recovery_candidates_total{result=\"empty\"} 98",
+          "metering_billing_recovery_candidates_total{result=\"scan_error\"} 21"
+        ],
+        "metering_receipt_backlog": [
+          "metering_receipt_backlog{status=\"claimed\"} 0",
+          "metering_receipt_backlog{status=\"dispatched\"} 0",
+          "metering_receipt_backlog{status=\"due\"} 10",
+          "metering_receipt_backlog{status=\"exception\"} 0",
+          "metering_receipt_backlog{status=\"pending_dispatch\"} 10",
+          "metering_receipt_backlog{status=\"settled\"} 3073"
+        ],
+        "metering_receipt_dispatch_total": [
+          "metering_receipt_dispatch_total{result=\"claim_error\"} 83",
+          "metering_receipt_dispatch_total{result=\"empty\"} 47",
+          "metering_receipt_dispatch_total{result=\"published\"} 7298"
+        ],
+        "metering_receipt_dlq_total": [
+          "metering_receipt_dlq_total 0"
+        ],
+        "metering_receipt_oldest_due_age_seconds": [
+          "metering_receipt_oldest_due_age_seconds 0.247452"
+        ],
+        "metering_receipt_settled_total": [
+          "metering_receipt_settled_total 3088"
+        ]
+      },
+      "pg": {
+        "active_backends": 0,
+        "due_receipts": 0,
+        "executions": {
+          "executing": 5,
+          "failed_no_charge": 34,
+          "settled": 3088
+        },
+        "held_reservations": 5,
+        "lock_waiters": 0,
+        "oldest_due_age_s": 0.0,
+        "oldest_unsettled_age_s": 0.0,
+        "receipts": {
+          "settled": 3088
+        },
+        "reserved_micro": "20750",
+        "unsettled_receipts": 0
+      },
+      "phase": "drain",
+      "redis": {
+        "pending": 583,
+        "ping_ms": 0.608,
+        "stream_len": 7298
+      }
+    },
+    {
+      "at": "2026-10-01T08:15:45Z",
+      "metrics": {
+        "metering_billing_recovery_candidates_total": [
+          "metering_billing_recovery_candidates_total{result=\"empty\"} 99",
+          "metering_billing_recovery_candidates_total{result=\"scan_error\"} 21"
+        ],
+        "metering_receipt_backlog": [
+          "metering_receipt_backlog{status=\"claimed\"} 3",
+          "metering_receipt_backlog{status=\"dispatched\"} 7",
+          "metering_receipt_backlog{status=\"due\"} 1",
+          "metering_receipt_backlog{status=\"exception\"} 0",
+          "metering_receipt_backlog{status=\"pending_dispatch\"} 4",
+          "metering_receipt_backlog{status=\"settled\"} 3093"
+        ],
+        "metering_receipt_dispatch_total": [
+          "metering_receipt_dispatch_total{result=\"claim_error\"} 83",
+          "metering_receipt_dispatch_total{result=\"empty\"} 47",
+          "metering_receipt_dispatch_total{result=\"published\"} 7313"
+        ],
+        "metering_receipt_dlq_total": [
+          "metering_receipt_dlq_total 0"
+        ],
+        "metering_receipt_oldest_due_age_seconds": [
+          "metering_receipt_oldest_due_age_seconds 0.02617"
+        ],
+        "metering_receipt_settled_total": [
+          "metering_receipt_settled_total 3103"
+        ]
+      },
+      "pg": {
+        "active_backends": 0,
+        "due_receipts": 5,
+        "executions": {
+          "executing": 6,
+          "failed_no_charge": 34,
+          "receipt_recorded": 5,
+          "settled": 3103
+        },
+        "held_reservations": 6,
+        "lock_waiters": 0,
+        "oldest_due_age_s": 0.111,
+        "oldest_unsettled_age_s": 0.11,
+        "receipts": {
+          "pending_dispatch": 5,
+          "settled": 3103
+        },
+        "reserved_micro": "45650",
+        "unsettled_receipts": 5
+      },
+      "phase": "drain",
+      "redis": {
+        "pending": 583,
+        "ping_ms": 0.424,
+        "stream_len": 7313
+      }
+    },
+    {
+      "at": "2026-10-01T08:15:46Z",
+      "metrics": {
+        "metering_billing_recovery_candidates_total": [
+          "metering_billing_recovery_candidates_total{result=\"empty\"} 99",
+          "metering_billing_recovery_candidates_total{result=\"scan_error\"} 21"
+        ],
+        "metering_receipt_backlog": [
+          "metering_receipt_backlog{status=\"claimed\"} 3",
+          "metering_receipt_backlog{status=\"dispatched\"} 7",
+          "metering_receipt_backlog{status=\"due\"} 1",
+          "metering_receipt_backlog{status=\"exception\"} 0",
+          "metering_receipt_backlog{status=\"pending_dispatch\"} 4",
+          "metering_receipt_backlog{status=\"settled\"} 3093"
+        ],
+        "metering_receipt_dispatch_total": [
+          "metering_receipt_dispatch_total{result=\"claim_error\"} 83",
+          "metering_receipt_dispatch_total{result=\"empty\"} 47",
+          "metering_receipt_dispatch_total{result=\"published\"} 7336"
+        ],
+        "metering_receipt_dlq_total": [
+          "metering_receipt_dlq_total 0"
+        ],
+        "metering_receipt_oldest_due_age_seconds": [
+          "metering_receipt_oldest_due_age_seconds 0.02617"
+        ],
+        "metering_receipt_settled_total": [
+          "metering_receipt_settled_total 3126"
+        ]
+      },
+      "pg": {
+        "active_backends": 0,
+        "due_receipts": 8,
+        "executions": {
+          "executing": 6,
+          "failed_no_charge": 34,
+          "receipt_recorded": 8,
+          "settled": 3126
+        },
+        "held_reservations": 5,
+        "lock_waiters": 0,
+        "oldest_due_age_s": 0.196,
+        "oldest_unsettled_age_s": 0.195,
+        "receipts": {
+          "pending_dispatch": 8,
+          "settled": 3126
+        },
+        "reserved_micro": "58100",
+        "unsettled_receipts": 8
+      },
+      "phase": "drain",
+      "redis": {
+        "pending": 583,
+        "ping_ms": 0.448,
+        "stream_len": 7336
+      }
+    },
+    {
+      "at": "2026-10-01T08:15:46Z",
+      "metrics": {
+        "metering_billing_recovery_candidates_total": [
+          "metering_billing_recovery_candidates_total{result=\"empty\"} 100",
+          "metering_billing_recovery_candidates_total{result=\"scan_error\"} 21"
+        ],
+        "metering_receipt_backlog": [
+          "metering_receipt_backlog{status=\"claimed\"} 3",
+          "metering_receipt_backlog{status=\"dispatched\"} 7",
+          "metering_receipt_backlog{status=\"due\"} 1",
+          "metering_receipt_backlog{status=\"exception\"} 0",
+          "metering_receipt_backlog{status=\"pending_dispatch\"} 4",
+          "metering_receipt_backlog{status=\"settled\"} 3093"
+        ],
+        "metering_receipt_dispatch_total": [
+          "metering_receipt_dispatch_total{result=\"claim_error\"} 83",
+          "metering_receipt_dispatch_total{result=\"empty\"} 47",
+          "metering_receipt_dispatch_total{result=\"published\"} 7358"
+        ],
+        "metering_receipt_dlq_total": [
+          "metering_receipt_dlq_total 0"
+        ],
+        "metering_receipt_oldest_due_age_seconds": [
+          "metering_receipt_oldest_due_age_seconds 0.02617"
+        ],
+        "metering_receipt_settled_total": [
+          "metering_receipt_settled_total 3148"
+        ]
+      },
+      "pg": {
+        "active_backends": 2,
+        "due_receipts": 1,
+        "executions": {
+          "executing": 5,
+          "failed_no_charge": 34,
+          "receipt_recorded": 13,
+          "settled": 3148
+        },
+        "held_reservations": 5,
+        "lock_waiters": 2,
+        "oldest_due_age_s": 0.001,
+        "oldest_unsettled_age_s": 0.294,
+        "receipts": {
+          "dispatched": 7,
+          "pending_dispatch": 6,
+          "settled": 3148
+        },
+        "reserved_micro": "74700",
+        "unsettled_receipts": 13
+      },
+      "phase": "drain",
+      "redis": {
+        "pending": 584,
+        "ping_ms": 0.55,
+        "stream_len": 7366
+      }
+    },
+    {
+      "at": "2026-10-01T08:15:47Z",
+      "metrics": {
+        "metering_billing_recovery_candidates_total": [
+          "metering_billing_recovery_candidates_total{result=\"empty\"} 101",
+          "metering_billing_recovery_candidates_total{result=\"scan_error\"} 21"
+        ],
+        "metering_receipt_backlog": [
+          "metering_receipt_backlog{status=\"claimed\"} 4",
+          "metering_receipt_backlog{status=\"dispatched\"} 7",
+          "metering_receipt_backlog{status=\"due\"} 1",
+          "metering_receipt_backlog{status=\"exception\"} 0",
+          "metering_receipt_backlog{status=\"pending_dispatch\"} 5",
+          "metering_receipt_backlog{status=\"settled\"} 3172"
+        ],
+        "metering_receipt_dispatch_total": [
+          "metering_receipt_dispatch_total{result=\"claim_error\"} 83",
+          "metering_receipt_dispatch_total{result=\"empty\"} 47",
+          "metering_receipt_dispatch_total{result=\"published\"} 7393"
+        ],
+        "metering_receipt_dlq_total": [
+          "metering_receipt_dlq_total 0"
+        ],
+        "metering_receipt_oldest_due_age_seconds": [
+          "metering_receipt_oldest_due_age_seconds 0.027744"
+        ],
+        "metering_receipt_settled_total": [
+          "metering_receipt_settled_total 3181"
+        ]
+      },
+      "pg": {
+        "active_backends": 1,
+        "due_receipts": 4,
+        "executions": {
+          "executing": 5,
+          "failed_no_charge": 34,
+          "receipt_recorded": 6,
+          "settled": 3181
+        },
+        "held_reservations": 6,
+        "lock_waiters": 0,
+        "oldest_due_age_s": 0.086,
+        "oldest_unsettled_age_s": 0.178,
+        "receipts": {
+          "dispatched": 3,
+          "pending_dispatch": 4,
+          "settled": 3180
+        },
+        "reserved_micro": "49800",
+        "unsettled_receipts": 6
+      },
+      "phase": "drain",
+      "redis": {
+        "pending": 585,
+        "ping_ms": 0.366,
+        "stream_len": 7393
+      }
+    },
+    {
+      "at": "2026-10-01T08:15:48Z",
+      "metrics": {
+        "metering_billing_recovery_candidates_total": [
+          "metering_billing_recovery_candidates_total{result=\"empty\"} 101",
+          "metering_billing_recovery_candidates_total{result=\"scan_error\"} 21"
+        ],
+        "metering_receipt_backlog": [
+          "metering_receipt_backlog{status=\"claimed\"} 4",
+          "metering_receipt_backlog{status=\"dispatched\"} 7",
+          "metering_receipt_backlog{status=\"due\"} 1",
+          "metering_receipt_backlog{status=\"exception\"} 0",
+          "metering_receipt_backlog{status=\"pending_dispatch\"} 5",
+          "metering_receipt_backlog{status=\"settled\"} 3172"
+        ],
+        "metering_receipt_dispatch_total": [
+          "metering_receipt_dispatch_total{result=\"claim_error\"} 83",
+          "metering_receipt_dispatch_total{result=\"empty\"} 47",
+          "metering_receipt_dispatch_total{result=\"published\"} 7416"
+        ],
+        "metering_receipt_dlq_total": [
+          "metering_receipt_dlq_total 0"
+        ],
+        "metering_receipt_oldest_due_age_seconds": [
+          "metering_receipt_oldest_due_age_seconds 0.027744"
+        ],
+        "metering_receipt_settled_total": [
+          "metering_receipt_settled_total 3206"
+        ]
+      },
+      "pg": {
+        "active_backends": 0,
+        "due_receipts": 7,
+        "executions": {
+          "executing": 5,
+          "failed_no_charge": 34,
+          "receipt_recorded": 8,
+          "settled": 3206
+        },
+        "held_reservations": 5,
+        "lock_waiters": 0,
+        "oldest_due_age_s": 0.169,
+        "oldest_unsettled_age_s": 0.168,
+        "receipts": {
+          "pending_dispatch": 7,
+          "settled": 3206
+        },
+        "reserved_micro": "53950",
+        "unsettled_receipts": 8
+      },
+      "phase": "drain",
+      "redis": {
+        "pending": 583,
+        "ping_ms": 0.414,
+        "stream_len": 7416
+      }
+    },
+    {
+      "at": "2026-10-01T08:15:48Z",
+      "metrics": {
+        "metering_billing_recovery_candidates_total": [
+          "metering_billing_recovery_candidates_total{result=\"empty\"} 102",
+          "metering_billing_recovery_candidates_total{result=\"scan_error\"} 21"
+        ],
+        "metering_receipt_backlog": [
+          "metering_receipt_backlog{status=\"claimed\"} 4",
+          "metering_receipt_backlog{status=\"dispatched\"} 7",
+          "metering_receipt_backlog{status=\"due\"} 1",
+          "metering_receipt_backlog{status=\"exception\"} 0",
+          "metering_receipt_backlog{status=\"pending_dispatch\"} 5",
+          "metering_receipt_backlog{status=\"settled\"} 3172"
+        ],
+        "metering_receipt_dispatch_total": [
+          "metering_receipt_dispatch_total{result=\"claim_error\"} 83",
+          "metering_receipt_dispatch_total{result=\"empty\"} 47",
+          "metering_receipt_dispatch_total{result=\"published\"} 7438"
+        ],
+        "metering_receipt_dlq_total": [
+          "metering_receipt_dlq_total 0"
+        ],
+        "metering_receipt_oldest_due_age_seconds": [
+          "metering_receipt_oldest_due_age_seconds 0.027744"
+        ],
+        "metering_receipt_settled_total": [
+          "metering_receipt_settled_total 3228"
+        ]
+      },
+      "pg": {
+        "active_backends": 4,
+        "due_receipts": 0,
+        "executions": {
+          "executing": 5,
+          "failed_no_charge": 34,
+          "receipt_recorded": 12,
+          "settled": 3228
+        },
+        "held_reservations": 5,
+        "lock_waiters": 1,
+        "oldest_due_age_s": 0.0,
+        "oldest_unsettled_age_s": 0.275,
+        "receipts": {
+          "pending_dispatch": 12,
+          "settled": 3228
+        },
+        "reserved_micro": "70550",
+        "unsettled_receipts": 12
+      },
+      "phase": "drain",
+      "redis": {
+        "pending": 584,
+        "ping_ms": 0.697,
+        "stream_len": 7446
+      }
+    },
+    {
+      "at": "2026-10-01T08:15:49Z",
+      "metrics": {
+        "metering_billing_recovery_candidates_total": [
+          "metering_billing_recovery_candidates_total{result=\"empty\"} 103",
+          "metering_billing_recovery_candidates_total{result=\"scan_error\"} 21"
+        ],
+        "metering_receipt_backlog": [
+          "metering_receipt_backlog{status=\"claimed\"} 0",
+          "metering_receipt_backlog{status=\"dispatched\"} 12",
+          "metering_receipt_backlog{status=\"due\"} 1",
+          "metering_receipt_backlog{status=\"exception\"} 0",
+          "metering_receipt_backlog{status=\"pending_dispatch\"} 1",
+          "metering_receipt_backlog{status=\"settled\"} 3251"
+        ],
+        "metering_receipt_dispatch_total": [
+          "metering_receipt_dispatch_total{result=\"claim_error\"} 83",
+          "metering_receipt_dispatch_total{result=\"empty\"} 47",
+          "metering_receipt_dispatch_total{result=\"published\"} 7473"
+        ],
+        "metering_receipt_dlq_total": [
+          "metering_receipt_dlq_total 0"
+        ],
+        "metering_receipt_oldest_due_age_seconds": [
+          "metering_receipt_oldest_due_age_seconds 0.025252"
+        ],
+        "metering_receipt_settled_total": [
+          "metering_receipt_settled_total 3260"
+        ]
+      },
+      "pg": {
+        "active_backends": 0,
+        "due_receipts": 3,
+        "executions": {
+          "executing": 5,
+          "failed_no_charge": 34,
+          "receipt_recorded": 8,
+          "settled": 3259
+        },
+        "held_reservations": 5,
+        "lock_waiters": 0,
+        "oldest_due_age_s": 0.062,
+        "oldest_unsettled_age_s": 0.154,
+        "receipts": {
+          "dispatched": 4,
+          "pending_dispatch": 3,
+          "settled": 3259
+        },
+        "reserved_micro": "53950",
+        "unsettled_receipts": 7
+      },
+      "phase": "drain",
+      "redis": {
+        "pending": 586,
+        "ping_ms": 0.438,
+        "stream_len": 7473
+      }
+    },
+    {
+      "at": "2026-10-01T08:15:50Z",
+      "metrics": {
+        "metering_billing_recovery_candidates_total": [
+          "metering_billing_recovery_candidates_total{result=\"empty\"} 103",
+          "metering_billing_recovery_candidates_total{result=\"scan_error\"} 21"
+        ],
+        "metering_receipt_backlog": [
+          "metering_receipt_backlog{status=\"claimed\"} 0",
+          "metering_receipt_backlog{status=\"dispatched\"} 12",
+          "metering_receipt_backlog{status=\"due\"} 1",
+          "metering_receipt_backlog{status=\"exception\"} 0",
+          "metering_receipt_backlog{status=\"pending_dispatch\"} 1",
+          "metering_receipt_backlog{status=\"settled\"} 3251"
+        ],
+        "metering_receipt_dispatch_total": [
+          "metering_receipt_dispatch_total{result=\"claim_error\"} 83",
+          "metering_receipt_dispatch_total{result=\"empty\"} 47",
+          "metering_receipt_dispatch_total{result=\"published\"} 7496"
+        ],
+        "metering_receipt_dlq_total": [
+          "metering_receipt_dlq_total 0"
+        ],
+        "metering_receipt_oldest_due_age_seconds": [
+          "metering_receipt_oldest_due_age_seconds 0.025252"
+        ],
+        "metering_receipt_settled_total": [
+          "metering_receipt_settled_total 3286"
+        ]
+      },
+      "pg": {
+        "active_backends": 0,
+        "due_receipts": 6,
+        "executions": {
+          "executing": 5,
+          "failed_no_charge": 34,
+          "receipt_recorded": 7,
+          "settled": 3286
+        },
+        "held_reservations": 5,
+        "lock_waiters": 0,
+        "oldest_due_age_s": 0.145,
+        "oldest_unsettled_age_s": 0.144,
+        "receipts": {
+          "pending_dispatch": 6,
+          "settled": 3286
+        },
+        "reserved_micro": "49800",
+        "unsettled_receipts": 6
+      },
+      "phase": "drain",
+      "redis": {
+        "pending": 583,
+        "ping_ms": 0.368,
+        "stream_len": 7496
+      }
+    },
+    {
+      "at": "2026-10-01T08:15:50Z",
+      "metrics": {
+        "metering_billing_recovery_candidates_total": [
+          "metering_billing_recovery_candidates_total{result=\"empty\"} 104",
+          "metering_billing_recovery_candidates_total{result=\"scan_error\"} 21"
+        ],
+        "metering_receipt_backlog": [
+          "metering_receipt_backlog{status=\"claimed\"} 0",
+          "metering_receipt_backlog{status=\"dispatched\"} 12",
+          "metering_receipt_backlog{status=\"due\"} 1",
+          "metering_receipt_backlog{status=\"exception\"} 0",
+          "metering_receipt_backlog{status=\"pending_dispatch\"} 1",
+          "metering_receipt_backlog{status=\"settled\"} 3251"
+        ],
+        "metering_receipt_dispatch_total": [
+          "metering_receipt_dispatch_total{result=\"claim_error\"} 83",
+          "metering_receipt_dispatch_total{result=\"empty\"} 47",
+          "metering_receipt_dispatch_total{result=\"published\"} 7518"
+        ],
+        "metering_receipt_dlq_total": [
+          "metering_receipt_dlq_total 0"
+        ],
+        "metering_receipt_oldest_due_age_seconds": [
+          "metering_receipt_oldest_due_age_seconds 0.025252"
+        ],
+        "metering_receipt_settled_total": [
+          "metering_receipt_settled_total 3308"
+        ]
+      },
+      "pg": {
+        "active_backends": 0,
+        "due_receipts": 11,
+        "executions": {
+          "executing": 5,
+          "failed_no_charge": 34,
+          "receipt_recorded": 11,
+          "settled": 3308
+        },
+        "held_reservations": 5,
+        "lock_waiters": 0,
+        "oldest_due_age_s": 0.249,
+        "oldest_unsettled_age_s": 0.248,
+        "receipts": {
+          "pending_dispatch": 11,
+          "settled": 3308
+        },
+        "reserved_micro": "66400",
+        "unsettled_receipts": 11
+      },
+      "phase": "drain",
+      "redis": {
+        "pending": 583,
+        "ping_ms": 0.35,
+        "stream_len": 7518
+      }
+    },
+    {
+      "at": "2026-10-01T08:15:51Z",
+      "metrics": {
+        "metering_billing_recovery_candidates_total": [
+          "metering_billing_recovery_candidates_total{result=\"empty\"} 105",
+          "metering_billing_recovery_candidates_total{result=\"scan_error\"} 21"
+        ],
+        "metering_receipt_backlog": [
+          "metering_receipt_backlog{status=\"claimed\"} 0",
+          "metering_receipt_backlog{status=\"dispatched\"} 9",
+          "metering_receipt_backlog{status=\"due\"} 2",
+          "metering_receipt_backlog{status=\"exception\"} 0",
+          "metering_receipt_backlog{status=\"pending_dispatch\"} 2",
+          "metering_receipt_backlog{status=\"settled\"} 3333"
+        ],
+        "metering_receipt_dispatch_total": [
+          "metering_receipt_dispatch_total{result=\"claim_error\"} 83",
+          "metering_receipt_dispatch_total{result=\"empty\"} 47",
+          "metering_receipt_dispatch_total{result=\"published\"} 7552"
+        ],
+        "metering_receipt_dlq_total": [
+          "metering_receipt_dlq_total 0"
+        ],
+        "metering_receipt_oldest_due_age_seconds": [
+          "metering_receipt_oldest_due_age_seconds 0.044266"
+        ],
+        "metering_receipt_settled_total": [
+          "metering_receipt_settled_total 3336"
+        ]
+      },
+      "pg": {
+        "active_backends": 0,
+        "due_receipts": 3,
+        "executions": {
+          "executing": 6,
+          "failed_no_charge": 34,
+          "receipt_recorded": 9,
+          "settled": 3336
+        },
+        "held_reservations": 6,
+        "lock_waiters": 0,
+        "oldest_due_age_s": 0.054,
+        "oldest_unsettled_age_s": 0.308,
+        "receipts": {
+          "dispatched": 7,
+          "pending_dispatch": 3,
+          "settled": 3335
+        },
+        "reserved_micro": "62250",
+        "unsettled_receipts": 9
+      },
+      "phase": "drain",
+      "redis": {
+        "pending": 589,
+        "ping_ms": 0.387,
+        "stream_len": 7552
+      }
+    },
+    {
+      "at": "2026-10-01T08:15:51Z",
+      "metrics": {
+        "metering_billing_recovery_candidates_total": [
+          "metering_billing_recovery_candidates_total{result=\"empty\"} 105",
+          "metering_billing_recovery_candidates_total{result=\"scan_error\"} 21"
+        ],
+        "metering_receipt_backlog": [
+          "metering_receipt_backlog{status=\"claimed\"} 0",
+          "metering_receipt_backlog{status=\"dispatched\"} 9",
+          "metering_receipt_backlog{status=\"due\"} 2",
+          "metering_receipt_backlog{status=\"exception\"} 0",
+          "metering_receipt_backlog{status=\"pending_dispatch\"} 2",
+          "metering_receipt_backlog{status=\"settled\"} 3333"
+        ],
+        "metering_receipt_dispatch_total": [
+          "metering_receipt_dispatch_total{result=\"claim_error\"} 83",
+          "metering_receipt_dispatch_total{result=\"empty\"} 47",
+          "metering_receipt_dispatch_total{result=\"published\"} 7575"
+        ],
+        "metering_receipt_dlq_total": [
+          "metering_receipt_dlq_total 0"
+        ],
+        "metering_receipt_oldest_due_age_seconds": [
+          "metering_receipt_oldest_due_age_seconds 0.044266"
+        ],
+        "metering_receipt_settled_total": [
+          "metering_receipt_settled_total 3365"
+        ]
+      },
+      "pg": {
+        "active_backends": 0,
+        "due_receipts": 6,
+        "executions": {
+          "executing": 6,
+          "failed_no_charge": 34,
+          "receipt_recorded": 6,
+          "settled": 3365
+        },
+        "held_reservations": 6,
+        "lock_waiters": 0,
+        "oldest_due_age_s": 0.142,
+        "oldest_unsettled_age_s": 0.141,
+        "receipts": {
+          "pending_dispatch": 6,
+          "settled": 3365
+        },
+        "reserved_micro": "49800",
+        "unsettled_receipts": 6
+      },
+      "phase": "drain",
+      "redis": {
+        "pending": 583,
+        "ping_ms": 0.442,
+        "stream_len": 7575
+      }
+    },
+    {
+      "at": "2026-10-01T08:15:52Z",
+      "metrics": {
+        "metering_billing_recovery_candidates_total": [
+          "metering_billing_recovery_candidates_total{result=\"empty\"} 106",
+          "metering_billing_recovery_candidates_total{result=\"scan_error\"} 21"
+        ],
+        "metering_receipt_backlog": [
+          "metering_receipt_backlog{status=\"claimed\"} 0",
+          "metering_receipt_backlog{status=\"dispatched\"} 9",
+          "metering_receipt_backlog{status=\"due\"} 2",
+          "metering_receipt_backlog{status=\"exception\"} 0",
+          "metering_receipt_backlog{status=\"pending_dispatch\"} 2",
+          "metering_receipt_backlog{status=\"settled\"} 3333"
+        ],
+        "metering_receipt_dispatch_total": [
+          "metering_receipt_dispatch_total{result=\"claim_error\"} 83",
+          "metering_receipt_dispatch_total{result=\"empty\"} 47",
+          "metering_receipt_dispatch_total{result=\"published\"} 7598"
+        ],
+        "metering_receipt_dlq_total": [
+          "metering_receipt_dlq_total 0"
+        ],
+        "metering_receipt_oldest_due_age_seconds": [
+          "metering_receipt_oldest_due_age_seconds 0.044266"
+        ],
+        "metering_receipt_settled_total": [
+          "metering_receipt_settled_total 3388"
+        ]
+      },
+      "pg": {
+        "active_backends": 1,
+        "due_receipts": 9,
+        "executions": {
+          "executing": 5,
+          "failed_no_charge": 34,
+          "receipt_recorded": 10,
+          "settled": 3388
+        },
+        "held_reservations": 5,
+        "lock_waiters": 0,
+        "oldest_due_age_s": 0.223,
+        "oldest_unsettled_age_s": 0.222,
+        "receipts": {
+          "pending_dispatch": 10,
+          "settled": 3388
+        },
+        "reserved_micro": "62250",
+        "unsettled_receipts": 10
+      },
+      "phase": "drain",
+      "redis": {
+        "pending": 583,
+        "ping_ms": 0.674,
+        "stream_len": 7598
+      }
+    },
+    {
+      "at": "2026-10-01T08:15:53Z",
+      "metrics": {
+        "metering_billing_recovery_candidates_total": [
+          "metering_billing_recovery_candidates_total{result=\"empty\"} 107",
+          "metering_billing_recovery_candidates_total{result=\"scan_error\"} 21"
+        ],
+        "metering_receipt_backlog": [
+          "metering_receipt_backlog{status=\"claimed\"} 0",
+          "metering_receipt_backlog{status=\"dispatched\"} 8",
+          "metering_receipt_backlog{status=\"due\"} 2",
+          "metering_receipt_backlog{status=\"exception\"} 0",
+          "metering_receipt_backlog{status=\"pending_dispatch\"} 2",
+          "metering_receipt_backlog{status=\"settled\"} 3414"
+        ],
+        "metering_receipt_dispatch_total": [
+          "metering_receipt_dispatch_total{result=\"claim_error\"} 83",
+          "metering_receipt_dispatch_total{result=\"empty\"} 47",
+          "metering_receipt_dispatch_total{result=\"published\"} 7632"
+        ],
+        "metering_receipt_dlq_total": [
+          "metering_receipt_dlq_total 0"
+        ],
+        "metering_receipt_oldest_due_age_seconds": [
+          "metering_receipt_oldest_due_age_seconds 0.047496"
+        ],
+        "metering_receipt_settled_total": [
+          "metering_receipt_settled_total 3414"
+        ]
+      },
+      "pg": {
+        "active_backends": 1,
+        "due_receipts": 2,
+        "executions": {
+          "executing": 5,
+          "failed_no_charge": 34,
+          "receipt_recorded": 10,
+          "reserved": 1,
+          "settled": 3414
+        },
+        "held_reservations": 6,
+        "lock_waiters": 0,
+        "oldest_due_age_s": 0.032,
+        "oldest_unsettled_age_s": 0.255,
+        "receipts": {
+          "dispatched": 8,
+          "pending_dispatch": 2,
+          "settled": 3414
+        },
+        "reserved_micro": "66400",
+        "unsettled_receipts": 10
+      },
+      "phase": "drain",
+      "redis": {
+        "pending": 591,
+        "ping_ms": 0.498,
+        "stream_len": 7632
+      }
+    },
+    {
+      "at": "2026-10-01T08:15:53Z",
+      "metrics": {
+        "metering_billing_recovery_candidates_total": [
+          "metering_billing_recovery_candidates_total{result=\"empty\"} 107",
+          "metering_billing_recovery_candidates_total{result=\"scan_error\"} 21"
+        ],
+        "metering_receipt_backlog": [
+          "metering_receipt_backlog{status=\"claimed\"} 0",
+          "metering_receipt_backlog{status=\"dispatched\"} 8",
+          "metering_receipt_backlog{status=\"due\"} 2",
+          "metering_receipt_backlog{status=\"exception\"} 0",
+          "metering_receipt_backlog{status=\"pending_dispatch\"} 2",
+          "metering_receipt_backlog{status=\"settled\"} 3414"
+        ],
+        "metering_receipt_dispatch_total": [
+          "metering_receipt_dispatch_total{result=\"claim_error\"} 83",
+          "metering_receipt_dispatch_total{result=\"empty\"} 47",
+          "metering_receipt_dispatch_total{result=\"published\"} 7655"
+        ],
+        "metering_receipt_dlq_total": [
+          "metering_receipt_dlq_total 0"
+        ],
+        "metering_receipt_oldest_due_age_seconds": [
+          "metering_receipt_oldest_due_age_seconds 0.047496"
+        ],
+        "metering_receipt_settled_total": [
+          "metering_receipt_settled_total 3445"
+        ]
+      },
+      "pg": {
+        "active_backends": 1,
+        "due_receipts": 5,
+        "executions": {
+          "executing": 6,
+          "failed_no_charge": 34,
+          "receipt_recorded": 5,
+          "settled": 3445
+        },
+        "held_reservations": 6,
+        "lock_waiters": 0,
+        "oldest_due_age_s": 0.113,
+        "oldest_unsettled_age_s": 0.112,
+        "receipts": {
+          "pending_dispatch": 5,
+          "settled": 3445
+        },
+        "reserved_micro": "45650",
+        "unsettled_receipts": 5
+      },
+      "phase": "drain",
+      "redis": {
+        "pending": 583,
+        "ping_ms": 0.432,
+        "stream_len": 7655
+      }
+    },
+    {
+      "at": "2026-10-01T08:15:54Z",
+      "metrics": {
+        "metering_billing_recovery_candidates_total": [
+          "metering_billing_recovery_candidates_total{result=\"empty\"} 108",
+          "metering_billing_recovery_candidates_total{result=\"scan_error\"} 21"
+        ],
+        "metering_receipt_backlog": [
+          "metering_receipt_backlog{status=\"claimed\"} 0",
+          "metering_receipt_backlog{status=\"dispatched\"} 8",
+          "metering_receipt_backlog{status=\"due\"} 2",
+          "metering_receipt_backlog{status=\"exception\"} 0",
+          "metering_receipt_backlog{status=\"pending_dispatch\"} 2",
+          "metering_receipt_backlog{status=\"settled\"} 3414"
+        ],
+        "metering_receipt_dispatch_total": [
+          "metering_receipt_dispatch_total{result=\"claim_error\"} 83",
+          "metering_receipt_dispatch_total{result=\"empty\"} 47",
+          "metering_receipt_dispatch_total{result=\"published\"} 7677"
+        ],
+        "metering_receipt_dlq_total": [
+          "metering_receipt_dlq_total 0"
+        ],
+        "metering_receipt_oldest_due_age_seconds": [
+          "metering_receipt_oldest_due_age_seconds 0.047496"
+        ],
+        "metering_receipt_settled_total": [
+          "metering_receipt_settled_total 3467"
+        ]
+      },
+      "pg": {
+        "active_backends": 0,
+        "due_receipts": 9,
+        "executions": {
+          "executing": 5,
+          "failed_no_charge": 34,
+          "receipt_recorded": 10,
+          "settled": 3467
+        },
+        "held_reservations": 5,
+        "lock_waiters": 0,
+        "oldest_due_age_s": 0.219,
+        "oldest_unsettled_age_s": 0.218,
+        "receipts": {
+          "pending_dispatch": 10,
+          "settled": 3467
+        },
+        "reserved_micro": "62250",
+        "unsettled_receipts": 10
+      },
+      "phase": "drain",
+      "redis": {
+        "pending": 583,
+        "ping_ms": 0.405,
+        "stream_len": 7677
+      }
+    },
+    {
+      "at": "2026-10-01T08:15:55Z",
+      "metrics": {
+        "metering_billing_recovery_candidates_total": [
+          "metering_billing_recovery_candidates_total{result=\"empty\"} 109",
+          "metering_billing_recovery_candidates_total{result=\"scan_error\"} 21"
+        ],
+        "metering_receipt_backlog": [
+          "metering_receipt_backlog{status=\"claimed\"} 0",
+          "metering_receipt_backlog{status=\"dispatched\"} 8",
+          "metering_receipt_backlog{status=\"due\"} 2",
+          "metering_receipt_backlog{status=\"exception\"} 0",
+          "metering_receipt_backlog{status=\"pending_dispatch\"} 2",
+          "metering_receipt_backlog{status=\"settled\"} 3414"
+        ],
+        "metering_receipt_dispatch_total": [
+          "metering_receipt_dispatch_total{result=\"claim_error\"} 83",
+          "metering_receipt_dispatch_total{result=\"empty\"} 48",
+          "metering_receipt_dispatch_total{result=\"published\"} 7698"
+        ],
+        "metering_receipt_dlq_total": [
+          "metering_receipt_dlq_total 0"
+        ],
+        "metering_receipt_oldest_due_age_seconds": [
+          "metering_receipt_oldest_due_age_seconds 0.047496"
+        ],
+        "metering_receipt_settled_total": [
+          "metering_receipt_settled_total 3488"
+        ]
+      },
+      "pg": {
+        "active_backends": 0,
+        "due_receipts": 0,
+        "executions": {
+          "failed_no_charge": 34,
+          "settled": 3488
+        },
+        "held_reservations": 0,
+        "lock_waiters": 0,
+        "oldest_due_age_s": 0.0,
+        "oldest_unsettled_age_s": 0.0,
+        "receipts": {
+          "settled": 3488
+        },
+        "reserved_micro": "0",
+        "unsettled_receipts": 0
+      },
+      "phase": "drain",
+      "redis": {
+        "pending": 583,
+        "ping_ms": 0.352,
+        "stream_len": 7698
+      }
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+Finalize Aggregate  (cost=19269.30..19269.31 rows=1 width=136) (actual time=26.522..29.109 rows=1 loops=1)
+  Buffers: shared hit=6 read=7962 written=97
+  I/O Timings: shared read=23.783 write=0.392
+  ->  Gather  (cost=19269.03..19269.24 rows=2 width=136) (actual time=26.396..29.093 rows=3 loops=1)
+        Workers Planned: 2
+        Workers Launched: 2
+        Buffers: shared hit=6 read=7962 written=97
+        I/O Timings: shared read=23.783 write=0.392
+        ->  Partial Aggregate  (cost=18269.03..18269.04 rows=1 width=136) (actual time=18.086..18.088 rows=1 loops=3)
+              Buffers: shared hit=6 read=7962 written=97
+              I/O Timings: shared read=23.783 write=0.392
+              ->  Parallel Bitmap Heap Scan on billing_entries b  (cost=2058.31..17502.46 rows=25552 width=22) (actual time=1.769..14.366 rows=20429 loops=3)
+                    Recheck Cond: ((org_id = 1) AND (posted_at >= '2026-09-01 00:00:00+00'::timestamp with time zone) AND (posted_at < '2026-10-02 00:00:00+00'::timestamp with time zone))
+                    Heap Blocks: exact=3710
+                    Buffers: shared hit=6 read=7962 written=97
+                    I/O Timings: shared read=23.783 write=0.392
+                    ->  Bitmap Index Scan on idx_billing_entries_org_posted  (cost=0.00..2042.98 rows=61324 width=0) (actual time=4.468..4.468 rows=61286 loops=1)
+                          Index Cond: ((org_id = 1) AND (posted_at >= '2026-09-01 00:00:00+00'::timestamp with time zone) AND (posted_at < '2026-10-02 00:00:00+00'::timestamp with time zone))
+                          Buffers: shared hit=3 read=310 written=3
+                          I/O Timings: shared read=0.867 write=0.014
+Planning:
+  Buffers: shared hit=4
+Planning Time: 0.089 ms
+Execution Time: 29.154 ms

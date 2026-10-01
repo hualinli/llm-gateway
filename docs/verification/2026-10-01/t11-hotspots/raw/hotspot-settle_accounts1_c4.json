@@ -1,0 +1,385 @@
+{
+  "accounts": 1,
+  "concurrency": 4,
+  "op": "settle",
+  "per_variant": {
+    "settle_cond_update": {
+      "latency_ms": {
+        "count": 2174,
+        "max": 13.924,
+        "mean": 3.513,
+        "min": 0.849,
+        "p50": 3.34,
+        "p95": 5.802,
+        "p99": 7.617
+      },
+      "throughput_per_second": 543.5,
+      "transactions": 2174
+    },
+    "settle_for_update": {
+      "latency_ms": {
+        "count": 2067,
+        "max": 11.963,
+        "mean": 3.933,
+        "min": 0.816,
+        "p50": 3.719,
+        "p95": 6.362,
+        "p99": 8.225
+      },
+      "throughput_per_second": 516.75,
+      "transactions": 2067
+    }
+  },
+  "run": {
+    "concurrency": 4,
+    "failed": 0.0,
+    "latency_average_ms": 3.773,
+    "log_lines": 4241,
+    "per_script_count": {
+      "settle_cond_update": 2174,
+      "settle_for_update": 2067
+    },
+    "per_script_latency_ms": {
+      "settle_cond_update": {
+        "count": 2174,
+        "max": 13.924,
+        "mean": 3.513,
+        "min": 0.849,
+        "p50": 3.34,
+        "p95": 5.802,
+        "p99": 7.617
+      },
+      "settle_for_update": {
+        "count": 2067,
+        "max": 11.963,
+        "mean": 3.933,
+        "min": 0.816,
+        "p50": 3.719,
+        "p95": 6.362,
+        "p99": 8.225
+      }
+    },
+    "pg": {
+      "active_max": 4,
+      "active_mean": 1.57,
+      "cpu_usec_delta": 8586734,
+      "errors": 0,
+      "idle_in_tx_max": 0,
+      "lock_waiters_max": 0,
+      "lock_waiters_mean": 0.0,
+      "lwlock_waiters_max": 2,
+      "samples": 14
+    },
+    "pg_stat_statements_delta": [
+      {
+        "calls": 8482,
+        "mean_exec_time_ms": 0.0998,
+        "query": "INSERT INTO billing_entries (org_id, kind, amount_micro, direction, business_id, payload_digest, reason, operator_user_id, request_id, posted_at, created_at) VA",
+        "shared_blks_hit": 139552,
+        "shared_blks_read": 0,
+        "total_exec_time_ms": 846.73
+      },
+      {
+        "calls": 4241,
+        "mean_exec_time_ms": 0.1489,
+        "query": "UPDATE usage_receipts SET status = $3, settled_at = now(), claim_until = $4, last_error = $5 WHERE execution_id = $6 || $1 || $7 || $2 AND status IN ($8, $9)",
+        "shared_blks_hit": 81688,
+        "shared_blks_read": 0,
+        "total_exec_time_ms": 631.58
+      },
+      {
+        "calls": 4241,
+        "mean_exec_time_ms": 0.1029,
+        "query": "UPDATE billing_executions SET status = $3, updated_at = now(), receipt_recorded_at = COALESCE($4, receipt_recorded_at), terminal_reason = COALESCE($5, terminal_",
+        "shared_blks_hit": 64345,
+        "shared_blks_read": 0,
+        "total_exec_time_ms": 436.29
+      },
+      {
+        "calls": 8482,
+        "mean_exec_time_ms": 0.0318,
+        "query": "INSERT INTO billing_accounts (org_id, currency, posted_balance_micro, reserved_micro, status, version, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, n",
+        "shared_blks_hit": 17570,
+        "shared_blks_read": 0,
+        "total_exec_time_ms": 269.35
+      },
+      {
+        "calls": 8482,
+        "mean_exec_time_ms": 0.0261,
+        "query": "INSERT INTO console_audit_events (actor_user_id, actor_org_id, action, target_type, target_id, outcome, detail, request_id, trace_id, created_at) VALUES ($3, $1",
+        "shared_blks_hit": 67766,
+        "shared_blks_read": 3,
+        "total_exec_time_ms": 221.31
+      },
+      {
+        "calls": 8482,
+        "mean_exec_time_ms": 0.0157,
+        "query": "SELECT id, org_id, kind, amount_micro, direction, business_id, payload_digest, reason, operator_user_id, request_id, posted_at, created_at FROM billing_entries ",
+        "shared_blks_hit": 19207,
+        "shared_blks_read": 0,
+        "total_exec_time_ms": 133.15
+      },
+      {
+        "calls": 4241,
+        "mean_exec_time_ms": 0.0281,
+        "query": "INSERT INTO console_audit_events (actor_user_id, actor_org_id, action, target_type, target_id, outcome, detail, request_id, trace_id, created_at) VALUES ($6, $1",
+        "shared_blks_hit": 33842,
+        "shared_blks_read": 0,
+        "total_exec_time_ms": 119.13
+      },
+      {
+        "calls": 4241,
+        "mean_exec_time_ms": 0.0233,
+        "query": "SELECT execution_id, org_id, user_id, key_id, gateway_id, price_version_id, model, status, reserved_micro, input_tokens_upper, output_tokens_upper, request_id, ",
+        "shared_blks_hit": 16964,
+        "shared_blks_read": 0,
+        "total_exec_time_ms": 98.99
+      },
+      {
+        "calls": 4241,
+        "mean_exec_time_ms": 0.0208,
+        "query": "SELECT $3 / (SELECT count(*) FROM usage_receipts WHERE execution_id = $4 || $1 || $5 || $2)",
+        "shared_blks_hit": 12723,
+        "shared_blks_read": 0,
+        "total_exec_time_ms": 88.4
+      },
+      {
+        "calls": 2174,
+        "mean_exec_time_ms": 0.0399,
+        "query": "UPDATE billing_accounts SET reserved_micro = reserved_micro - $2, version = version + $3, updated_at = now() WHERE org_id = $1 AND reserved_micro >= $4",
+        "shared_blks_hit": 11935,
+        "shared_blks_read": 0,
+        "total_exec_time_ms": 86.78
+      },
+      {
+        "calls": 2067,
+        "mean_exec_time_ms": 0.0412,
+        "query": "UPDATE billing_accounts SET posted_balance_micro = posted_balance_micro, reserved_micro = reserved_micro - $2, version = version + $3, updated_at = now() WHERE ",
+        "shared_blks_hit": 11430,
+        "shared_blks_read": 0,
+        "total_exec_time_ms": 85.16
+      },
+      {
+        "calls": 2067,
+        "mean_exec_time_ms": 0.0402,
+        "query": "UPDATE billing_accounts SET posted_balance_micro = posted_balance_micro - $2, reserved_micro = reserved_micro, version = version + $3, updated_at = now() WHERE ",
+        "shared_blks_hit": 11350,
+        "shared_blks_read": 0,
+        "total_exec_time_ms": 83.12
+      },
+      {
+        "calls": 2174,
+        "mean_exec_time_ms": 0.0367,
+        "query": "UPDATE billing_accounts SET posted_balance_micro = posted_balance_micro - $2, version = version + $3, updated_at = now() WHERE org_id = $1",
+        "shared_blks_hit": 11870,
+        "shared_blks_read": 0,
+        "total_exec_time_ms": 79.73
+      },
+      {
+        "calls": 4241,
+        "mean_exec_time_ms": 0.0181,
+        "query": "SELECT execution_id, event_id, org_id, user_id, key_id, model, prompt_tokens, output_tokens, total_tokens, price_version_id, charge_micro, occurred_at, digest, ",
+        "shared_blks_hit": 16964,
+        "shared_blks_read": 0,
+        "total_exec_time_ms": 76.84
+      },
+      {
+        "calls": 8482,
+        "mean_exec_time_ms": 0.0079,
+        "query": "SELECT $2 FROM ONLY \"public\".\"organizations\" x WHERE \"id\" OPERATOR(pg_catalog.=) $1 FOR KEY SHARE OF x",
+        "shared_blks_hit": 33928,
+        "shared_blks_read": 0,
+        "total_exec_time_ms": 66.64
+      },
+      {
+        "calls": 14,
+        "mean_exec_time_ms": 0.139,
+        "query": "SELECT count(*) FILTER (WHERE wait_event_type = $1), count(*) FILTER (WHERE state = $2), count(*) FILTER (WHERE wait_event_type = $3), count(*) FILTER (WHERE st",
+        "shared_blks_hit": 14,
+        "shared_blks_read": 0,
+        "total_exec_time_ms": 1.95
+      },
+      {
+        "calls": 1,
+        "mean_exec_time_ms": 0.3398,
+        "query": "SELECT query, calls, total_exec_time, shared_blks_hit, shared_blks_read FROM pg_stat_statements",
+        "shared_blks_hit": 0,
+        "shared_blks_read": 0,
+        "total_exec_time_ms": 0.34
+      },
+      {
+        "calls": 1,
+        "mean_exec_time_ms": 0.0079,
+        "query": "SET application_name = 't11-sampler'",
+        "shared_blks_hit": 0,
+        "shared_blks_read": 0,
+        "total_exec_time_ms": 0.01
+      }
+    ],
+    "seconds": 4.0,
+    "seed_attempts": 1,
+    "statement_latencies_ms": {
+      "INSERT INTO billing_accounts": {
+        "avg_ms": 0.174,
+        "failures": 0
+      },
+      "INSERT INTO billing_entries": {
+        "avg_ms": 0.259,
+        "failures": 0
+      },
+      "INSERT INTO console_audit_events": {
+        "avg_ms": 0.242,
+        "failures": 0
+      },
+      "SELECT 1 / (SELECT count(*) FROM usage_receipts WHERE execution_id = 'exec_' || :client_id || '_' || :n);": {
+        "avg_ms": 0.164,
+        "failures": 0
+      },
+      "SELECT execution_id, event_id, org_id, user_id, key_id, model,": {
+        "avg_ms": 0.188,
+        "failures": 0
+      },
+      "SELECT execution_id, org_id, user_id, key_id, gateway_id, price_version_id,": {
+        "avg_ms": 0.19,
+        "failures": 0
+      },
+      "SELECT id, org_id, kind, amount_micro, direction, business_id, payload_digest,": {
+        "avg_ms": 0.173,
+        "failures": 0
+      },
+      "SELECT org_id, currency, posted_balance_micro, reserved_micro,": {
+        "avg_ms": 0.186,
+        "failures": 0
+      },
+      "UPDATE billing_accounts": {
+        "avg_ms": 0.194,
+        "failures": 0
+      },
+      "UPDATE billing_executions": {
+        "avg_ms": 0.279,
+        "failures": 0
+      },
+      "UPDATE usage_receipts": {
+        "avg_ms": 0.325,
+        "failures": 0
+      },
+      "\\set n :n + 1": {
+        "avg_ms": 0.014,
+        "failures": 0
+      },
+      "\\set org 800001": {
+        "avg_ms": 0.008,
+        "failures": 0
+      }
+    },
+    "statement_latencies_per_script": {
+      "0": {
+        "INSERT INTO billing_accounts": {
+          "avg_ms": 0.177,
+          "failures": 0
+        },
+        "INSERT INTO billing_entries": {
+          "avg_ms": 0.28,
+          "failures": 0
+        },
+        "INSERT INTO console_audit_events": {
+          "avg_ms": 0.241,
+          "failures": 0
+        },
+        "SELECT 1 / (SELECT count(*) FROM usage_receipts WHERE execution_id = 'exec_' || :client_id || '_' || :n);": {
+          "avg_ms": 0.161,
+          "failures": 0
+        },
+        "SELECT execution_id, event_id, org_id, user_id, key_id, model,": {
+          "avg_ms": 0.191,
+          "failures": 0
+        },
+        "SELECT execution_id, org_id, user_id, key_id, gateway_id, price_version_id,": {
+          "avg_ms": 0.202,
+          "failures": 0
+        },
+        "SELECT id, org_id, kind, amount_micro, direction, business_id, payload_digest,": {
+          "avg_ms": 0.167,
+          "failures": 0
+        },
+        "SELECT org_id, currency, posted_balance_micro, reserved_micro,": {
+          "avg_ms": 0.186,
+          "failures": 0
+        },
+        "UPDATE billing_accounts": {
+          "avg_ms": 0.242,
+          "failures": 0
+        },
+        "UPDATE billing_executions": {
+          "avg_ms": 0.285,
+          "failures": 0
+        },
+        "UPDATE usage_receipts": {
+          "avg_ms": 0.331,
+          "failures": 0
+        },
+        "\\set n :n + 1": {
+          "avg_ms": 0.013,
+          "failures": 0
+        },
+        "\\set org 800001": {
+          "avg_ms": 0.009,
+          "failures": 0
+        }
+      },
+      "1": {
+        "INSERT INTO billing_accounts": {
+          "avg_ms": 0.174,
+          "failures": 0
+        },
+        "INSERT INTO billing_entries": {
+          "avg_ms": 0.259,
+          "failures": 0
+        },
+        "INSERT INTO console_audit_events": {
+          "avg_ms": 0.242,
+          "failures": 0
+        },
+        "SELECT 1 / (SELECT count(*) FROM usage_receipts WHERE execution_id = 'exec_' || :client_id || '_' || :n);": {
+          "avg_ms": 0.164,
+          "failures": 0
+        },
+        "SELECT execution_id, event_id, org_id, user_id, key_id, model,": {
+          "avg_ms": 0.188,
+          "failures": 0
+        },
+        "SELECT execution_id, org_id, user_id, key_id, gateway_id, price_version_id,": {
+          "avg_ms": 0.19,
+          "failures": 0
+        },
+        "SELECT id, org_id, kind, amount_micro, direction, business_id, payload_digest,": {
+          "avg_ms": 0.173,
+          "failures": 0
+        },
+        "UPDATE billing_accounts": {
+          "avg_ms": 0.194,
+          "failures": 0
+        },
+        "UPDATE billing_executions": {
+          "avg_ms": 0.279,
+          "failures": 0
+        },
+        "UPDATE usage_receipts": {
+          "avg_ms": 0.325,
+          "failures": 0
+        },
+        "\\set n :n + 1": {
+          "avg_ms": 0.014,
+          "failures": 0
+        },
+        "\\set org 800001": {
+          "avg_ms": 0.008,
+          "failures": 0
+        }
+      }
+    },
+    "stdout_tail": "     0.008           0  \\set org 800001\n         0.164           0  SELECT 1 / (SELECT count(*) FROM usage_receipts WHERE execution_id = 'exec_' || :client_id || '_' || :n);\n         0.188           0  SELECT execution_id, event_id, org_id, user_id, key_id, model,\n         0.190           0  SELECT execution_id, org_id, user_id, key_id, gateway_id, price_version_id,\n         0.279           0  UPDATE billing_executions\n         0.228           0  INSERT INTO billing_accounts\n         0.200           0  UPDATE billing_accounts\n         0.161           0  SELECT id, org_id, kind, amount_micro, direction, business_id, payload_digest,\n         0.282           0  INSERT INTO billing_entries\n         0.219           0  INSERT INTO console_audit_events\n         0.174           0  INSERT INTO billing_accounts\n         0.194           0  UPDATE billing_accounts\n         0.173           0  SELECT id, org_id, kind, amount_micro, direction, business_id, payload_digest,\n         0.259           0  INSERT INTO billing_entries\n         0.213           0  INSERT INTO console_audit_events\n         0.325           0  UPDATE usage_receipts\n         0.242           0  INSERT INTO console_audit_events\n",
+    "tps": 1060.22906,
+    "transactions": 4241.0
+  }
+}

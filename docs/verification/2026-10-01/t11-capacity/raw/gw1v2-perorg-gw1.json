@@ -1,0 +1,433 @@
+{
+  "id": "gw1v2-perorg-gw1",
+  "experiment": "gw1v2",
+  "label": "gw1 per-org cap 32, one hot org, M 40/s",
+  "warmup": false,
+  "side": "gateway",
+  "shape": "m",
+  "mode": "open",
+  "org_group": "hot",
+  "pprof": false,
+  "generator_count": 1,
+  "two_gateways": false,
+  "mode_config": {
+    "streams": 512,
+    "per_org": 32,
+    "two_gateways": false,
+    "gateway_cpus": 8,
+    "gateway_b_cpus": null
+  },
+  "target": "http://127.0.0.1:56278/v1/chat/completions",
+  "hold_seconds": 60,
+  "planned_rate": 40.0,
+  "started_unix": 1790847497.582849,
+  "wall_seconds": 62.225,
+  "finished_unix": 1790847559.815656,
+  "aggregate": {
+    "scheduled": 2400,
+    "started": 2400,
+    "completed": 881,
+    "rejected": 1519,
+    "transport_error": 0,
+    "incomplete": 0,
+    "cancelled": 0,
+    "parse_error": 0,
+    "not_scheduled": 0,
+    "abandoned": 0,
+    "loadgen_dropped": 0,
+    "dropped_no_free_slot": 0,
+    "dropped_queue_full": 0,
+    "loadgen_dropped_percent": 0.0,
+    "peak_active_sum": 39,
+    "peak_active_max": 39,
+    "peak_active_per_generator": [
+      39
+    ],
+    "planned_start_rate": 40.0,
+    "achieved_arrival_rate": 39.9999,
+    "arrival_ratio": 1.0,
+    "arrival_ratio_enforced": true,
+    "achieved_start_rate": 40.0166,
+    "window_seconds": 59.975,
+    "capacity_round_valid": true,
+    "capacity_invalid_reasons": [],
+    "note": "single generator: percentiles are exact for the round"
+  },
+  "generators": [
+    {
+      "generator": "gen0",
+      "exit_code": 0,
+      "wall_seconds": 62.207,
+      "target": "http://127.0.0.1:56278/v1/chat/completions",
+      "mode": "open",
+      "load_profile": {
+        "mode": "open",
+        "concurrency": 117,
+        "total_arrivals": 2400,
+        "planned_rate_per_second": 40,
+        "admission_queue": 468,
+        "shape": "m",
+        "role_only_first": false,
+        "slow_client": "normal",
+        "slow_client_duration_seconds": 0,
+        "cancel_after_seconds": 0,
+        "max_event_bytes": 4194304,
+        "timeout_seconds": 61,
+        "expected_stream_seconds": 2.08
+      },
+      "elapsed_seconds": 62.177532579,
+      "accounting": {
+        "Scheduled": 2400,
+        "Started": 2400,
+        "Completed": 881,
+        "Rejected": 1519,
+        "TransportError": 0,
+        "Incomplete": 0,
+        "Cancelled": 0,
+        "ParseError": 0,
+        "NotScheduled": 0,
+        "Abandoned": 0,
+        "LoadgenDropped": 0,
+        "DroppedNoFreeSlot": 0,
+        "DroppedQueueFull": 0,
+        "CancelExplicit": 0,
+        "CancelTimeout": 0,
+        "PeakActive": 39,
+        "ActiveAtEnd": 0,
+        "GoroutinesPeak": 113
+      },
+      "rates": {
+        "PlannedStartRatePerSecond": 40,
+        "ArrivalRatePerSecond": 39.999910747010325,
+        "AchievedStartRatePerSecond": 40.01658432381191,
+        "SuccessPerSecond": 14.169269783058033,
+        "ArrivalWindowSeconds": 59.975133824,
+        "StartWindowSeconds": 59.975129711,
+        "RunSeconds": 62.176810343
+      },
+      "latency": {
+        "first_event": {
+          "Count": 881,
+          "P50": 106094340,
+          "P95": 111795414,
+          "P99": 123944592,
+          "Min": 103527803,
+          "Max": 140768450,
+          "Avg": 107055744
+        },
+        "first_content": {
+          "Count": 881,
+          "P50": 106106925,
+          "P95": 111802672,
+          "P99": 123958453,
+          "Min": 103535471,
+          "Max": 140772862,
+          "Avg": 107064901
+        },
+        "stream_duration": {
+          "Count": 881,
+          "P50": 2192858013,
+          "P95": 2206661794,
+          "P99": 2219587892,
+          "Min": 2171094602,
+          "Max": 2237491102,
+          "Avg": 2192934636
+        },
+        "total_duration": {
+          "Count": 881,
+          "P50": 2192858013,
+          "P95": 2206661794,
+          "P99": 2219587892,
+          "Min": 2171094602,
+          "Max": 2237491102,
+          "Avg": 2192934636
+        },
+        "dispatch_lag": {
+          "Count": 2400,
+          "P50": 209501,
+          "P95": 1097317,
+          "P99": 1743185,
+          "Min": 7501,
+          "Max": 2195883,
+          "Avg": 345960
+        },
+        "scheduled_to_terminal": {
+          "Count": 2400,
+          "P50": 8707363,
+          "P95": 2201782668,
+          "P99": 2212433394,
+          "Min": 3972255,
+          "Max": 2237797642,
+          "Avg": 810167959
+        }
+      },
+      "status": {
+        "200": 881,
+        "429": 1519
+      },
+      "avg_events": 101,
+      "avg_bytes_per_stream": 18910.297916666666,
+      "loadgen_dropped_percent": 0,
+      "capacity_round_valid": true,
+      "capacity_invalid_reasons": [],
+      "capacity_rule": "generator-side drops above 0.1% of scheduled arrivals, and arrivals delivered below 99% of the planned rate, invalidate that round for capacity conclusions; re-run with more generator resources or a separate load host (BENCHMARK-AND-ACCEPTANCE-2026-10-01 \u00a72.1)"
+    }
+  ],
+  "resources_file": "data/benchmarks/t11-capacity/resources/gw1v2-perorg-gw1.json",
+  "resources_summary": {
+    "series_points": {
+      "gateway_metrics": 56,
+      "metering_metrics": 56,
+      "console_metrics": 30,
+      "docker_stats": 20,
+      "pg": 30,
+      "redis": 30
+    },
+    "full_metrics_snapshots": {
+      "gateway": {
+        "path": "data/benchmarks/t11-capacity/raw/gw1v2-perorg-gw1/metrics-gateway.txt",
+        "bytes": 22365,
+        "sha256": "4b878131e6fe7731",
+        "histogram_percentiles": {
+          "gateway_first_event_seconds{model=\"default\"}": {
+            "0.5": 0.125,
+            "0.95": 0.1475,
+            "0.99": 0.1495
+          },
+          "gateway_latency_seconds{model=\"default\",tenant=\"org:1\"}": {
+            "0.5": 1.75,
+            "0.95": 2.425,
+            "0.99": 2.485
+          },
+          "gateway_ttft_seconds{model=\"default\",tenant=\"org:1\"}": {
+            "0.5": 0.125,
+            "0.95": 0.1475,
+            "0.99": 0.1495
+          },
+          "metering_settlement_lag_seconds": {
+            "0.5": null,
+            "0.95": null,
+            "0.99": null
+          }
+        }
+      },
+      "metering": {
+        "path": "data/benchmarks/t11-capacity/raw/gw1v2-perorg-gw1/metrics-metering.txt",
+        "bytes": 19553,
+        "sha256": "7a8e00db9f362393",
+        "histogram_percentiles": {
+          "metering_settlement_lag_seconds": {
+            "0.5": 0.991817,
+            "0.95": 235.10702,
+            "0.99": 287.021404
+          }
+        }
+      }
+    },
+    "gateway": {
+      "samples": 56,
+      "sample_errors": 0,
+      "rss_peak_mib": 35.52,
+      "rss_last_mib": 35.52,
+      "heap_inuse_peak_mib": 11.25,
+      "heap_inuse_last_mib": 10.32,
+      "heap_alloc_peak_mib": 7.86,
+      "goroutines_peak": 195.0,
+      "goroutines_last": 136.0,
+      "open_fds_peak": 91.0,
+      "cpu_seconds_delta": 17.48,
+      "gc_cycles_delta": 182.0,
+      "active_streams_peak": 32.0,
+      "active_streams_last": 17.0,
+      "series_first_last_delta": {
+        "gateway_active_streams": 17.0,
+        "gateway_active_streams_rejected_total": 0.0,
+        "go_gc_duration_seconds_count": 182.0,
+        "go_goroutines": 109.0,
+        "go_memstats_heap_alloc_bytes": 5102848.0,
+        "go_memstats_heap_inuse_bytes": 7135232.0,
+        "go_memstats_heap_objects": 12792.0,
+        "go_memstats_heap_released_bytes": 1236992.0,
+        "go_memstats_sys_bytes": 14348304.0,
+        "go_threads": 5.0,
+        "metering_billing_recovery_owner_unknown_open": 0.0,
+        "metering_billing_review_required_open": 0.0,
+        "metering_receipt_oldest_unsettled_age_seconds": 0.0,
+        "metering_receipt_settled_total": 0.0,
+        "metering_usage_invalid_total": 0.0,
+        "metering_usage_missing_total": 0.0,
+        "process_cpu_seconds_total": 17.48,
+        "process_max_fds": 0.0,
+        "process_open_fds": 66.0,
+        "process_resident_memory_bytes": 15785984.0,
+        "process_virtual_memory_bytes": 68878336.0,
+        "gateway_access_guard_total{result=\"allowed\"}": null,
+        "gateway_requests_total{model=\"default\",status=\"200\",tenant=\"org:1\"}": null,
+        "limiter_allowed_total{tenant=\"org:1\"}": null,
+        "t": 61.241
+      }
+    },
+    "containers": {
+      "llm-gw-cap-20261001t083817z-6cd44e80-console-1": {
+        "mem_peak_mib": 12.7,
+        "cpu_peak_percent": 2.3
+      },
+      "llm-gw-cap-20261001t083817z-6cd44e80-control-1": {
+        "mem_peak_mib": 7.8,
+        "cpu_peak_percent": 1.8
+      },
+      "llm-gw-cap-20261001t083817z-6cd44e80-gateway-1": {
+        "mem_peak_mib": 18.9,
+        "cpu_peak_percent": 37.9
+      },
+      "llm-gw-cap-20261001t083817z-6cd44e80-metering-1": {
+        "mem_peak_mib": 47.0,
+        "cpu_peak_percent": 83.0
+      },
+      "llm-gw-cap-20261001t083817z-6cd44e80-mock-backup-1": {
+        "mem_peak_mib": 5.6,
+        "cpu_peak_percent": 1.6
+      },
+      "llm-gw-cap-20261001t083817z-6cd44e80-mock-primary-1": {
+        "mem_peak_mib": 12.3,
+        "cpu_peak_percent": 17.3
+      },
+      "llm-gw-cap-20261001t083817z-6cd44e80-postgres-1": {
+        "mem_peak_mib": 251.3,
+        "cpu_peak_percent": 333.9
+      },
+      "llm-gw-cap-20261001t083817z-6cd44e80-redis-1": {
+        "mem_peak_mib": 193.9,
+        "cpu_peak_percent": 7.6
+      }
+    },
+    "pg": {
+      "samples": 30,
+      "backends": {
+        "first": 8.0,
+        "last": 14.0,
+        "max": 14.0
+      },
+      "active": {
+        "first": 1.0,
+        "last": 1.0,
+        "max": 4.0
+      },
+      "idle_in_tx": {
+        "first": 0.0,
+        "last": 0.0,
+        "max": 1.0
+      },
+      "waiting_locks": {
+        "first": 0.0,
+        "last": 0.0,
+        "max": 0.0
+      },
+      "wait_row": {
+        "first": 0.0,
+        "last": 0.0,
+        "max": 0.0
+      },
+      "open_executions": {
+        "first": 6.0,
+        "last": 19.0,
+        "max": 35.0
+      },
+      "pending_receipts": {
+        "first": 0.0,
+        "last": 0.0,
+        "max": 17.0
+      },
+      "dispatched_receipts": {
+        "first": 0.0,
+        "last": 0.0,
+        "max": 11.0
+      },
+      "settled_receipts": {
+        "first": 156573.0,
+        "last": 157437.0,
+        "max": 157437.0
+      },
+      "unsettled_age_s": {
+        "first": 0.0,
+        "last": 0.0,
+        "max": 0.534385
+      },
+      "oldest_due_age_s": {
+        "first": 0.0,
+        "last": 0.0,
+        "max": 0.534383
+      },
+      "review_required": {
+        "first": 0.0,
+        "last": 0.0,
+        "max": 0.0
+      },
+      "xact_commit": {
+        "first": 1563221.0,
+        "last": 1579910.0,
+        "max": 1579910.0
+      },
+      "xact_rollback": {
+        "first": 0.0,
+        "last": 0.0,
+        "max": 0.0
+      },
+      "tup_inserted": {
+        "first": 1933560.0,
+        "last": 1951227.0,
+        "max": 1951227.0
+      },
+      "tup_updated": {
+        "first": 1489889.0,
+        "last": 1503594.0,
+        "max": 1503594.0
+      },
+      "blks_hit": {
+        "first": 227755664.0,
+        "last": 237856747.0,
+        "max": 237856747.0
+      },
+      "blks_read": {
+        "first": 1605908.0,
+        "last": 1787232.0,
+        "max": 1787232.0
+      },
+      "wait_events_observed": [
+        "Client:ClientRead",
+        "IO:WalSync"
+      ],
+      "max_conn": "100"
+    },
+    "redis": {
+      "samples": 30,
+      "instantaneous_ops_per_sec": {
+        "first": 1.0,
+        "last": 167.0,
+        "max": 380.0
+      },
+      "connected_clients": {
+        "first": 13.0,
+        "last": 14.0,
+        "max": 14.0
+      },
+      "blocked_clients": {
+        "first": 2.0,
+        "last": 2.0,
+        "max": 2.0
+      },
+      "used_memory": {
+        "first": 192115408.0,
+        "last": 193054032.0,
+        "max": 193054032.0
+      },
+      "ping_rtt_ms": {
+        "n": 30,
+        "p50": 0.727,
+        "p95": 1.169,
+        "max": 1.187
+      }
+    }
+  },
+  "error": null
+}

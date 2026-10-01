@@ -1,0 +1,37 @@
+# source profile: data/benchmarks/t11-capacity/profiles/slow-p5-100pct-1k.cpu.pb.gz
+# binary: data/benchmarks/t11-capacity/bin/gateway
+
+File: gateway
+Build ID: 862b42a65ca9d214c88f42acb5ffcbd59e8f1bf7
+Type: cpu
+Time: 2026-10-01 17:23:53 CST
+Duration: 20s, Total samples = 1.54s ( 7.70%)
+Showing nodes accounting for 1.19s, 77.27% of 1.54s total
+Showing top 25 nodes out of 319
+      flat  flat%   sum%        cum   cum%
+     0.56s 36.36% 36.36%      0.56s 36.36%  internal/runtime/syscall/linux.Syscall6
+     0.23s 14.94% 51.30%      0.23s 14.94%  runtime.futex
+     0.03s  1.95% 53.25%      0.03s  1.95%  encoding/json.stateInString
+     0.03s  1.95% 55.19%      0.43s 27.92%  main.(*billingStatusWriter).Flush
+     0.03s  1.95% 57.14%      0.38s 24.68%  net/http.checkConnErrorWriter.Write
+     0.03s  1.95% 59.09%      0.03s  1.95%  runtime.nanotime (inline)
+     0.03s  1.95% 61.04%      0.20s 12.99%  runtime.schedule
+     0.02s  1.30% 62.34%      0.06s  3.90%  internal/poll.runtime_pollSetDeadline
+     0.02s  1.30% 63.64%      0.02s  1.30%  internal/runtime/atomic.(*Uint32).CompareAndSwap (inline)
+     0.02s  1.30% 64.94%      0.03s  1.95%  internal/runtime/maps.(*Map).getWithoutKeySmallFastStr
+     0.02s  1.30% 66.23%      0.14s  9.09%  runtime.findRunnable
+     0.02s  1.30% 67.53%      0.02s  1.30%  runtime.findfunc
+     0.02s  1.30% 68.83%      0.02s  1.30%  runtime.lock2
+     0.02s  1.30% 70.13%      0.02s  1.30%  runtime.memmove
+     0.01s  0.65% 70.78%      0.01s  0.65%  aeshashbody
+     0.01s  0.65% 71.43%      0.28s 18.18%  bufio.(*Reader).fill
+     0.01s  0.65% 72.08%      0.02s  1.30%  bufio.(*Writer).Write
+     0.01s  0.65% 72.73%      0.01s  0.65%  context.(*cancelCtx).Done
+     0.01s  0.65% 73.38%      0.01s  0.65%  database/sql.(*driverConn).expired
+     0.01s  0.65% 74.03%      0.08s  5.19%  encoding/json.(*decodeState).object
+     0.01s  0.65% 74.68%      0.02s  1.30%  encoding/json.(*decodeState).skip
+     0.01s  0.65% 75.32%      0.05s  3.25%  encoding/json.checkValid
+     0.01s  0.65% 75.97%      0.01s  0.65%  encoding/json.state0
+     0.01s  0.65% 76.62%      0.01s  0.65%  encoding/json.stateBeginStringOrEmpty
+     0.01s  0.65% 77.27%      0.01s  0.65%  encoding/json.unquoteBytes
+
