@@ -126,6 +126,12 @@ services:
       # 数据面时改成 pg 并取消下面 POSTGRES_DSN 的注释；生产 profile 强制 pg。
       GATEWAY_ACCESS_GUARD: "off"
       # POSTGRES_DSN: postgres://gateway:gateway@postgres:5432/llm_gateway?sslmode=disable
+      # 计费准入与 durable receipt（T06C）：默认 off。demo 的 key/账户/价目数据由
+      # Console 写入，没有企业归属的 legacy key 会被准入拒绝（503），所以 demo 显式
+      # 关闭并由进程打印 WARNING：既不预占资金，也不在 [DONE] 前写 usage receipt。
+      # 要验证资金闭环时改成 pg，并同时把上面的 GATEWAY_ACCESS_GUARD 改成 pg、
+      # 取消 POSTGRES_DSN 注释（准入需要已验证的 org/user/key 归属）。
+      GATEWAY_BILLING: "off"
       METERING_SPOOL_DIR: /var/lib/llm-gateway/metering-spool
     ports:
       - "127.0.0.1:8090:8090"

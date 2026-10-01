@@ -101,4 +101,20 @@ var (
 	// terminal execution cannot be reserved, released or failed again, and a
 	// settled execution is T07's business, not the release path's.
 	ErrExecutionState = errors.New("billing: the execution is not in a state that allows this transition")
+
+	// ErrReceiptNotFound marks an unknown usage receipt, including an execution
+	// that has an execution row but no durable receipt yet.
+	ErrReceiptNotFound = errors.New("billing: usage receipt not found")
+
+	// ErrReceiptConflict marks a repeated execution whose receipt payload
+	// digest differs from the stored one, or an event identity already billed
+	// under another execution. The stored receipt is left untouched and no
+	// second charge is possible.
+	ErrReceiptConflict = errors.New("billing: this execution already has a usage receipt with a different payload")
+
+	// ErrReceiptCommitUnknown marks a receipt transaction whose COMMIT outcome
+	// could not be determined *and* whose re-query by execution id proved the
+	// receipt was not written. The caller must refuse a clean stream end; T07B
+	// re-drives the same execution anchor.
+	ErrReceiptCommitUnknown = errors.New("billing: the usage receipt transaction ended with an unknown outcome")
 )

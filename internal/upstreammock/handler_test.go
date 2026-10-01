@@ -289,3 +289,102 @@ func readSSE(t *testing.T, r io.Reader) (events []json.RawMessage, done bool) {
 	flush()
 	return events, done
 }
+
+func TestHandlerHonorsMockShapeOverrides(t *testing.T) {
+	srv := httptest.NewServer(NewHandler(Config{Name: "shape", CompletionTokens: 8}))
+	defer srv.Close()
+
+	resp := postStream(t, srv.URL, `{"model":"m","stream":true,"x_mock_ttft_ms":0,"x_mock_token_interval_ms":0,"x_mock_tokens":2,"x_mock_event_line_bytes":1024,"x_mock_role_only_first":true}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status=%d, want 200", resp.StatusCode)
+	}
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var dataLines []string
+	for _, line := range strings.Split(string(raw), "\n") {
+		if strings.HasPrefix(line, "data: ") {
+			dataLines = append(dataLines, line)
+		}
+	}
+	if len(dataLines) != 5 { // role-only + 2 content + usage + [DONE]
+		t.Fatalf("data lines=%d, want 5:\n%s", len(dataLines), raw)
+	}
+	// The SSE readers measure a line including its terminator, so a split line
+	// is one byte shorter than the size the mock was asked for.
+	for _, index := range []int{1, 2} {
+		if got := len(dataLines[index]) + 1; got != 1024 {
+			t.Fatalf("content line %d = %d bytes including the terminator, want exactly 1024", index, got)
+		}
+	}
+	if len(dataLines[0]) >= 1024 {
+		t.Fatalf("role-only line = %d bytes, want the small role frame", len(dataLines[0]))
+	}
+	var roleChunk struct {
+		Choices []struct {
+			Delta struct {
+				Role    string `json:"role"`
+				Content string `json:"content"`
+			} `json:"delta"`
+		} `json:"choices"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimPrefix(dataLines[0], "data: ")), &roleChunk); err != nil {
+		t.Fatal(err)
+	}
+	if len(roleChunk.Choices) != 1 || roleChunk.Choices[0].Delta.Role != "assistant" || roleChunk.Choices[0].Delta.Content != "" {
+		t.Fatalf("role-only frame = %s", dataLines[0])
+	}
+	if !strings.Contains(dataLines[1], `"content":"`) {
+		t.Fatalf("content frame = %s", dataLines[1])
+	}
+}
+
+func TestHandlerRoleOnlyFirstConfig(t *testing.T) {
+	srv := httptest.NewServer(NewHandler(Config{Name: "role", CompletionTokens: 2, RoleOnlyFirst: true}))
+	defer srv.Close()
+
+	resp := postStream(t, srv.URL, `{"model":"m","stream":true}`)
+	defer resp.Body.Close()
+	events, done := readSSE(t, resp.Body)
+	if !done {
+		t.Fatal("stream missing [DONE]")
+	}
+	if len(events) != 4 { // role-only + 2 content + usage
+		t.Fatalf("events=%d, want 4", len(events))
+	}
+	var first struct {
+		Choices []struct {
+			Delta struct {
+				Role    string `json:"role"`
+				Content string `json:"content"`
+			} `json:"delta"`
+		} `json:"choices"`
+	}
+	if err := json.Unmarshal(events[0], &first); err != nil {
+		t.Fatal(err)
+	}
+	if len(first.Choices) != 1 || first.Choices[0].Delta.Role != "assistant" || first.Choices[0].Delta.Content != "" {
+		t.Fatalf("first event = %s, want a role-only frame", events[0])
+	}
+}
+
+func TestHandlerRejectsOutOfRangeMockOverrides(t *testing.T) {
+	srv := httptest.NewServer(NewHandler(Config{Name: "bounds", CompletionTokens: 2}))
+	defer srv.Close()
+
+	for _, body := range []string{
+		`{"stream":true,"x_mock_event_line_bytes":1073741824}`,
+		`{"stream":true,"x_mock_tokens":1000001}`,
+		`{"stream":true,"x_mock_ttft_ms":-5}`,
+		`{"stream":true,"x_mock_tokens":100000,"x_mock_event_line_bytes":8388608}`,
+	} {
+		resp := postStream(t, srv.URL, body)
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("body=%s status=%d, want 400", body, resp.StatusCode)
+		}
+		resp.Body.Close()
+	}
+}

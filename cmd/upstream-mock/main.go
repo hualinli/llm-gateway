@@ -25,6 +25,8 @@ func main() {
 		failAfter     = flag.Int("fail-after", 0, "close after N content events without [DONE]; 0 completes")
 		maxInflight   = flag.Int("max-inflight", 0, "concurrent stream limit; extra requests get 429; 0 unlimited")
 		echo          = flag.Bool("echo", false, "stream body sha256 plus messages; default keeps the synthetic name loop")
+		eventLine     = flag.Int("event-line-bytes", 0, "pad each content event so its data: line reaches N bytes (>=1MiB is deliberately over the shared 1MiB line cap); 0 = historical small events")
+		roleOnlyFirst = flag.Bool("role-only-first", false, "emit a role-only first event before content events")
 		authorization = flag.String("authorization", os.Getenv("UPSTREAM_MOCK_AUTHORIZATION"), "required bearer token; empty disables the check")
 	)
 	flag.Parse()
@@ -40,6 +42,8 @@ func main() {
 		FailAfter:             *failAfter,
 		MaxInflight:           *maxInflight,
 		Echo:                  *echo,
+		EventLineBytes:        *eventLine,
+		RoleOnlyFirst:         *roleOnlyFirst,
 		ExpectedAuthorization: *authorization,
 	})
 	srv := &http.Server{
@@ -48,8 +52,10 @@ func main() {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	go func() {
-		log.Printf("upstream-mock %s listening on %s ttft=%s token-interval=%s tokens=%d status=%d hang=%v fail-after=%d max-inflight=%d echo=%v authorization=%s",
-			*name, *listen, *ttft, *tokenInterval, *tokens, *status, *hang, *failAfter, *maxInflight, *echo, authorizationState(*authorization))
+		log.Printf("upstream-mock %s listening on %s ttft=%s token-interval=%s tokens=%d status=%d hang=%v fail-after=%d max-inflight=%d echo=%v event-line-bytes=%d role-only-first=%v authorization=%s",
+			*name, *listen, *ttft, *tokenInterval, *tokens, *status, *hang, *failAfter, *maxInflight, *echo,
+			*eventLine, *roleOnlyFirst, authorizationState(*authorization))
+		log.Printf("upstream-mock per-request overrides (mock-only, forwarded verbatim by the Gateway): x_mock_ttft_ms, x_mock_token_interval_ms, x_mock_tokens, x_mock_event_line_bytes, x_mock_role_only_first")
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatal(err)
 		}

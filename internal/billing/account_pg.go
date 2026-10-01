@@ -29,6 +29,14 @@ type PGAccountStore struct {
 	// an admission that cannot finish inside this bound is a refused request
 	// (503), not a slow one. <= 0 means DefaultAdmissionTimeout.
 	AdmissionTimeout time.Duration
+	// FinalizeTimeout bounds one durable-receipt transaction (T06C's
+	// FinalizeReceipt/RecordUsageException). That write sits between the
+	// upstream's terminal event and the client's "[DONE]", so it has its own,
+	// shorter bound. <= 0 means DefaultFinalizeTimeout.
+	FinalizeTimeout time.Duration
+	// ReceiptVerifyTimeout bounds the detached re-query that resolves a COMMIT
+	// whose outcome is unknown. <= 0 means DefaultReceiptVerifyTimeout.
+	ReceiptVerifyTimeout time.Duration
 }
 
 // DefaultAdmissionTimeout bounds one reservation-state transaction. It is

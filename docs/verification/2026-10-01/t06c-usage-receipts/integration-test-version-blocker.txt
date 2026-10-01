@@ -1,0 +1,25 @@
+--- FAIL: TestConsolePostgresEndToEnd (0.11s)
+console_e2e_test.go:185: database schema requires migration: version=10 dirty=false, expected 9
+--- FAIL: TestConsolePostgresDisableInvalidatesEverySession (0.12s)
+console_e2e_test.go:301: database schema requires migration: version=10 dirty=false, expected 9
+--- FAIL: TestRbacHTTPMemberVisibilityAndCrossOrgNotFound (0.12s)
+rbac_e2e_test.go:194: database schema requires migration: version=10 dirty=false, expected 9
+--- FAIL: TestRbacHTTPInvitationLifecycle (0.12s)
+rbac_e2e_test.go:278: database schema requires migration: version=10 dirty=false, expected 9
+--- FAIL: TestRbacHTTPLastOwnerAndOwnershipTransfer (0.11s)
+rbac_e2e_test.go:410: database schema requires migration: version=10 dirty=false, expected 9
+--- FAIL: TestRbacHTTPCrossOrgMutationsAreNotFound (0.12s)
+rbac_e2e_test.go:582: database schema requires migration: version=10 dirty=false, expected 9
+--- FAIL: TestRbacHTTPErrorMappingExamples (0.10s)
+rbac_e2e_test.go:642: database schema requires migration: version=10 dirty=false, expected 9
+--- FAIL: TestPostgresAuditSinkPersistsSafeEvent (0.03s)
+audit_pg_integration_test.go:34: database schema requires migration: version=10 dirty=false, expected 9
+--- FAIL: TestProviderCredentialLifecyclePostgres (0.12s)
+provider_credential_lifecycle_integration_test.go:38: database schema requires migration: version=10 dirty=false, expected 9
+--- FAIL: TestProviderCredentialMutationsRollBackWhenAuditUnavailable (0.10s)
+provider_credential_lifecycle_integration_test.go:257: database schema requires migration: version=10 dirty=false, expected 9
+--- FAIL: TestPostgresMigratesLegacyControlPayload (0.04s)
+store_integration_test.go:59: database schema requires migration: version=10 dirty=false, expected 9
+--- FAIL: TestMigrationCreatesIAMSchemaAndFabricatesNoRows (0.14s)
+integration_test.go:112: schema version after Up: database schema requires migration: version=10 dirty=false, expected 9
+--- FAIL: TestPostgresLedgerRoundTripReconcile (0.17s)
