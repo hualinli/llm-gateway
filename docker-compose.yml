@@ -152,6 +152,57 @@ services:
       timeout: 1s
       retries: 30
 
+  # T09 second data-plane instance. It is behind a profile so the daily demo is
+  # unchanged, and it deliberately shares Control/Redis/PostgreSQL with the
+  # `gateway` service: that is the topology T09 is about.
+  #
+  # What is shared: identity and config (Control snapshot), the organization RPM
+  # token bucket (Redis), the wallet and the usage receipts (PostgreSQL).
+  # What is NOT shared: active-stream caps. GATEWAY_MAX_ACTIVE_STREAMS and
+  # GATEWAY_MAX_ACTIVE_STREAMS_PER_ORG are per instance, so running this service
+  # doubles an organization's reachable ceiling. They are not a cross-instance
+  # hard quota (roadmap §4.3) and must never be reported as one.
+  #
+  #   docker compose --profile multi-instance up -d --build --wait
+  gateway-b:
+    profiles: ["multi-instance"]
+    build:
+      context: .
+    entrypoint: ["/usr/local/bin/gateway"]
+    environment:
+      GATEWAY_PROFILE: demo
+      GATEWAY_INSTANCE_ID: gateway-b
+      GATEWAY_ADDR: ":8093"
+      # 与 gateway 服务不同，这里直接按生产形态把诊断 listener 分出来。
+      GATEWAY_DIAGNOSTICS_ADDR: ":8094"
+      REDIS_ADDR: redis:6379
+      CONTROL_ADDR: control:50051
+      LIMITER_ON_REDIS_ERROR: closed
+      GATEWAY_MAX_ACTIVE_STREAMS: "256"
+      GATEWAY_MAX_ACTIVE_STREAMS_PER_ORG: "32"
+      GATEWAY_ACCESS_GUARD: "off"
+      GATEWAY_BILLING: "off"
+      METERING_SPOOL_DIR: /var/lib/llm-gateway/metering-spool-b
+    ports:
+      - "127.0.0.1:8093:8093"
+      - "127.0.0.1:8094:8094"
+    volumes:
+      - metering-spool-b:/var/lib/llm-gateway/metering-spool-b
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      control:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      # /livez lives on the business listener (the diagnostics listener only
+      # serves /metrics and /debug/pprof), exactly like the first gateway.
+      test: ["CMD", "wget", "-qO-", "http://localhost:8093/livez"]
+      interval: 2s
+      timeout: 1s
+      retries: 30
+
   mock-primary:
     profiles: ["demo-mocks"]
     build:
@@ -240,3 +291,6 @@ volumes:
   grafana-data:
   pg-data:
   metering-spool:
+  # T09: the second instance keeps its own spool so a spool failure in one
+  # process cannot be mistaken for the other's.
+  metering-spool-b:

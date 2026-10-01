@@ -187,7 +187,20 @@ func (p *OpenAIProvider) ChatStreamGated(ctx context.Context, reqBody []byte, w 
 		}
 		return nil, &UpstreamError{Message: "request: " + err.Error(), Retryable: true}
 	}
-	defer resp.Body.Close()
+	// Cancel the attempt before closing the body. The ordering is deliberate,
+	// not style: http.Response.Body.Close() may consume the remainder of the
+	// response, and a body whose upstream never sends EOF can only be unblocked
+	// by cancelling the request context. Closing first would park this handler —
+	// and with it the downstream chunked response — until the attempt timeout.
+	//
+	// Measured on Go 1.27 the HTTP/1 transport normally abandons the connection
+	// instead of draining it (bodyEOFSignal.earlyCloseFn), so the common case is
+	// fast either way; this ordering is what stops the handler's completion from
+	// depending on that internal behaviour. See openai_close_regression_test.go.
+	defer func() {
+		cancel()
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		message, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<10))

@@ -6,13 +6,36 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"llm-gateway/internal/auth"
 	"llm-gateway/internal/httperr"
 	"llm-gateway/internal/metrics"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/redis/go-redis/v9"
+)
+
+// T09 per-instance active-stream metrics. They are process-local by
+// construction: the series of two Gateway instances add up, and nothing here
+// coordinates across them (roadmap §4.3).
+var (
+	// OrgActiveStreams counts stream-slot decisions on this instance.
+	OrgActiveStreams = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "gateway_org_active_streams_total",
+		Help: "Per-organization active stream decisions on this gateway instance (accepted, rejected)",
+	}, []string{"result"})
+
+	// OrgActiveStreamsInFlight is the current per-instance count. Labels are
+	// deliberately absent: an org id label would be unbounded cardinality. Use
+	// /metrics on one instance, or the per-org counters, for diagnosis.
+	OrgActiveStreamsInFlight = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "gateway_org_active_streams_inflight",
+		Help: "Active chat streams counted per organization on this gateway instance (sum over organizations)",
+	})
 )
 
 // OrgRateSource supplies the published per-organization token bucket from the
@@ -41,6 +64,13 @@ type Limiter struct {
 	// is down; closed rejects the request so a production gateway cannot exceed
 	// its configured rate while the limiter is blind.
 	onRedisError string
+
+	// Per-instance per-org active stream cap (see SetMaxActiveStreamsPerOrg).
+	// orgInflight is process-local by construction: no Redis, no lease, no
+	// cross-instance coordination.
+	maxOrgStreams atomic.Int32
+	orgMu         sync.Mutex
+	orgInflight   map[int64]int
 }
 
 const (
@@ -97,6 +127,96 @@ func (l *Limiter) SetOnRedisError(policy string) error {
 		return fmt.Errorf("invalid limiter redis policy %q", policy)
 	}
 	return nil
+}
+
+// SetMaxActiveStreamsPerOrg caps concurrent chat streams per organization **on
+// this Gateway instance** (roadmap §4.3: 组织并发首版也是每实例保护，不做分布式
+// 并发租约). Zero disables the cap.
+//
+// The cap is deliberately process-local and additive: with two Gateway
+// instances the effective ceiling an organization can reach is 2 x the
+// configured value, and the UI/报告 must not call it a cross-instance hard
+// quota. The shared, cross-instance limiter in the first version is the org RPM
+// token bucket in Redis — not this.
+func (l *Limiter) SetMaxActiveStreamsPerOrg(max int) {
+	if max < 0 {
+		max = 0
+	}
+	l.maxOrgStreams.Store(int32(max))
+}
+
+// MaxActiveStreamsPerOrg reports the configured per-instance per-org cap.
+func (l *Limiter) MaxActiveStreamsPerOrg() int {
+	return int(l.maxOrgStreams.Load())
+}
+
+// OrgStreamsInFlight reports how many streams this instance currently counts for
+// one organization. It is a diagnostic, not a decision input.
+func (l *Limiter) OrgStreamsInFlight(orgID int64) int {
+	l.orgMu.Lock()
+	defer l.orgMu.Unlock()
+	return int(l.orgInflight[orgID])
+}
+
+// acquireOrgStream reserves one per-org stream slot on this instance.
+func (l *Limiter) acquireOrgStream(orgID int64) bool {
+	max := int(l.maxOrgStreams.Load())
+	if max <= 0 {
+		return true
+	}
+	l.orgMu.Lock()
+	defer l.orgMu.Unlock()
+	if l.orgInflight == nil {
+		l.orgInflight = make(map[int64]int)
+	}
+	if l.orgInflight[orgID] >= max {
+		return false
+	}
+	l.orgInflight[orgID]++
+	OrgActiveStreams.WithLabelValues("accepted").Inc()
+	OrgActiveStreamsInFlight.Inc()
+	return true
+}
+
+func (l *Limiter) releaseOrgStream(orgID int64) {
+	l.orgMu.Lock()
+	defer l.orgMu.Unlock()
+	// Paired with acquireOrgStream: a request that never reserved a slot (the
+	// cap was disabled, or the organization had no attribution) finds no entry
+	// and must not drive the gauge negative.
+	if l.orgInflight[orgID] > 0 {
+		l.orgInflight[orgID]--
+		OrgActiveStreamsInFlight.Dec()
+		if l.orgInflight[orgID] == 0 {
+			delete(l.orgInflight, orgID)
+		}
+	}
+}
+
+// StreamLimit wraps only the streaming chat handler: it counts one in-flight
+// stream per organization for as long as the handler runs (that is, until the
+// SSE response ends), and refuses past the per-instance cap with 429. It must be
+// applied inside the rate limiter so a request that spends a token also gets a
+// stream slot, and only around the chat endpoint — a /v1/models call is not a
+// stream and must never consume this budget.
+func StreamLimit(l *Limiter) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			orgID := auth.OrgIDFromContext(r.Context())
+			if l == nil || orgID <= 0 || l.MaxActiveStreamsPerOrg() <= 0 {
+				next.ServeHTTP(w, r)
+				return
+			}
+			if !l.acquireOrgStream(orgID) {
+				OrgActiveStreams.WithLabelValues("rejected").Inc()
+				w.Header().Set("Retry-After", "1")
+				httperr.WriteStatus(w, r, http.StatusTooManyRequests, "too many active streams for this organization")
+				return
+			}
+			defer l.releaseOrgStream(orgID)
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // FailClosed reports whether a Redis failure must reject traffic.
