@@ -154,4 +154,54 @@ var (
 		Name: "gateway_access_guard_total",
 		Help: "Access guard decisions by bounded result: allowed, unauthorized, forbidden, not_found or unavailable. Labels never carry key, organization or user values.",
 	}, []string{"result"})
+
+	// T07A：receipt dispatcher 与 settlement。标签都是封闭结果词表，不含
+	// execution/org/event id：那些取值上界不可控，异常明细在 PG 审计行里查。
+	// backlog 与 oldest-unsettled 两个 gauge 复用 T07C 在
+	// internal/metrics/reconcile.go 里已注册的同名指标，不重复注册。
+	MeteringReceiptDispatchTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "metering_receipt_dispatch_total",
+		Help: "Receipt dispatch outcomes by bounded result: published, publish_failed, claim_error or empty",
+	}, []string{"result"})
+
+	MeteringReceiptDispatchAttemptsTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "metering_receipt_dispatch_attempts_total",
+		Help: "Usage receipts claimed for dispatch; one claim is one delivery attempt (the receipts.attempts column)",
+	})
+
+	MeteringReceiptOldestDueSeconds = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "metering_receipt_oldest_due_age_seconds",
+		Help: "Age of the oldest dispatchable usage receipt: 0 when nothing is due",
+	})
+
+	MeteringReceiptSettledTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "metering_receipt_settled_total",
+		Help: "Usage receipts settled (digest verified, debit and release posted, execution settled)",
+	})
+
+	MeteringReceiptExceptionTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "metering_receipt_exception_total",
+		Help: "Usage receipts that ended as an audited exception, by bounded reason (unmatched, payload_conflict, state, dispatch_poisoned)",
+	}, []string{"reason"})
+
+	MeteringSettlementTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "metering_settlement_total",
+		Help: "Settlement deliveries by bounded result: settled, replayed, conflict, unmatched, exception or retry",
+	}, []string{"result"})
+
+	MeteringSettlementLagSeconds = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "metering_settlement_lag_seconds",
+		Help:    "Receipt occurrence to committed settlement (the billable-event to visible-settlement SLO)",
+		Buckets: []float64{.05, .1, .25, .5, 1, 2, 5, 10, 30, 60, 300},
+	})
+
+	MeteringSettlementClaimTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "metering_settlement_claim_total",
+		Help: "Pending settlement messages reclaimed from crashed consumers",
+	})
+
+	MeteringReceiptDLQTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "metering_receipt_dlq_total",
+		Help: "Receipt envelopes moved to the bounded receipt dead-letter stream (the durable anomaly is the PostgreSQL audit row)",
+	})
 )

@@ -129,9 +129,9 @@ func TestPostgresLedgerRoundTripReconcile(t *testing.T) {
 	if added, err := ledger.Add(event); err != nil || added {
 		t.Fatalf("redelivery: added=%v err=%v", added, err)
 	}
-	report, err := metering.ReconcileStream(ctx, rdb, ledger)
-	if err != nil || !report.Consistent() || report.Valid != 1 {
-		t.Fatalf("unchanged event after PostgreSQL round-trip: report=%+v err=%v", report, err)
+	report := transportReconcile(t, ctx, rdb, ledger)
+	if !report.Consistent() || report.Transport.BilledEvents != 1 {
+		t.Fatalf("unchanged event after PostgreSQL round-trip: report=%+v", report.Transport)
 	}
 }
 
@@ -196,12 +196,13 @@ func TestGatewayRedisPostgresRepeatedIDAndRedelivery(t *testing.T) {
 	defer func() { cancel(); <-finished }()
 	deadline := time.Now().Add(3 * time.Second)
 	for {
-		report, err := metering.ReconcileStream(ctx, rdb, ledger)
-		if err == nil && report.LedgerRows == 2 && report.PendingMessages == 0 {
+		count, countErr := ledger.Count()
+		report := transportReconcile(t, ctx, rdb, ledger)
+		if countErr == nil && count == 2 && report.Transport.PendingCount == 0 {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("two real upstream calls should be billed separately: report=%+v err=%v", report, err)
+			t.Fatalf("two real upstream calls should be billed separately: count=%d report=%+v err=%v", count, report.Transport, countErr)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -209,11 +210,12 @@ func TestGatewayRedisPostgresRepeatedIDAndRedelivery(t *testing.T) {
 	if err != nil || balance != 6 || upstreamCalls.Load() != 2 {
 		t.Fatalf("calls=%d balance=%d err=%v", upstreamCalls.Load(), balance, err)
 	}
-	report, err := metering.ReconcileStream(ctx, rdb, ledger)
-	if err != nil || !report.Consistent() || report.Valid != 2 || report.DuplicateEvents != 1 {
-		t.Fatalf("two calls + one redelivery: report=%+v err=%v", report, err)
+	report := transportReconcile(t, ctx, rdb, ledger)
+	if !report.Consistent() || report.Transport.BilledEvents != 2 || report.Transport.DuplicateEntries != 1 {
+		t.Fatalf("two calls + one redelivery: report=%+v", report.Transport)
 	}
-	t.Logf("upstream_calls=%d stream_messages=%d ledger_rows=%d duplicate_deliveries=%d charge=%d reconcile=consistent", upstreamCalls.Load(), report.StreamMessages, report.LedgerRows, report.DuplicateEvents, balance)
+	t.Logf("upstream_calls=%d stream_entries=%d billed_events=%d duplicate_deliveries=%d charge=%d reconcile=consistent",
+		upstreamCalls.Load(), report.Transport.EntriesRead, report.Transport.BilledEvents, report.Transport.DuplicateEntries, balance)
 }
 
 func TestPostgresLegacyEventIDMigrationPreservesDedup(t *testing.T) {
@@ -230,4 +232,21 @@ func TestPostgresLegacyEventIDMigrationPreservesDedup(t *testing.T) {
 	if err != nil || balance != 3 {
 		t.Fatalf("balance=%d err=%v", balance, err)
 	}
+}
+
+// transportReconcile runs the T07C transport check against a ledger and a Redis
+// Stream, with no PostgreSQL fact layer: it replaces the pre-T07C
+// ReconcileStream full-scan comparison these tests used to call.
+func transportReconcile(t *testing.T, ctx context.Context, rdb *redis.Client, ledger metering.Ledger) metering.ReconcileReport {
+	t.Helper()
+	report, err := metering.Reconcile(ctx, metering.ReconcileParams{
+		Redis:     rdb,
+		Ledger:    ledger,
+		Until:     time.Now().UTC().Add(time.Second),
+		Transport: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return report
 }

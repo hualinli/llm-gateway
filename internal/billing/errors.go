@@ -117,4 +117,28 @@ var (
 	// receipt was not written. The caller must refuse a clean stream end; T07B
 	// re-drives the same execution anchor.
 	ErrReceiptCommitUnknown = errors.New("billing: the usage receipt transaction ended with an unknown outcome")
+
+	// ErrReceiptClaimLost marks a dispatch bookkeeping write whose claim lease is
+	// no longer the stored one: another dispatcher reclaimed the receipt after
+	// this worker's lease expired. The worker must not overwrite the newer
+	// claim's state; the receipt itself is untouched and stays dispatchable.
+	ErrReceiptClaimLost = errors.New("billing: the dispatch claim lease is no longer held")
+
+	// ErrReceiptPayloadConflict marks a delivered settlement event whose payload
+	// digest does not match the stored receipt. The stored receipt is left
+	// untouched, no money moves, and the delivery must be recorded as a visible
+	// anomaly: a conflict is never silently ignored.
+	ErrReceiptPayloadConflict = errors.New("billing: the settlement payload does not match the stored usage receipt")
+
+	// ErrSettlementState marks a settlement the state machine refuses: the
+	// receipt is already an exception, or its execution ended in a state that
+	// must never be charged (released / failed_no_charge). No money moves and no
+	// state is rewritten.
+	ErrSettlementState = errors.New("billing: the receipt or its execution is not in a settleable state")
+
+	// ErrSettlementCommitUnknown marks a settlement transaction whose COMMIT
+	// outcome could not be determined *and* whose re-query by execution id did
+	// not prove a settled receipt. The caller must not acknowledge the transport
+	// message: the redelivery is what converges the state.
+	ErrSettlementCommitUnknown = errors.New("billing: the settlement transaction ended with an unknown outcome")
 )

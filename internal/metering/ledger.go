@@ -55,6 +55,19 @@ func (l *MemoryLedger) Balance(t string) (int64, error) {
 	defer l.mu.Unlock()
 	return l.balance[t], nil
 }
+
+// Lookup is the per-event read the bounded transport check uses. The in-memory
+// ledger is only the demo fallback; the PG ledger is the production one.
+func (l *MemoryLedger) Lookup(tenantID, eventID string) (Event, bool, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	event, ok := l.events[eventKey(Event{TenantID: tenantID, EventID: eventID})]
+	if !ok {
+		return Event{}, false, nil
+	}
+	return event, true, nil
+}
+
 func (l *MemoryLedger) Snapshot() (map[string]Event, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -153,6 +166,53 @@ func (p *PGLedger) Balance(tenantID string) (int64, error) {
 		return 0, err
 	}
 	return v, nil
+}
+
+// DB exposes the ledger's connection so the T07C reconciliation can read the
+// four billing layers (executions, receipts, entries, accounts) with the same
+// pool instead of opening a second one. It is a read seam, not an invitation to
+// write outside the ledger's own statements.
+func (p *PGLedger) DB() *sql.DB { return p.db }
+
+// Lookup answers "does this tenant have a durable row for this event id" with
+// one primary-key probe. It is the per-event read the bounded transport check
+// uses; the pre-T07C reconciliation instead materialized the whole table with
+// Snapshot(), which is exactly what T07C removes.
+func (p *PGLedger) Lookup(tenantID, eventID string) (Event, bool, error) {
+	if eventID == "" {
+		return Event{}, false, nil
+	}
+	var (
+		e           Event
+		orgID       sql.NullInt64
+		userID      sql.NullInt64
+		keyID       sql.NullString
+		executionID sql.NullString
+	)
+	// The column list is exactly querySnapshotEvents': metering_events has no
+	// usage_missing / usage_invalid columns (those two flags exist only on the
+	// Stream payload), so a read that claimed them would be a lie.
+	err := p.db.QueryRow(`SELECT event_id, tenant_id, org_id, user_id, key_id, execution_id,
+       model, provider, prompt_tokens, completion_tokens, total_tokens, cost_cents, created_at
+FROM metering_events WHERE event_id = $1`, eventID).
+		Scan(&e.EventID, &e.TenantID, &orgID, &userID, &keyID, &executionID,
+			&e.Model, &e.Provider, &e.PromptTokens, &e.CompletionTokens, &e.TotalTokens,
+			&e.CostCents, &e.CreatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Event{}, false, nil
+	}
+	if err != nil {
+		return Event{}, false, err
+	}
+	if tenantID != "" && e.TenantID != tenantID {
+		return Event{}, false, nil
+	}
+	e.OrgID = orgID.Int64
+	e.UserID = userID.Int64
+	e.KeyID = keyID.String
+	e.ExecutionID = executionID.String
+	e.CreatedAt = e.CreatedAt.UTC()
+	return e, true, nil
 }
 
 // NewLedger 工厂：优先 PG；非强制模式下才允许回退内存。

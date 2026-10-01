@@ -130,13 +130,30 @@ func TestRedisReconcileRejectsConflictingDuplicatePayload(t *testing.T) {
 		}
 		event.CostCents++
 	}
-	report, err := ReconcileStream(context.Background(), rdb, ledger)
+	report := reconcileTransportOnly(t, rdb, ledger)
+	if report.Consistent() || report.Transport.PayloadMismatches != 1 || report.Transport.DuplicateEntries != 1 {
+		t.Fatalf("different payload was silently classified as safe redelivery: %+v", report.Transport)
+	}
+	if len(report.Transport.PayloadSamples) != 1 || report.Transport.PayloadSamples[0] != "tenant-a:same-event" {
+		t.Fatalf("payload mismatch sample = %v", report.Transport.PayloadSamples)
+	}
+}
+
+// reconcileTransportOnly runs the T07C bounded reconciliation with the Redis
+// transport check only: it is what the pre-T07C ReconcileStream was, minus the
+// full Stream scan and the full ledger snapshot.
+func reconcileTransportOnly(t *testing.T, rdb *redis.Client, ledger Ledger) ReconcileReport {
+	t.Helper()
+	report, err := Reconcile(context.Background(), ReconcileParams{
+		Redis:     rdb,
+		Ledger:    ledger,
+		Until:     time.Now().UTC().Add(time.Second),
+		Transport: true,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if report.Consistent() || len(report.PayloadMismatch) != 1 || report.DuplicateEvents != 1 {
-		t.Fatalf("different payload was silently classified as safe redelivery: %+v", report)
-	}
+	return report
 }
 
 func TestRedisMeteringDeliveryAndReconcile(t *testing.T) {
@@ -170,12 +187,9 @@ func TestRedisMeteringDeliveryAndReconcile(t *testing.T) {
 		return count == 1
 	})
 
-	report, err := ReconcileStream(ctx, rdb, ledger)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if report.Valid != 1 || report.DuplicateEvents != 1 || !report.Consistent() {
-		t.Fatalf("unexpected reconcile report: %+v", report)
+	report := reconcileTransportOnly(t, rdb, ledger)
+	if report.Transport.BilledEvents != 1 || report.Transport.DuplicateEntries != 1 || !report.Consistent() {
+		t.Fatalf("unexpected reconcile report: %+v", report.Transport)
 	}
 
 	if err := rdb.XAdd(ctx, &redis.XAddArgs{Stream: StreamName, Values: map[string]any{"data": "not-json"}}).Err(); err != nil {

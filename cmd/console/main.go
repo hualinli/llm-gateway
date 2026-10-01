@@ -112,6 +112,10 @@ func runServe(profile appenv.Profile, args []string) error {
 	// and the organization account/ledger surface. It shares the Console pool.
 	billingStore := billing.NewPGStore(db)
 
+	// T07C: the monthly statement is a live aggregation over
+	// billing_entries.posted_at, and the money-exception queue is the durable
+	// PostgreSQL table migration 000011 adds (the Redis DLQ stays a diagnostic
+	// cache). Both share the Console pool.
 	return serve(serveOptions{
 		config:              cfg,
 		profile:             profile,
@@ -121,6 +125,8 @@ func runServe(profile appenv.Profile, args []string) error {
 		usage:               console.NewPGUsageStore(db),
 		prices:              billingStore,
 		accounts:            billingStore,
+		statements:          billing.NewPGStatementStore(db),
+		exceptions:          billing.NewPGExceptionStore(db),
 		publication:         channel.Publication(),
 		publicationInterval: cfg.PublicationInterval,
 		audit:               audit,
@@ -159,6 +165,10 @@ type serveOptions struct {
 	// 503 instead of pretending the platform has no prices and no ledger.
 	prices   console.PriceService
 	accounts console.BillingAccountService
+	// statements backs GET /api/v1/orgs/{org}/billing/statements and exceptions
+	// backs the durable money-exception queue (T07C). nil answers 503.
+	statements console.StatementService
+	exceptions console.MoneyExceptionService
 	// publication is optional: nil disables the policy-publication loop.
 	publication         publicationRunner
 	publicationInterval time.Duration

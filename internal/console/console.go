@@ -40,6 +40,13 @@
 //	POST /api/v1/admin/billing/accounts/{org}/adjustments        session + platform admin + CSRF
 //	                                                             + Idempotency-Key
 //
+// T07C read surface:
+//
+//	GET  /api/v1/orgs/{org}/billing/statements?month=YYYY-MM   session + matrix (view_org_usage)
+//	GET  /api/v1/orgs/{org}/billing/exceptions                 session + matrix (view_org_usage)
+//	GET  /api/v1/orgs/{org}/billing/exceptions/{exception}     session + matrix (view_org_usage)
+//	POST /api/v1/admin/billing/exceptions/{exception}/resolution session + platform admin + CSRF
+//
 //	GET  /livez, GET /readyz                      public
 package console
 
@@ -92,6 +99,13 @@ const (
 	PathAdminBillingAdjustments = "/api/v1/admin/billing/accounts/:org/adjustments"
 	PathOrgBillingAccount       = "/api/v1/orgs/:org/billing/account"
 	PathOrgBillingEntries       = "/api/v1/orgs/:org/billing/entries"
+
+	// T07C read surface: the monthly consumption statement and the durable
+	// money-exception queue, plus the platform decision that resolves one.
+	PathOrgBillingStatements            = "/api/v1/orgs/:org/billing/statements"
+	PathOrgBillingExceptions            = "/api/v1/orgs/:org/billing/exceptions"
+	PathOrgBillingException             = "/api/v1/orgs/:org/billing/exceptions/:exception"
+	PathAdminBillingExceptionResolution = "/api/v1/admin/billing/exceptions/:exception/resolution"
 
 	PathLivez               = "/livez"
 	PathReadyz              = "/readyz"
@@ -191,6 +205,12 @@ type Options struct {
 	// Accounts backs the organization billing reads and the platform
 	// adjustment write. nil answers 503, for the same reason as Prices.
 	Accounts BillingAccountService
+	// Statements backs GET /api/v1/orgs/{org}/billing/statements. nil answers
+	// 503: an empty statement would claim the organization spent nothing.
+	Statements StatementService
+	// Exceptions backs the durable money-exception queue (migration 000011) and
+	// the platform resolution write. nil answers 503.
+	Exceptions MoneyExceptionService
 	// Now is the clock used for the usage window and key-expiry validation. nil
 	// means time.Now().UTC().
 	Now func() time.Time
@@ -214,6 +234,8 @@ type server struct {
 	usage            UsageStore
 	prices           PriceService
 	accounts         BillingAccountService
+	statements       StatementService
+	exceptions       MoneyExceptionService
 	secureCookies    bool
 	sessionTTL       time.Duration
 	retryAfter       time.Duration
@@ -240,6 +262,8 @@ func newServer(opts Options) (*server, error) {
 		usage:            opts.Usage,
 		prices:           opts.Prices,
 		accounts:         opts.Accounts,
+		statements:       opts.Statements,
+		exceptions:       opts.Exceptions,
 		secureCookies:    opts.SecureCookies,
 		sessionTTL:       opts.SessionTTL,
 		retryAfter:       opts.RetryAfter,
@@ -265,6 +289,12 @@ func newServer(opts Options) (*server, error) {
 	}
 	if s.accounts == nil {
 		s.accounts = unavailableBillingAccountService{}
+	}
+	if s.statements == nil {
+		s.statements = unavailableStatementService{}
+	}
+	if s.exceptions == nil {
+		s.exceptions = unavailableMoneyExceptionService{}
 	}
 	if s.sessionTTL <= 0 {
 		s.sessionTTL = DefaultSessionTTL
@@ -368,6 +398,14 @@ func Register(engine *route.Engine, opts Options) error {
 	engine.GET(PathOrgBillingAccount, s.withSession, s.getOrgBillingAccount)
 	engine.GET(PathOrgBillingEntries, s.withSession, s.listOrgBillingEntries)
 	engine.POST(PathAdminBillingAdjustments, s.withSession, s.withCSRF, s.withPlatformAdmin, s.adjustBillingAccount)
+
+	// T07C: the monthly statement and the durable money-exception queue are
+	// organization reads (view_org_usage); resolving an exception is a platform
+	// decision and additionally requires CSRF.
+	engine.GET(PathOrgBillingStatements, s.withSession, s.getOrgBillingStatement)
+	engine.GET(PathOrgBillingExceptions, s.withSession, s.listOrgBillingExceptions)
+	engine.GET(PathOrgBillingException, s.withSession, s.getOrgBillingException)
+	engine.POST(PathAdminBillingExceptionResolution, s.withSession, s.withCSRF, s.withPlatformAdmin, s.resolveBillingException)
 	return nil
 }
 

@@ -37,6 +37,19 @@ type PGAccountStore struct {
 	// ReceiptVerifyTimeout bounds the detached re-query that resolves a COMMIT
 	// whose outcome is unknown. <= 0 means DefaultReceiptVerifyTimeout.
 	ReceiptVerifyTimeout time.Duration
+	// DispatchTimeout bounds one short dispatcher bookkeeping transaction (a
+	// claim, a mark-dispatched, a retry record). It never covers a publish:
+	// Redis is called outside any transaction. <= 0 means
+	// DefaultDispatchMarkTimeout.
+	DispatchTimeout time.Duration
+	// SettlementTimeout bounds one settlement transaction (digest check, debit,
+	// release, execution transition, receipt state and audit). <= 0 means
+	// DefaultSettlementTimeout.
+	SettlementTimeout time.Duration
+	// SettlementVerifyTimeout bounds the detached re-query that resolves a
+	// settlement COMMIT whose outcome is unknown. <= 0 means
+	// DefaultSettlementVerifyTimeout.
+	SettlementVerifyTimeout time.Duration
 }
 
 // DefaultAdmissionTimeout bounds one reservation-state transaction. It is
