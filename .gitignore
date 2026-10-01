@@ -23,6 +23,10 @@ web/coverage/
 web/.vite/
 web/*.tsbuildinfo
 web/npm-debug.log*
+web/e2e/.state.json
+web/e2e/.auth/
+web/playwright-report/
+web/test-results/
 
 # 误提交的构建产物（go build 输出，不入库）
 /console

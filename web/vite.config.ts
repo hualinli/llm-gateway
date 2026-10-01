@@ -15,6 +15,14 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
+/**
+ * Proxy targets are overridable so the Playwright suite can point the same
+ * single-origin dev server at an isolated local Console/Gateway
+ * (`web/e2e/README.md`); the defaults stay the documented local ports.
+ */
+const consoleTarget = process.env.CONSOLE_PROXY_TARGET ?? 'http://127.0.0.1:8092';
+const gatewayTarget = process.env.GATEWAY_PROXY_TARGET ?? 'http://127.0.0.1:8090';
+
 export default defineConfig({
   plugins: [react()],
   server: {
@@ -23,11 +31,11 @@ export default defineConfig({
     strictPort: false,
     proxy: {
       '/api/v1': {
-        target: 'http://127.0.0.1:8092',
+        target: consoleTarget,
         changeOrigin: false,
       },
       '/v1': {
-        target: 'http://127.0.0.1:8090',
+        target: gatewayTarget,
         changeOrigin: false,
         ws: false,
         timeout: 0,

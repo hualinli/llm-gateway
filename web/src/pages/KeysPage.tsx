@@ -156,7 +156,7 @@ export function KeysPage(): ReactNode {
         description="创建成功后 raw secret 只出现在那一次响应里：服务端只保存哈希与前缀，没有接口可以再次取回。丢失时只能撤销该 Key 并重新创建。"
       />
 
-      <Card size="small" title="Key 列表">
+      <Card size="small" title="Key 列表" data-testid="keys-list-card">
         <DataState
           query={keys}
           loadingRows={4}

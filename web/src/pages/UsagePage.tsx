@@ -8,12 +8,15 @@
  */
 
 import { useMemo, useState, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Alert,
   Button,
   Card,
   Col,
   DatePicker,
+  Descriptions,
+  Drawer,
   Input,
   InputNumber,
   Row,
@@ -32,7 +35,12 @@ import { DataState } from '../components/states';
 import { CursorPagination, useCursorPager } from '../components/CursorPager';
 import { ContractGap, PageHeader } from '../components/PageHeader';
 import { useActiveOrg } from '../session/SessionProvider';
-import { formatCostCents, formatNumber, formatTimestamp, shortId } from '../utils/format';
+import {
+  formatCostCents,
+  formatNumber,
+  formatTimestamp,
+  shortId,
+} from '../utils/format';
 import { CAN } from '../utils/permissions';
 
 interface UsageFilters {
@@ -81,6 +89,7 @@ export function UsagePage(): ReactNode {
   const [draftUser, setDraftUser] = useState('');
   const [draftKey, setDraftKey] = useState('');
   const [draftLimit, setDraftLimit] = useState(20);
+  const [detail, setDetail] = useState<UsageEvent | null>(null);
 
   const query = useMemo(() => toQuery(filters, pager.cursor), [filters, pager.cursor]);
   const usage = useUsage(orgId, query, orgId !== null);
@@ -115,6 +124,36 @@ export function UsagePage(): ReactNode {
         title="用量"
         description="按 (occurred_at, id) DESC 游标分页；totals 描述整个过滤窗口，而不是当前页。"
       />
+
+      {role === 'member' ? (
+        <Alert
+          type="info"
+          showIcon
+          message="个人账单口径：成员只有 scope=self 的用量，没有组织账单读取权限"
+          description={
+            <Space direction="vertical" size={2}>
+              <span>
+                你的消费就是下面窗口合计里的 events / tokens / cost_cents（<code>cost_kind=demo_consumption</code>）。
+                组织资金、账本、月度账单与异常属于 <code>view_org_usage</code>，服务端对 member 固定返回 403 forbidden，
+                「资金与结算」页会把该 403 完整渲染出来（不隐藏、不假装 0）。
+              </span>
+              <span>每一次请求的明细可用表格中的「请求详情」查看；结算状态见详情里的契约缺口说明。</span>
+            </Space>
+          }
+        />
+      ) : (
+        <Alert
+          type="info"
+          showIcon
+          message={
+            <Space size={4} wrap>
+              <span>组织的资金、账本流水与月度账单在</span>
+              <Link to={`/orgs/${encodeURIComponent(orgId ?? '')}/billing`}>资金与结算</Link>
+              <span>页（view_org_usage）。</span>
+            </Space>
+          }
+        />
+      )}
 
       <Card size="small" title="过滤条件">
         <Space direction="vertical" size={8} style={{ width: '100%' }}>
@@ -219,7 +258,7 @@ export function UsagePage(): ReactNode {
               />
             </Card>
 
-            <Card size="small" title="事件明细">
+            <Card size="small" title="事件明细" data-testid="usage-events-card">
               <Table<UsageEvent>
                 size="small"
                 rowKey="id"
@@ -276,6 +315,19 @@ export function UsagePage(): ReactNode {
                     dataIndex: 'execution_id',
                     render: (value: string | null) => shortId(value),
                   },
+                  {
+                    title: '操作',
+                    key: 'action',
+                    render: (_, record) => (
+                      <Button
+                        size="small"
+                        aria-label={`查看请求详情 ${record.id}`}
+                        onClick={() => setDetail(record)}
+                      >
+                        请求详情
+                      </Button>
+                    ),
+                  },
                 ]}
               />
               <CursorPagination
@@ -293,9 +345,113 @@ export function UsagePage(): ReactNode {
       </DataState>
 
       <ContractGap title="没有按模型/成员聚合的消费分解端点">
-        契约只有逐事件分页 + 窗口合计：按 model/user 分组的图表需要客户端遍历所有页，本页不做假图表。
-        可用/预占资金与结算延迟属于 T05/T06/T07。
+        {'契约只有逐事件分页 + 窗口合计：按 model/user 分组的图表需要客户端遍历所有页，本页不做假图表。'}
+        {' 管理员可以在「成员与邀请」页对单个成员发起一次真实查询（'}
+        <code>usage?user=&#123;user_id&#125;</code>
+        {'），那是服务端过滤，不是本地聚合。'}
       </ContractGap>
+
+      <RequestDetailDrawer event={detail} orgId={orgId} onClose={() => setDetail(null)} />
     </Space>
+  );
+}
+
+/* ------------------------------------------------------- request detail */
+
+/**
+ * One metering event in full, plus the honest answer to "was this request
+ * settled, and for how much?".
+ *
+ * The frozen contract has **no execution-scoped read**: `metering_events` carries
+ * `execution_id` and the ledger's settlement row is
+ * `billing_receipt:debit:<execution>` in `business_id`, but
+ * `/billing/entries` filters only by `kind`, not by execution. So the drawer
+ * shows the real event fields and states the gap instead of guessing a
+ * settlement status by scanning pages.
+ */
+function RequestDetailDrawer({
+  event,
+  orgId,
+  onClose,
+}: {
+  event: UsageEvent | null;
+  orgId: string | null;
+  onClose: () => void;
+}): ReactNode {
+  const billingLink = `/orgs/${encodeURIComponent(orgId ?? '')}/billing`;
+  return (
+    <Drawer
+      title={event ? `请求详情（${event.id}）` : '请求详情'}
+      width={640}
+      open={event !== null}
+      onClose={onClose}
+      destroyOnHidden
+      data-testid="request-detail-drawer"
+    >
+      {event ? (
+        <Space direction="vertical" size={16} style={{ width: '100%' }}>
+          <Descriptions size="small" column={1} bordered>
+            <Descriptions.Item label="event_id">{event.id}</Descriptions.Item>
+            <Descriptions.Item label="occurred_at">
+              {formatTimestamp(event.occurred_at)}
+            </Descriptions.Item>
+            <Descriptions.Item label="model / provider">
+              {event.model} · {event.provider}
+            </Descriptions.Item>
+            <Descriptions.Item label="tokens">
+              prompt {formatNumber(event.prompt_tokens)} · completion{' '}
+              {formatNumber(event.completion_tokens)} · total {formatNumber(event.total_tokens)}
+            </Descriptions.Item>
+            <Descriptions.Item label="cost_cents">
+              <Tag color="orange">{formatCostCents(event.cost_cents)}</Tag>
+              <Typography.Text type="secondary">
+                {' '}
+                演示价（1 token = 1 分），不是余额也不是发票金额
+              </Typography.Text>
+            </Descriptions.Item>
+            <Descriptions.Item label="attribution">
+              <Tag color={event.attribution === 'attributed' ? 'green' : 'orange'}>
+                {event.attribution}
+              </Tag>
+              <Typography.Text type="secondary">
+                {' '}
+                {event.attribution === 'legacy_unknown_user'
+                  ? '该行属于组织但用户未知（Key 早于 key 级归属），member 永远看不到它'
+                  : 'user_id 与 key_id 都已归属'}
+              </Typography.Text>
+            </Descriptions.Item>
+            <Descriptions.Item label="user_id">{event.user_id ?? 'null（未知）'}</Descriptions.Item>
+            <Descriptions.Item label="key_id">{event.key_id ?? 'null（未知）'}</Descriptions.Item>
+            <Descriptions.Item label="execution_id">
+              {event.execution_id ?? 'null（上游未返回执行 id）'}
+            </Descriptions.Item>
+            <Descriptions.Item label="tenant_id">{event.tenant_id}</Descriptions.Item>
+            <Descriptions.Item label="organization_id">
+              {event.organization_id ?? 'null（归因迁移前的行，任何组织作用域都看不到）'}
+            </Descriptions.Item>
+          </Descriptions>
+
+          <Alert
+            type="warning"
+            showIcon
+            message="结算状态：本版本无法按 execution 查询（契约缺口）"
+            description={
+              <Space direction="vertical" size={2}>
+                <span>
+                  T05/T06 的结算写入账本分录 `business_id=billing_receipt:debit:&lt;execution&gt;`，
+                  但 `/orgs/&#123;org&#125;/billing/entries` 只支持按 `kind` 过滤，没有 execution 过滤或按
+                  execution 查询的端点；也没有 `GET /executions/&#123;id&#125;` 返回 receipt 状态。
+                </span>
+                <span>
+                  因此这里不显示“已结算/未结算”的推断值：要核对某次执行，请在
+                  <Link to={billingLink}> 资金与结算 </Link>
+                  页用 kind=debit 抽查分录的 business_id 与 posted_at（服务端是唯一事实源）。
+                </span>
+              </Space>
+            }
+          />
+        </Space>
+      ) : null}
+    </Drawer>
   );
 }

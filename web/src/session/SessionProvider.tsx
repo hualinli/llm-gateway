@@ -66,10 +66,18 @@ export function SessionProvider({ children }: { children: ReactNode }): ReactNod
 
   // A 401 anywhere means the session is gone (expired, revoked or the user was
   // disabled): drop every cached response and send the user to the login route.
+  //
+  // The `me` query itself is deliberately kept: clearing it while its own
+  // request is settling deletes the cache entry before React Query can record
+  // the error, so the observer stays in `pending` forever — which is exactly what
+  // disabled the login form for a visitor with no session. Everything else is
+  // still removed, so no organization data survives the expiry.
   useEffect(() => {
     consoleApi.setUnauthorizedHandler(() => {
       consoleApi.clearCsrfToken();
-      queryClient.clear();
+      queryClient.removeQueries({
+        predicate: (query) => query.queryKey[0] !== queryKeys.me[0],
+      });
       if (location.pathname !== '/login') {
         navigate('/login', { replace: true });
       }
