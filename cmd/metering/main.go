@@ -153,6 +153,21 @@ func main() {
 		settlement.register(mux, adminToken)
 	}
 
+	// T07B：有界执行恢复（僵尸 reserved/executing 的审计释放）+ 24h 人工队列。
+	// 恢复判断的是**别的进程**是否还活着，所以它跑在 metering（billing worker）
+	// 而不是数据面：Gateway 只负责写心跳，metering 只负责读事实。
+	recoveryCfg, err := recoveryConfigFromEnv(appenv.EnvLookup)
+	if err != nil {
+		log.Fatalf("recovery config: %v", err)
+	}
+	recovery, err := startRecovery(ctx, ledger, recoveryCfg)
+	if err != nil {
+		log.Fatalf("recovery wiring: %v", err)
+	}
+	if recovery != nil {
+		recovery.register(mux, adminToken)
+	}
+
 	// 生产把 pprof/metrics 与业务 listener 分离；demo/test 未设置诊断地址时
 	// 保持原行为（仅 /metrics 挂在业务端口上，不额外暴露 pprof）。
 	businessAddr := appenv.StringEnv("METERING_ADDR", defaultMeteringAddr)

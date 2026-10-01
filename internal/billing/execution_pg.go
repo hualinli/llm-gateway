@@ -297,6 +297,12 @@ func (s *PGAccountStore) MarkExecuting(ctx context.Context, executionID, request
 //   - an execution that already ended another way (settled, failed_no_charge)
 //     is refused with ErrExecutionState: the release path must not rewrite a
 //     fact another path owns;
+//   - an execution that has a successful (chargeable) receipt — status
+//     pending_dispatch, dispatched or settled — is refused with
+//     ErrExecutionHasReceipt: the consumption fact must be settled, never
+//     returned (T07B guard). A usage *exception* receipt does not block the
+//     release, because it is the opposite fact: unknown usage, nothing to
+//     charge;
 //   - a zero-cost reservation has no ledger entry to write, but its status
 //     still reaches `released` and a retry is still idempotent.
 func (s *PGAccountStore) Release(ctx context.Context, executionID, reason string) (ExecutionResult, error) {
@@ -359,6 +365,21 @@ func (s *PGAccountStore) terminalizeTx(ctx context.Context, tx txExecutor, execu
 	if IsTerminalExecutionStatus(execution.Status) {
 		return ExecutionResult{}, fmt.Errorf("%w: execution %s already ended as %s; it cannot become %s",
 			ErrExecutionState, executionID, execution.Status, targetStatus)
+	}
+
+	// T07B guard: a successful (chargeable) receipt means the customer consumed
+	// and must be charged, so the reservation belongs to settlement, not to this
+	// path. Without this check `receipt_recorded -> released` was reachable and
+	// returned the funds while dropping a committed consumption fact on the
+	// floor. An *exception* receipt is the opposite fact — usage unknown, nothing
+	// chargeable — so it does not block an audited release.
+	//
+	// The execution row lock this transaction already holds is what makes a
+	// plain (non-locking) receipt read sufficient: FinalizeReceipt takes the same
+	// execution lock before inserting the receipt, so no receipt for this
+	// execution can appear between the read and the release.
+	if err := assertNoChargeableReceiptTx(ctx, tx, executionID); err != nil {
+		return ExecutionResult{}, err
 	}
 
 	// Defensive: the ledger's UNIQUE (business_id, kind) already makes a second
@@ -535,6 +556,30 @@ func lockExecutionTx(ctx context.Context, tx txExecutor, executionID string) (*E
 		return nil, err
 	}
 	return &execution, nil
+}
+
+// assertNoChargeableReceiptTx refuses to treat an execution as "not consumed"
+// when a durable receipt says otherwise. It is the receipt half of the release
+// guard (T07B): pending_dispatch, dispatched and settled are all chargeable
+// facts; only `exception` means "usage unknown, nothing to charge", which is the
+// one receipt state an audited release may coexist with.
+//
+// It must be called while holding the execution row lock (see terminalizeTx),
+// which is what makes the plain read safe against a concurrent finalize.
+func assertNoChargeableReceiptTx(ctx context.Context, tx txExecutor, executionID string) error {
+	receipt, err := getReceiptTx(ctx, tx, executionID)
+	switch {
+	case err == nil:
+		if receipt.Status != ReceiptStatusException {
+			return fmt.Errorf("%w: execution %s has receipt status=%s (charge_micro=%s)",
+				ErrExecutionHasReceipt, executionID, receipt.Status, FormatMicro(receipt.ChargeMicro))
+		}
+		return nil
+	case errors.Is(err, ErrReceiptNotFound):
+		return nil
+	default:
+		return err
+	}
 }
 
 func getPriceVersionTx(ctx context.Context, tx txExecutor, id int64) (PriceVersion, error) {

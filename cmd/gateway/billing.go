@@ -9,8 +9,10 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"llm-gateway/internal/billing"
 	"llm-gateway/internal/gatewayguard"
@@ -40,6 +42,11 @@ type billingStore interface {
 	// RecordUsageException leaves the PG state of a boundary whose usage cannot
 	// back a charge.
 	RecordUsageException(ctx context.Context, params billing.UsageExceptionParams) (billing.ReceiptResult, error)
+	// RecordSettlementAnomaly commits one durable, queryable anomaly. T07B uses
+	// it for a usage event that arrives after the execution can no longer be
+	// charged (typically after a recovery release): the money decision is
+	// already made, so the late usage must not disappear into a log line.
+	RecordSettlementAnomaly(ctx context.Context, params billing.SettlementAnomalyParams) error
 }
 
 // billingPriceStore is the price-version read the admission needs. Prices are
@@ -123,9 +130,28 @@ func openBilling(config billingConfig, gatewayID string, knownModel func(string)
 	store.FinalizeTimeout = config.ReceiptTimeout
 	store.ReceiptVerifyTimeout = config.ReceiptVerifyTimeout
 
-	log.Printf("billing: mode=pg pool max_open=%d max_idle=%d conn_max_lifetime=%s admission_timeout=%s receipt_timeout=%s verify_timeout=%s finalize_timeout=%s",
+	// T07B instance liveness: the process that owns an execution is the process
+	// that must prove it is alive. The loop starts with the pool and stops with
+	// it, so a process that can no longer write billing facts stops claiming to
+	// own executions as well.
+	heartbeatCtx, cancelHeartbeat := context.WithCancel(context.Background())
+	go runInstanceHeartbeat(heartbeatCtx, store, gatewayID, time.Now().UTC(), config.HeartbeatInterval)
+	closeBilling = func() error {
+		cancelHeartbeat()
+		return db.Close()
+	}
+	if config.HeartbeatInterval > billing.DefaultLivenessLease {
+		// The reaper judges this instance dead between two beats if its lease is
+		// shorter than the heartbeat interval. The two knobs live in different
+		// processes, so this is the only place the mismatch can be pointed out.
+		log.Printf("WARNING: GATEWAY_INSTANCE_HEARTBEAT_INTERVAL=%s exceeds the default recovery liveness lease %s; METERING_RECOVERY_LEASE must be configured above the heartbeat interval or this instance will be judged dead between heartbeats",
+			config.HeartbeatInterval, billing.DefaultLivenessLease)
+	}
+
+	log.Printf("billing: mode=pg pool max_open=%d max_idle=%d conn_max_lifetime=%s admission_timeout=%s receipt_timeout=%s verify_timeout=%s finalize_timeout=%s heartbeat_interval=%s",
 		config.MaxOpenConns, config.MaxIdleConns, config.ConnMaxLifetime,
-		config.AdmissionTimeout, config.ReceiptTimeout, config.ReceiptVerifyTimeout, config.FinalizeTimeout)
+		config.AdmissionTimeout, config.ReceiptTimeout, config.ReceiptVerifyTimeout, config.FinalizeTimeout,
+		config.HeartbeatInterval)
 	log.Printf("billing: policy messages<=%d message_bytes<=%d input_bytes<=%d output_tokens default=%d max=%d overhead per_message=%d per_request=%d",
 		config.Policy.MaxMessages, config.Policy.MaxMessageBytes, config.Policy.MaxInputBytes,
 		config.Policy.OutputTokensDefault, config.Policy.OutputTokensMax,
@@ -138,7 +164,7 @@ func openBilling(config billingConfig, gatewayID string, knownModel func(string)
 		gatewayID:       gatewayID,
 		decisionTimeout: config.DecisionTimeout,
 		knownModel:      knownModel,
-	}, db.Close, nil
+	}, closeBilling, nil
 }
 
 // SetObserver installs the latency observer. It must be called before the
@@ -386,9 +412,16 @@ func (a *billingAdapter) Finalize(ctx context.Context, req proxy.FinalizeRequest
 		Model:        req.Model,
 	})
 	if err != nil {
+		result := finalizationResultLabel(err)
+		if errors.Is(err, billing.ErrExecutionState) && a.recordLateUsage(ctx, req, err) {
+			// The execution ended (typically an audited recovery release) and a
+			// usage event arrived afterwards. The refusal above is the state
+			// guard; this is its durable record.
+			result = "late_usage"
+		}
 		log.Printf("execution_id=%s event_id=%s model=%s billing finalization refused (no [DONE] will be released): %v",
 			req.ExecutionID, req.EventID, req.Model, err)
-		a.observeFinalization(req.Model, finalizationResultLabel(err), time.Since(started))
+		a.observeFinalization(req.Model, result, time.Since(started))
 		return err
 	}
 	if attempt != nil {
@@ -437,6 +470,50 @@ func (a *billingAdapter) RecordUsageException(ctx context.Context, req proxy.Fin
 	}
 	a.observeFinalization(req.Model, "exception", time.Since(started))
 	return nil
+}
+
+// recordLateUsage persists the "usage arrived after the decision was made" fact
+// as a durable, queryable anomaly (GET /receipts/exceptions on the metering
+// surface lists it). It returns whether the anomaly was recorded.
+//
+// The write is detached from the request cancellation but bounded: the client is
+// already gone (or about to be), and a lost usage event is exactly the kind of
+// fact that must not depend on a live connection. It never moves money and never
+// vetoes anything: the [DONE] was already withheld by the caller.
+func (a *billingAdapter) recordLateUsage(ctx context.Context, req proxy.FinalizeRequest, cause error) bool {
+	anomalyCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), a.decisionTimeout)
+	defer cancel()
+	reason := boundAnomalyReason(fmt.Sprintf(
+		"late usage event for an execution that can no longer be charged (the platform does not charge it): %v", cause))
+	if err := a.store.RecordSettlementAnomaly(anomalyCtx, billing.SettlementAnomalyParams{
+		Action:      billing.ActionSettlementException,
+		ExecutionID: req.ExecutionID,
+		EventID:     req.EventID,
+		OrgID:       req.OrgID,
+		Reason:      reason,
+		Source:      "finalize_gate",
+		Now:         time.Now().UTC(),
+	}); err != nil {
+		log.Printf("execution_id=%s event_id=%s billing late-usage anomaly could not be recorded: %v",
+			req.ExecutionID, req.EventID, err)
+		return false
+	}
+	return true
+}
+
+// boundAnomalyReason keeps a diagnosis inside billing.MaxReasonLength without
+// cutting a UTF-8 rune in half: the column is PostgreSQL text, which must be
+// valid UTF-8, and a mid-rune cut would turn a diagnosis into an insert error.
+func boundAnomalyReason(reason string) string {
+	reason = strings.TrimSpace(reason)
+	if len(reason) <= billing.MaxReasonLength {
+		return reason
+	}
+	limit := billing.MaxReasonLength
+	for limit > 0 && !utf8.RuneStart(reason[limit]) {
+		limit--
+	}
+	return strings.TrimSpace(reason[:limit])
 }
 
 // refusal writes the unified refusal envelope. The message never includes the
