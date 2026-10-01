@@ -301,12 +301,20 @@ func TestSettleReceiptRefusesExceptionAndTerminalExecutions(t *testing.T) {
 		t.Fatalf("an exception settlement wrote %d money rows", got)
 	}
 
-	// 2. A released execution (T07B's recovery path): a receipt_recorded
-	// execution that already returned its reservation must not be charged by a
-	// late settlement.
+	// 2. A terminal execution whose receipt claims a charge must not be settled.
+	// Since T07B the combination is unreachable through the API — Release and
+	// RecordFailure refuse an execution with a chargeable receipt
+	// (ErrExecutionHasReceipt, see recovery_pg_integration_test.go) — so the
+	// state is injected directly here (the migration deliberately lets a state
+	// row advance) to prove settlement's own guard still refuses it.
 	receipt := env.admitAndFinalize(t, "exec_released", 10, 5, 100, 100, "evt_released")
-	if _, err := env.accounts.Release(ctx, "exec_released", "recovery: the instance is gone and the reservation is stale"); err != nil {
-		t.Fatalf("release: %v", err)
+	if _, err := env.accounts.Release(ctx, "exec_released", "recovery: the instance is gone and the reservation is stale"); !errors.Is(err, ErrExecutionHasReceipt) {
+		t.Fatalf("releasing a chargeable execution: %v, want ErrExecutionHasReceipt", err)
+	}
+	if _, err := env.db.Exec(`UPDATE billing_executions
+SET status = 'released', terminal_reason = 'injected: terminal execution with a chargeable receipt'
+WHERE execution_id = $1`, "exec_released"); err != nil {
+		t.Fatalf("inject released state: %v", err)
 	}
 	if _, err := env.accounts.SettleReceipt(ctx, settleParams(receipt, "4-2")); !errors.Is(err, ErrSettlementState) {
 		t.Fatalf("settling a released execution: %v, want ErrSettlementState", err)
@@ -315,14 +323,14 @@ func TestSettleReceiptRefusesExceptionAndTerminalExecutions(t *testing.T) {
 	if released.Status != StatusReleased {
 		t.Fatalf("execution=%+v, want released", released)
 	}
-	// Only the release entry exists: settlement never posted a debit.
+	// No settlement debit, and the refused release posted nothing either.
 	if got := countRows(t, env.db, `SELECT count(*) FROM billing_entries WHERE business_id = $1`,
 		ReceiptBusinessID("exec_released", KindDebit)); got != 0 {
 		t.Fatalf("late settlement wrote %d debits", got)
 	}
 	if got := countRows(t, env.db, `SELECT count(*) FROM billing_entries WHERE business_id = $1 AND kind = $2`,
-		ExecutionBusinessID("exec_released", KindRelease), KindRelease); got != 1 {
-		t.Fatalf("release rows=%d, want exactly 1", got)
+		ExecutionBusinessID("exec_released", KindRelease), KindRelease); got != 0 {
+		t.Fatalf("release rows=%d, want 0 (the release itself was refused)", got)
 	}
 }
 

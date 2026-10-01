@@ -331,7 +331,12 @@ type billingConfig struct {
 	// before "[DONE]"; it must exceed ReceiptTimeout so the store's own bound
 	// fails first.
 	FinalizeTimeout time.Duration
-	Policy          admissionPolicy
+	// HeartbeatInterval is how often the process refreshes its
+	// gateway_instances liveness row (T07B). The recovery reaper's liveness
+	// lease (METERING_RECOVERY_LEASE) must be a comfortable multiple of it:
+	// that lease is what turns "stopped beating" into "dead".
+	HeartbeatInterval time.Duration
+	Policy            admissionPolicy
 }
 
 // billingConfigDefaults mirror the documented defaults; every knob is
@@ -345,6 +350,10 @@ const (
 	defaultBillingVerifyTimeout    = billing.DefaultReceiptVerifyTimeout
 	defaultBillingDecisionTimeout  = 1 * time.Second
 	defaultBillingFinalizeTimeout  = 2 * time.Second
+	// defaultBillingHeartbeatInterval mirrors billing.DefaultHeartbeatInterval:
+	// the same bound the recovery side documents as the heartbeat it must
+	// outlive.
+	defaultBillingHeartbeatInterval = billing.DefaultHeartbeatInterval
 )
 
 // billingConfigFromEnv reads the billing configuration through an injected
@@ -367,6 +376,7 @@ func billingConfigFromEnv(lookup appenv.Lookup) (billingConfig, error) {
 		ReceiptVerifyTimeout: lookupDuration(lookup, "GATEWAY_BILLING_RECEIPT_VERIFY_TIMEOUT"),
 		DecisionTimeout:      lookupDuration(lookup, "GATEWAY_BILLING_DECISION_TIMEOUT"),
 		FinalizeTimeout:      lookupDuration(lookup, "GATEWAY_FINALIZE_TIMEOUT"),
+		HeartbeatInterval:    lookupDuration(lookup, "GATEWAY_INSTANCE_HEARTBEAT_INTERVAL"),
 		Policy:               policy,
 	}
 	if config.MaxOpenConns <= 0 {
@@ -395,6 +405,9 @@ func billingConfigFromEnv(lookup appenv.Lookup) (billingConfig, error) {
 	}
 	if config.FinalizeTimeout <= 0 {
 		config.FinalizeTimeout = defaultBillingFinalizeTimeout
+	}
+	if config.HeartbeatInterval <= 0 {
+		config.HeartbeatInterval = defaultBillingHeartbeatInterval
 	}
 	if err := applyPolicyEnv(lookup, &config.Policy); err != nil {
 		return billingConfig{}, err

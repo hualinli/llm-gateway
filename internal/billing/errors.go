@@ -102,6 +102,15 @@ var (
 	// settled execution is T07's business, not the release path's.
 	ErrExecutionState = errors.New("billing: the execution is not in a state that allows this transition")
 
+	// ErrExecutionHasReceipt marks a release (or a failure-without-charge) that
+	// would return the reservation of an execution whose durable receipt proves
+	// consumption and therefore must be settled: the receipt wins, the
+	// reservation is not returned. An *exception* receipt is the opposite fact
+	// (usage unknown, nothing chargeable) and does not block an audited release.
+	// T07B added this guard; before it, `receipt_recorded -> released` was
+	// reachable and silently dropped a chargeable consumption fact.
+	ErrExecutionHasReceipt = errors.New("billing: the execution has a chargeable usage receipt and must be settled, not released")
+
 	// ErrReceiptNotFound marks an unknown usage receipt, including an execution
 	// that has an execution row but no durable receipt yet.
 	ErrReceiptNotFound = errors.New("billing: usage receipt not found")
