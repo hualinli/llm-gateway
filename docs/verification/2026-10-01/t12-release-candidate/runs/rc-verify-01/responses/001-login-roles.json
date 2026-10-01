@@ -1,0 +1,83 @@
+{
+  "request": {
+    "roles": [
+      "admin",
+      "member_a",
+      "member_b",
+      "viewer_a"
+    ]
+  },
+  "response": {
+    "logins": [
+      {
+        "role": "admin",
+        "email": "rc-admin@example.com",
+        "status": 200,
+        "user_id": "1",
+        "platform_admin": true,
+        "organizations": [
+          "rc-admin@example.com:owner",
+          "demo-enterprise-a:owner",
+          "demo-enterprise-b:owner"
+        ],
+        "set_cookie": "gw_session=<redacted>; max-age=43200; path=/; HttpOnly; SameSite=Lax | gw_csrf=7rObiH…<redacted:43>; max-age=43200; path=/; HttpOnly; SameSite=Lax",
+        "cookie_flags": {
+          "HttpOnly": true,
+          "SameSite": true,
+          "Secure": false
+        }
+      },
+      {
+        "role": "member_a",
+        "email": "rc-member-a-rc-verify-01@rc.test",
+        "status": 200,
+        "user_id": "6",
+        "platform_admin": false,
+        "organizations": [
+          "demo-enterprise-a:member",
+          "rc-member-a-rc-verify-01@rc.test:owner"
+        ],
+        "set_cookie": "gw_session=<redacted>; max-age=43200; path=/; HttpOnly; SameSite=Lax | gw_csrf=2O8Aty…<redacted:43>; max-age=43200; path=/; HttpOnly; SameSite=Lax",
+        "cookie_flags": {
+          "HttpOnly": true,
+          "SameSite": true,
+          "Secure": false
+        }
+      },
+      {
+        "role": "member_b",
+        "email": "rc-member-b-rc-verify-01@rc.test",
+        "status": 200,
+        "user_id": "7",
+        "platform_admin": false,
+        "organizations": [
+          "demo-enterprise-b:member",
+          "rc-member-b-rc-verify-01@rc.test:owner"
+        ],
+        "set_cookie": "gw_session=<redacted>; max-age=43200; path=/; HttpOnly; SameSite=Lax | gw_csrf=AMO-XP…<redacted:43>; max-age=43200; path=/; HttpOnly; SameSite=Lax",
+        "cookie_flags": {
+          "HttpOnly": true,
+          "SameSite": true,
+          "Secure": false
+        }
+      },
+      {
+        "role": "viewer_a",
+        "email": "rc-viewer-a-rc-verify-01@rc.test",
+        "status": 200,
+        "user_id": "9",
+        "platform_admin": false,
+        "organizations": [
+          "demo-enterprise-a:billing_viewer",
+          "rc-viewer-a-rc-verify-01@rc.test:owner"
+        ],
+        "set_cookie": "gw_session=<redacted>; max-age=43200; path=/; HttpOnly; SameSite=Lax | gw_csrf=hKCO_r…<redacted:43>; max-age=43200; path=/; HttpOnly; SameSite=Lax",
+        "cookie_flags": {
+          "HttpOnly": true,
+          "SameSite": true,
+          "Secure": false
+        }
+      }
+    ]
+  }
+}

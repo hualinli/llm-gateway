@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -14,6 +16,7 @@ import (
 	"llm-gateway/internal/billing"
 	"llm-gateway/internal/metering"
 	"llm-gateway/internal/metrics"
+	"llm-gateway/internal/observability"
 )
 
 // T07B wiring: the bounded execution-recovery loop and the human queue surface
@@ -36,6 +39,13 @@ const (
 
 	// defaultRecoveryReadTimeout bounds one HTTP read of the human queue.
 	defaultRecoveryReadTimeout = 3 * time.Second
+	// defaultRecoveryWriteTimeout bounds one manual disposition: it moves money
+	// in one transaction, so it gets the settlement bound rather than the read
+	// bound.
+	defaultRecoveryWriteTimeout = 10 * time.Second
+	// maxManualDispositionBody bounds the operator's request body. The body is
+	// two fields; anything larger is a caller bug, not a decision.
+	maxManualDispositionBody = 8 << 10
 )
 
 // recoveryConfig is the parsed environment of the recovery janitor.
@@ -68,6 +78,9 @@ type recoveryStore interface {
 	RecoveryGap(ctx context.Context, params billing.RecoveryGapParams) (billing.RecoveryGap, error)
 	ReviewRequiredBacklog(ctx context.Context, params billing.ReviewBacklogParams) (billing.ReviewBacklog, error)
 	ListReviewRequiredExecutions(ctx context.Context, params billing.ReviewQueueParams) (billing.ReviewQueuePage, error)
+	// T12: the two audited manual decisions of the review_required queue.
+	ReleaseExecutionManually(ctx context.Context, params billing.ManualDispositionParams) (billing.ManualDispositionResult, error)
+	SettleExecutionManually(ctx context.Context, params billing.ManualDispositionParams) (billing.ManualDispositionResult, error)
 }
 
 // recoveryRuntime owns the loop and the operator surface.
@@ -77,6 +90,34 @@ type recoveryRuntime struct {
 	// surface stays available, the janitor does not run.
 	loop      *billing.ExecutionRecovery
 	reviewSLA time.Duration
+	// window is the recovery window (max execution duration + grace) the manual
+	// dispositions enforce. It is kept separately from the loop so the operator
+	// surface keeps the configured window when the automatic loop is off.
+	window time.Duration
+	// lease is the liveness lease recorded with a manual release.
+	lease time.Duration
+}
+
+// windowValue is the recovery window in force, whether or not the loop runs.
+func (r *recoveryRuntime) windowValue() time.Duration {
+	if r.loop != nil {
+		return r.loop.Options().MinAge()
+	}
+	if r.window > 0 {
+		return r.window
+	}
+	return billing.DefaultRecoveryMaxExecutionDuration + billing.DefaultRecoveryGrace
+}
+
+// leaseValue is the liveness lease in force, whether or not the loop runs.
+func (r *recoveryRuntime) leaseValue() time.Duration {
+	if r.loop != nil {
+		return r.loop.Options().LivenessLease
+	}
+	if r.lease > 0 {
+		return r.lease
+	}
+	return billing.DefaultLivenessLease
 }
 
 // sla is the human handling target in force, whether or not the loop runs.
@@ -168,10 +209,15 @@ func startRecovery(ctx context.Context, ledger metering.Ledger, config recoveryC
 		return nil, errors.New("execution recovery requires the ledger's PostgreSQL pool")
 	}
 	store := billing.NewPGAccountStore(db)
-	runtime := &recoveryRuntime{store: store, reviewSLA: config.ReviewSLA}
+	runtime := &recoveryRuntime{
+		store:     store,
+		reviewSLA: config.ReviewSLA,
+		window:    config.MaxExecutionDuration + config.Grace,
+		lease:     config.LivenessLease,
+	}
 
 	if config.Mode == recoveryModeOff {
-		log.Printf("WARNING: METERING_RECOVERY=off: no abandoned reserved/executing execution will be released automatically; /recovery/review-required still reports the human queue (SLA %s)", config.ReviewSLA)
+		log.Printf("WARNING: METERING_RECOVERY=off: no abandoned reserved/executing execution will be released automatically; /recovery/review-required still reports the human queue and its manual release/settle actions stay available (SLA %s)", config.ReviewSLA)
 		return runtime, nil
 	}
 
@@ -199,14 +245,218 @@ func startRecovery(ctx context.Context, ledger metering.Ledger, config recoveryC
 }
 
 // register mounts the operator surface behind the same admin bearer as the
-// ledger endpoints. Both endpoints are read-only.
+// ledger endpoints. /recovery/status and /recovery/review-required are reads;
+// the two manual disposition actions move money, so they are POST-only and take
+// the acting user and a reason from the body (T12, §6.5).
 func (r *recoveryRuntime) register(mux *http.ServeMux, adminToken string) {
 	if r == nil {
 		return
 	}
 	mux.Handle("/recovery/status", requireBearer(http.HandlerFunc(r.handleStatus), adminToken))
 	mux.Handle("/recovery/review-required", requireBearer(http.HandlerFunc(r.handleReviewQueue), adminToken))
-	log.Printf("metering admin endpoints /recovery/status and /recovery/review-required registered")
+	mux.Handle("POST /recovery/review-required/{execution}/release",
+		requireBearer(http.HandlerFunc(r.handleManualRelease), adminToken))
+	mux.Handle("POST /recovery/review-required/{execution}/settle",
+		requireBearer(http.HandlerFunc(r.handleManualSettle), adminToken))
+	log.Printf("metering admin endpoints /recovery/status, /recovery/review-required, " +
+		"POST /recovery/review-required/{execution}/release and POST /recovery/review-required/{execution}/settle registered")
+}
+
+// manualDispositionRequest is the body of both manual actions. Both fields are
+// required: the admin bearer authenticates the *caller*, not the person on whose
+// behalf the money moves.
+type manualDispositionRequest struct {
+	ActorUserID int64  `json:"actor_user_id"`
+	Reason      string `json:"reason"`
+}
+
+// handleManualRelease releases one review_required execution under the
+// platform-absorbs policy: the reservation goes back and the customer is not
+// charged.
+func (r *recoveryRuntime) handleManualRelease(w http.ResponseWriter, req *http.Request) {
+	r.handleManualDisposition(w, req, billing.ManualActionRelease)
+}
+
+// handleManualSettle settles one review_required execution: the pinned
+// reservation is charged and released through the ordinary settlement postings.
+func (r *recoveryRuntime) handleManualSettle(w http.ResponseWriter, req *http.Request) {
+	r.handleManualDisposition(w, req, billing.ManualActionSettle)
+}
+
+// handleManualDisposition is the shared handler of the two decisions. Its status
+// codes are the documented contract:
+//
+//	400  the request itself is malformed (body, reason)
+//	401  the admin bearer is missing or wrong (requireBearer)
+//	403  no acting user: an unattributed override is not an audit trail
+//	404  no such execution
+//	409  refused by a guard: not review_required, a chargeable receipt, inside
+//	     the recovery window, or a ledger conflict
+//	503  the store could not answer (PostgreSQL)
+func (r *recoveryRuntime) handleManualDisposition(w http.ResponseWriter, req *http.Request, action string) {
+	if r == nil || r.store == nil {
+		writeSettlementJSON(w, http.StatusServiceUnavailable, map[string]any{"ok": false, "error": "recovery requires the PostgreSQL ledger"})
+		return
+	}
+	executionID := strings.TrimSpace(req.PathValue("execution"))
+	if executionID == "" || len(executionID) > billing.MaxExecutionIDLength {
+		writeSettlementJSON(w, http.StatusNotFound, map[string]any{
+			"ok": false, "error": "an execution id is required in the path"})
+		return
+	}
+
+	body, err := decodeManualDisposition(w, req)
+	if err != nil {
+		writeSettlementJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	// 403, not 400: the request is well formed, but it does not say who is
+	// acting. The admin bearer authenticates the calling service; a money-moving
+	// manual decision additionally requires the human it is attributed to.
+	if body.ActorUserID <= 0 {
+		writeSettlementJSON(w, http.StatusForbidden, map[string]any{
+			"ok": false, "error": "actor_user_id > 0 is required: a manual " + action + " must be attributed to the operator who decided it"})
+		return
+	}
+	reason := strings.TrimSpace(body.Reason)
+	if reason == "" {
+		writeSettlementJSON(w, http.StatusBadRequest, map[string]any{
+			"ok": false, "error": "reason is required: money must never move without a stated reason"})
+		return
+	}
+
+	now := time.Now().UTC()
+	params := billing.NormalizeManualDisposition(billing.ManualDispositionParams{
+		ExecutionID:   executionID,
+		Action:        action,
+		Reason:        reason,
+		ActorUserID:   body.ActorUserID,
+		MinAge:        r.windowValue(),
+		LivenessLease: r.leaseValue(),
+		ObservedAt:    now,
+		RequestID:     observability.RequestID(req.Context()),
+		Now:           now,
+	})
+
+	ctx, cancel := context.WithTimeout(req.Context(), defaultRecoveryWriteTimeout)
+	defer cancel()
+
+	var (
+		result billing.ManualDispositionResult
+		apply  error
+	)
+	switch action {
+	case billing.ManualActionRelease:
+		result, apply = r.store.ReleaseExecutionManually(ctx, params)
+	case billing.ManualActionSettle:
+		result, apply = r.store.SettleExecutionManually(ctx, params)
+	default:
+		writeSettlementJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "unknown disposition"})
+		return
+	}
+	if apply != nil {
+		writeSettlementJSON(w, manualDispositionStatus(apply), map[string]any{
+			"ok":           false,
+			"action":       action,
+			"execution_id": executionID,
+			"error":        apply.Error(),
+		})
+		return
+	}
+	writeSettlementJSON(w, http.StatusOK, manualDispositionPayload(action, result))
+}
+
+// decodeManualDisposition reads the two required fields and refuses anything
+// else: an unknown field is a caller that believes it is setting something.
+func decodeManualDisposition(w http.ResponseWriter, req *http.Request) (manualDispositionRequest, error) {
+	var body manualDispositionRequest
+	decoder := json.NewDecoder(http.MaxBytesReader(w, req.Body, maxManualDispositionBody))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return manualDispositionRequest{}, fmt.Errorf("body must be a JSON object {\"actor_user_id\": <user id>, \"reason\": \"<why>\"}: %v", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return manualDispositionRequest{}, errors.New("body must contain exactly one JSON object")
+	}
+	if len(body.Reason) > billing.MaxRecoveryReasonLength {
+		return manualDispositionRequest{}, fmt.Errorf("reason exceeds %d bytes", billing.MaxRecoveryReasonLength)
+	}
+	return body, nil
+}
+
+// manualDispositionStatus maps a store refusal onto the documented contract.
+// A refusal is never a 500: every one of them means "no money moved, and here is
+// why".
+func manualDispositionStatus(err error) int {
+	switch {
+	case errors.Is(err, billing.ErrExecutionNotFound):
+		return http.StatusNotFound
+	case errors.Is(err, billing.ErrInvalidArgument),
+		errors.Is(err, billing.ErrRecoveryCheckMissing):
+		return http.StatusBadRequest
+	case errors.Is(err, billing.ErrExecutionState),
+		errors.Is(err, billing.ErrExecutionHasReceipt),
+		errors.Is(err, billing.ErrRecoveryTooYoung),
+		errors.Is(err, billing.ErrRecoveryInstanceAlive),
+		errors.Is(err, billing.ErrRecoveryOwnerUnknown),
+		errors.Is(err, billing.ErrIdempotencyConflict):
+		return http.StatusConflict
+	default:
+		return http.StatusServiceUnavailable
+	}
+}
+
+// manualDispositionPayload reports the resulting execution state plus what moved.
+func manualDispositionPayload(action string, result billing.ManualDispositionResult) map[string]any {
+	execution := result.Execution
+	payload := map[string]any{
+		"ok":               true,
+		"action":           action,
+		"manual":           true,
+		"status":           execution.Status,
+		"execution_id":     execution.ExecutionID,
+		"org_id":           execution.OrgID,
+		"price_version_id": execution.PriceVersionID,
+		"model":            execution.Model,
+		"reserved_micro":   billing.FormatMicro(execution.ReservedMicro),
+		"terminal_reason":  nilStringJSON(execution.TerminalReason),
+		"updated_at":       execution.UpdatedAt.UTC().Format(time.RFC3339Nano),
+		"money": map[string]any{
+			"charge_micro":         billing.FormatMicro(result.ChargeMicro),
+			"released_micro":       billing.FormatMicro(execution.ReservedMicro),
+			"debit_entry_id":       entryID(result.DebitEntry),
+			"release_entry_id":     entryID(result.ReleaseEntry),
+			"posted_balance_micro": billing.FormatMicro(result.Account.PostedBalanceMicro),
+			"reserved_total_micro": billing.FormatMicro(result.Account.ReservedMicro),
+			"account_version":      result.Account.Version,
+		},
+		"audit": map[string]any{
+			"action": action,
+			"manual": true,
+			"policy": result.Policy,
+			"receipt": map[string]any{
+				"checked": result.ReceiptChecked,
+				"status":  result.ReceiptStatus,
+			},
+		},
+	}
+	if action == billing.ManualActionRelease {
+		payload["audit"].(map[string]any)["action"] = billing.ActionExecutionRecovered
+		payload["audit"].(map[string]any)["manual_override"] = result.Checks.ManualOverride
+		payload["audit"].(map[string]any)["owner_alive"] = result.Checks.OwnerAlive
+		payload["audit"].(map[string]any)["owner_instance_id"] = result.Checks.OwnerInstance
+	} else {
+		payload["audit"].(map[string]any)["action"] = billing.ActionExecutionManuallySettled
+	}
+	return payload
+}
+
+// entryID renders an optional ledger entry id.
+func entryID(entry *billing.Entry) any {
+	if entry == nil {
+		return nil
+	}
+	return entry.ID
 }
 
 // handleStatus answers the effective bounds, the loop's health and the human

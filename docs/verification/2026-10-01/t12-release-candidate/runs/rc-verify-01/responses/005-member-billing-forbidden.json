@@ -1,0 +1,15 @@
+{
+  "request": {
+    "actor": "member_a"
+  },
+  "response": {
+    "status": 403,
+    "body": {
+      "error": {
+        "code": "forbidden",
+        "message": "action is not permitted for your organization role",
+        "request_id": "ec169d99589127c969b4f3b3958197bb"
+      }
+    }
+  }
+}

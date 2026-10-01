@@ -1,28 +1,162 @@
 name: CI
 
+# 分层见 docs/plans/PRODUCTION-INTERVIEW-ROADMAP-2026-10-01.md §9.3：
+#   * 每个 PR：普通测试/vet/build、关键 package race、migration/Redis/PG 集成、
+#     frontend typecheck/build/unit、关键 RBAC/账本/三角色 E2E。
+#   * 夜间/手动：完整 race。
+#   * 容量与长时间压测不放在共享 runner 上（见验收规格 §6.2/§9.3）。
 on:
   push:
   pull_request:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # 关键 package：身份 / 成员 / Key 归属 / 资金账本 / 准入 / 限流 / 数据面。
+  KEY_RACE_PACKAGES: >-
+    ./internal/billing/...
+    ./internal/gatewayguard/...
+    ./internal/console/...
+    ./internal/organization/...
+    ./internal/iam/...
+    ./internal/limiter/...
+    ./internal/proxy/...
+    ./cmd/gateway/...
+    ./cmd/console/...
 
 jobs:
   verify:
+    name: Go（fmt / build / vet / test / race / 集成）
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
-      - name: Unit tests
-        run: go test ./... -count=1
-      - name: Race detector
-        run: go test -race ./... -count=1
-      - name: Static checks
-        run: go vet ./...
+
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "以下文件未格式化："
+            echo "$unformatted"
+            exit 1
+          fi
+
       - name: Build
         run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Unit tests
+        run: go test ./... -count=1
+
+      - name: Race detector（关键 package）
+        run: go test -race $KEY_RACE_PACKAGES -count=1
+
       - name: Redis and PostgreSQL integration
         run: make integration-test
+
       - name: Stop test dependencies
         if: always()
         run: make test-down
+
+  frontend:
+    name: 前端（typecheck / build / unit）
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: npm ci
+        run: npm ci
+
+      - name: Typecheck（tsc --noEmit）
+        run: npm run typecheck
+
+      - name: Build（tsc --noEmit && vite build）
+        run: npm run build
+
+      - name: Unit tests（vitest）
+        run: npm test
+
+  e2e:
+    name: 三角色 Playwright E2E（真实栈）
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # 真实 docker compose 栈 + 真实 Console/Control/Gateway/PostgreSQL/Redis。
+    needs: [verify]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: docker / compose 版本
+        run: |
+          docker version
+          docker compose version
+
+      - name: npm ci
+        working-directory: web
+        run: npm ci
+
+      - name: 安装 chromium
+        working-directory: web
+        run: npx playwright install --with-deps chromium
+
+      - name: 发布候选端到端（构建 → 迁移 → bootstrap → 验收 → 安全 → Playwright）
+        # scripts/release-candidate.sh 自带资源回收（只 drop 自己的 compose project）。
+        run: ./scripts/release-candidate.sh run --project-name t12rc-ci --run-id "ci-${GITHUB_RUN_ID}" --with-e2e
+
+      - name: 证据归档
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: t12-release-candidate-evidence
+          path: |
+            docs/verification/2026-10-01/t12-release-candidate/runs/**
+            web/playwright-report/**
+            web/test-results/**
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: 兜底回收
+        if: always()
+        run: ./scripts/release-candidate.sh down --project-name t12rc-ci --work-dir data/release-candidate/current || true
+
+  nightly-race:
+    name: 夜间完整 race
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Race detector（全部 package）
+        run: go test -race ./... -count=1

@@ -1,0 +1,39 @@
+{
+  "consoleBaseUrl": "http://127.0.0.1:18092",
+  "gatewayBaseUrl": "http://127.0.0.1:18090",
+  "generatedAt": "2026-10-01T10:59:07.510Z",
+  "runId": "mupf8z1y",
+  "admin": {
+    "email": "rc-admin@example.com",
+    "password": "<redacted>",
+    "userId": "1"
+  },
+  "orgA": {
+    "id": "2",
+    "name": "demo-enterprise-a"
+  },
+  "orgB": {
+    "id": "3",
+    "name": "demo-enterprise-b"
+  },
+  "orgAdmin": {
+    "email": "e2e-orgadmin-mupf8z1y@example.com",
+    "password": "<redacted>",
+    "userId": "12"
+  },
+  "member": {
+    "email": "e2e-member-mupf8z1y@example.com",
+    "password": "<redacted>",
+    "userId": "10"
+  },
+  "viewer": {
+    "email": "e2e-viewer-mupf8z1y@example.com",
+    "password": "<redacted>",
+    "userId": "11"
+  },
+  "adjustmentKey": "e2e-seed-credit-mupf8z1y",
+  "priceModel": "e2e-model",
+  "gatewayKey": "<redacted>",
+  "backend": true,
+  "reason": "ok"
+}

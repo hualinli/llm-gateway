@@ -240,20 +240,34 @@ func (s *PGAccountStore) RecoverExecution(ctx context.Context, params RecoveryPa
 }
 
 func (s *PGAccountStore) recoverExecutionTx(ctx context.Context, tx *sql.Tx, params RecoveryParams) (RecoveryResult, error) {
+	return s.recoverExecutionGuardedTx(ctx, tx, params, recoverySourceStatuses, true)
+}
+
+// recoverExecutionGuardedTx is the shared body of every audited recovery
+// release: the automatic janitor's (recoverySourceStatuses, replay of an
+// already-released execution) and the manual disposition of the
+// review_required queue (exactly review_required, no replay — see manual.go).
+//
+// The two callers differ in *which* executions they accept and whether a
+// released row is an idempotent replay; they share everything that moves money:
+// the execution row lock, the window check, the receipt guard, the
+// owner-liveness decision (waivable only by Manual), the release posting, the
+// guarded transition and the audit row.
+func (s *PGAccountStore) recoverExecutionGuardedTx(ctx context.Context, tx *sql.Tx, params RecoveryParams, sourceStatuses []string, allowReplay bool) (RecoveryResult, error) {
 	execution, err := lockExecutionTx(ctx, tx, params.ExecutionID)
 	if err != nil {
 		return RecoveryResult{}, err
 	}
-	if execution.Status == StatusReleased {
+	if allowReplay && execution.Status == StatusReleased {
 		account, err := getAccountOrZeroTx(ctx, tx, execution.OrgID)
 		if err != nil {
 			return RecoveryResult{}, err
 		}
 		return RecoveryResult{Execution: *execution, Account: account, Replayed: true}, nil
 	}
-	if !containsStatus(recoverySourceStatuses, execution.Status) {
+	if !containsStatus(sourceStatuses, execution.Status) {
 		return RecoveryResult{}, fmt.Errorf("%w: execution %s is %s; recovery releases only %v",
-			ErrExecutionState, params.ExecutionID, execution.Status, recoverySourceStatuses)
+			ErrExecutionState, params.ExecutionID, execution.Status, sourceStatuses)
 	}
 
 	now := params.Now
@@ -522,6 +536,8 @@ func insertRecoveryAuditTx(ctx context.Context, tx txExecutor, execution Executi
 		"reserved_micro":         FormatMicro(execution.ReservedMicro),
 		"released_micro":         FormatMicro(execution.ReservedMicro),
 		"reason":                 params.Reason,
+		"manual":                 strconv.FormatBool(params.Manual),
+		"actor_user_id":          strconv.FormatInt(params.ActorUserID, 10),
 		"platform_policy":        checks.PlatformPolicy,
 		"check_observed_at":      checks.ObservedAt.UTC().Format(time.RFC3339Nano),
 		"admitted_at":            checks.AdmittedAt.UTC().Format(time.RFC3339Nano),

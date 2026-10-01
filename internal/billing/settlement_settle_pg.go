@@ -144,70 +144,21 @@ func (s *PGAccountStore) settleReceiptTx(ctx context.Context, tx *sql.Tx, params
 
 	// 3. money: the consumption debit first, then the release of the whole
 	// reservation. Both use AdjustTx, so the append-only entry and the account
-	// projection are one fact.
-	var (
-		debitEntry   *Entry
-		releaseEntry *Entry
-		account      Account
-		accountRead  bool
-	)
-	if receipt.ChargeMicro > 0 {
-		adjust := AdjustParams{
-			OrgID:       receipt.OrgID,
-			AmountMicro: receipt.ChargeMicro,
-			Direction:   DirectionDebit,
-			Kind:        KindDebit,
-			Reason:      "settle usage receipt " + receipt.ExecutionID,
-			BusinessID:  ReceiptBusinessID(receipt.ExecutionID, KindDebit),
-			RequestID:   nilString(execution.RequestID),
-			Now:         now,
-		}
-		adjust.PayloadDigest = SettlementDebitDigest(params.Identity, adjust.BusinessID)
-		applied, err := s.adjustTx(ctx, tx, NormalizeAdjustment(adjust))
-		if err != nil {
-			return SettlementResult{}, err
-		}
-		entry := applied.Entry
-		debitEntry = &entry
-		account, accountRead = applied.Account, true
+	// projection are one fact. postSettlementTx is shared with the manual
+	// disposition path (T12), so a manual settle posts the *same* two entries —
+	// same kinds, same deterministic business ids — as this automatic one.
+	postings, err := s.postSettlementTx(ctx, tx, settlementPostingsParams{
+		Execution:   execution,
+		OrgID:       receipt.OrgID,
+		ChargeMicro: receipt.ChargeMicro,
+		DebitReason: "settle usage receipt " + receipt.ExecutionID,
+		DebitDigest: SettlementDebitDigest(params.Identity, ReceiptBusinessID(receipt.ExecutionID, KindDebit)),
+		Now:         now,
+	})
+	if err != nil {
+		return SettlementResult{}, err
 	}
-	if execution.ReservedMicro > 0 {
-		adjust := AdjustParams{
-			OrgID:       receipt.OrgID,
-			AmountMicro: execution.ReservedMicro,
-			Direction:   DirectionDebit,
-			Kind:        KindRelease,
-			Reason:      settlementReleaseReason,
-			// The same business id the ordinary release path uses: the ledger's
-			// UNIQUE (business_id, kind) is what makes "settle" and "release"
-			// mutually exclusive.
-			BusinessID: ExecutionBusinessID(receipt.ExecutionID, KindRelease),
-			RequestID:  nilString(execution.RequestID),
-			Now:        now,
-		}
-		adjust.PayloadDigest = ReleaseDigest(receipt.ExecutionID, settlementReleaseReason)
-		applied, err := s.adjustTx(ctx, tx, NormalizeAdjustment(adjust))
-		if err != nil {
-			return SettlementResult{}, err
-		}
-		entry := applied.Entry
-		releaseEntry = &entry
-		account, accountRead = applied.Account, true
-	}
-	if !accountRead {
-		// A zero-cost execution moves no money, so no posting read the
-		// projection. Report it if it exists; a missing row and a zero
-		// projection are the same fact here because nothing moved.
-		existing, err := getAccountTx(ctx, tx, execution.OrgID)
-		switch {
-		case err == nil:
-			account = existing
-		case errors.Is(err, ErrAccountNotFound):
-			account = Account{OrgID: execution.OrgID, Currency: CurrencyCNY}
-		default:
-			return SettlementResult{}, err
-		}
-	}
+	debitEntry, releaseEntry, account := postings.DebitEntry, postings.ReleaseEntry, postings.Account
 
 	// 4. the receipt becomes settled, last.
 	settled, err := scanReceipt(tx.QueryRowContext(ctx, queryMarkReceiptSettled, receipt.ExecutionID, now))
@@ -255,6 +206,116 @@ func (s *PGAccountStore) settleReceiptTx(ctx context.Context, tx *sql.Tx, params
 		OverReserved: overReserved,
 		Lag:          lag,
 	}, nil
+}
+
+// settlementPostingsParams is the money half of one settlement: the consumption
+// debit and the release of the whole reservation, both with deterministic
+// business ids. The facts it needs are exactly the ones the caller already read
+// inside its own transaction.
+type settlementPostingsParams struct {
+	// Execution is the execution the settlement decided for. Its reservation is
+	// what the release returns and its request id is carried onto both entries.
+	Execution Execution
+	// OrgID is the organization whose account is charged and whose projection is
+	// updated.
+	OrgID int64
+	// ChargeMicro is the consumption debit. 0 posts no debit (a zero-cost
+	// execution); the ledger's CHECK (amount_micro > 0) forbids a zero row.
+	ChargeMicro int64
+	// DebitReason is the ledger reason of the debit.
+	DebitReason string
+	// DebitDigest is the canonical payload digest of the debit. It must be a
+	// deterministic function of stored facts: a changed digest under the same
+	// business id would turn an idempotent retry into an idempotency conflict.
+	DebitDigest string
+	// Now is posted_at of both entries.
+	Now time.Time
+}
+
+// settlementPostings is what postSettlementTx moved. Account is the projection
+// after the postings (or the stored projection when nothing moved).
+type settlementPostings struct {
+	DebitEntry   *Entry
+	ReleaseEntry *Entry
+	Account      Account
+}
+
+// postSettlementTx posts the two entries every settlement is made of:
+//
+//	kind=debit    business_id=billing_receipt:debit:<execution>   charge_micro
+//	kind=release  business_id=billing_execution:release:<execution> reservation
+//
+// Both business ids are derived from the execution id, which is what makes a
+// settlement idempotent (a retry addresses the same ledger rows) and what makes
+// "settle" and "release" mutually exclusive at the ledger level: the ordinary
+// release path (release.go/recovery) posts the very same (business_id, kind)
+// pair with the same amount.
+//
+// It is shared by the automatic settlement (T07A's settleReceiptTx) and the
+// manual disposition of a review_required execution (T12), so a manual settle is
+// not a second money path: it is the same postings, differing only in which
+// payload digest the debit carries (the automatic one is derived from the
+// receipt, the manual one from the execution's pinned price version).
+func (s *PGAccountStore) postSettlementTx(ctx context.Context, tx txExecutor, params settlementPostingsParams) (settlementPostings, error) {
+	var postings settlementPostings
+	if params.ChargeMicro > 0 {
+		adjust := AdjustParams{
+			OrgID:       params.OrgID,
+			AmountMicro: params.ChargeMicro,
+			Direction:   DirectionDebit,
+			Kind:        KindDebit,
+			Reason:      params.DebitReason,
+			BusinessID:  ReceiptBusinessID(params.Execution.ExecutionID, KindDebit),
+			RequestID:   nilString(params.Execution.RequestID),
+			Now:         params.Now,
+		}
+		adjust.PayloadDigest = params.DebitDigest
+		applied, err := s.adjustTx(ctx, tx, NormalizeAdjustment(adjust))
+		if err != nil {
+			return settlementPostings{}, err
+		}
+		entry := applied.Entry
+		postings.DebitEntry = &entry
+		postings.Account = applied.Account
+	}
+	if params.Execution.ReservedMicro > 0 {
+		adjust := AdjustParams{
+			OrgID:       params.OrgID,
+			AmountMicro: params.Execution.ReservedMicro,
+			Direction:   DirectionDebit,
+			Kind:        KindRelease,
+			Reason:      settlementReleaseReason,
+			// The same business id the ordinary release path uses: the ledger's
+			// UNIQUE (business_id, kind) is what makes "settle" and "release"
+			// mutually exclusive.
+			BusinessID: ExecutionBusinessID(params.Execution.ExecutionID, KindRelease),
+			RequestID:  nilString(params.Execution.RequestID),
+			Now:        params.Now,
+		}
+		adjust.PayloadDigest = ReleaseDigest(params.Execution.ExecutionID, settlementReleaseReason)
+		applied, err := s.adjustTx(ctx, tx, NormalizeAdjustment(adjust))
+		if err != nil {
+			return settlementPostings{}, err
+		}
+		entry := applied.Entry
+		postings.ReleaseEntry = &entry
+		postings.Account = applied.Account
+	}
+	if postings.DebitEntry == nil && postings.ReleaseEntry == nil {
+		// A zero-cost execution moves no money, so no posting read the
+		// projection. Report it if it exists; a missing row and a zero
+		// projection are the same fact here because nothing moved.
+		existing, err := getAccountTx(ctx, tx, params.OrgID)
+		switch {
+		case err == nil:
+			postings.Account = existing
+		case errors.Is(err, ErrAccountNotFound):
+			postings.Account = Account{OrgID: params.OrgID, Currency: CurrencyCNY}
+		default:
+			return settlementPostings{}, err
+		}
+	}
+	return postings, nil
 }
 
 // settledReplayTx returns the stored state of an already-settled receipt. It

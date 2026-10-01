@@ -1,0 +1,11 @@
+{
+  "run_id": "rc-demo-01",
+  "phase": "seed",
+  "ok": true,
+  "steps_total": 1,
+  "steps_passed": 1,
+  "hard_failures": [],
+  "soft_findings": [],
+  "duration_s": 0.926,
+  "generated_at": "2026-10-01T10:56:11Z"
+}

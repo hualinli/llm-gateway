@@ -1,0 +1,392 @@
+{
+  "name": "t12rc-verify",
+  "networks": {
+    "default": {
+      "name": "t12rc-verify_default",
+      "ipam": {}
+    }
+  },
+  "services": {
+    "console": {
+      "build": {
+        "context": "/Users/lihualin/Projects/llm-gateway/.worktrees/t12",
+        "dockerfile": "/Users/lihualin/Projects/llm-gateway/.worktrees/t12/data/release-candidate/rc-verify-01/Dockerfile.rc",
+        "args": {
+          "GOPROXY": "https://goproxy.cn,direct"
+        }
+      },
+      "command": null,
+      "depends_on": {
+        "control": {
+          "condition": "service_healthy",
+          "required": true
+        },
+        "migrate": {
+          "condition": "service_completed_successfully",
+          "required": true
+        },
+        "postgres": {
+          "condition": "service_healthy",
+          "required": true
+        }
+      },
+      "entrypoint": [
+        "/usr/local/bin/console"
+      ],
+      "environment": {
+        "CONSOLE_LOGIN_BURST": "50",
+        "CONSOLE_LOGIN_RATE": "60",
+        "CONSOLE_PUBLICATION_INTERVAL": "2s",
+        "CONSOLE_SECURE_COOKIES": "false",
+        "CONTROL_ADDR": "control:50051",
+        "CONTROL_CONSOLE_SERVICE_NAME": "console",
+        "GATEWAY_PROFILE": "demo",
+        "POSTGRES_DSN": "<redacted>"
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "wget",
+          "-qO-",
+          "http://localhost:8092/readyz"
+        ],
+        "timeout": "1s",
+        "interval": "2s",
+        "retries": 30
+      },
+      "networks": {
+        "default": null
+      },
+      "ports": [
+        {
+          "mode": "ingress",
+          "host_ip": "127.0.0.1",
+          "target": 8092,
+          "published": "18092",
+          "protocol": "tcp"
+        }
+      ]
+    },
+    "control": {
+      "build": {
+        "context": "/Users/lihualin/Projects/llm-gateway/.worktrees/t12",
+        "dockerfile": "/Users/lihualin/Projects/llm-gateway/.worktrees/t12/data/release-candidate/rc-verify-01/Dockerfile.rc",
+        "args": {
+          "GOPROXY": "https://goproxy.cn,direct"
+        }
+      },
+      "command": null,
+      "depends_on": {
+        "migrate": {
+          "condition": "service_completed_successfully",
+          "required": true
+        }
+      },
+      "entrypoint": [
+        "/usr/local/bin/control"
+      ],
+      "environment": {
+        "CONTROL_ADMIN_SERVICE_ENABLED": "true",
+        "CONTROL_ADMIN_TOKEN": "<redacted>",
+        "CONTROL_ALLOW_INSECURE_ADMIN_SERVICE": "true",
+        "CONTROL_ALLOW_INSECURE_CREDENTIAL_RESOLVE": "true",
+        "CONTROL_CONSOLE_SERVICE_NAME": "console",
+        "CONTROL_REQUIRE_ADMIN_AUTH": "true",
+        "CONTROL_REQUIRE_POSTGRES": "true",
+        "GATEWAY_PROFILE": "demo",
+        "POSTGRES_DSN": "<redacted>",
+        "PROVIDER_CREDENTIAL_MASTER_KEY_FILE": "<redacted>"
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "wget",
+          "-qO-",
+          "http://localhost:50052/healthz"
+        ],
+        "timeout": "1s",
+        "interval": "2s",
+        "retries": 30
+      },
+      "networks": {
+        "default": null
+      },
+      "ports": [
+        {
+          "mode": "ingress",
+          "host_ip": "127.0.0.1",
+          "target": 50051,
+          "published": "15051",
+          "protocol": "tcp"
+        },
+        {
+          "mode": "ingress",
+          "host_ip": "127.0.0.1",
+          "target": 50052,
+          "published": "15052",
+          "protocol": "tcp"
+        }
+      ],
+      "user": "1000:1000",
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "/Users/lihualin/Projects/llm-gateway/.worktrees/t12/data/release-candidate/rc-verify-01/secrets/provider-credential-master-key",
+          "target": "/run/secrets/provider-credential-master-key",
+          "read_only": true,
+          "bind": {
+            "create_host_path": true
+          }
+        }
+      ]
+    },
+    "gateway": {
+      "build": {
+        "context": "/Users/lihualin/Projects/llm-gateway/.worktrees/t12",
+        "dockerfile": "/Users/lihualin/Projects/llm-gateway/.worktrees/t12/data/release-candidate/rc-verify-01/Dockerfile.rc",
+        "args": {
+          "GOPROXY": "https://goproxy.cn,direct"
+        }
+      },
+      "command": null,
+      "depends_on": {
+        "control": {
+          "condition": "service_healthy",
+          "required": true
+        },
+        "redis": {
+          "condition": "service_healthy",
+          "required": true
+        }
+      },
+      "entrypoint": [
+        "/usr/local/bin/gateway"
+      ],
+      "environment": {
+        "CONTROL_ADDR": "control:50051",
+        "GATEWAY_ACCESS_GUARD": "pg",
+        "GATEWAY_BILLING": "pg",
+        "GATEWAY_MAX_ACTIVE_STREAMS": "256",
+        "GATEWAY_PROFILE": "demo",
+        "LIMITER_ON_REDIS_ERROR": "closed",
+        "METERING_SPOOL_DIR": "/var/lib/llm-gateway/metering-spool",
+        "POSTGRES_DSN": "<redacted>",
+        "REDIS_ADDR": "redis:6379"
+      },
+      "extra_hosts": [
+        "host.docker.internal=host-gateway"
+      ],
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "wget",
+          "-qO-",
+          "http://localhost:8090/livez"
+        ],
+        "timeout": "1s",
+        "interval": "2s",
+        "retries": 30
+      },
+      "networks": {
+        "default": null
+      },
+      "ports": [
+        {
+          "mode": "ingress",
+          "host_ip": "127.0.0.1",
+          "target": 8090,
+          "published": "18090",
+          "protocol": "tcp"
+        }
+      ],
+      "volumes": [
+        {
+          "type": "volume",
+          "source": "metering-spool",
+          "target": "/var/lib/llm-gateway/metering-spool",
+          "volume": {}
+        }
+      ]
+    },
+    "metering": {
+      "build": {
+        "context": "/Users/lihualin/Projects/llm-gateway/.worktrees/t12",
+        "dockerfile": "/Users/lihualin/Projects/llm-gateway/.worktrees/t12/data/release-candidate/rc-verify-01/Dockerfile.rc",
+        "args": {
+          "GOPROXY": "https://goproxy.cn,direct"
+        }
+      },
+      "command": null,
+      "depends_on": {
+        "migrate": {
+          "condition": "service_completed_successfully",
+          "required": true
+        },
+        "redis": {
+          "condition": "service_healthy",
+          "required": true
+        }
+      },
+      "entrypoint": [
+        "/usr/local/bin/metering"
+      ],
+      "environment": {
+        "GATEWAY_PROFILE": "demo",
+        "METERING_REQUIRE_POSTGRES": "true",
+        "POSTGRES_DSN": "<redacted>",
+        "REDIS_ADDR": "redis:6379"
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "wget",
+          "-qO-",
+          "http://localhost:8091/readyz"
+        ],
+        "timeout": "1s",
+        "interval": "2s",
+        "retries": 30
+      },
+      "networks": {
+        "default": null
+      },
+      "ports": [
+        {
+          "mode": "ingress",
+          "host_ip": "127.0.0.1",
+          "target": 8091,
+          "published": "18091",
+          "protocol": "tcp"
+        }
+      ],
+      "volumes": [
+        {
+          "type": "volume",
+          "source": "metering-spool",
+          "target": "/var/lib/llm-gateway/metering-spool",
+          "volume": {}
+        }
+      ]
+    },
+    "migrate": {
+      "build": {
+        "context": "/Users/lihualin/Projects/llm-gateway/.worktrees/t12",
+        "dockerfile": "/Users/lihualin/Projects/llm-gateway/.worktrees/t12/data/release-candidate/rc-verify-01/Dockerfile.rc",
+        "args": {
+          "GOPROXY": "https://goproxy.cn,direct"
+        }
+      },
+      "command": [
+        "up"
+      ],
+      "depends_on": {
+        "postgres": {
+          "condition": "service_healthy",
+          "required": true
+        }
+      },
+      "entrypoint": [
+        "/usr/local/bin/migrate"
+      ],
+      "environment": {
+        "POSTGRES_DSN": "<redacted>"
+      },
+      "networks": {
+        "default": null
+      },
+      "restart": "no"
+    },
+    "postgres": {
+      "command": null,
+      "entrypoint": null,
+      "environment": {
+        "POSTGRES_DB": "llm_gateway",
+        "POSTGRES_PASSWORD": "<redacted>",
+        "POSTGRES_USER": "gateway"
+      },
+      "healthcheck": {
+        "test": [
+          "CMD-SHELL",
+          "pg_isready -U gateway -d llm_gateway"
+        ],
+        "timeout": "1s",
+        "interval": "2s",
+        "retries": 10
+      },
+      "image": "postgres:18.6",
+      "networks": {
+        "default": null
+      },
+      "ports": [
+        {
+          "mode": "ingress",
+          "host_ip": "127.0.0.1",
+          "target": 5432,
+          "published": "25433",
+          "protocol": "tcp"
+        }
+      ],
+      "volumes": [
+        {
+          "type": "volume",
+          "source": "pg-data",
+          "target": "/var/lib/postgresql",
+          "volume": {}
+        }
+      ]
+    },
+    "redis": {
+      "command": [
+        "redis-server",
+        "--appendonly",
+        "yes",
+        "--appendfsync",
+        "everysec"
+      ],
+      "entrypoint": null,
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "redis-cli",
+          "ping"
+        ],
+        "timeout": "1s",
+        "interval": "2s",
+        "retries": 10
+      },
+      "image": "redis:8.10.2-alpine",
+      "networks": {
+        "default": null
+      },
+      "ports": [
+        {
+          "mode": "ingress",
+          "host_ip": "127.0.0.1",
+          "target": 6379,
+          "published": "26379",
+          "protocol": "tcp"
+        }
+      ],
+      "volumes": [
+        {
+          "type": "volume",
+          "source": "redis-data",
+          "target": "/data",
+          "volume": {}
+        }
+      ],
+      "environment": {}
+    }
+  },
+  "volumes": {
+    "metering-spool": {
+      "name": "t12rc-verify_metering-spool"
+    },
+    "pg-data": {
+      "name": "t12rc-verify_pg-data"
+    },
+    "redis-data": {
+      "name": "t12rc-verify_redis-data"
+    }
+  }
+}

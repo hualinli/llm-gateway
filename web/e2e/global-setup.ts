@@ -236,6 +236,17 @@ async function seedMember(
     if (!accepted.ok()) {
       throw new Error(`accept ${identity.email}: ${accepted.status()} ${await accepted.text()}`);
     }
+    // Seed one real API key for the member. With a Control channel (the T12
+    // release-candidate stack) the keys page then renders real rows; without one
+    // this is a `503 unavailable` and the specs assert that honest error state
+    // instead (see README §5). The result is deliberately not asserted here.
+    const key = await invitee.post(`/api/v1/orgs/${encodeURIComponent(orgId)}/keys`, {
+      headers: csrfHeaders(session.csrf_token),
+      data: {},
+    });
+    if (!key.ok() && key.status() !== 503) {
+      throw new Error(`seed key for ${identity.email}: ${key.status()} ${await key.text()}`);
+    }
     // The accepting session is the member's browser session for the specs.
     await invitee.storageState({ path: AUTH.member });
   } finally {
@@ -303,5 +314,10 @@ async function captureStorageState(
 
 function writeState(state: E2EState): void {
   mkdirSync(STATE_PATH.replace(/\/[^/]+$/, ''), { recursive: true });
-  writeFileSync(STATE_PATH, `${JSON.stringify(state, null, 2)}\n`, 'utf8');
+  // mode 0600: the file carries the seeded identities' passwords in plaintext
+  // (the specs read them back), so at least keep it owner-only on disk.
+  writeFileSync(STATE_PATH, `${JSON.stringify(state, null, 2)}\n`, {
+    encoding: 'utf8',
+    mode: 0o600,
+  });
 }

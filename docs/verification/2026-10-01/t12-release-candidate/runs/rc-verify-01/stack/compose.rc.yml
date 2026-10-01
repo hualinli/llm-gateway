@@ -1,0 +1,35 @@
+# 由 scripts/release-candidate.sh 生成，仅用于本次发布候选运行。
+# ports 用 !override（Compose >= 2.24）；否则序列会与基础文件相加。
+services:
+  gateway:
+    ports: !override
+      - "127.0.0.1:18090:8090"
+    environment:
+      GATEWAY_ACCESS_GUARD: "pg"
+      GATEWAY_BILLING: "pg"
+      POSTGRES_DSN: postgres://gateway:gateway@postgres:5432/llm_gateway?sslmode=disable
+  metering:
+    ports: !override
+      - "127.0.0.1:18091:8091"
+  console:
+    ports: !override
+      - "127.0.0.1:18092:8092"
+    environment:
+      # Playwright 三角色套件一次运行会建立多个身份；默认 burst=5 是给人手输入用的。
+      CONSOLE_LOGIN_BURST: "50"
+      CONSOLE_LOGIN_RATE: "60"
+      # 策略/撤销传播：验收会等它收敛。
+      CONSOLE_PUBLICATION_INTERVAL: 2s
+  control:
+    ports: !override
+      - "127.0.0.1:15051:50051"
+      - "127.0.0.1:15052:50052"
+    volumes:
+      # 本次运行专属的 Provider 凭据主密钥（0600），不使用 demo 栈的 data/ 主密钥。
+      - /Users/lihualin/Projects/llm-gateway/.worktrees/t12/data/release-candidate/rc-verify-01/secrets/provider-credential-master-key:/run/secrets/provider-credential-master-key:ro
+  postgres:
+    ports: !override
+      - "127.0.0.1:25433:5432"
+  redis:
+    ports: !override
+      - "127.0.0.1:26379:6379"
