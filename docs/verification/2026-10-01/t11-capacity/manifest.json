@@ -1,14 +1,14 @@
 {
   "run_id": "20261001T083817Z-6cd44e80",
-  "generated_at": "2026-10-01T09:55:27Z",
+  "generated_at": "2026-10-01T09:57:20Z",
   "commit": "6cd44e80fca930417a8c239a541c9153539e7c70",
   "root": "docs/verification/2026-10-01/t11-capacity",
   "files": [
     {
       "path": "docs/verification/2026-10-01/t11-capacity/README.md",
       "scope": "report",
-      "bytes": 61900,
-      "sha256": "a63c128a34f8c2283040c6845bd64ce8f63d2c4f4a055d20d647ed8bb4e2cc13",
+      "bytes": 62303,
+      "sha256": "021752a97b00bcae3fe615a47aa768e67630ce5aa8c8a7b202b6a3f0299d3d93",
       "committed": true,
       "note": null
     },
@@ -31,8 +31,8 @@
     {
       "path": "docs/verification/2026-10-01/t11-capacity/manifest.json",
       "scope": "report",
-      "bytes": 201447,
-      "sha256": "a47ac47610fcf95e9480aa8ca38981f0dc1ca6cd62825c65232bdb6684bc4048",
+      "bytes": 201704,
+      "sha256": "b62aa3b9d5278990a397c3417136e20cef2b8f333d229f585c250dc2392e98ce",
       "committed": false,
       "note": "kept in the gitignored working directory (build artifact, secret, or over the committed-size budget); regenerate with the recorded command"
     },
@@ -4349,6 +4349,6 @@
       "note": "kept in the gitignored working directory (build artifact, secret, or over the committed-size budget); regenerate with the recorded command"
     }
   ],
-  "committed_bytes": 2242340,
-  "total_bytes": 77880799
+  "committed_bytes": 2242743,
+  "total_bytes": 77881459
 }

@@ -2,7 +2,8 @@
 
 日期：2026-10-01（UTC run_id；宿主时区 Asia/Shanghai）
 任务：T11（[Agent 执行 Prompt](../../../plans/AGENT-PROMPTS-2026-10-01.md) §T11；验收规格 [BENCHMARK-AND-ACCEPTANCE](../../../plans/BENCHMARK-AND-ACCEPTANCE-2026-10-01.md) §3/§4/§6/§7）
-分支：`codex/t11-capacity`；HEAD：`6cd44e80fca930417a8c239a541c9153539e7c70`（= T10 提交，作为 T11 的 base）
+分支：`codex/t11-capacity`；**被测 commit**：`6cd44e80fca930417a8c239a541c9153539e7c70`（= T10 提交，T11 的 base；`environment.json` 记录的就是它）
+打包 commit：`9e8bd64`（"test: add the capacity, hotspot and failure-recovery evidence reports (T11)"，由父任务在本报告产出后提交，只包含本目录、`scripts/capacity-report.py` 与另一 agent 的 hotspot/recovery 产物；**不影响**本次测量的二进制——被测镜像由 `6cd44e80` 构建并在整个运行中复用）
 
 | 项目 | 值 |
 |---|---|
@@ -10,7 +11,7 @@
 | Compose 项目 | `llm-gw-cap-20261001t083817z-6cd44e80`（项目私有端口/卷/网络） |
 | 工作区状态 | **tracked 干净**（`git diff HEAD` 为空）；5 个未跟踪路径：本报告目录、`scripts/capacity-report.py`、另一 agent 的 `t11-hotspots/`、`t11-recovery-report/`、`scripts/hotspot-ab.py`；`source_changed_during_run=false` |
 | 被测二进制 | `llm-gw-cap-6cd44e80-{gateway,control,metering,console,migrate,mock-primary,mock-backup}:latest`（由本 commit 构建；本次运行 `--no-build` 复用） |
-| 轮次 | 54 轮（2 热身 + 52 正式），其中 **4 轮无效**（全部是 S 开环 ≥200/s 的生成器丢弃轮），0 轮失败 |
+| 轮次 | 54 轮（2 热身 + 52 正式），其中 **3 轮无效**（`open-s-200/300/500`，全部因生成器丢弃 >0.1%），0 轮失败 |
 | 本轮流量 | 启动 186591 条流：完成 179783、拒绝 6806（429/503）、未完成 2、生成器丢弃 25728（仅出现在 3 个无效轮：105 + 6020 + 19603） |
 | 对账 | 见 §8：6/9 项通过；2 项因 2 条未终结执行未过（资金投影与账本重算一致） |
 | 原始数据 | `raw/`（每轮合并记录）、`resources/`（每轮资源摘要）、`profiles/`（pprof 文本）、`manifest.json`（路径+字节+sha256，含未入库大文件）；完整采样序列与二进制在 gitignored 的 `data/benchmarks/t11-capacity/` |

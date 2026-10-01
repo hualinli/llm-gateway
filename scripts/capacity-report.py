@@ -2391,6 +2391,11 @@ def main(argv=None):
     output = pathlib.Path(args.output).resolve()
     work = pathlib.Path(args.work_dir).resolve()
     work.mkdir(parents=True, exist_ok=True)
+    if args.republish:
+        # Republishing derives the manifest from artifacts already on disk; it
+        # measures nothing, so it must not be blocked by a dirty worktree.
+        republish(output, work)
+        return 0
     git_start = git_state()
     if git_start["tracked_dirty"] and not args.allow_dirty:
         raise SystemExit(
@@ -2398,9 +2403,6 @@ def main(argv=None):
             f"({len(git_start['tracked_changes'])} paths)\n  "
             + "\n  ".join(git_start["tracked_changes"][:10])
             + "\ncommit them, or pass --allow-dirty to record that this run is not reproducible from a fixed commit")
-    if args.republish:
-        republish(output, work)
-        return 0
     stack = Stack(args, output, work)
     stack.prepare(git_start)
     requests = {name.strip() for name in args.experiments.split(",") if name.strip()}
