@@ -175,7 +175,7 @@ func TestClaimLeaseExpiryReclaimsACrashedClaim(t *testing.T) {
 	env := newSettlementEnv(t, "claim-lease")
 	ctx := context.Background()
 	env.admitAndFinalize(t, "exec_lease", 10, 5, 100, 100, "evt_lease")
-	clock := newStepClock(time.Now().UTC().Add(time.Second))
+	clock := newStepClock(time.Now().UTC().Truncate(time.Microsecond).Add(time.Second + 976*time.Nanosecond))
 
 	first, err := env.accounts.ClaimDispatchableReceipts(ctx, ClaimReceiptsParams{
 		Now: clock.Now(), Limit: 10, Lease: 30 * time.Second,
@@ -189,8 +189,10 @@ func TestClaimLeaseExpiryReclaimsACrashedClaim(t *testing.T) {
 	if first[0].Receipt.Attempts != 1 {
 		t.Fatalf("attempts=%d, want 1", first[0].Receipt.Attempts)
 	}
-	if !first[0].Lease.Equal(clock.Now().Add(30 * time.Second)) {
-		t.Fatalf("lease=%s, want %s", first[0].Lease, clock.Now().Add(30*time.Second))
+	// Settlement timestamps use PostgreSQL's microsecond precision.
+	wantLease := clock.Now().Add(30 * time.Second).Truncate(time.Microsecond)
+	if !first[0].Lease.Equal(wantLease) {
+		t.Fatalf("lease=%s, want %s", first[0].Lease, wantLease)
 	}
 
 	// The "crashed" worker never marks anything. While its lease is live, no
@@ -353,7 +355,7 @@ func TestDispatchFailureBacksOffThenPoisonsWithAnAuditRow(t *testing.T) {
 	env := newSettlementEnv(t, "dispatch-poison")
 	ctx := context.Background()
 	env.admitAndFinalize(t, "exec_poison", 10, 5, 100, 100, "evt_poison")
-	clock := newStepClock(time.Now().UTC().Add(time.Second))
+	clock := newStepClock(time.Now().UTC().Truncate(time.Microsecond).Add(time.Second + 989*time.Nanosecond))
 	publisher := &fakePublisher{err: errors.New("redis: connection refused")}
 	dispatcher, err := NewReceiptDispatcher(env.accounts, publisher, DispatcherOptions{
 		BatchSize: 10, Concurrency: 2, PollInterval: time.Hour, Lease: 30 * time.Second,
@@ -386,8 +388,9 @@ func TestDispatchFailureBacksOffThenPoisonsWithAnAuditRow(t *testing.T) {
 		if stored.LastError == nil || !strings.Contains(*stored.LastError, "redis: connection refused") {
 			t.Fatalf("tick %d last_error=%v", i, stored.LastError)
 		}
-		if stored.DispatchAfter == nil || !stored.DispatchAfter.Equal(clock.Now().Add(want.wantBackoff)) {
-			t.Fatalf("tick %d dispatch_after=%v, want %s", i, stored.DispatchAfter, clock.Now().Add(want.wantBackoff))
+		wantDispatchAfter := clock.Now().Add(want.wantBackoff).Truncate(time.Microsecond)
+		if stored.DispatchAfter == nil || !stored.DispatchAfter.Equal(wantDispatchAfter) {
+			t.Fatalf("tick %d dispatch_after=%v, want %s", i, stored.DispatchAfter, wantDispatchAfter)
 		}
 		// While the backoff is running, nothing is due: the retry rate is
 		// bounded, not a hot loop.

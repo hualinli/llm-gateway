@@ -839,7 +839,9 @@ func TestPublicationWorkerRetriesWithBoundedBackoff(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	now := time.Now().UTC()
+	// Exercise the PostgreSQL round trip with sub-microsecond precision even on
+	// platforms whose wall clock only supplies microseconds.
+	now := time.Now().UTC().Truncate(time.Microsecond).Add(119 * time.Nanosecond)
 	worker := organization.NewPublicationWorker(db, &fakePublisher{errs: []error{errors.New("control unavailable")}}, organization.PublicationOptions{
 		Now:       func() time.Time { return now },
 		RetryBase: time.Second,
@@ -858,7 +860,7 @@ func TestPublicationWorkerRetriesWithBoundedBackoff(t *testing.T) {
 	if !rows[0].NextRetryAt.Valid {
 		t.Fatal("next_retry_at is NULL for a failed publication")
 	}
-	if delay := rows[0].NextRetryAt.Time.Sub(now); delay != time.Second {
+	if delay := rows[0].NextRetryAt.Time.Sub(now.Truncate(time.Microsecond)); delay != time.Second {
 		t.Fatalf("first backoff = %s, want 1s", delay)
 	}
 	// 退避期内不会被再次拾取。
