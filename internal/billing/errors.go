@@ -31,7 +31,10 @@
 // its audit row commit or roll back together.
 package billing
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 // Domain errors. The HTTP layer only maps them onto status codes; it never
 // re-derives the condition from a database error string.
@@ -144,6 +147,11 @@ var (
 	// must never be charged (released / failed_no_charge). No money moves and no
 	// state is rewritten.
 	ErrSettlementState = errors.New("billing: the receipt or its execution is not in a settleable state")
+	// ErrReceiptAlreadyException distinguishes the stale-message case where the
+	// receipt was already exceptional when settlement inspected it. A concurrent
+	// operator retry may make it dispatchable again before the consumer records
+	// the refusal, so that later bookkeeping must not poison it a second time.
+	ErrReceiptAlreadyException = fmt.Errorf("%w: receipt is already an exception", ErrSettlementState)
 
 	// ErrSettlementCommitUnknown marks a settlement transaction whose COMMIT
 	// outcome could not be determined *and* whose re-query by execution id did

@@ -356,7 +356,9 @@ func (c *SettlementConsumer) handle(ctx context.Context, m redis.XMessage) {
 		if !c.recordAnomaly(ctx, billing.ActionSettlementException, event, m.ID, err.Error()) {
 			return
 		}
-		c.markException(ctx, event, m.ID, err)
+		if !errors.Is(err, billing.ErrReceiptAlreadyException) {
+			c.markException(ctx, event, m.ID, err)
+		}
 		c.ack(ctx, m)
 	default:
 		// Transient (or an unknown commit): DO NOT ack. The message stays in the

@@ -540,3 +540,162 @@ func TestSettlementMissingReceiptIsRecordedAsUnmatchedAndCreatesNoMoney(t *testi
 		t.Fatalf("account=(%+v, %v)", account, err)
 	}
 }
+
+// blockedAnomalySettlementStore pauses the consumer after its refusal audit is
+// committed. That creates the precise window where an operator can retry a
+// transport-poisoned receipt before the stale consumer would have marked it as
+// a settlement exception.
+type blockedAnomalySettlementStore struct {
+	base             SettlementStore
+	anomalyRecorded  chan struct{}
+	resumeAfterAudit chan struct{}
+	markException    int
+}
+
+func (s *blockedAnomalySettlementStore) SettleReceipt(ctx context.Context, params billing.SettleReceiptParams) (billing.SettlementResult, error) {
+	return s.base.SettleReceipt(ctx, params)
+}
+
+func (s *blockedAnomalySettlementStore) MarkReceiptException(ctx context.Context, params billing.ReceiptExceptionParams) (billing.ReceiptResult, error) {
+	s.markException++
+	return s.base.MarkReceiptException(ctx, params)
+}
+
+func (s *blockedAnomalySettlementStore) RecordSettlementAnomaly(ctx context.Context, params billing.SettlementAnomalyParams) error {
+	if err := s.base.RecordSettlementAnomaly(ctx, params); err != nil {
+		return err
+	}
+	close(s.anomalyRecorded)
+	<-s.resumeAfterAudit
+	return nil
+}
+
+// TestStaleSettlementRefusalCannotRePoisonOperatorRetriedReceipt fixes the
+// ordering that used to lose a valid transport retry: a delivered copy is
+// pending while the dispatcher marks the receipt poisoned; the stale consumer
+// reads that exception; the operator retries it; then the old consumer resumes.
+func TestStaleSettlementRefusalCannotRePoisonOperatorRetriedReceipt(t *testing.T) {
+	env := newSettlementE2E(t)
+	ctx := context.Background()
+	receipt := env.admitAndFinalize(t, "exec_stale_refusal", "evt_stale_refusal", 10, 5)
+	event, err := billing.NewReceiptEvent(receipt, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("build receipt event: %v", err)
+	}
+	payload, err := billing.MarshalReceiptEvent(event)
+	if err != nil {
+		t.Fatalf("marshal receipt event: %v", err)
+	}
+	messageID, err := env.rdb.XAdd(ctx, &redis.XAddArgs{
+		Stream: ReceiptStreamName,
+		Values: map[string]any{"kind": billing.ReceiptEventKind, "execution_id": receipt.ExecutionID, "data": string(payload)},
+	}).Result()
+	if err != nil {
+		t.Fatalf("publish stale delivery: %v", err)
+	}
+
+	// Model a publish whose Redis response was lost: the envelope exists, then
+	// the exhausted dispatcher records a durable transport exception.
+	now := time.Now().UTC()
+	claimed, err := env.accounts.ClaimDispatchableReceipts(ctx, billing.ClaimReceiptsParams{Now: now, Limit: 10, Lease: time.Minute})
+	if err != nil || len(claimed) != 1 || claimed[0].Receipt.ExecutionID != receipt.ExecutionID {
+		t.Fatalf("claim for poison transition=(%+v, %v)", claimed, err)
+	}
+	poisoned, err := env.accounts.RecordDispatchFailure(ctx, billing.DispatchFailureParams{
+		ExecutionID: receipt.ExecutionID,
+		Lease:       claimed[0].Lease,
+		Reason:      "publish: response timed out after append",
+		Source:      messageID,
+		Poison:      true,
+		Now:         now,
+	})
+	if err != nil || poisoned.Status != billing.ReceiptStatusException {
+		t.Fatalf("poison receipt=(%+v, %v)", poisoned, err)
+	}
+
+	store := &blockedAnomalySettlementStore{
+		base:             env.accounts,
+		anomalyRecorded:  make(chan struct{}),
+		resumeAfterAudit: make(chan struct{}),
+	}
+	consumer := NewSettlementConsumer(env.rdb, store, SettlementConsumerOptions{Name: "stale-refusal-consumer"})
+	if err := consumer.EnsureGroup(ctx); err != nil {
+		t.Fatalf("ensure settlement group: %v", err)
+	}
+	streams, err := env.rdb.XReadGroup(ctx, &redis.XReadGroupArgs{
+		Group: SettlementGroupName, Consumer: consumer.Name(), Streams: []string{ReceiptStreamName, ">"}, Count: 1,
+	}).Result()
+	if err != nil || len(streams) != 1 || len(streams[0].Messages) != 1 || streams[0].Messages[0].ID != messageID {
+		t.Fatalf("read stale delivery=(%+v, %v)", streams, err)
+	}
+
+	done := make(chan struct{})
+	released := false
+	defer func() {
+		if !released {
+			close(store.resumeAfterAudit)
+		}
+		select {
+		case <-done:
+		case <-time.After(20 * time.Second):
+			t.Error("settlement consumer did not finish")
+		}
+	}()
+	go func() {
+		defer close(done)
+		consumer.handle(ctx, streams[0].Messages[0])
+	}()
+	select {
+	case <-store.anomalyRecorded:
+	case <-time.After(15 * time.Second):
+		t.Fatal("consumer did not commit its settlement refusal anomaly")
+	}
+
+	var actorUserID int64
+	if err := env.db.QueryRowContext(ctx, `SELECT owner_user_id FROM organizations WHERE id=$1`, env.orgID).Scan(&actorUserID); err != nil {
+		t.Fatalf("find retry actor: %v", err)
+	}
+	retried, err := env.accounts.RetryDispatchException(ctx, billing.DispatchRetryParams{
+		ExecutionID: receipt.ExecutionID,
+		ActorUserID: actorUserID,
+		Reason:      "verified Redis append after timeout",
+		RequestID:   "retry-after-stale-refusal",
+		Now:         time.Now().UTC(),
+	})
+	if err != nil || retried.Status != billing.ReceiptStatusPendingDispatch {
+		t.Fatalf("operator retry=(%+v, %v)", retried, err)
+	}
+	close(store.resumeAfterAudit)
+	released = true
+	<-done
+
+	stored := env.receipt(t, receipt.ExecutionID)
+	if stored.Status != billing.ReceiptStatusPendingDispatch || stored.LastError != nil || stored.Digest != receipt.Digest {
+		t.Fatalf("stale consumer changed retried receipt: %+v", stored)
+	}
+	if store.markException != 0 {
+		t.Fatalf("stale consumer called MarkReceiptException %d times", store.markException)
+	}
+	if got := env.countEntries(t, billing.KindDebit); got != 0 {
+		t.Fatalf("stale delivery moved money: %d debits", got)
+	}
+	if got := env.countEntries(t, billing.KindRelease); got != 0 {
+		t.Fatalf("stale delivery released money: %d releases", got)
+	}
+	if got := countEntriesForAction(t, env.db, billing.ActionSettlementException, receipt.ExecutionID); got != 1 {
+		t.Fatalf("settlement refusal audit rows=%d, want 1", got)
+	}
+	if got := countEntriesForAction(t, env.db, billing.ActionReceiptDispatchRetried, receipt.ExecutionID); got != 1 {
+		t.Fatalf("operator retry audit rows=%d, want 1", got)
+	}
+	env.waitPending(t, 0)
+}
+
+func countEntriesForAction(t *testing.T, db *sql.DB, action, targetID string) int64 {
+	t.Helper()
+	var count int64
+	if err := db.QueryRow(`SELECT count(*) FROM console_audit_events WHERE action=$1 AND target_id=$2`, action, targetID).Scan(&count); err != nil {
+		t.Fatalf("count %s audit rows: %v", action, err)
+	}
+	return count
+}

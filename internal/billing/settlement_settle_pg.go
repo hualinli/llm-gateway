@@ -100,7 +100,7 @@ func (s *PGAccountStore) settleReceiptTx(ctx context.Context, tx *sql.Tx, params
 	// the usage is unusable) rather than as a payload conflict.
 	if receipt.Status == ReceiptStatusException {
 		return SettlementResult{}, fmt.Errorf("%w: receipt %s is an exception (usage cannot back a charge)",
-			ErrSettlementState, receipt.ExecutionID)
+			ErrReceiptAlreadyException, receipt.ExecutionID)
 	}
 
 	incoming := params.Identity.Digest()
