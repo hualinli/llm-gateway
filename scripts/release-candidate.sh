@@ -1604,7 +1604,7 @@ EOF
 rc_load_state() {
   [[ -n "$RC_WORK_DIR" ]] || RC_WORK_DIR="$RC_ROOT/data/release-candidate/current"
   RC_STATE_FILE="$RC_WORK_DIR/state.env"
-  [[ -r "$RC_STATE_FILE" ]] || rc_die "找不到运行状态 $RC_STATE_FILE（先执行 up 或 run）"
+  [[ -r "$RC_STATE_FILE" ]] || rc_die "找不到运行状态 ${RC_STATE_FILE}（先执行 up 或 run）"
   # shellcheck disable=SC1090
   source "$RC_STATE_FILE"
   RC_WORK_DIR="$(cd "$RC_WORK_DIR" && pwd)"
@@ -1692,7 +1692,7 @@ rc_isolation_diff() {
 rc_build() {
   [[ "$RC_SKIP_BUILD" == "1" ]] && { rc_log "跳过镜像构建（--skip-build）"; return 0; }
   [[ "$RC_PULL" == "1" ]] && { rc_compose pull --ignore-buildable >>"$RC_WORK_DIR/logs/build.log" 2>&1 || true; }
-  rc_log "==> 构建镜像（首次可能需要数分钟；GOPROXY=$RC_GOPROXY）"
+  rc_log "==> 构建镜像（首次可能需要数分钟；GOPROXY=${RC_GOPROXY}）"
   local t0; t0="$(date +%s)"
   if ! rc_compose build >>"$RC_WORK_DIR/logs/build.log" 2>&1; then
     rc_warn "docker compose build 失败；tail:"
@@ -1703,7 +1703,7 @@ rc_build() {
 }
 
 rc_up() {
-  rc_log "==> 启动全栈（project=$RC_PROJECT，profile=demo-mocks）"
+  rc_log "==> 启动全栈（project=${RC_PROJECT}，profile=demo-mocks）"
   if ! rc_compose_run --profile demo-mocks up -d --wait >>"$RC_WORK_DIR/logs/stack.log" 2>&1; then
     tail -40 "$RC_WORK_DIR/logs/stack.log" >&2
     rc_die "栈启动失败"
@@ -1849,7 +1849,7 @@ rc_e2e() {
   rc_log "==> 前端依赖（npm ci）"
   ( cd "$RC_ROOT/web" && npm ci >>"$RC_WORK_DIR/logs/e2e.log" 2>&1 ) \
     || { tail -20 "$RC_WORK_DIR/logs/e2e.log" >&2; rc_die "npm ci 失败"; }
-  rc_log "==> Playwright 三角色套件（Console=$RC_CONSOLE_PORT Gateway=$RC_GATEWAY_PORT）"
+  rc_log "==> Playwright 三角色套件（Console=$RC_CONSOLE_PORT Gateway=${RC_GATEWAY_PORT}）"
   # screenshots.spec.ts 会把 PNG 写进被跟踪的 docs/web/screenshots/（属于 T04/T08 的
   # 交付物）。发布候选运行不允许覆盖别的任务的受跟踪文件，因此按标题排除，
   # 并在证据 README 里把这条记为"有意跳过 + 原因"。
@@ -1871,7 +1871,7 @@ rc_e2e() {
     "$RC_EVIDENCE_DIR/e2e/state.json" 2>/dev/null || true
   # 会话 jar（含 cookie）不复制进证据：它是本地会话凭据。
   ls "$RC_ROOT/web/e2e/.auth" > "$RC_EVIDENCE_DIR/e2e/auth-jars-not-archived.txt" 2>/dev/null || true
-  [[ $rc -ne 0 ]] && rc_warn "Playwright 退出码 $rc（详见 $RC_EVIDENCE_DIR/e2e/playwright.log）"
+  [[ $rc -ne 0 ]] && rc_warn "Playwright 退出码 ${rc}（详见 $RC_EVIDENCE_DIR/e2e/playwright.log）"
   return $rc
 }
 
@@ -1893,7 +1893,7 @@ rc_down() {
 rc_trap() {
   local code=$?
   if [[ "$RC_TEARDOWN" == "1" ]]; then rc_down || true; fi
-  [[ $code -ne 0 ]] && rc_warn "退出码 $code；work dir=$RC_WORK_DIR evidence=$RC_EVIDENCE_DIR"
+  [[ $code -ne 0 ]] && rc_warn "退出码 ${code}；work dir=$RC_WORK_DIR evidence=$RC_EVIDENCE_DIR"
   exit $code
 }
 

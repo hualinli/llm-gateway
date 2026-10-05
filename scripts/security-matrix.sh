@@ -3163,7 +3163,7 @@ if __name__ == "__main__":
 
 DRIVER_EOF
 
-t10_log "运行断言驱动（phases=$phases）"
+t10_log "运行断言驱动（phases=${phases}）"
 set +e
 python3 "$driver_path" --lab "$T10_EVIDENCE_DIR/lab.json" 2>&1 | tee "$T10_LOG_DIR/driver.log"
 driver_rc=${PIPESTATUS[0]}

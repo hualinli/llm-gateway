@@ -103,7 +103,7 @@ done
 print_exports() {
 	abs=$(cd "$DIR" && pwd)
 	echo ""
-	echo "本地 Control mTLS 材料目录: $abs（只有路径，没有私钥内容）"
+	echo "本地 Control mTLS 材料目录: ${abs}（只有路径，没有私钥内容）"
 	if [ -f "$DIR/ca.crt" ]; then
 		fingerprint=$(openssl x509 -in "$DIR/ca.crt" -noout -fingerprint -sha256 2>/dev/null | sed 's/^.*=//')
 		[ -n "$fingerprint" ] && echo "CA SHA-256 指纹: $fingerprint"

@@ -149,7 +149,7 @@ t10_wait_http() {
     [[ "$code" == "$expect" ]] && return 0
     sleep 0.3
   done
-  t10_die "等待 $url 返回 $expect 超时（最后=$code）"
+  t10_die "等待 $url 返回 $expect 超时（最后=${code}）"
 }
 
 # t10_psql <container> <sql> — 服务端执行 SQL，返回 -At 输出。
