@@ -35,6 +35,6 @@
 
 ## CI 状态口径与剩余边界
 
-历史 main `3bc04a7` 的 [CI #18](https://github.com/hualinli/llm-gateway/actions/runs/37321863065) 成功；补丁前 recovery、funds、组合候选的 CI #20、#21、#22 也已确认成功。本次修复分支推送已触发新运行，main 合并后的最终远端结论以[GitHub Actions](https://github.com/hualinli/llm-gateway/actions)对应 main 提交为准；本文提交时正在确认，不能借用旧提交绿灯。
+历史 main `3bc04a7` 的 [CI #18](https://github.com/hualinli/llm-gateway/actions/runs/37321863065) 成功；补丁前 recovery、funds、组合候选的 CI #20、#21、#22 也已确认成功。资金修复 `3ef1f4a` 的 [CI #25](https://github.com/hualinli/llm-gateway/actions/runs/37338471204) 与恢复修复 `980b9d0` 的 [CI #23](https://github.com/hualinli/llm-gateway/actions/runs/37338470581) 已确认成功；组合候选 #24 被后续溢出修复 #26 按同分支并发规则取代（cancelled，非测试失败）。main 合并后的最终远端结论以[GitHub Actions](https://github.com/hualinli/llm-gateway/actions)对应 main 提交为准；本文提交时正在确认，不能借用旧提交绿灯。
 
 告警仍先在 Prometheus `/alerts` 查看，不接外部通知。生产 HA、真实支付、真实付费 Provider、60 分钟 soak、生产 mTLS/密钥轮换未验证；本次没有扩充这些承诺。
