@@ -1,11 +1,13 @@
 # 证据索引：T00–T12 与历史报告（T12）
 
-> 更新基线：主线 `3bc04a7`；T00–T11 的数字保留原始来源。
+> 更新基线：2026-10-06，主线合并提交 `56a55f0`；T00–T11 的数字保留原始来源。
 > 每行给出：任务 → 证据路径（相对仓库根）→ 关键提交 SHA → headline 结果 → 限制/未验证。
 > 状态口径：✅ 有可追踪证据；🟡 有部分证据/无独立报告；⬜ 未验证。
 > 「声明数」类数字不等于执行用例数；集成用例在缺少 DSN/Redis 环境变量时 skip。
 
 > [主线 CI #18](https://github.com/hualinli/llm-gateway/actions/runs/37321863065) 已通过。T12 发布候选证据见[验收报告](../verification/2026-10-01/t12-release-candidate/README.md)；本次人工操作、故障恢复和告警见[补充报告](../verification/2026-10-05/platform-supplements.md)。下方任务逐项性能结果是原测量，不代表新增候选的容量复测。
+
+> 最新审核修复、合并与复验见[审核合并报告](../verification/2026-10-06/parallel-review-merge.md)；旧任务数字保留原时点。
 
 ## 1. 任务证据（T00–T12）
 

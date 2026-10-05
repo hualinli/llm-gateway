@@ -1,8 +1,10 @@
 # 已知限制（T12，穷尽清单）
 
-> 更新：2026-10-05。主线基线 `3bc04a7`；本次功能在三个补充分支上，尚未合入 main。
+> 更新：2026-10-06。三个补充分支已审核合入 main（合并提交 `56a55f0`）。
 > 规则：有实现但无证据仍算未验证。历史性能数字不外推生产。
 > T12 验收与主线 CI 已有证据；本次变化见[补充报告](../verification/2026-10-05/platform-supplements.md)。
+
+> 最新审核修复、合并与复验见[审核合并报告](../verification/2026-10-06/parallel-review-merge.md)；旧任务数字保留原时点。
 
 ## A. 范围外（设计上不做，不是缺陷）
 
@@ -25,7 +27,7 @@
 |---|---|---|
 | B1.1 | 隔离环境从零启动与三角色初始化 | 已验证：[T12 验收](../verification/2026-10-01/t12-release-candidate/README.md)，schema 13；生产形态仍未验证 |
 | B1.2 | 平台 Demo 资金与权限闭环 | 已验证：同上 S2–S9；不是生产上线证据 |
-| B1.3 | CI 最终候选 | Go、PG/Redis race 集成、前端及隔离三角色 E2E 均已接入；新告警检查在补充分支；没有生产 CD |
+| B1.3 | CI 最终候选 | Go、PG/Redis race 集成、前端及隔离三角色 E2E 均已接入；新告警检查已合入 main；没有生产 CD |
 | B1.4 | 远端 CI | [主线 #18](https://github.com/hualinli/llm-gateway/actions/runs/37321863065) 已成功；新增分支不能借用主线绿灯，需要各自通过 |
 | B1.5 | 候选秘密扫描、Cookie/CSRF 与权限 | T12 安全验收已验证 demo 候选；生产 HTTPS、证书轮换等仍未验证 |
 
@@ -92,15 +94,15 @@
 
 | # | 边界 | 证据 |
 |---|---|---|
-| C1 | 传输中断与旧异常 | 主线仍有重试预算耗尽后 exception 的历史行为；恢复分支已改为传输失败持续退避，并提供只接受有效原始收据和传输审计的旧异常重投。未知 usage/编码异常不自动重投。 |
-| C2 | **usage 缺失/非法/自相矛盾 → review_required（24h SLA）**，不自动释放；这类未知 usage 的 exception receipt 用零 token 占位且不能自动结算。传输异常的 exception 可能有有效原始 usage，只有受控重投能恢复它。 | T06C §5；本次补充报告与恢复手册 |
+| C1 | 传输中断与旧异常 | 旧版本有重试预算耗尽后 exception 的历史行为；主线已改为传输失败持续退避，并提供只接受有效原始收据和传输审计的旧异常重投。未知 usage/编码异常不自动重投。 |
+| C2 | **usage 缺失/非法/自相矛盾 → review_required（默认 24h，可配置 SLA）**，不自动释放；这类未知 usage 的 exception receipt 用零 token 占位且不能自动结算。传输异常的 exception 可能有有效原始 usage，只有受控重投能恢复它。 | T06C §5；本次补充报告与恢复手册 |
 | C3 | **超预占不截断费用**：上游不遵守 `max_tokens` 时按实际费用入 receipt + 审计 `over_reserved=true`，走显式应收/账户暂停政策 | T06C §2；ADR-0004 §2.3 |
 | C4 | **没有 per-attempt 供应商成本账**：`billing_entries` 只记客户 charge，失败 attempt 的上游成本无处落账（能力缺失，不是回归） | T10 F01-1 |
 | C5 | **被限流/流上限拒绝的请求已经写过资金通路**：链路顺序 billing 在 limiter 之前，每次 429/503 都产生 1 条 execution + 1 条 reservation + 1 条 release（`failed_no_charge`，资金不被占用）；故障期间资金通路的写入量与请求量同阶 | T10 F08-2；T11 容量 §7.1 |
 | C6 | **未知上游成本 ≠ 0**：`provider_*_cost` 可空表示未知，NULL 当 0 会凭空造出毛利 | ADR-0004 §2.3 |
 | C7 | **finalize 失败 / COMMIT 未知 → 不写 `[DONE]`、保留预占、走人工/复核**；usage 被 veto 且 exception 行写不进 PG 时 execution 长期占款（人工路径） | ADR-0005 §2.4；T10 §8 限制 2 |
 | C8 | **`abandoned:` 标记只声明「本 attempt 已结束且没有 durable decision」**，不声明上游没有成本；标记没有 TTL/GC（释放后不再扫描，但标记本身一直留着） | T10 §4 F02、§8 限制 1/4 |
-| C9 | **24h SLA 到期本身不触发任何资金动作** | runbook §0 |
+| C9 | **人工 SLA 到期本身不触发任何资金动作** | runbook §0 |
 | C10 | **legacy 计量事件仍可能在 `[DONE]` 后丢**：hot/overflow/loop 三级内存队列不持久，`[DONE]` 已 flush、`Enqueue` 已返回、flush 前 SIGKILL 会丢这条 demo 记录；正式资金链（`GATEWAY_BILLING=pg` + finalizer）不受影响 | `docs/PROJECT-STATUS.md` §3 第 6 条、§5 |
 | C11 | **`/ledger/balance` 是 demo 累计消费**（`cost_cents`，1 token = 1 分），不是余额、不是账单；`cost_kind=demo_consumption` | ADR-0004 §2.7 |
 | C12 | **金额只有 CNY**（DB `CHECK (currency='CNY')`）、只允许 int64 微元、只舍入一次；`posted_balance_micro` 可为负 = 显式应收 | ADR-0004 §2.1/§2.2/§2.4 |
@@ -127,7 +129,7 @@
 
 | # | 项 | 说明 |
 |---|---|---|
-| E1 | demo 未设置 `METERING_ADMIN_TOKEN` 时 `/ledger/*`、`/reconcile`、`/receipts/*`、`/recovery/*` 开放（启动打印 WARNING） | T01A §4 |
+| E1 | demo 未设置 `METERING_ADMIN_TOKEN` 时 `/ledger/*`、`/reconcile`、`/receipts/*`、`/recovery/*`（不含独立鉴权的 `/recovery/policy`）开放（启动打印 WARNING） | T01A §4 |
 | E2 | 默认 Gateway 令牌桶 20/s + burst 40：在 55/s 到达的试跑里 96 个请求出现 12–14 个 429（预期行为，非缺陷；正式实验显式提高桶容量并记录） | T10 §5.3 |
 | E3 | demo/Compose 默认 `GATEWAY_BILLING=off`：没有「`[DONE]` 前 durable receipt」这层保证 | T06C §2 |
 | E4 | 证据目录/日志的 secret 卫生依赖各 runner 的脱敏实现（T02/T03/T10 各有扫描证据）；`pg_dump` 文件不进仓库 | T10 §6 |

@@ -1,11 +1,13 @@
 # LLM Gateway —— 一页概览（T12 面试材料）
 
-> 更新基线：主线 `3bc04a7`；新增功能在补充分支，尚未合入 main。
+> 更新基线：2026-10-06，三个补充分支已审核合入 main（`56a55f0`）。
 > 本文所有数字都来自仓库内可读的提交与证据文件（每条都带路径）；无法追溯到证据的标注 **未验证**。
 > 除特别说明外，所有性能数字都是**本机单机测量**（Intel macOS + OrbStack/Docker Desktop Linux VM，
 > 发压器与被测进程同机），**不能外推生产容量**。
 
 > [主线 CI #18](https://github.com/hualinli/llm-gateway/actions/runs/37321863065) 已通过。T12 发布候选证据见[验收报告](../verification/2026-10-01/t12-release-candidate/README.md)；本次人工操作、故障恢复和告警见[补充报告](../verification/2026-10-05/platform-supplements.md)。下方任务逐项性能结果是原测量，不代表新增候选的容量复测。
+
+> 最新审核修复、合并与复验见[审核合并报告](../verification/2026-10-06/parallel-review-merge.md)；旧任务数字保留原时点。
 
 ## 1. 要解决的问题
 
@@ -83,7 +85,7 @@
 - **发布候选已验证**：主线 CI、隔离冷启动、资金 Demo、安全扫描与三角色 E2E；生产部署形态仍未验证。
 - **容量类未验证**：60 min soak、durable finalization P99、>200 收据/s 的结算 SLO、
   1000 钱包 / 10k Key 容量、管理 API 容量、大事件形状；本机测量不能外推生产。
-- **语义边界**：补充分支实现传输错误持续退避、旧传输异常受控重投和 Console 人工资金操作；未知 usage 仍进入人工队列，超时不自动移动资金。
+- **语义边界**：主线实现传输错误持续退避、旧传输异常受控重投和 Console 人工资金操作；未知 usage 仍进入人工队列，超时不自动移动资金。
   「无 per-attempt 供应商成本账」是能力缺失（T10 F01-1）；被限流拒绝的请求仍会写资金通路行（T10 F08-2）；
   上游必须遵守平台写入的 `max_tokens` 才能保证预占上界，真实模型的 token 上界**未验证**。
 - **文档漂移**：`docs/verification/2026-10-01/t06c-usage-receipts/README.md` §1 写的准入顺序

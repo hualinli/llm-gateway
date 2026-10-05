@@ -45,7 +45,8 @@ make demo-clean               # 显式删除 PostgreSQL/Redis/Grafana/spool 卷
 
 本次补充由三个分支交付：`codex/funds-review-console`（人工资金操作）、
 `codex/transport-recovery-alerts`（长故障恢复与告警）、`codex/project-status-refresh`（组合验证与文档）。
-第三个分支包含前两个分支，尚未合入 main；验证范围见[补充报告](docs/verification/2026-10-05/platform-supplements.md)。
+三个分支经 3 个 GPT-6 Luna（max）并行审核、修复与独立复核后，已合入 main（合并提交 `56a55f0`）。
+最新验证与 CI 状态口径见[审核合并报告](docs/verification/2026-10-06/parallel-review-merge.md)。
 
 - 平台管理员在「计费运维」页查看人工队列，填写理由并确认释放或人工结算，查看账户与账本结果。操作人取自登录会话。
 - Redis 传输失败按有界退避持续重试；旧传输异常有带审计的受控重投入口。未知 usage 仍需人工判断。
@@ -180,8 +181,10 @@ eval "$(scripts/dev-certs.sh | grep '^export ')"
 | `GATEWAY_LIMITER_RATE/BURST`、`LIMITER_ON_REDIS_ERROR` | 20/40、`open` | Redis 令牌桶；prod 必须显式设置且 `closed` |
 | `CONTROL_ADDR` | 空 | Console→Control 管理通道；空 = Key 接口 503、不启动发布 loop（prod 必填） |
 | `CONTROL_ADMIN_SERVICE_ENABLED` + `CONTROL_CONSOLE_SERVICE_NAME` + `CONTROL_TLS_*` | 关 | Control 内部管理面（生产必须 mTLS） |
-| `METERING_ADMIN_TOKEN` | 空 | 非空时 `/ledger/*`、`/reconcile`、`/receipts/*`、`/recovery/*` 要求 Bearer；prod 必填 |
+| `METERING_ADMIN_TOKEN` | 空 | 非空时 `/ledger/*`、`/reconcile`、`/receipts/*`、`/recovery/*`（除专用只读 `/recovery/policy`）要求 Bearer；prod 必填 |
 | `METERING_RECOVERY`（`_MAX_EXECUTION`/`_GRACE`/`_LEASE`/`_SLA`） | `auto`（30m/10m/60s/24h） | 僵尸 execution 的有界恢复策略，见 [恢复 runbook](docs/runbooks/billing-recovery.md) |
+| `METERING_POLICY_TOKEN` | 空（Compose demo 有示例值） | `/recovery/policy` 专用只读凭据，生产配置独立随机值，不可复用管理 token |
+| `CONSOLE_METERING_URL` / `CONSOLE_METERING_POLICY_TOKEN` | 空 | Metering 内网 URL / 同一只读凭据；缺失或策略不可用时人工队列与操作返回 503，见 [部署说明](docs/runbooks/billing-recovery.md#41-只读端点) |
 | `POSTGRES_DSN`、`REDIS_ADDR`、`METERING_SPOOL_DIR` | Compose 默认 | 依赖与 legacy spool 目录 |
 
 Provider/凭据：Gateway 不读取 `OPENAI_BASE_URL` 创建业务路由，Provider 一律由控制面下发，

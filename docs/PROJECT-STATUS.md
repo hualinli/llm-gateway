@@ -10,7 +10,7 @@
 > **§1–§7.9、§6、§8 的历史行保留不删**，只标注写作时点（它们写于 T09–T11 之前，其中的「未验证」项
 > 可能已被后续任务关闭，当前结论以 §0、§5、§7.10–§7.13 与
 > [面试证据索引](interview/EVIDENCE-INDEX.md) 为准）。
-> T12 验收证据已合入。上述 2026-10-01 更新段落与后续逐轮记录保留为历史，当前结论以本页 2026-10-05 状态为准。
+> T12 验收证据已合入。上述 2026-10-01 更新段落与后续逐轮记录保留为历史，当前结论以本页 2026-10-06 状态为准。
 >
 > **T01A 更新（2026-10-01）**：§4.4 增加运行时 profile/生产 fail-fast、诊断与查询 listener 分离、统一错误信封与入口指标、隔离基线 runner、本地证书 bootstrap；§3 第 5 条与 §5 的对应风险已按 T01A 结果更新。基线命令与结果见 §7。
 >
@@ -26,7 +26,7 @@
 >
 > 本文只写“代码事实 / 本次已执行验证 / 未验证限制”，不写目标承诺。与计划文档或其他文档冲突时，以代码和本文记录的证据为准。
 
-## 当前状态（2026-10-05）
+## 当前状态（2026-10-06）
 
 主线基线 `3bc04a7` 已合并 T00–T12，schema 为 13；[主线 CI #18](https://github.com/hualinli/llm-gateway/actions/runs/37321863065) 全部必需任务通过。
 CI 包含 Go build/vet/回归、真实 PG/Redis 与 race 集成、前端 typecheck/单元/构建、隔离发布候选三角色 E2E。
@@ -36,13 +36,13 @@ CI 包含 Go build/vet/回归、真实 PG/Redis 与 race 集成、前端 typeche
 [分支归并](verification/2026-10-05/branch-consolidation.md)和[审查修复](verification/2026-10-05/t12-review-fixes.md)记录后续修复。
 PG 正式计费当前只接受文本与单份输出（n=1）；不完整 SSE 不显示为成功完成。
 
-本次新增功能在独立分支实现，**尚未合入 main**：
+本次三个补充分支经并行审核、修复与独立复核，已合入 main（`56a55f0`）。最新证据见[审核合并报告](verification/2026-10-06/parallel-review-merge.md)：
 
 | 分支 | 已实现 | 验证 |
 |---|---|---|
-| `codex/funds-review-console`（`ea40a2b`） | Console 全局人工队列、会话操作人、CSRF、理由与确认、释放/按预占人工结算、账户和分录结果 | 真实 HTTP+PG、并发/状态守卫、全项目 PG/Redis race 集成、前端 64 用例与构建 |
-| `codex/transport-recovery-alerts`（`180bc13`） | 传输错误持续退避；历史传输 exception 受控重投与事务审计；六类 Prometheus 告警和 CI 规则检查 | 连续失败 40 次后恢复恰好结算一次；并发重投恰好一次；拒绝未知 usage/编码异常；全项目 PG/Redis race 集成；promtool |
-| `codex/project-status-refresh` | 合并上述两支的组合候选，同步状态、限制、证据和运维入口 | 见[本次补充报告](verification/2026-10-05/platform-supplements.md) |
+| `codex/funds-review-console`（`3ef1f4a`） | Console 全局人工队列、会话操作人、CSRF、理由与确认、释放/按预占人工结算、账户和分录结果 | 真实 HTTP+PG、并发/状态守卫、全项目 PG/Redis race 集成、前端 64 用例与构建 |
+| `codex/transport-recovery-alerts`（`980b9d0`） | 传输错误持续退避；历史传输 exception 受控重投与事务审计；六类 Prometheus 告警和 CI 规则检查 | 连续失败 40 次后恢复恰好结算一次；并发重投恰好一次；拒绝未知 usage/编码异常；全项目 PG/Redis race 集成；promtool |
+| `codex/project-status-refresh`（`f3222cd`） | 合并上述两支并修复配置溢出的组合候选，同步状态、限制、证据和运维入口 | 见[本次补充报告](verification/2026-10-05/platform-supplements.md) |
 
 外部通知暂不接入，先使用 Prometheus `/alerts`。传输重投不直接移动资金；资金异常决议仍只写轨迹。
 人工 settle 明确按 reserved_micro 收费，不把未知 usage 伪装成已知。
@@ -272,7 +272,7 @@ PG 正式计费当前只接受文本与单份输出（n=1）；不完整 SSE 不
 | `GATEWAY_MAX_ACTIVE_STREAMS_PER_ORG` 未进生产 preflight | ADR-0001 §2.2 的生产必需变量表要求显式设置，但 `gatewayChecks` 未包含它，只打印 WARNING；每实例上限也不是跨实例硬配额（两实例可相加，实测热组织 881 → 1743 条） | T09 §10 / T11 容量 §5.4 |
 | T12 发布候选证据 | 已产出冷启动、三角色、资金、安全扫描证据；主线 CI #18 成功 | [T12 验收](verification/2026-10-01/t12-release-candidate/README.md) |
 | ~~`review_required` 人工队列没有可执行入口~~ | **T12 已接线**：`POST /recovery/review-required/{execution}/release|settle`（`METERING_ADMIN_TOKEN`、必填 actor + reason、仅接受 `review_required`、除属主存活外不豁免任何守卫、复用同一资金路径与确定性 business id、幂等且冲突返回 409、审计写入资金事务）——见 [billing-recovery 手册](runbooks/billing-recovery.md) §0–§5 | T12（已完成） |
-| 历史文档漂移 | T06C 旧报告准入顺序、T03 旧请求 ID 引用仍需结合时点阅读；迁移说明已同步 schema 13 | 当前事实见本页 2026-10-05 状态 |
+| 历史文档漂移 | T06C 旧报告准入顺序、T03 旧请求 ID 引用仍需结合时点阅读；迁移说明已同步 schema 13 | 当前事实见本页 2026-10-06 状态 |
 
 ## 6. 已关闭的历史问题（不再作为新增任务）
 
@@ -501,8 +501,8 @@ PG 正式计费当前只接受文本与单份输出（n=1）；不完整 SSE 不
 
 | # | 残余风险 | 现状 | 下一步 |
 |---|---|---|---|
-| 1 | 新增分支远端 CI 待确认 | 主线 CI #18 成功；本次组合候选本地集成、28 项 E2E、安全和告警测试通过 | 合并前确认新增分支自身 CI 成功 |
-| 2 | 长 Redis 停机自动恢复停止 | T10 历史行为；本次恢复分支已修复并验证，main 尚待合入 | 已在恢复分支实现持续退避、受控旧异常重投及告警；见本次补充报告 |
+| 1 | 新增分支远端 CI 待确认 | 历史主线 CI #18 成功；本次组合候选本地集成、28 项 E2E、安全和告警测试通过 | 合并后新 main CI 以远端运行结果为准，见审核合并报告 |
+| 2 | 长 Redis 停机自动恢复停止 | T10 历史行为；本次恢复分支已修复并验证，已合入 main | 已在主线实现持续退避、受控旧异常重投及告警；见本次补充报告 |
 | 3 | 容量与 SLO 只在低负载成立 | ≥200 收据/s 结算积压 38–146s；60min soak 与 durable finalization P99 未测；全部为单机测量 | 需要稳定 Linux + 发压机分离，再做正式阶梯/soak；不要在共享 runner 上设毫秒门槛 |
 | 4 | 生产形态未验证 | prod 正例启动、mTLS、HA、证书/主密钥轮换未验证；CI 与前端验证已补齐 | 独立 prod profile/HA 演练 |
 | 5 | 资金语义边界需持续披露 | 无 per-attempt 供应商成本账；超预占不截断；usage 不可用进人工队列；被拒请求仍写资金通路 | 在对外材料中保持与 [KNOWN-LIMITS](interview/KNOWN-LIMITS.md) 一致，不把目标 SLO 写成已达标 |

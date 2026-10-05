@@ -1,6 +1,6 @@
 # Runbook：僵尸 execution 的有界恢复（T07B）与人工处置（T12）
 
-> 2026-10-05 补充分支：平台管理员可从 Console 人工资金队列执行现有 release/settle 政策。
+> 2026-10-06 已合入 main：平台管理员可从 Console 人工资金队列执行现有 release/settle 政策。
 > 传输错误改为持续退避；旧传输异常可受控重投，六类告警先在 Prometheus 页面查看。
 > 具体条件、阈值和处置步骤见[传输恢复与告警手册](dispatch-recovery-alerts.md)。以下既有恢复状态机和资金边界继续有效。
 
@@ -106,7 +106,15 @@ alive(instance, execution) := 心跳行存在
 
 ### 4.1 只读端点
 
-两个只读端点挂在 metering 的管理监听上（与 `/receipts/backlog` 同一个 `METERING_ADMIN_TOKEN` bearer）：
+Console 使用额外的 `GET /recovery/policy`，只读取当前安全窗口、心跳租约和人工 SLA，不读取账本或执行管理操作。部署时：
+
+- 在 Metering 设置 `METERING_POLICY_TOKEN` 为独立随机凭据（生产至少 16 字符），不可复用 `METERING_ADMIN_TOKEN`。
+- 在 Console 设置 `CONSOLE_METERING_URL` 为 Metering 内网基础 URL（如 `http://metering:8091`），`CONSOLE_METERING_POLICY_TOKEN` 为同一个只读凭据。仅服务端持有，不下发浏览器。
+- 所有 Metering 副本必须使用一致的 `METERING_RECOVERY_MAX_EXECUTION`、`_GRACE`、`_LEASE`、`_SLA` 和只读 token。此端点返回单个副本配置，负载均衡不会计算集群最严格窗口。
+- 缺少 URL/token、策略端点未配置、拒绝凭据、超时或返回非法策略时，Console 人工队列与资金操作安全拒绝并返回 503。检查双端配置与内网连通性；不以默认窗口绕过。
+- `METERING_RECOVERY=off` 仍提供真实策略。最大执行时长与宽限相加溢出会在启动时拒绝；SLA 到期不自动移动资金。
+
+以下两个只读端点挂在 metering 的管理监听上（与 `/receipts/backlog` 同一个 `METERING_ADMIN_TOKEN` bearer）：
 
 ```bash
 # 策略 + 循环健康 + 两个队列（24h 人工队列 / 无法自动判定队列）

@@ -1,12 +1,14 @@
 # Web 控制台（T04 最小闭环 + T08 三视角完整 UI）
 
-> 2026-10-05 更新：主线 CI 已验证三角色 E2E。`codex/funds-review-console` 新增平台「人工资金处置」队列：
+> 2026-10-06 更新：主线 CI 已验证三角色 E2E。已合入 main 的资金分支新增平台「人工资金处置」队列：
 > 分页查看待处理执行、填写理由、确认释放或按预占人工结算、查看账户和分录结果。
 > 使用 `/api/v1/admin/billing/review-required` 及 `/{execution}/{release,settle}`，操作人来自会话，写请求带 CSRF。
 > 不对资金操作自动重试；冲突刷新队列，结果未知先查审计。HTTP+PG 验证真实资金，浏览器用受控队列 fixture 验证交互。
-> 补充分支单元 64/64 与生产构建通过，完整范围见[报告](../verification/2026-10-05/platform-supplements.md)。
+> 最新复验单元 64/64 与生产构建通过，完整范围见[报告](../verification/2026-10-05/platform-supplements.md)。
 > 下方 T04/T08 截图、数量与缺口表保留当时事实；全局人工执行队列不等于全局资金异常总表或单次执行状态查询。
 
+
+Console 每次从 Metering 专用只读 `/recovery/policy` 读取安全窗口和 SLA；缺失或不可用时队列和操作返回 503。部署变量见[恢复手册](../runbooks/billing-recovery.md#41-只读端点)，最新证据见[审核合并报告](../verification/2026-10-06/parallel-review-merge.md)。
 
 `web/` 是 React 单页应用。它只消费已经冻结的两份真实契约：
 
