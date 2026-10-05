@@ -24,11 +24,11 @@
 | 控制面 | 🟡 一致性基础完成 | Get/Watch、PG 版本、原子 patch、防回退、TLS/mTLS、管理认证和 Gateway applied/rejected 回报已有；聚合 active 语义和报告时效未完成 |
 | 凭据管理 | ✅ 第一版完成 | `/keys` Create/List/Revoke、admin/tenant-user 授权核心和 PG 审计已有；正式身份签发/轮换流程未完成 |
 | 可观测性 | 🟡 基础实现完成 | Prometheus 已抓 Gateway/Metering，基础 Dashboard 已有；告警和指标口径仍需完善 |
-| 测试 | 🟡 分层执行状态不同 | base `2fef64e` 上 443 个 `func Test` 声明（≠ 执行用例数）；2026-10-01 T01A 的 `go build`/`go vet`/`go test ./...`/`go test -race ./...` 与 `make integration-test`（隔离 Redis 7.4.11 + PG 16.15）全部通过，证据见 [T01A 运行基线](docs/verification/2026-10-01/t01a-prod-profiles/README.md)。**T03**：黑盒 RBAC/Key/用量/审计验收 **12/12 PASS、0 SKIP、0 阻断缺陷**（[证据](docs/verification/2026-10-01/t03-enterprise-rbac/README.md)）；补修 owner-transfer 校验顺序后 `go test ./internal/organization/ ./internal/console/ -count=1`（含 PG 集成用例）通过。**T04（分支 `codex/t04-web-console`，未合入本分支）**：该分支自报 `tsc --noEmit` 通过、vitest 3 文件/33 用例通过、`npm run build` 通过（gzip 约 438 kB） |
+| 测试 | 🟡 分层执行状态不同 | base `2fef64e` 上 443 个 `func Test` 声明（≠ 执行用例数）；2026-10-01 T01A 的 `go build`/`go vet`/`go test ./...`/`go test -race ./...` 与 `make integration-test`（隔离 Redis 7.4.11 + PG 16.15）全部通过，证据见 [T01A 运行基线](docs/verification/2026-10-01/t01a-prod-profiles/README.md)。**T03**：黑盒 RBAC/Key/用量/审计验收 **12/12 PASS、0 SKIP、0 阻断缺陷**（[证据](docs/verification/2026-10-01/t03-enterprise-rbac/README.md)）；补修 owner-transfer 校验顺序后 `go test ./internal/organization/ ./internal/console/ -count=1`（含 PG 集成用例）通过。**T04** 已随 `f241e53` 合入 T08 基线（`tsc --noEmit` 通过、vitest 3 文件/33 用例、build gzip 约 438 kB）。**T08（分支 `codex/t08-three-role-ui`）**：`npx tsc --noEmit` 通过（含 `e2e/`）、`npm test` 4 文件/60 用例通过、`npm run build` 通过（gzip 约 466 kB，较 T04 +28 kB）、`npm run e2e`（Playwright，真实本地 Console）**33 passed / 0 failed**，证据见 [docs/web/README.md](docs/web/README.md) §9 与 [web/e2e/README.md](web/e2e/README.md) |
 | Demo 与 CI | 🟡 已有编排、远端未确认 | `demo-up/config/smoke/down`、`scripts/demo-accept.sh` 三轮正常/切备/双故障/对账和 `.github/workflows/ci.yml` 已提交；2026-10-01 `make demo-accept` 三轮 PASS；**远端 CI 是否跑绿未知**；实验环境已由 [隔离 runner](docs/verification/2026-10-01/t01a-baseline/README.md) 覆盖 |
 | 性能证据 | 🟡 历史本机数据 | [2026-09-26 本机直连/网关基线与切备报告](docs/verification/2026-09-26/performance/README.md)是历史证据（闭环 `ec24990`、固定到达 `4459c83`）；[T01A 隔离低负载对照](docs/verification/2026-10-01/t01a-baseline/README.md)在固定 commit 上复测了直连 vs Gateway；容量拐点、慢客户端和生产资源上界未验证 |
 | 生产安全性 | 🟡 生产 profile 已收紧，部署仍待验证 | `GATEWAY_PROFILE=prod` 缺任一必要配置即拒绝启动（禁 legacy raw-key/内存回退/匿名管理面/insecure 凭据解析，要求 mTLS、显式限流与活跃流上限、诊断 listener 分离）；诊断与业务 listener 可分离，`/ledger/*`、`/reconcile` 支持 `METERING_ADMIN_TOKEN` 鉴权；决策见 [ADR-0001](docs/decisions/ADR-0001-runtime-profiles.md)。**未验证**：真实 PG/Redis 的 prod 正例启动、诊断 listener 自身的认证、证书轮换 |
-| 多租户产品面 | 🟡 控制面 RBAC/Key/用量已闭环，Web 在 T04 分支 | T02 落地 Console API（Hertz，`cmd/console`）与会话/组织基础（migration 000004）。**T03** 落地企业 RBAC（邀请、角色矩阵、最后 owner 保护、owner 转移）、Control `api_keys` 事实表 + 内部 `AdminService`、Gateway PG access guard 与计量归属（migration 000005–000007，schema v7）以及 Console 的成员/邀请/Key/用量/审计端点，黑盒验收 12/12 PASS。**T04** 分支 `codex/t04-web-console` 交付 `web/` 最小 Web 闭环（React + TypeScript + Vite，10 项契约缺口显式列出），**尚未合入本分支**。**仍缺**：价格版本、钱包/预占/receipt 与账单（T05/T06）、多实例心跳与策略收敛（T09）、Playwright 浏览器用例（T08）。决策见 [ADR-0002](docs/decisions/ADR-0002-iam-identity-and-organizations.md)/[ADR-0003](docs/decisions/ADR-0003-enterprise-rbac-keys-and-policy.md)，接口见 [console-v1.yaml](docs/openapi/console-v1.yaml) |
+| 多租户产品面 | 🟡 控制面 RBAC/Key/用量已闭环，Web 在 T04 分支 | T02 落地 Console API（Hertz，`cmd/console`）与会话/组织基础（migration 000004）。**T03** 落地企业 RBAC（邀请、角色矩阵、最后 owner 保护、owner 转移）、Control `api_keys` 事实表 + 内部 `AdminService`、Gateway PG access guard 与计量归属（migration 000005–000007，schema v7）以及 Console 的成员/邀请/Key/用量/审计端点，黑盒验收 12/12 PASS。**T04** 已合入 T08 基线（`f241e53`）：`web/` 最小 Web 闭环（React + TypeScript + Vite，契约缺口显式列出）。**T05/T06/T07A** 的 `/admin/prices`、`/orgs/{org}/billing/{account,entries,statements,exceptions}`、`/admin/billing/accounts/{org}/adjustments` 与异常决议端点已在 T08 工作树接线，**T08** 交付三角色完整 UI 与 Playwright（member / 企业管理员 / billing_viewer / 平台管理员 + 负向 RBAC/会话/CSRF，1440 与 390 截图），金额端到端保持十进制字符串。**仍缺**：多实例心跳与配置聚合状态（T09）、平台级用户/组织列表与 Provider 凭据/配置状态读取端点（UI 已标注契约缺口）。决策见 [ADR-0002](docs/decisions/ADR-0002-iam-identity-and-organizations.md)/[ADR-0003](docs/decisions/ADR-0003-enterprise-rbac-keys-and-policy.md)，接口见 [console-v1.yaml](docs/openapi/console-v1.yaml) |
 
 当前更准确的简历定位是：
 
@@ -1254,9 +1254,12 @@ make console-run-tls  # 带 CONTROL_ADDR + CONTROL_TLS_* 启动 Console（本地
 
 组合语义（`internal/controlclient` 的错误映射）：同一 `operation_id` 但 payload 不同 → `409 conflict`；`expected_version` 不匹配 → `409 conflict`（消息里带 `current_version`）；Console 身份不被 Control 信任或连不上 → `502 upstream_unavailable`；完全没配置通道 → `503 unavailable`。用量接口的 `cost_cents` 是**演示累计消费**（固定演示价 1 token = 1 分），字段上标了 `cost_kind=demo_consumption`，不是余额、不是账单；`org_id IS NULL` 的历史事件不属于任何组织范围。
 
-### 5.8 Web 控制台（T04）
+### 5.8 Web 控制台（T04 最小闭环 + T08 三视角完整 UI）
 
-`web/` 是 Console 的浏览器前端：React + TypeScript + Vite + Ant Design + React Router + TanStack Query，**同源**消费 `/api/v1`（Console，HttpOnly 会话 cookie + `X-CSRF-Token`）与 `/v1`（Gateway，用户自己的 API Key）。数据全部来自真实 API，契约里不存在的字段（余额、预占、价格）不显示，只在页面上标注契约缺口；`cost_cents` 一律写作 demo 累计消费。页面：登录、组织切换、概览、模型目录 + Playground、本人 Key（secret 只显示一次）、本人用量、成员/邀请、审计、平台管理。应用自身文档见 [docs/web/README.md](docs/web/README.md)。
+`web/` 是 Console 的浏览器前端：React + TypeScript + Vite + Ant Design + React Router + TanStack Query，**同源**消费 `/api/v1`（Console，HttpOnly 会话 cookie + `X-CSRF-Token`）与 `/v1`（Gateway，用户自己的 API Key）。数据全部来自真实 API，契约里不存在的字段不显示，只在页面上标注契约缺口。
+
+T04 的页面：登录、组织切换、概览、模型目录 + Playground、本人 Key（secret 只显示一次）、本人用量、成员/邀请、审计、平台管理。
+T08 补上 T05/T06/T07A 端点落地后的三角色视图：**资金与结算**（可用/预占/已入账 + 服务端冻结口径、月度账单、append-only 账本、资金异常队列与时间线）、**价格版本**（发布历史 + 发布新版本，同 `(model, effective_at)` 拒绝覆盖）、**平台额度调整**（「额度调整」而非充值，reason 必填 + `Idempotency-Key` 重放语义 + before/after 快照）、成员用量分解（服务端 `usage?user=` 过滤）、请求详情抽屉（结算状态按契约缺口如实标注）。金额端到端保持十进制字符串，`formatMicroYuan` 用字符串运算，不经过 `Number()`。应用自身文档见 [docs/web/README.md](docs/web/README.md)，浏览器测试见 [web/e2e/README.md](web/e2e/README.md)。
 
 ```bash
 # 后端：终端 1 控制面（:8092，需 PostgreSQL），终端 2 数据面（:8090）
@@ -1267,12 +1270,17 @@ make run
 cd web
 npm ci                    # 依赖版本已精确锁定（package-lock.json 一并提交）
 npm run dev               # http://127.0.0.1:5173，代理 /api/v1 -> 127.0.0.1:8092、/v1 -> 127.0.0.1:8090
-npm run typecheck         # tsc --noEmit（strict）
-npm test                  # vitest run（API 客户端错误映射与 CSRF 行为）
+npm run typecheck         # tsc --noEmit（strict，含 e2e/）
+npm test                  # vitest run（API 客户端错误映射/CSRF + 资金客户端与 µ¥ 字符串运算）
 npm run build             # 产出 dist/，用 web/nginx.conf 托管（SSE 禁缓冲）
+
+# 浏览器端到端（T08）：隔离的 Console + 三角色 Playwright
+bash web/e2e/scripts/prepare-backend.sh   # 隔离 PG/Redis + migration + bootstrap demo 数据
+bash web/e2e/scripts/start-console.sh     # Console on 127.0.0.1:18092
+npm run e2e                               # 33 例：三角色 + 负向 + 1440/390 截图
 ```
 
-`web/nginx.conf` 是生产示例：静态资源 SPA 回退 + `/api/v1/` 反代 Console + `/v1/` 反代 Gateway（`proxy_buffering off`、`gzip off`、`chunked_transfer_encoding on`、`X-Accel-Buffering: no`、长读超时）。浏览器端 Playwright 覆盖由 T08 负责，不属于 T04。
+`web/nginx.conf` 是生产示例：静态资源 SPA 回退 + `/api/v1/` 反代 Console + `/v1/` 反代 Gateway（`proxy_buffering off`、`gzip off`、`chunked_transfer_encoding on`、`X-Accel-Buffering: no`、长读超时）。浏览器端 Playwright 覆盖由 T08 交付（三角色用例、负向 RBAC/会话/CSRF 用例、1440 与 390 截图），见 `web/e2e/`。
 
 ---
 

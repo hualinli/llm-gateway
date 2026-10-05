@@ -30,8 +30,10 @@ import {
   LogoutOutlined,
   MenuOutlined,
   SettingOutlined,
+  TagsOutlined,
   TeamOutlined,
   UserOutlined,
+  WalletOutlined,
 } from '@ant-design/icons';
 
 import { ErrorView } from '../components/states';
@@ -138,6 +140,9 @@ export function buildMenuItems(
     });
 
     const enterprise: NonNullable<MenuProps['items']> = [];
+    // The billing page is reachable by every role: the server returns the real
+    // `403 forbidden` for a plain member and the page renders it as such.
+    enterprise.push({ key: `${base}/billing`, icon: <WalletOutlined />, label: '资金与结算' });
     if (CAN.viewMembers(role)) {
       enterprise.push({ key: `${base}/members`, icon: <TeamOutlined />, label: '成员与邀请' });
     }
@@ -153,7 +158,11 @@ export function buildMenuItems(
     items.push({
       type: 'group',
       label: '平台管理',
-      children: [{ key: '/platform', icon: <SettingOutlined />, label: '平台管理' }],
+      children: [
+        { key: '/platform', icon: <SettingOutlined />, label: '用户与状态' },
+        { key: '/platform/prices', icon: <TagsOutlined />, label: '价格版本' },
+        { key: '/platform/billing', icon: <WalletOutlined />, label: '额度调整与异常' },
+      ],
     });
   }
 

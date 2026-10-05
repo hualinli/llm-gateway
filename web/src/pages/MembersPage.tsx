@@ -7,12 +7,13 @@
  * `owner` can only be granted through the ownership-transfer endpoint).
  */
 
-import { useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import {
   Alert,
   App as AntdApp,
   Button,
   Card,
+  Drawer,
   Form,
   Input,
   InputNumber,
@@ -24,7 +25,7 @@ import {
   Tag,
   Typography,
 } from 'antd';
-import { PlusOutlined, SwapOutlined } from '@ant-design/icons';
+import { BarChartOutlined, PlusOutlined, SwapOutlined } from '@ant-design/icons';
 
 import {
   useChangeMemberRole,
@@ -33,12 +34,13 @@ import {
   useMembers,
   useRemoveMember,
   useTransferOwnership,
+  useUsage,
 } from '../api/queries';
-import type { CreateInvitationResponse, Invitation, Member, OrgRole } from '../api/types';
+import type { CreateInvitationResponse, Invitation, Member, OrgRole, UsageEvent } from '../api/types';
 import { DataState, ErrorView, errorSummary } from '../components/states';
 import { ContractGap, PageHeader } from '../components/PageHeader';
 import { useActiveOrg } from '../session/SessionProvider';
-import { formatTimestamp } from '../utils/format';
+import { formatCostCents, formatNumber, formatTimestamp, shortId } from '../utils/format';
 import { assignableRoles, CAN, ROLE_LABELS, ROLE_TAG_COLOR } from '../utils/permissions';
 
 interface InviteForm {
@@ -64,6 +66,7 @@ export function MembersPage(): ReactNode {
   const [createdInvite, setCreatedInvite] = useState<CreateInvitationResponse | null>(null);
   const [transferTarget, setTransferTarget] = useState<Member | null>(null);
   const [transferConfirm, setTransferConfirm] = useState('');
+  const [usageMember, setUsageMember] = useState<Member | null>(null);
 
   const canManage = CAN.manageMembers(role);
   const invitableRoles: OrgRole[] = CAN.createAdmin(role)
@@ -219,6 +222,16 @@ export function MembersPage(): ReactNode {
                   key: 'action',
                   render: (_, record) => (
                     <Space size={4} wrap>
+                      {CAN.viewOrgUsage(role) ? (
+                        <Button
+                          size="small"
+                          icon={<BarChartOutlined />}
+                          aria-label={`查看 ${record.email} 的用量`}
+                          onClick={() => setUsageMember(record)}
+                        >
+                          用量
+                        </Button>
+                      ) : null}
                       {CAN.transferOwner(role) && record.role !== 'owner' ? (
                         <Button
                           size="small"
@@ -322,6 +335,12 @@ export function MembersPage(): ReactNode {
       <ContractGap title="没有撤销邀请（revoke invitation）端点">
         契约只有创建与列出邀请：已发出的邀请在过期或被接受前无法通过 API 撤销，列表里也永远不会出现 token。
       </ContractGap>
+
+      <MemberUsageDrawer
+        orgId={orgId}
+        member={usageMember}
+        onClose={() => setUsageMember(null)}
+      />
 
       {/* --------------------------------------------------- invite modal -- */}
       <Modal
@@ -450,3 +469,127 @@ export function MembersPage(): ReactNode {
   );
 }
 
+/* ------------------------------------------------- per-member breakdown */
+
+/**
+ * One member's real usage, read through the server-side `user` filter of
+ * `GET /orgs/{org}/usage`. Nothing is aggregated client-side: the totals are the
+ * server's totals for the filtered window, and the window is stated on screen.
+ *
+ * This is the T08 "成员分解" deliverable. The contract has no group-by endpoint,
+ * so the breakdown is one member at a time, by design.
+ */
+function MemberUsageDrawer({
+  orgId,
+  member,
+  onClose,
+}: {
+  orgId: string | null;
+  member: Member | null;
+  onClose: () => void;
+}): ReactNode {
+  // A fixed 7-day window, recomputed when the drawer target changes so the
+  // query key stays stable while the drawer is open.
+  const query = useMemo(() => {
+    const to = new Date();
+    const from = new Date(to.getTime() - 7 * 24 * 60 * 60 * 1000);
+    return { from: from.toISOString(), to: to.toISOString(), limit: 20 };
+  }, [member?.user_id]);
+
+  const usage = useUsage(
+    orgId,
+    { ...query, ...(member ? { user: member.user_id } : {}) },
+    orgId !== null && member !== null,
+  );
+
+  return (
+    <Drawer
+      title={member ? `${member.email} 的用量（近 7 天）` : '成员用量'}
+      width={720}
+      open={member !== null}
+      onClose={onClose}
+      destroyOnHidden
+      data-testid="member-usage-drawer"
+    >
+      {member ? (
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          <Alert
+            type="info"
+            showIcon
+            message="服务端过滤，不是本地聚合"
+            description={
+              <Space direction="vertical" size={2}>
+                <span>
+                  请求：<code>GET /orgs/{orgId}/usage?user={member.user_id}&from=…&to=…&limit=20</code>
+                </span>
+                <span>
+                  窗口是固定的近 7 天（UTC，服务端上限 31 天）；totals 覆盖整个过滤窗口。
+                </span>
+              </Space>
+            }
+          />
+          <DataState query={usage} loadingRows={4} showStaleBanner>
+            {(page) => (
+              <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                <Space size={16} wrap>
+                  <span>
+                    事件 <strong>{formatNumber(page.totals.events)}</strong>
+                  </span>
+                  <span>
+                    tokens <strong>{formatNumber(page.totals.total_tokens)}</strong>
+                  </span>
+                  <span>
+                    演示消费 <strong>{formatCostCents(page.totals.cost_cents)}</strong>
+                  </span>
+                  <Tag color={page.scope === 'organization' ? 'blue' : 'default'}>
+                    scope={page.scope}
+                  </Tag>
+                </Space>
+                <Typography.Text type="secondary">
+                  {formatTimestamp(page.window.from)} → {formatTimestamp(page.window.to)} ·{' '}
+                  {page.totals.cost_note}
+                </Typography.Text>
+                <Table<UsageEvent>
+                  size="small"
+                  rowKey="id"
+                  dataSource={page.items}
+                  pagination={false}
+                  locale={{ emptyText: '该成员在此窗口内没有计量事件' }}
+                  scroll={{ x: 720 }}
+                  columns={[
+                    {
+                      title: 'occurred_at',
+                      dataIndex: 'occurred_at',
+                      render: (value: string) => formatTimestamp(value),
+                    },
+                    { title: 'model', dataIndex: 'model' },
+                    {
+                      title: 'key_id',
+                      dataIndex: 'key_id',
+                      render: (value: string | null) => shortId(value),
+                    },
+                    {
+                      title: 'tokens',
+                      dataIndex: 'total_tokens',
+                      render: (value: number) => formatNumber(value),
+                    },
+                    {
+                      title: 'cost_cents',
+                      dataIndex: 'cost_cents',
+                      render: (value: string) => <Tag color="orange">{value}</Tag>,
+                    },
+                  ]}
+                />
+                <Typography.Text type="secondary">
+                  {page.next_cursor
+                    ? '窗口内还有更多事件：这里只显示第一页（20 条），完整分页请到「用量」页按 user 过滤。'
+                    : '已显示该窗口内的全部事件。'}
+                </Typography.Text>
+              </Space>
+            )}
+          </DataState>
+        </Space>
+      ) : null}
+    </Drawer>
+  );
+}

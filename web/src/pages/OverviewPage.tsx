@@ -1,23 +1,51 @@
 /**
- * Overview: identity, active organization, usage of the last 24 hours and the
- * key inventory — every number read from a real API response.
+ * Overview: identity, active organization, usage of the last 24 hours, the
+ * funding state of the organization and the key inventory — every number read
+ * from a real API response.
  *
- * The roadmap's "available / reserved balance" panels are **not** rendered as
- * numbers, because no endpoint in the frozen T04 contract returns a wallet:
- * T05 (pricing) and T06 (admission/ledger) own them. Instead the page labels
- * the absence and shows the demo-consumption figures the usage API does return.
+ * "资金与结算" now has real endpoints (T05/T06/T07A): the account projection, the
+ * current UTC month statement and the ledger live in `/orgs/{org}/billing/*`.
+ * Amounts are decimal strings and are formatted without `Number()`; the server's
+ * frozen `available_note` is shown verbatim. A plain `member` has no
+ * `view_org_usage` grant, so the card renders the *server's* 403 rather than
+ * hiding the capability.
  */
 
 import { useMemo, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { Alert, Card, Col, Descriptions, Row, Space, Statistic, Table, Tag, Typography } from 'antd';
+import {
+  Alert,
+  Card,
+  Col,
+  Descriptions,
+  Row,
+  Space,
+  Statistic,
+  Table,
+  Tag,
+  Typography,
+} from 'antd';
 
-import { useKeys, useOrganization, useUsage } from '../api/queries';
+import {
+  useBillingAccount,
+  useBillingStatement,
+  useKeys,
+  useOrganization,
+  useUsage,
+} from '../api/queries';
 import type { UsageEvent } from '../api/types';
-import { DataState } from '../components/states';
+import { DataState, asApiError } from '../components/states';
+import { MicroYuan } from '../components/Money';
 import { ContractGap, PageHeader } from '../components/PageHeader';
 import { useActiveOrg, useSession } from '../session/SessionProvider';
-import { formatCostCents, formatNumber, formatTimestamp, shortId } from '../utils/format';
+import {
+  formatCostCents,
+  formatMicroYuan,
+  formatNumber,
+  formatTimestamp,
+  shortId,
+  utcMonthOf,
+} from '../utils/format';
 import { CAN, ORG_TYPE_LABELS, ROLE_LABELS, ROLE_TAG_COLOR } from '../utils/permissions';
 
 /**
@@ -185,21 +213,7 @@ export function OverviewPage(): ReactNode {
         </DataState>
       </Card>
 
-      <Card title="资金与结算" size="small">
-        <Space direction="vertical" size={8} style={{ width: '100%' }}>
-          <Alert
-            type="warning"
-            showIcon
-            message="可用余额 / 预占资金 / 结算延迟：本版本没有对应 API"
-            description="T04 的冻结契约里不存在钱包、账户或账本端点（T05 引入价格版本与精确金额，T06 引入 admission 预占与 durable receipt）。因此这里不显示任何数字，也不把 demo 消费伪装成余额。"
-          />
-          <ContractGap title="GET /api/v1/orgs/{org}/balance 等钱包端点不存在">
-            概览页因此只展示 usage 接口真实返回的 events / tokens / cost_cents
-            （<code>cost_kind=demo_consumption</code>，1 token = 1 分的演示价）。最近请求的
-            “成功 / 断流”分类与结算延迟同样属于 T06/T07 的指标，本页不猜测。
-          </ContractGap>
-        </Space>
-      </Card>
+      <FundsCard orgId={orgId} />
 
       <Card
         title="API Keys"
@@ -232,5 +246,156 @@ export function OverviewPage(): ReactNode {
         )}
       </Card>
     </Space>
+  );
+}
+
+/* ---------------------------------------------------------- funds card */
+
+/**
+ * "资金与结算" on the overview: the organization's projection, the current UTC
+ * month's statement totals, and the honest status of what is *not* available.
+ *
+ * Every state is the server's: `403` when the role lacks `view_org_usage`,
+ * `404` when no billing row exists yet, `loading`/`stale`/`error` from the
+ * query. No field is derived, and no `Number()` ever touches an amount.
+ */
+function FundsCard({ orgId }: { orgId: string | null }): ReactNode {
+  const { role } = useActiveOrg();
+  const canRead = CAN.viewOrgUsage(role);
+  const month = useMemo(() => utcMonthOf(), []);
+
+  const account = useBillingAccount(orgId, orgId !== null);
+  const statement = useBillingStatement(orgId, { month, limit: 5 }, canRead && orgId !== null);
+
+  const accountError = account.isError ? asApiError(account.error) : null;
+  const billingLink = `/orgs/${encodeURIComponent(orgId ?? '')}/billing`;
+
+  return (
+    <Card
+      title="资金与结算"
+      size="small"
+      extra={<Link to={billingLink}>打开完整账单（账户 / 流水 / 月度账单 / 异常）</Link>}
+      data-testid="overview-funds-card"
+    >
+      <Space direction="vertical" size={12} style={{ width: '100%' }}>
+        {accountError?.kind === 'forbidden' ? (
+          <Alert
+            type="warning"
+            showIcon
+            message="服务端 403：当前角色没有组织资金读取权限"
+            description={
+              <Space direction="vertical" size={2}>
+                <span>
+                  code={accountError.code} · request_id={accountError.requestId || '—'}。
+                  `view_org_usage` 只授予 owner / admin / billing_viewer；member 只能看自己的用量（scope=self），
+                  所以这里不显示组织余额，也不假装是 0。
+                </span>
+                <span>
+                  个人消费请查看 <Link to={`/orgs/${encodeURIComponent(orgId ?? '')}/usage`}>用量</Link>
+                  （scope=self）；组织账单页会把同一个 403 完整渲染出来。
+                </span>
+              </Space>
+            }
+          />
+        ) : accountError?.kind === 'not_found' ? (
+          <Alert
+            type="info"
+            showIcon
+            message="该组织还没有计费账户行（404 not_found）"
+            description="账户投影由第一次入账创建（平台额度调整，或 T06 admission 预占）；GET 不会创建它。非成员同样得到 404。"
+          />
+        ) : (
+          <DataState query={account} loadingRows={3} showStaleBanner>
+            {(data) => (
+              <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                <Row gutter={[16, 8]}>
+                  <Col xs={12} md={6}>
+                    <Typography.Text type="secondary">可用 available</Typography.Text>
+                    <div>
+                      <MicroYuan value={data.available_micro} strong />
+                    </div>
+                  </Col>
+                  <Col xs={12} md={6}>
+                    <Typography.Text type="secondary">预占 reserved</Typography.Text>
+                    <div>
+                      <MicroYuan value={data.reserved_micro} strong />
+                    </div>
+                  </Col>
+                  <Col xs={12} md={6}>
+                    <Typography.Text type="secondary">已入账 posted</Typography.Text>
+                    <div>
+                      <MicroYuan value={data.posted_balance_micro} strong />
+                    </div>
+                  </Col>
+                  <Col xs={12} md={6}>
+                    <Space size={4} wrap>
+                      <Tag color={data.status === 'active' ? 'green' : 'red'}>{data.status}</Tag>
+                      <Tag>v{data.version}</Tag>
+                      <Typography.Text type="secondary">
+                        {formatTimestamp(data.updated_at)}
+                      </Typography.Text>
+                    </Space>
+                  </Col>
+                </Row>
+                <Alert
+                  type={data.available_micro.trim().startsWith('-') ? 'error' : 'info'}
+                  showIcon
+                  message="口径（服务端冻结文案，逐字显示）"
+                  description={<Typography.Text code>{data.available_note}</Typography.Text>}
+                />
+              </Space>
+            )}
+          </DataState>
+        )}
+
+        {canRead ? (
+          <Card size="small" type="inner" title={`本周期消费（UTC 月 ${month}，posted_at 口径）`}>
+            <DataState
+              query={statement}
+              loadingRows={2}
+              showStaleBanner={false}
+              isEmpty={(data) => data.totals.entries === '0'}
+              emptyDescription={`${month}（UTC）还没有任何账本分录：本月没有入账、扣费或预占`}
+            >
+              {(data) => (
+                <Space size={24} wrap>
+                  <Space direction="vertical" size={0}>
+                    <Typography.Text type="secondary">净额 net_micro</Typography.Text>
+                    <Typography.Text strong style={{ fontSize: 18 }}>
+                      {formatMicroYuan(data.totals.net_micro)} 元
+                    </Typography.Text>
+                  </Space>
+                  <Space direction="vertical" size={0}>
+                    <Typography.Text type="secondary">扣费 debit_micro</Typography.Text>
+                    <Typography.Text>{formatMicroYuan(data.totals.debit_micro)} 元</Typography.Text>
+                  </Space>
+                  <Space direction="vertical" size={0}>
+                    <Typography.Text type="secondary">入账 credit_micro</Typography.Text>
+                    <Typography.Text>{formatMicroYuan(data.totals.credit_micro)} 元</Typography.Text>
+                  </Space>
+                  <Space direction="vertical" size={0}>
+                    <Typography.Text type="secondary">分录 / 迟到结算</Typography.Text>
+                    <Space size={4} wrap>
+                      <Tag>{data.totals.entries} 条</Tag>
+                      <Tag color={data.totals.late_entries === '0' ? 'default' : 'orange'}>
+                        late {data.totals.late_entries}
+                      </Tag>
+                    </Space>
+                  </Space>
+                  <Typography.Text type="secondary">
+                    totals 覆盖整个月并忽略分页；负 net 是真实净支出。
+                  </Typography.Text>
+                </Space>
+              )}
+            </DataState>
+          </Card>
+        ) : null}
+
+        <ContractGap title="最近请求成功/断流分类与结算延迟没有聚合端点">
+          “成功 / 断流 / 结算延迟 P99”属于 T06/T07 的指标，契约没有对应查询端点（没有 `/admin/metrics`
+          的应用层聚合，`/metrics` 是 Prometheus 文本且不属于 UI 契约）：本页只用真实返回的账本与用量字段，不推测。
+        </ContractGap>
+      </Space>
+    </Card>
   );
 }

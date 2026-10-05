@@ -26,12 +26,23 @@ import {
   type ApiErrorKind,
 } from './errors';
 import type {
+  AdjustmentRequest,
+  AdjustmentResponse,
   ApiKeyPage,
   AuditEventPage,
+  BillingAccount,
+  BillingEntriesQuery,
+  BillingEntryPage,
+  BillingExceptionDetail,
+  BillingExceptionPage,
+  BillingExceptionsQuery,
+  BillingStatement,
+  BillingStatementQuery,
   CreateApiKeyRequest,
   CreateApiKeyResponse,
   CreateInvitationRequest,
   CreateInvitationResponse,
+  CreatePriceVersionRequest,
   CreateUserRequest,
   InvitationPage,
   LoginResponse,
@@ -42,6 +53,11 @@ import type {
   MembershipRecord,
   OrgRole,
   OwnerTransferResponse,
+  PriceQuery,
+  PriceVersion,
+  PriceVersionPage,
+  ResolveExceptionRequest,
+  ResolveExceptionResponse,
   RevokeApiKeyResponse,
   UsagePage,
   UsageQuery,
@@ -74,6 +90,11 @@ export interface ConsoleClientOptions {
 interface RequestOptions {
   query?: Record<string, string | number | undefined | null>;
   body?: unknown;
+  /**
+   * Extra request headers. Only ever used for contract-mandated headers such as
+   * `Idempotency-Key`; credentials never travel in a header this client adds.
+   */
+  headers?: Record<string, string>;
   /** Skip the `onUnauthorized` callback (login/logout probes). */
   silentUnauthorized?: boolean;
 }
@@ -149,6 +170,9 @@ export class ConsoleClient {
     }
     if (isUnsafeMethod(method) && this.csrfToken) {
       headers['X-CSRF-Token'] = this.csrfToken;
+    }
+    for (const [name, value] of Object.entries(options.headers ?? {})) {
+      headers[name] = value;
     }
 
     let response: Response;
@@ -335,6 +359,120 @@ export class ConsoleClient {
     return this.request<User>('POST', `/admin/users/${encodeURIComponent(userId)}/status`, {
       body: { status },
     });
+  }
+
+  /* -------------------------------------------------------------- prices */
+
+  /**
+   * `GET /api/v1/admin/prices` — platform administrators only; every other
+   * authenticated caller gets `403 forbidden`. The list is publication history
+   * (id DESC), not "currently effective".
+   */
+  async listPrices(params: PriceQuery = {}): Promise<PriceVersionPage> {
+    return this.request<PriceVersionPage>('GET', '/admin/prices', { query: { ...params } });
+  }
+
+  /**
+   * `POST /api/v1/admin/prices` — publishes a new immutable version. The pair
+   * `(model, effective_at)` is the version's identity: republishing it is
+   * `409 conflict`, never an overwrite. Amounts are decimal strings.
+   */
+  async createPrice(body: CreatePriceVersionRequest): Promise<PriceVersion> {
+    return this.request<PriceVersion>('POST', '/admin/prices', { body });
+  }
+
+  /* ------------------------------------------------------------- billing */
+
+  /**
+   * `GET /api/v1/orgs/{org}/billing/account` — requires the server-side
+   * `view_org_usage` action (owner/admin/billing_viewer). A plain member is
+   * `403`; a non-member and an organization without a billing row are both
+   * `404 not_found`.
+   */
+  async getBillingAccount(org: string): Promise<BillingAccount> {
+    return this.request<BillingAccount>('GET', `/orgs/${encodeURIComponent(org)}/billing/account`);
+  }
+
+  /** `GET /api/v1/orgs/{org}/billing/entries` — the append-only ledger page. */
+  async listBillingEntries(
+    org: string,
+    params: BillingEntriesQuery = {},
+  ): Promise<BillingEntryPage> {
+    return this.request<BillingEntryPage>(
+      'GET',
+      `/orgs/${encodeURIComponent(org)}/billing/entries`,
+      { query: { ...params } },
+    );
+  }
+
+  /**
+   * `GET /api/v1/orgs/{org}/billing/statements?month=YYYY-MM` — live monthly
+   * consumption report over `posted_at` (UTC month). `totals` always covers the
+   * whole month and ignores `limit`/`cursor`.
+   */
+  async getBillingStatement(
+    org: string,
+    params: BillingStatementQuery = {},
+  ): Promise<BillingStatement> {
+    return this.request<BillingStatement>(
+      'GET',
+      `/orgs/${encodeURIComponent(org)}/billing/statements`,
+      { query: { ...params } },
+    );
+  }
+
+  /** `GET /api/v1/orgs/{org}/billing/exceptions` — the durable money queue. */
+  async listBillingExceptions(
+    org: string,
+    params: BillingExceptionsQuery = {},
+  ): Promise<BillingExceptionPage> {
+    return this.request<BillingExceptionPage>(
+      'GET',
+      `/orgs/${encodeURIComponent(org)}/billing/exceptions`,
+      { query: { ...params } },
+    );
+  }
+
+  /** `GET /api/v1/orgs/{org}/billing/exceptions/{exception}` — with its trail. */
+  async getBillingException(org: string, exception: string): Promise<BillingExceptionDetail> {
+    return this.request<BillingExceptionDetail>(
+      'GET',
+      `/orgs/${encodeURIComponent(org)}/billing/exceptions/${encodeURIComponent(exception)}`,
+    );
+  }
+
+  /**
+   * `POST /api/v1/admin/billing/accounts/{org}/adjustments` — platform admins
+   * only, plus CSRF. The `Idempotency-Key` becomes the ledger `business_id`:
+   * replaying it with the same payload returns `200` + `replayed: true` and
+   * moves no money again.
+   */
+  async adjustBillingAccount(
+    org: string,
+    body: AdjustmentRequest,
+    idempotencyKey: string,
+  ): Promise<AdjustmentResponse> {
+    return this.request<AdjustmentResponse>(
+      'POST',
+      `/admin/billing/accounts/${encodeURIComponent(org)}/adjustments`,
+      { body, headers: { 'Idempotency-Key': idempotencyKey } },
+    );
+  }
+
+  /**
+   * `POST /api/v1/admin/billing/exceptions/{exception}/resolution` — platform
+   * admins only, plus CSRF, with a mandatory note. The decision never moves
+   * money: a correction is a new reversing ledger entry.
+   */
+  async resolveBillingException(
+    exception: string,
+    body: ResolveExceptionRequest,
+  ): Promise<ResolveExceptionResponse> {
+    return this.request<ResolveExceptionResponse>(
+      'POST',
+      `/admin/billing/exceptions/${encodeURIComponent(exception)}/resolution`,
+      { body },
+    );
   }
 }
 

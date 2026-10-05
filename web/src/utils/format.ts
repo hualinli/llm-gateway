@@ -2,10 +2,14 @@
  * Formatting helpers. All money/time rendering goes through here so the app
  * keeps one definition of each unit.
  *
- * `cost_cents` is a decimal string of *demo consumption* (the legacy demo price
- * is 1 token = 1 cent). It is not a balance and not an invoice amount; the API
- * labels it `cost_kind: demo_consumption` and this module never calls it
- * "available balance".
+ * Two money worlds exist and are never mixed:
+ *   - `cost_cents` (usage) is legacy *demo consumption* (1 token = 1 cent). It is
+ *     not a balance and not an invoice amount; the API labels it
+ *     `cost_kind: demo_consumption`.
+ *   - `*_micro` (billing ledger, account, prices) is real money in micro-yuan
+ *     (`1 元 = 1_000_000 µ¥`). Those values are **decimal strings** and are
+ *     formatted with string arithmetic below: no amount is ever parsed into a
+ *     JavaScript `number`, so no precision can be lost on the way to the DOM.
  */
 
 /** RFC 3339 UTC -> `2026-10-01 12:00:00Z`. Returns the raw string if unparsable. */
@@ -35,6 +39,123 @@ export function formatCostCents(value: string | number | null | undefined): stri
   const text = typeof value === 'number' ? String(value) : value;
   if (text === '') return '—';
   return `${text} 分（演示）`;
+}
+
+/* ------------------------------------------------------------- micro-yuan */
+
+/** Decimal places between micro-yuan and yuan. */
+const MICRO_DECIMALS = 6;
+
+/** Group an integer digit string (`1234567` -> `1,234,567`) without Number(). */
+function groupDigits(value: string): string {
+  let out = '';
+  for (let index = 0; index < value.length; index += 1) {
+    out += value[index];
+    const remaining = value.length - index - 1;
+    if (remaining > 0 && remaining % 3 === 0) out += ',';
+  }
+  return out;
+}
+
+/**
+ * Micro-yuan decimal string -> yuan decimal string, e.g. `"12500000"` ->
+ * `"12.5"`, `"-4000"` -> `"-0.004"`, `"1"` -> `"0.000001"`.
+ *
+ * This is pure string arithmetic on purpose: `Number("9007199254740993")` would
+ * silently round a ledger amount, and the T05/T06 contract keeps money on the
+ * wire as a decimal string precisely so that cannot happen.
+ *
+ * A value that is not a plain integer string is returned verbatim: inventing a
+ * number the server did not send would be worse than showing the raw field.
+ */
+export function formatMicroYuan(value: string | null | undefined): string {
+  if (value === null || value === undefined) return '—';
+  const raw = value.trim();
+  if (raw === '') return '—';
+  const match = /^([+-]?)([0-9]+)$/.exec(raw);
+  if (!match) return raw;
+  const sign = match[1] === '-' ? '-' : '';
+  const digits = (match[2] ?? '').padStart(MICRO_DECIMALS + 1, '0');
+  const integer = digits.slice(0, digits.length - MICRO_DECIMALS);
+  const fraction = digits.slice(digits.length - MICRO_DECIMALS).replace(/0+$/, '');
+  const grouped = groupDigits(integer);
+  return fraction === '' ? `${sign}${grouped}` : `${sign}${grouped}.${fraction}`;
+}
+
+/** `12500000` -> `12.5 元`, keeping the exact micro string alongside it. */
+export function formatMicroYuanWithUnit(value: string | null | undefined): string {
+  if (value === null || value === undefined || value === '') return '—';
+  return `${formatMicroYuan(value)} 元`;
+}
+
+/** Exact-machine rendering for tooltips and audit views: `12500000 µ¥`. */
+export function formatMicroExact(value: string | null | undefined): string {
+  if (value === null || value === undefined || value === '') return '—';
+  return `${value} µ¥`;
+}
+
+/**
+ * A ledger entry's signed amount. The sign is the `direction` field; the amount
+ * itself is always a strictly positive string, so `formatMicroYuan` is applied
+ * to the magnitude and the sign is added as text.
+ */
+export function formatSignedMicroYuan(
+  amountMicro: string | null | undefined,
+  direction: 'credit' | 'debit' | null | undefined,
+): string {
+  if (amountMicro === null || amountMicro === undefined || amountMicro === '') return '—';
+  if (direction === 'debit') return `−${formatMicroYuan(amountMicro)}`;
+  if (direction === 'credit') return `+${formatMicroYuan(amountMicro)}`;
+  return formatMicroYuan(amountMicro);
+}
+
+/* --------------------------------------------------------------- months */
+
+const UTC_MONTH_PATTERN = /^[0-9]{4}-(0[1-9]|1[0-2])$/;
+
+/** `true` only for the exact `YYYY-MM` shape the statements endpoint accepts. */
+export function isUtcMonth(value: string): boolean {
+  return UTC_MONTH_PATTERN.test(value);
+}
+
+/** The UTC month containing `date` (default: now), as `YYYY-MM`. */
+export function utcMonthOf(date: Date = new Date()): string {
+  return date.toISOString().slice(0, 7);
+}
+
+/**
+ * Shift a `YYYY-MM` string by whole months (`delta` may be negative).
+ * A malformed input is returned unchanged rather than repaired silently.
+ */
+export function shiftUtcMonth(month: string, delta: number): string {
+  if (!isUtcMonth(month) || !Number.isFinite(delta)) return month;
+  const year = Number(month.slice(0, 4));
+  const monthIndex = Number(month.slice(5, 7)) - 1;
+  const shifted = new Date(Date.UTC(year, monthIndex + delta, 1));
+  return shifted.toISOString().slice(0, 7);
+}
+
+/** `2026-09` -> `2026-09（UTC 月）`. */
+export function formatUtcMonthLabel(month: string | null | undefined): string {
+  if (!month) return '—';
+  return `${month}（UTC 月）`;
+}
+
+/**
+ * A duration in seconds (server sends it as a decimal string) -> a coarse
+ * human age. This is a duration, not money, so a Number() round-trip is fine;
+ * a value that does not parse is shown verbatim.
+ */
+export function formatAgeSeconds(value: string | number | null | undefined): string {
+  if (value === null || value === undefined || value === '') return '—';
+  const seconds = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(seconds) || seconds < 0) return String(value);
+  if (seconds < 60) return `${Math.round(seconds)} 秒`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} 分钟`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} 小时 ${minutes % 60} 分`;
+  return `${Math.floor(hours / 24)} 天 ${hours % 24} 小时`;
 }
 
 /** `expires_in_seconds` -> the same number of whole hours, rounded up. */

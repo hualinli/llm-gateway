@@ -17,12 +17,23 @@ import {
 
 import { consoleApi } from './client';
 import type {
+  AdjustmentRequest,
+  AdjustmentResponse,
   ApiKeyPage,
   AuditEventPage,
+  BillingAccount,
+  BillingEntriesQuery,
+  BillingEntryPage,
+  BillingExceptionDetail,
+  BillingExceptionPage,
+  BillingExceptionsQuery,
+  BillingStatement,
+  BillingStatementQuery,
   CreateApiKeyRequest,
   CreateApiKeyResponse,
   CreateInvitationRequest,
   CreateInvitationResponse,
+  CreatePriceVersionRequest,
   CreateUserRequest,
   InvitationPage,
   MeResponse,
@@ -31,6 +42,11 @@ import type {
   MembershipPage,
   OrgRole,
   OwnerTransferResponse,
+  PriceQuery,
+  PriceVersion,
+  PriceVersionPage,
+  ResolveExceptionRequest,
+  ResolveExceptionResponse,
   RevokeApiKeyResponse,
   UsagePage,
   UsageQuery,
@@ -47,6 +63,16 @@ export const queryKeys = {
   keys: (org: string, params: KeyListParams) => ['org', org, 'keys', params] as const,
   usage: (org: string, query: UsageQuery) => ['org', org, 'usage', query] as const,
   audit: (org: string, cursor: string | null) => ['org', org, 'audit', cursor] as const,
+  billingAccount: (org: string) => ['org', org, 'billing', 'account'] as const,
+  billingEntries: (org: string, query: BillingEntriesQuery) =>
+    ['org', org, 'billing', 'entries', query] as const,
+  billingStatement: (org: string, query: BillingStatementQuery) =>
+    ['org', org, 'billing', 'statement', query] as const,
+  billingExceptions: (org: string, query: BillingExceptionsQuery) =>
+    ['org', org, 'billing', 'exceptions', query] as const,
+  billingException: (org: string, exception: string) =>
+    ['org', org, 'billing', 'exception', exception] as const,
+  prices: (query: PriceQuery) => ['prices', query] as const,
 };
 
 export interface KeyListParams {
@@ -262,6 +288,145 @@ export function useCreateOrganization(): UseMutationResult<Membership, Error, st
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: queryKeys.me });
       void client.invalidateQueries({ queryKey: queryKeys.organizations });
+    },
+  });
+}
+
+/* --------------------------------------------------------------- prices */
+
+/**
+ * `GET /api/v1/admin/prices` — platform administrators only. `enabled` is
+ * `false` for every other role, so the request is not even attempted; the page
+ * still explains why instead of pretending the catalogue is empty.
+ */
+export function usePrices(
+  query: PriceQuery,
+  enabled: boolean,
+): UseQueryResult<PriceVersionPage> {
+  return useQuery({
+    queryKey: queryKeys.prices(query),
+    queryFn: () => consoleApi.listPrices(query),
+    enabled,
+  });
+}
+
+export function useCreatePrice(): UseMutationResult<
+  PriceVersion,
+  Error,
+  CreatePriceVersionRequest
+> {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreatePriceVersionRequest) => consoleApi.createPrice(body),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ['prices'] });
+    },
+  });
+}
+
+/* -------------------------------------------------------------- billing */
+
+/**
+ * `GET /api/v1/orgs/{org}/billing/account`. The server decides: `403` for a
+ * plain member, `404` for a non-member **and** for an organization that has no
+ * billing row yet (the row appears with the first posting).
+ */
+export function useBillingAccount(
+  org: string | null,
+  enabled: boolean,
+): UseQueryResult<BillingAccount> {
+  return useQuery({
+    queryKey: queryKeys.billingAccount(org ?? ''),
+    queryFn: () => consoleApi.getBillingAccount(org as string),
+    enabled: enabled && org !== null,
+  });
+}
+
+export function useBillingEntries(
+  org: string | null,
+  query: BillingEntriesQuery,
+  enabled: boolean,
+): UseQueryResult<BillingEntryPage> {
+  return useQuery({
+    queryKey: queryKeys.billingEntries(org ?? '', query),
+    queryFn: () => consoleApi.listBillingEntries(org as string, query),
+    enabled: enabled && org !== null,
+  });
+}
+
+export function useBillingStatement(
+  org: string | null,
+  query: BillingStatementQuery,
+  enabled: boolean,
+): UseQueryResult<BillingStatement> {
+  return useQuery({
+    queryKey: queryKeys.billingStatement(org ?? '', query),
+    queryFn: () => consoleApi.getBillingStatement(org as string, query),
+    enabled: enabled && org !== null,
+  });
+}
+
+export function useBillingExceptions(
+  org: string | null,
+  query: BillingExceptionsQuery,
+  enabled: boolean,
+): UseQueryResult<BillingExceptionPage> {
+  return useQuery({
+    queryKey: queryKeys.billingExceptions(org ?? '', query),
+    queryFn: () => consoleApi.listBillingExceptions(org as string, query),
+    enabled: enabled && org !== null,
+  });
+}
+
+export function useBillingException(
+  org: string | null,
+  exception: string | null,
+  enabled: boolean,
+): UseQueryResult<BillingExceptionDetail> {
+  return useQuery({
+    queryKey: queryKeys.billingException(org ?? '', exception ?? ''),
+    queryFn: () => consoleApi.getBillingException(org as string, exception as string),
+    enabled: enabled && org !== null && exception !== null,
+  });
+}
+
+/**
+ * `POST /api/v1/admin/billing/accounts/{org}/adjustments` — a platform credit
+ * adjustment. The `Idempotency-Key` is part of the command: the same key with
+ * the same payload is a replay (`200`, `replayed: true`), a different payload
+ * under the same key is `409 conflict` and moves no money.
+ */
+export function useAdjustBillingAccount(): UseMutationResult<
+  AdjustmentResponse,
+  Error,
+  { org: string; body: AdjustmentRequest; idempotencyKey: string }
+> {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ org, body, idempotencyKey }) =>
+      consoleApi.adjustBillingAccount(org, body, idempotencyKey),
+    onSuccess: (_result, variables) => {
+      void client.invalidateQueries({ queryKey: queryKeys.billingAccount(variables.org) });
+      void client.invalidateQueries({ queryKey: ['org', variables.org, 'billing'] });
+    },
+  });
+}
+
+export function useResolveBillingException(
+  org: string,
+): UseMutationResult<
+  ResolveExceptionResponse,
+  Error,
+  { exception: string; body: ResolveExceptionRequest }
+> {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ exception, body }) => consoleApi.resolveBillingException(exception, body),
+    onSuccess: (_result, variables) => {
+      void client.invalidateQueries({ queryKey: ['org', org, 'billing'] });
+      void client.invalidateQueries({
+        queryKey: queryKeys.billingException(org, variables.exception),
+      });
     },
   });
 }

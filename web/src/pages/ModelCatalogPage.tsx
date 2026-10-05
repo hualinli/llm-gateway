@@ -28,17 +28,19 @@ import {
   Space,
   Table,
   Tag,
+  Tooltip,
   Typography,
 } from 'antd';
 import { ClearOutlined, CloudDownloadOutlined, SendOutlined, StopOutlined } from '@ant-design/icons';
 
 import { listGatewayModels, streamChatCompletion } from '../api/gateway';
-import type { ChatMessage, GatewayModel } from '../api/types';
+import { usePrices } from '../api/queries';
+import type { ChatMessage, GatewayModel, PriceVersion } from '../api/types';
 import { asApiError, ErrorView, LoadingState } from '../components/states';
 import { ContractGap, PageHeader } from '../components/PageHeader';
-import { useActiveOrg } from '../session/SessionProvider';
+import { useActiveOrg, useSession } from '../session/SessionProvider';
 import { usePlaygroundKey } from '../session/PlaygroundKeyProvider';
-import { formatNumber } from '../utils/format';
+import { formatMicroYuan, formatNumber, formatTimestamp } from '../utils/format';
 
 interface StreamState {
   running: boolean;
@@ -338,6 +340,7 @@ export function ModelCatalogPage(): ReactNode {
                 通过同源 <code>/v1</code> 直连 Gateway；客户端逐块读取
                 <code> response.body</code>，首 token 到达即渲染（Nginx 需禁用缓冲）。
               </Typography.Text>
+              <PricePanel model={model} />
             </Space>
           </Col>
           <Col xs={24} lg={14}>
@@ -366,11 +369,164 @@ export function ModelCatalogPage(): ReactNode {
         </Row>
       </Card>
 
-      <ContractGap title="没有价格目录 / token 上限策略端点">
-        Playground 只发送用户输入的 <code>max_tokens</code>，不展示任何“价目表”：T04
-        契约中没有价格端点（T05 提供版本化价格）。平台侧 token 上限与模型权限由 T06
-        的 admission 策略执行，本页不做客户端假限额。
+      <ContractGap title="没有面向组织的价目端点，也没有 token 上限策略端点">
+        Playground 只发送用户输入的 <code>max_tokens</code>，不做客户端假限额：服务端 admission 的模型权限与
+        token 上限无法通过 API 读取。
+        {' '}
+        价格端点 <code>/api/v1/admin/prices</code> 仅平台管理员可用（其它角色固定 403），因此上方价目只对平台管理员显示；
+        组织视角的「模型价格」在本版本没有契约支持（不用缓存或估算冒充）。
       </ContractGap>
+    </Space>
+  );
+}
+
+/* ------------------------------------------------------------ prices */
+
+/**
+ * The model's published price versions, for platform administrators only.
+ *
+ * `GET /api/v1/admin/prices` answers `403` for every other role, so the panel
+ * does not even attempt the request for them; it states the gap instead. The
+ * "newest effective version" line is derived **client-side from the returned
+ * publication history** and is labelled as such — the contract has no
+ * "currently effective price" endpoint.
+ */
+function PricePanel({ model }: { model: string | null }): ReactNode {
+  const { me } = useSession();
+  const isPlatformAdmin = me?.user.platform_admin === true;
+  const prices = usePrices(
+    { limit: 5, ...(model ? { model } : {}) },
+    isPlatformAdmin && model !== null,
+  );
+
+  if (!isPlatformAdmin) {
+    return (
+      <Alert
+        type="info"
+        showIcon
+        message="价目：当前角色不可见（服务端 403）"
+        description="GET /api/v1/admin/prices 只对 users.platform_admin 开放。本次调用的实际计费由 Gateway 在 admission 时按版本化价格执行，控制台在本版本无法向组织角色展示价目。"
+      />
+    );
+  }
+
+  if (model === null) {
+    return (
+      <Alert type="info" showIcon message="选择模型后显示它的发布价格版本（平台管理员可见）" />
+    );
+  }
+
+  if (prices.isPending) return <LoadingState rows={2} />;
+  if (prices.isError) {
+    return <ErrorView error={prices.error} title="读取价目失败" />;
+  }
+
+  const versions = prices.data?.items ?? [];
+  if (versions.length === 0) {
+    return (
+      <Alert
+        type="warning"
+        showIcon
+        message={`model=${model} 还没有价格版本`}
+        description="未定价的模型在 T06 admission 结算时会落成资金异常（usage_missing/unknown_upstream_cost），而不是按 0 元结算。"
+      />
+    );
+  }
+
+  const now = Date.now();
+  const newest = [...versions]
+    .filter((item) => new Date(item.effective_at).getTime() <= now)
+    .sort((a, b) => new Date(b.effective_at).getTime() - new Date(a.effective_at).getTime())[0];
+
+  return (
+    <Space direction="vertical" size={8} style={{ width: '100%' }}>
+      {newest ? (
+        <Alert
+          type="success"
+          showIcon
+          message={`最新生效版本 #${newest.id}（由发布历史推导，非服务端“当前价”端点）`}
+          description={
+            <Space direction="vertical" size={2}>
+              <span>
+                input{' '}
+                <Tooltip title={`${newest.input_price_micro_per_million} µ¥ / 1M`}>
+                  <strong>{formatMicroYuan(newest.input_price_micro_per_million)} 元 / 1M tokens</strong>
+                </Tooltip>{' '}
+                · output{' '}
+                <Tooltip title={`${newest.output_price_micro_per_million} µ¥ / 1M`}>
+                  <strong>
+                    {formatMicroYuan(newest.output_price_micro_per_million)} 元 / 1M tokens
+                  </strong>
+                </Tooltip>
+              </span>
+              <span>
+                生效于 {formatTimestamp(newest.effective_at)} · provider 成本 input=
+                {newest.provider_input_cost_micro_per_million === null
+                  ? '未知（null）'
+                  : `${formatMicroYuan(newest.provider_input_cost_micro_per_million)} 元/1M`}{' '}
+                · output=
+                {newest.provider_output_cost_micro_per_million === null
+                  ? '未知（null）'
+                  : `${formatMicroYuan(newest.provider_output_cost_micro_per_million)} 元/1M`}
+              </span>
+              <span>
+                实际计费以 Gateway 在 admission 时锁定的版本为准；这里只是同一发布历史的展示。
+              </span>
+            </Space>
+          }
+        />
+      ) : (
+        <Alert
+          type="warning"
+          showIcon
+          message="该模型的价格版本都还未生效（effective_at 在未来）"
+          description="在生效时刻之前，admission 没有可用版本：调用会按 T06 的失败路径落异常，而不是按未来价格计费。"
+        />
+      )}
+      <Table<PriceVersion>
+        size="small"
+        rowKey="id"
+        dataSource={versions}
+        pagination={false}
+        columns={[
+          { title: 'id', dataIndex: 'id', width: 60 },
+          {
+            title: 'input（元 / 1M）',
+            dataIndex: 'input_price_micro_per_million',
+            render: (value: string) => formatMicroYuan(value),
+          },
+          {
+            title: 'output（元 / 1M）',
+            dataIndex: 'output_price_micro_per_million',
+            render: (value: string) => formatMicroYuan(value),
+          },
+          {
+            title: 'effective_at',
+            dataIndex: 'effective_at',
+            render: (value: string) => formatTimestamp(value),
+          },
+          {
+            title: 'provider 成本',
+            key: 'cost',
+            render: (_, record) => (
+              <Space size={4} wrap>
+                <Tag>
+                  in=
+                  {record.provider_input_cost_micro_per_million === null
+                    ? '未知'
+                    : formatMicroYuan(record.provider_input_cost_micro_per_million)}
+                </Tag>
+                <Tag>
+                  out=
+                  {record.provider_output_cost_micro_per_million === null
+                    ? '未知'
+                    : formatMicroYuan(record.provider_output_cost_micro_per_million)}
+                </Tag>
+              </Space>
+            ),
+          },
+        ]}
+      />
     </Space>
   );
 }

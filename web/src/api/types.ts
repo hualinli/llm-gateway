@@ -1,14 +1,16 @@
 /**
  * Hand-written types for the frozen Console contract
- * (`docs/openapi/console-v1.yaml`, T02 + T03) and the OpenAI-compatible data
- * plane subset the Playground uses (`GET /v1/models`,
+ * (`docs/openapi/console-v1.yaml`, T02 + T03 + T05/T06/T07A billing) and the
+ * OpenAI-compatible data plane subset the Playground uses (`GET /v1/models`,
  * `POST /v1/chat/completions`).
  *
  * The Console contract is frozen; this file is a transcription, not a schema.
  * Rules kept from the specification:
  *   - every 64-bit id is a JSON *string* (never a number);
  *   - every timestamp is RFC 3339 UTC;
- *   - money (`cost_cents`) is a decimal string and is demo consumption only;
+ *   - money (`cost_cents`, `*_micro`) is a decimal string and is never parsed
+ *     into a JavaScript number: `formatMicroYuan` in `utils/format.ts` does
+ *     string arithmetic so no amount can lose precision on the way to the DOM;
  *   - list responses are `{ items, next_cursor }` with an opaque cursor.
  */
 
@@ -299,6 +301,8 @@ export const AUDIT_ACTIONS = [
   'org.key.revoke',
   'admin.user.create',
   'admin.user.status',
+  'admin.price.create',
+  'billing.adjustment',
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
@@ -308,7 +312,7 @@ export interface AuditEvent {
   actor_user_id: string | null;
   actor_organization_id: string | null;
   action: AuditAction;
-  target_type: 'membership' | 'invitation' | 'user' | 'api_key';
+  target_type: 'membership' | 'invitation' | 'user' | 'api_key' | 'price_version' | 'billing_account';
   target_id: string;
   outcome: 'success' | 'failure';
   detail: Record<string, unknown> | null;
@@ -333,6 +337,261 @@ export interface CreateUserRequest {
 
 export interface SetUserStatusRequest {
   status: UserStatus;
+}
+
+/* ------------------------------------------------- prices (T05, admin only) */
+
+/**
+ * One immutable price version. `provider_*_cost_micro_per_million` is `null`
+ * when the platform cost is unknown — which is not the same as zero.
+ * Every amount is a decimal string of micro-yuan per one million tokens.
+ */
+export interface PriceVersion {
+  id: string;
+  model: string;
+  currency: 'CNY';
+  input_price_micro_per_million: string;
+  output_price_micro_per_million: string;
+  provider_input_cost_micro_per_million: string | null;
+  provider_output_cost_micro_per_million: string | null;
+  effective_at: string;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface PriceVersionPage {
+  items: PriceVersion[];
+  next_cursor: string | null;
+}
+
+export interface CreatePriceVersionRequest {
+  model: string;
+  currency?: 'CNY';
+  input_price_micro_per_million: string;
+  output_price_micro_per_million: string;
+  provider_input_cost_micro_per_million?: string | null;
+  provider_output_cost_micro_per_million?: string | null;
+  effective_at: string;
+}
+
+export interface PriceQuery {
+  model?: string | undefined;
+  limit?: number | undefined;
+  cursor?: string | undefined;
+}
+
+/* ------------------------------------------------ billing (T05/T06/T07A/B) */
+
+export type BillingDirection = 'credit' | 'debit';
+export type BillingEntryKind = 'credit' | 'debit' | 'adjustment' | 'reservation' | 'release';
+export type BillingAccountStatus = 'active' | 'suspended';
+
+/**
+ * The organization's billing projection. It is derived from the ledger and can
+ * be recomputed from it; the ledger, not this row, is the fact.
+ *
+ * `available_note` is frozen server wording and is rendered verbatim, so a UI
+ * cannot present `posted_balance_micro` as spendable money.
+ */
+export interface BillingAccount {
+  organization_id: string;
+  currency: 'CNY';
+  posted_balance_micro: string;
+  reserved_micro: string;
+  available_micro: string;
+  status: BillingAccountStatus;
+  version: string;
+  created_at: string;
+  updated_at: string;
+  available_note: string;
+}
+
+/** One append-only ledger row. Corrections are reversing entries, never edits. */
+export interface BillingEntry {
+  id: string;
+  organization_id: string;
+  kind: BillingEntryKind;
+  direction: BillingDirection;
+  amount_micro: string;
+  business_id: string;
+  reason: string | null;
+  operator_user_id: string | null;
+  request_id: string | null;
+  posted_at: string;
+  created_at: string;
+}
+
+export interface BillingEntryPage {
+  items: BillingEntry[];
+  next_cursor: string | null;
+}
+
+export interface BillingEntriesQuery {
+  limit?: number | undefined;
+  cursor?: string | undefined;
+  kind?: BillingEntryKind | undefined;
+}
+
+/** One ledger entry as it appears on a statement, with both time axes. */
+export interface BillingStatementLine extends BillingEntry {
+  /** When the settled usage happened; `null` for non-settlement entries. */
+  occurred_at: string | null;
+  late_posted: boolean;
+  late_days: number;
+}
+
+export interface BillingStatementTotals {
+  entries: string;
+  credit_micro: string;
+  debit_micro: string;
+  net_micro: string;
+  reserved_micro: string;
+  released_micro: string;
+  reserved_net_micro: string;
+  late_entries: string;
+  late_micro: string;
+}
+
+export interface BillingStatement {
+  organization_id: string;
+  /** `YYYY-MM` (UTC month). */
+  month: string;
+  currency: 'CNY';
+  timezone: 'UTC';
+  basis: 'posted_at';
+  cutoff_at: string;
+  generated_at: string;
+  window: { from: string; to: string };
+  totals: BillingStatementTotals;
+  items: BillingStatementLine[];
+  next_cursor: string | null;
+  disclaimer: string;
+  axis_note: string;
+}
+
+export interface BillingStatementQuery {
+  /** `YYYY-MM`; defaults to the UTC month containing the current instant. */
+  month?: string | undefined;
+  limit?: number | undefined;
+  cursor?: string | undefined;
+}
+
+/* ------------------------------------------- platform credit adjustments */
+
+export interface AdjustmentRequest {
+  /** Strictly positive decimal string of micro-yuan; a JSON number is `400`. */
+  amount_micro: string;
+  direction: BillingDirection;
+  reason: string;
+}
+
+export interface AdjustmentResponse {
+  entry: BillingEntry;
+  account: BillingAccount;
+  /** `false` on `201 Created`, `true` when the key replayed the same posting. */
+  replayed: boolean;
+}
+
+/* ------------------------------------------------------ money exceptions */
+
+export type BillingExceptionKind =
+  | 'usage_missing'
+  | 'usage_invalid'
+  | 'over_reserved'
+  | 'payload_conflict'
+  | 'unknown_upstream_cost'
+  | 'execution_ledger_mismatch'
+  | 'receipt_state_mismatch'
+  | 'entry_state_mismatch'
+  | 'account_projection_mismatch';
+
+export type BillingExceptionStatus = 'open' | 'resolved' | 'dismissed';
+export type BillingResolution = 'charged' | 'waived' | 'dismissed' | 'reopened';
+
+/** One durable money exception. `amount_micro` is what it is *about*, not a posting. */
+export interface BillingException {
+  id: string;
+  kind: BillingExceptionKind;
+  organization_id: string;
+  execution_id: string | null;
+  amount_micro: string;
+  currency: 'CNY';
+  reason: string;
+  status: BillingExceptionStatus;
+  detected_at: string;
+  last_seen_at: string;
+  occurrences: string;
+  resolved_at: string | null;
+  resolved_by: string | null;
+  resolution: BillingResolution | null;
+  resolution_note: string | null;
+  version: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type BillingExceptionEventAction =
+  | 'detected'
+  | 'recurred'
+  | 'resolved'
+  | 'dismissed'
+  | 'reopened';
+
+/** One append-only audit row of an exception's lifecycle. */
+export interface BillingExceptionEvent {
+  id: string;
+  action: BillingExceptionEventAction;
+  from_status: BillingExceptionStatus | null;
+  to_status: BillingExceptionStatus | null;
+  /** `null` for `detected`/`recurred`, which the platform observed. */
+  actor_user_id: string | null;
+  note: string | null;
+  created_at: string;
+}
+
+export interface BillingExceptionBacklog {
+  open: string;
+  resolved: string;
+  dismissed: string;
+  oldest_open_at: string | null;
+  oldest_open_age_seconds: string | null;
+}
+
+export interface BillingExceptionPage {
+  items: BillingException[];
+  next_cursor: string | null;
+  totals: BillingExceptionBacklog;
+  note: string;
+}
+
+export interface BillingExceptionDetail {
+  exception: BillingException;
+  /** The append-only audit trail, oldest first. */
+  events: BillingExceptionEvent[];
+  note: string;
+}
+
+export interface BillingExceptionsQuery {
+  limit?: number | undefined;
+  cursor?: string | undefined;
+  status?: BillingExceptionStatus | undefined;
+  kind?: BillingExceptionKind | undefined;
+  execution?: string | undefined;
+}
+
+export interface ResolveExceptionRequest {
+  resolution: BillingResolution;
+  /** Must match `resolution`; a mismatch is `400` before any row is written. */
+  status: BillingExceptionStatus;
+  /** Mandatory human explanation; stored on the append-only audit row. */
+  note: string;
+}
+
+export interface ResolveExceptionResponse {
+  exception: BillingException;
+  event: BillingExceptionEvent;
+  /** `false` on `201`, `true` when the identical decision had already been applied. */
+  replayed: boolean;
 }
 
 /* --------------------------------------------------------- data plane /v1 */
