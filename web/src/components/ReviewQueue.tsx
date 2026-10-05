@@ -24,8 +24,10 @@ export function ReviewQueueSection(): ReactNode {
  });
  const open = (item:ReviewExecution,action:ReviewAction):void=>{form.resetFields();disposition.reset();setSelected({item,action});};
  const submit = async ():Promise<void>=>{
-  const values=await form.validateFields();
-  if(selected) { try { await disposition.mutateAsync({...selected,reason:values.reason.trim()}); } catch { /* Render server error; never automatically repeat a money operation. */ } }
+  try {
+   const values=await form.validateFields();
+   if(selected) await disposition.mutateAsync({...selected,reason:values.reason.trim()});
+  } catch { /* Form validation and server errors render inline; never automatically repeat a money operation. */ }
  };
  return <Card title="待人工处理的资金请求" data-testid="review-queue-card">
   <Space direction="vertical" style={{width:'100%'}} size={12}>
@@ -52,7 +54,7 @@ export function ReviewQueueSection(): ReactNode {
   </Space>
   <Modal title={selected?.action==='settle'?'确认人工结算':'确认释放预占'} open={!!selected} confirmLoading={disposition.isPending} onOk={()=>void submit()} onCancel={()=>{if(!disposition.isPending)setSelected(undefined);}} okText={selected?.action==='settle'?'确认扣款并结清':'确认释放，不向客户扣款'} cancelText="取消" closable={!disposition.isPending} maskClosable={!disposition.isPending}>
    {selected?<><p>请求 {selected.item.execution_id} · 组织 {selected.item.organization_id}</p><p>{selected.action==='settle'?'将按准入预占金额向客户扣款：':'将释放预占，平台承担未知成本：'}<MicroYuan value={selected.item.reserved_micro}/></p></>:null}
-   <Form form={form} layout="vertical"><Form.Item name="reason" label="处理理由（记录到审计）" rules={[{required:true,whitespace:true,max:512}]}><Input.TextArea rows={3} maxLength={512}/></Form.Item></Form>
+   <Form form={form} layout="vertical"><Form.Item name="reason" label="处理理由（记录到审计）" rules={[{required:true,whitespace:true,max:512}]}><Input.TextArea aria-label="处理理由（记录到审计）" rows={3} maxLength={512}/></Form.Item></Form>
    {disposition.isError?<ErrorView error={disposition.error} title="处理未确认，请刷新队列核实结果"/>:null}
   </Modal>
  </Card>;
