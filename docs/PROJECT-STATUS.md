@@ -10,8 +10,7 @@
 > **§1–§7.9、§6、§8 的历史行保留不删**，只标注写作时点（它们写于 T09–T11 之前，其中的「未验证」项
 > 可能已被后续任务关闭，当前结论以 §0、§5、§7.10–§7.13 与
 > [面试证据索引](interview/EVIDENCE-INDEX.md) 为准）。
-> **T12 自身的发布候选证据尚未产生**（本工作树 `docs/verification/2026-10-01/` 下没有 `t12-*` 目录），
-> 发布候选冷启动、5 分钟 Demo、CI 最终候选与秘密扫描在本文中一律标 **未验证**。
+> T12 验收证据已合入。上述 2026-10-01 更新段落与后续逐轮记录保留为历史，当前结论以本页 2026-10-05 状态为准。
 >
 > **T01A 更新（2026-10-01）**：§4.4 增加运行时 profile/生产 fail-fast、诊断与查询 listener 分离、统一错误信封与入口指标、隔离基线 runner、本地证书 bootstrap；§3 第 5 条与 §5 的对应风险已按 T01A 结果更新。基线命令与结果见 §7。
 >
@@ -26,6 +25,28 @@
 > **当前产品目标与实施顺序**见 [生产导向多租户计费平台路线](plans/PRODUCTION-INTERVIEW-ROADMAP-2026-10-01.md)，配套 [压测与故障验收规格](plans/BENCHMARK-AND-ACCEPTANCE-2026-10-01.md) 与 [Agent 执行 Prompt 与任务包](plans/AGENT-PROMPTS-2026-10-01.md)（T00–T12）。[PROJECT-ROADMAP.md](PROJECT-ROADMAP.md) 自 2026-10-01 起只作为历史路线保留（其中系统不变量与 Agent 协议仍有效）。
 >
 > 本文只写“代码事实 / 本次已执行验证 / 未验证限制”，不写目标承诺。与计划文档或其他文档冲突时，以代码和本文记录的证据为准。
+
+## 当前状态（2026-10-05）
+
+主线基线 `3bc04a7` 已合并 T00–T12，schema 为 13；[主线 CI #18](https://github.com/hualinli/llm-gateway/actions/runs/37321863065) 全部必需任务通过。
+CI 包含 Go build/vet/回归、真实 PG/Redis 与 race 集成、前端 typecheck/单元/构建、隔离发布候选三角色 E2E。
+仅定时的全量 race job 在 push 时按条件跳过，不能将它解释为测试失败。已有 CI，尚无自动生产部署。
+
+[原 T12 验收](verification/2026-10-01/t12-release-candidate/README.md)已覆盖空栈启动、三角色、资金闭环与秘密扫描；
+[分支归并](verification/2026-10-05/branch-consolidation.md)和[审查修复](verification/2026-10-05/t12-review-fixes.md)记录后续修复。
+PG 正式计费当前只接受文本与单份输出（n=1）；不完整 SSE 不显示为成功完成。
+
+本次新增功能在独立分支实现，**尚未合入 main**：
+
+| 分支 | 已实现 | 验证 |
+|---|---|---|
+| `codex/funds-review-console`（`ea40a2b`） | Console 全局人工队列、会话操作人、CSRF、理由与确认、释放/按预占人工结算、账户和分录结果 | 真实 HTTP+PG、并发/状态守卫、全项目 PG/Redis race 集成、前端 64 用例与构建 |
+| `codex/transport-recovery-alerts`（`180bc13`） | 传输错误持续退避；历史传输 exception 受控重投与事务审计；六类 Prometheus 告警和 CI 规则检查 | 连续失败 40 次后恢复恰好结算一次；并发重投恰好一次；拒绝未知 usage/编码异常；全项目 PG/Redis race 集成；promtool |
+| `codex/project-status-refresh` | 合并上述两支的组合候选，同步状态、限制、证据和运维入口 | 见[本次补充报告](verification/2026-10-05/platform-supplements.md) |
+
+外部通知暂不接入，先使用 Prometheus `/alerts`。传输重投不直接移动资金；资金异常决议仍只写轨迹。
+人工 settle 明确按 reserved_micro 收费，不把未知 usage 伪装成已知。
+生产 HA、真实支付、真实付费 Provider、60 min soak、生产 mTLS 与备份恢复演练仍未完成。
 
 ## 0. T12 终稿：任务总表与 schema（本轮新增）
 
@@ -49,11 +70,11 @@
 | T07A dispatcher 与幂等结算 | ✅ | lease 认领、事务外投递、sent≠done 补投、单事务结算、三路 digest 校验 | [t07a-settlement-dispatcher](verification/2026-10-01/t07a-settlement-dispatcher/README.md)，`03d019c` |
 | T07B 心跳与有界恢复 | 🟡 | 强制状态机 + 自动释放六条件 + 人工路径；**无独立验收报告**（runbook + 代码 + DB 层窗口用例） | [恢复 runbook](runbooks/billing-recovery.md)、§7.8，`1497d06` |
 | T07C 四层对账/月账单/异常 | ✅ | 114,500 事实有界（healthy 取回 500 行/256 KB）；月账单与迟到结算；异常 append-only | [t07c-reconcile-statements](verification/2026-10-01/t07c-reconcile-statements/README.md)，`03d019c` |
-| T08 三角色 Web | ✅ | Playwright 33 passed、28 张截图、vitest 60 用例；**前端数字为分支自报，本候选未复跑** | [docs/web/README.md](web/README.md) §7/§9，`a051fa8` |
+| T08 三角色 Web | ✅ | Playwright 33 passed、28 张截图、vitest 60 用例；T08 数字保留为历史；主线 CI 已复验前端与三角色 E2E | [docs/web/README.md](web/README.md) §7/§9，`a051fa8` |
 | T09 多实例、策略时效 | ✅ | 8 check × 3 次全绿；撤销传播 P99 0.235s；组织 RPM 共享桶；最后一笔额度 1×200+1×402；10k Key 快照不触发增量 | [t09-multi-instance](verification/2026-10-01/t09-multi-instance/README.md)，`0633363` |
 | T10 故障/安全/恢复验收 | ✅ | 故障矩阵 PASS 11/PARTIAL 3/FAIL 0（F02-1 修复后预期 12/2）；安全与恢复 37/37 PASS、1 FINDING（长 Redis 停机打毒 receipt） | [t10-failures](verification/2026-10-01/t10-failures/README.md)、[t10-security](verification/2026-10-01/t10-security/README.md)、[ADR-0006](decisions/ADR-0006-test-failpoints.md)，`6cd44e8` |
 | T11 容量/热点/恢复证据 | ✅ | 闭环 c=256 116.4 启动/s；直连增量 p50 +3.9ms；第一个瓶颈是 PG 写路径（~198–200/s）；8 故障场景 RTO <1s、资金零差异；B03 条件更新与日汇总均**不采纳/不上线** | [t11-capacity](verification/2026-10-01/t11-capacity/README.md)、[t11-hotspots](verification/2026-10-01/t11-hotspots/README.md)、[t11-recovery-report](verification/2026-10-01/t11-recovery-report/README.md)，`9e8bd64` |
-| T12 发布候选与面试材料 | 🟡 | 本文 + `docs/interview/**` + README 终稿已交付；**发布候选冷启动、5 分钟 Demo、CI 最终候选、秘密扫描未验证**（无 `t12-*` 证据目录） | [docs/interview/](interview/)、§7.13 |
+| T12 发布候选与面试材料 | 🟡 | 本文 + `docs/interview/**` + README 终稿已交付；发布候选冷启动、Demo、安全扫描有 T12 验收证据；主线 CI #18 通过 | [docs/interview/](interview/)、§7.13 |
 
 ### 0.2 schema 版本与迁移清单（current to 000013）
 
@@ -77,10 +98,9 @@
 | 000012 | `000012_gateway_instances` | `gateway_instances`（T07B 进程存活心跳事实） |
 | 000013 | `000013_gateway_instance_status` | `gateway_instance_status`（T09 每实例 applied/rejected；行不存在 = unknown） |
 
-- **文档漂移（未修改非本任务文件）**：`migrations/README.md` 仍写「当前版本为 7」且未登记
-  000008–000013；实际以 `migrations.Version = 13` 与本表为准（见 [KNOWN-LIMITS](interview/KNOWN-LIMITS.md) D2）。
+- 迁移说明与常量已同步为 13，登记到 000013。此次功能无需新增迁移。
 
-### 0.3 本轮（T12 文档任务）实际执行与未执行
+### 0.3 历史记录（2026-10-01 T12 文档任务）实际执行与未执行
 
 - 实际执行：仓库内容核对（`git log`、迁移、ADR、各任务证据文件、OpenAPI、web/README）；
   `git grep -h "^func Test" HEAD -- '*_test.go' | wc -l` = **760 个 `func Test` 声明**
@@ -228,7 +248,7 @@
 |---|---|---|
 | ~~生产 profile 静默回退（内存台账、legacy raw-key、无管理认证、诊断同 listener）~~ | **T01A 已收敛**：显式 profile + prod fail-fast + 诊断 listener 分离 + metering 查询 token；残留风险是运维忘记设置 `GATEWAY_PROFILE=prod`，此时进程按 demo 启动并打印 WARNING（见 ADR-0001） | T01A（已完成）、T12 复核 |
 | ~~计量/对账查询端点（`/ledger/*`、`/reconcile`）无鉴权~~ | **T01A 已提供** `METERING_ADMIN_TOKEN` 鉴权；demo 未设置 token 时仍开放（有 WARNING），生产 profile 强制要求 token | T01A（已完成） |
-| 远端 CI 是否跑绿 | **仍未验证**（仓库非公开，无法查询运行记录）；另：`.github/workflows/ci.yml` 只有单 job `verify`，**没有前端步骤**、没有故障/容量分层 | T12（发布候选，未验证） |
+| 远端 CI | 主线 #18 已成功，Go/PG/Redis/前端/E2E 均有步骤；新增分支仍需各自通过 | 2026-10-05 当前状态 |
 | `cmd/loadtest` 过载时降低发压、TTFT 口径、固定 10s timeout | **T01B 已收敛**（`3420e49`）：`-mode open` 开环调度 + 有界 admission queue + `loadgen_dropped` 与有效性规则、first_event/first_content 分离、`-timeout` 可配；仍**没有独立 T01B 验收报告** | T01B（工具已落地，报告缺失） |
 | 压测环境未隔离（使用日常 Compose/端口/卷） | T01A 已提供隔离 runner（`scripts/isolated-baseline.py`）；T10/T11 的 runner 都自建独立 Compose project 并自清理 | T01A（已完成） |
 | ~~无用户/组织/权限/会话模型~~ | **T02 提供会话/组织基础，T03 补齐企业 RBAC**（邀请、角色矩阵、最后 owner 保护、owner 转移、策略发布记录）；剩余：策略到 Gateway 的实际收敛无断言（T09）、并发 owner 只有 service 层测试 | T02/T03（已完成）、T09 |
@@ -245,14 +265,14 @@
 | 多实例并发恢复 | **仍未验证**：恢复循环依赖行锁 + 状态守卫（两个恢复者同时释放同一 execution 只有一个能提交），但没有双 metering 实例同时运行恢复循环的并发实验。T11 的 `kill9-gateway` 只验证了「唯一拥有者被杀 → 租约过期后释放 32 条」（`t11-recovery-report/README.md` §4.3） | T10/T11 遗留（未验证） |
 | 心跳写入的进程级崩溃 | **部分验证**：T11 `kill9-gateway` 场景证明了进程被杀 → 心跳停止 → 存活租约过期 → janitor 释放被中断的执行（`released: 32`、占款归零、投影=账本）；但「捕获到两次心跳之间被 SIGKILL」的精确窗口与多恢复者并发没有单独实验 | T10/T11（部分） |
 | 真实 Provider、容量拐点、慢客户端、多实例容量 | **本机已测（`9e8bd64`）**：慢客户端 7 点 0 拒绝/0 超时、过载/回落有界、1 vs 2 Gateway 与 1 vs 10 钱包对照；**真实付费 Provider 未调用**，绝对吞吐不可外推生产 | T11（本机限定） |
-| 长 Redis 停机把 receipt 打成终态 `exception`（T10 FINDING） | Redis 停机 138s（默认 `max_attempts=8`、退避 1s..5m 用尽）→ `receipt poisoned`、收据终态 `exception`；**钱不动**（posted 不变、无 debit、预占仍持有、对账仍 consistent），但 Redis 恢复后**不自动重投**，需人工队列。10/30/60s 档在预算内（最大 claim 7 次）。**本次未修**（属结算/投递策略变更，需与失败注入任务协调） | T10（FINDING，未修）/ T12 |
+| 长 Redis 停机后的自动恢复 | T10 历史 FINDING 已在恢复分支修复：传输失败持续有界退避；旧异常受控重投，未知 usage 仍拒绝自动恢复 | 本次补充分支，尚待合入 main |
 | 没有 per-attempt 供应商成本账（T10 F01-1） | `billing_entries` 只记客户 charge，失败 attempt 的上游成本无处落账；`provider_*_cost` 可空表示未知（未知 ≠ 0） | T10（能力缺失） |
 | 被限流/流上限拒绝的请求仍写资金通路（T10 F08-2） | 链路顺序 billing 在 limiter 之前：每次 429/503 都写 1 条 execution + 1 条 reservation + 1 条 release（`failed_no_charge`，资金不被占用）；故障期间资金通路写入量与请求量同阶 | T10（可用性/成本观察） |
 | 容量运行结束时 2 条执行停在 `executing` | 8300 micro 预占（占播种余额 0.0000008%）；账本重算与投影一致，**不是资金差异**；最可能是 500/s 过载下 finalize 超时，但未保留错误日志，**机制未确认**；设计上属于 T07B 的有界恢复窗口，本次未留观察时间 | T11（未过对账项，如实记录） |
 | `GATEWAY_MAX_ACTIVE_STREAMS_PER_ORG` 未进生产 preflight | ADR-0001 §2.2 的生产必需变量表要求显式设置，但 `gatewayChecks` 未包含它，只打印 WARNING；每实例上限也不是跨实例硬配额（两实例可相加，实测热组织 881 → 1743 条） | T09 §10 / T11 容量 §5.4 |
-| T12 发布候选证据未产生 | 本工作树 `docs/verification/2026-10-01/` 无 `t12-*` 目录：新隔离环境从零启动、三角色两企业初始化、5 分钟 Demo、CI 最终候选（含前端 typecheck/build 与三角色 E2E）、秘密扫描/诊断暴露/Cookie/CSRF/默认 Key/secret 权限全部 **未验证** | T12（进行中） |
+| T12 发布候选证据 | 已产出冷启动、三角色、资金、安全扫描证据；主线 CI #18 成功 | [T12 验收](verification/2026-10-01/t12-release-candidate/README.md) |
 | ~~`review_required` 人工队列没有可执行入口~~ | **T12 已接线**：`POST /recovery/review-required/{execution}/release|settle`（`METERING_ADMIN_TOKEN`、必填 actor + reason、仅接受 `review_required`、除属主存活外不豁免任何守卫、复用同一资金路径与确定性 business id、幂等且冲突返回 409、审计写入资金事务）——见 [billing-recovery 手册](runbooks/billing-recovery.md) §0–§5 | T12（已完成） |
-| 文档漂移 | ① `t06c-usage-receipts/README.md` §1 的准入顺序与 `cmd/gateway/main.go:219-228` 不一致（代码是 billing 先于 limiter）；② `migrations/README.md` 仍写「当前版本为 7」且未登记 000008–000013（实际 `Version = 13`）；③ T03 证据引用的 `t03-timing-probe` 与观测请求不符（T09 §7.4） | T12 复核（见 [KNOWN-LIMITS](interview/KNOWN-LIMITS.md) D） |
+| 历史文档漂移 | T06C 旧报告准入顺序、T03 旧请求 ID 引用仍需结合时点阅读；迁移说明已同步 schema 13 | 当前事实见本页 2026-10-05 状态 |
 
 ## 6. 已关闭的历史问题（不再作为新增任务）
 
@@ -437,7 +457,7 @@
 |---|---|---|
 | 文档交付（本轮实际执行） | ✅ | 新增 `docs/interview/{ONE-PAGER,ARCHITECTURE,MONEY-STATE-MACHINE,DEEP-CASES,EVIDENCE-INDEX,KNOWN-LIMITS}.md`；重写 `README.md`；本文补 §0/§5/§7.10–§7.13/§8。所有数字带来源提交与路径，无法追溯的标 未验证 |
 | Go/前端/Compose/CI 复验 | ⬜ 未执行 | 本任务只改文档，不触碰 Go 代码、脚本、CI 与 `docs/verification/**`；命令级复验属同任务的发布候选验证一半 |
-| 发布候选证据（从零启动、三角色两企业、5 分钟 Demo、CI 最终候选、秘密扫描/诊断暴露/Cookie/CSRF/默认 Key/secret 权限） | ⬜ **未验证** | 本工作树 `docs/verification/2026-10-01/` 下没有 `t12-*` 目录；产出后应把实际路径与 headline 补入本文 §0.1 与 [证据索引](interview/EVIDENCE-INDEX.md) 的 T12 行 |
+| 发布候选证据 | ✅ 已产出 | [T12 验收](verification/2026-10-01/t12-release-candidate/README.md)；主线 CI #18；补充分支见 2026-10-05 报告 |
 
 ## 8. 证据索引
 
@@ -472,7 +492,7 @@
 | [T11 热点与查询 A/B](verification/2026-10-01/t11-hotspots/README.md)（+ `raw/*.json`、`plans/`84 个 EXPLAIN）+ `scripts/hotspot-ab.py` | 2026-10-01，`9e8bd64`（base `6cd44e8`，本任务不提交） | 资金等价门禁 25/75；B03 条件更新不采纳（p99 +9.5% 中位、34/36 cell 同向更差）；去 `INSERT … ON CONFLICT` 不实施；1M 行查询索引 p95 213–231ms→34–36ms；日汇总不上线（多算 0.70%/46.3%） | 无 Go 代码改动、无迁移；单机 Docker Desktop VM 且宿主并行跑容量阶梯，跨 run 噪声大于 A/B 差异；数据集是合成的 |
 | [T11 结算与故障恢复报告](verification/2026-10-01/t11-recovery-report/README.md)（+ `raw/settle-*.json`、`raw/recovery-*.json`、`raw/load-*.json`） | 2026-10-01，`9e8bd64`（base `6cd44e8`，复用 T10 runner，不提交） | 40 req/s 稳态 receipt→settled p50 199/p95 352/p99 1764ms；8 场景 RTO <1s（max 0.967s）、排空 ≤8.7s、资金零差异；PG finalize 停机留 30 条占款（owner 存活不释放），kill9 后释放 32 条 | 故障各 1 轮、RTO 单次探针；40 req/s 是 smoke 得出的保守常数不是容量结论；长停机打毒引用 T10 未重跑 |
 | [docs/interview/**](interview/)（ONE-PAGER / ARCHITECTURE / MONEY-STATE-MACHINE / DEEP-CASES / EVIDENCE-INDEX / KNOWN-LIMITS） | 2026-10-01，`codex/t12-release-candidate` @ `9e8bd64`（文档） | T12 面试材料：一页概览（含关键数字与来源提交/路径）、三条链路与数据归属、资金状态机与锁顺序、四个深度案例、全任务证据索引、穷尽限制清单 | 文档本身不是测量证据；所有数字均转引上面的原始报告；T12 发布候选验证未产出 |
-| **T12 发布候选证据** | ⬜ **未产生** | 预期覆盖：新隔离环境从零启动、三角色两企业、5 分钟 Demo、CI 最终候选（含前端）、秘密扫描/诊断/Cookie/CSRF/默认 Key/secret 权限 | 本工作树 `docs/verification/2026-10-01/` 下没有 `t12-*` 目录；产出后应补入 §0.1 与 [EVIDENCE-INDEX](interview/EVIDENCE-INDEX.md) 的 T12 行 |
+| **T12 发布候选证据** | 已产出 | 冷启动、三角色、资金 Demo、安全扫描与 CI | [T12 验收](verification/2026-10-01/t12-release-candidate/README.md)与本页当前状态 |
 
 ## 9. 残余风险（T12 终稿摘要）
 
@@ -481,9 +501,9 @@
 
 | # | 残余风险 | 现状 | 下一步 |
 |---|---|---|---|
-| 1 | 发布候选尚未被独立验证 | T12 文档已交付，但 §0.1/§7.13 的发布候选证据 ⬜ 未产生 | 由 T12 验证任务产出 `docs/verification/2026-10-01/t12-*` 并把实际路径/结论补入本文与 [EVIDENCE-INDEX](interview/EVIDENCE-INDEX.md) |
-| 2 | 长 Redis 停机自动恢复停止 | >约 127–138s 后 receipt 终态 `exception`，钱不动但需人工队列（T10 FINDING，未修） | 决策：把「重试预算时间上限」写进告警/运维手册，或引入「停机期间不消耗预算」策略 |
+| 1 | 新增分支远端 CI 待确认 | 主线 CI #18 成功；本次组合候选本地集成、28 项 E2E、安全和告警测试通过 | 合并前确认新增分支自身 CI 成功 |
+| 2 | 长 Redis 停机自动恢复停止 | T10 历史行为；本次恢复分支已修复并验证，main 尚待合入 | 已在恢复分支实现持续退避、受控旧异常重投及告警；见本次补充报告 |
 | 3 | 容量与 SLO 只在低负载成立 | ≥200 收据/s 结算积压 38–146s；60min soak 与 durable finalization P99 未测；全部为单机测量 | 需要稳定 Linux + 发压机分离，再做正式阶梯/soak；不要在共享 runner 上设毫秒门槛 |
-| 4 | 生产形态未验证 | prod 正例启动、mTLS、HA、证书/主密钥轮换未验证；CI 无前端步骤、远端结果未知 | T12 验证任务 + 独立的 prod profile/HA 演练 |
+| 4 | 生产形态未验证 | prod 正例启动、mTLS、HA、证书/主密钥轮换未验证；CI 与前端验证已补齐 | 独立 prod profile/HA 演练 |
 | 5 | 资金语义边界需持续披露 | 无 per-attempt 供应商成本账；超预占不截断；usage 不可用进人工队列；被拒请求仍写资金通路 | 在对外材料中保持与 [KNOWN-LIMITS](interview/KNOWN-LIMITS.md) 一致，不把目标 SLO 写成已达标 |
-| 6 | 文档漂移 | `migrations/README.md` 版本号、T06C 准入顺序、T03 请求 ID 引用 | 由对应任务负责人同步（本轮只记录，未改非本任务文件） |
+| 6 | 历史报告的时点 | 主入口与迁移说明已同步；T06C 准入顺序和 T03 请求 ID 是历史报告偏差 | 阅读历史报告时以当前代码及本页当前状态为准 |

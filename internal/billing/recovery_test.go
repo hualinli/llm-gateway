@@ -485,3 +485,18 @@ func uniqueStrings(values []string) []string {
 }
 
 func timePtr(value time.Time) *time.Time { return &value }
+
+func TestRecoveryWindowRejectsOverflow(t *testing.T) {
+	opts := NormalizeRecoveryOptions(RecoveryOptions{})
+	opts.MaxExecutionDuration = time.Duration(1<<63-1) - opts.Grace
+	if err := ValidateRecoveryOptions(opts); err != nil {
+		t.Fatalf("largest supported window: %v", err)
+	}
+	if opts.MinAge() != time.Duration(1<<63-1) {
+		t.Fatal("largest supported window was shortened")
+	}
+	opts.MaxExecutionDuration++
+	if err := ValidateRecoveryOptions(opts); !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("overflow: %v", err)
+	}
+}

@@ -1,0 +1,46 @@
+docker compose -f docker-compose.test.yml up -d --wait
+ Container llm-gateway-tests-redis-1 Running
+ Container llm-gateway-tests-postgres-1 Running
+ Container llm-gateway-tests-redis-1 Waiting
+ Container llm-gateway-tests-postgres-1 Waiting
+ Container llm-gateway-tests-postgres-1 Healthy
+ Container llm-gateway-tests-redis-1 Healthy
+env -u OPENAI_BASE_URL -u OPENAI_API_KEY -u OPENAI_MODEL \
+		METERING_TEST_REDIS_ADDR='127.0.0.1:16379' \
+		LIMITER_TEST_REDIS_ADDR='127.0.0.1:16379' \
+		CONTROL_TEST_POSTGRES_DSN='postgres://gateway_test:test_only_local@127.0.0.1:15433/gateway_test?sslmode=disable' \
+		IAM_TEST_POSTGRES_DSN='postgres://gateway_test:test_only_local@127.0.0.1:15433/gateway_test?sslmode=disable' \
+		METERING_TEST_POSTGRES_DSN='postgres://gateway_test:test_only_local@127.0.0.1:15433/gateway_test?sslmode=disable' \
+		GATEWAY_TEST_POSTGRES_DSN='postgres://gateway_test:test_only_local@127.0.0.1:15433/gateway_test?sslmode=disable' \
+		go test -race ./... -run '.' -count=1 -timeout=120s
+ok  	llm-gateway/cmd/console	4.068s
+ok  	llm-gateway/cmd/control	2.843s
+?   	llm-gateway/cmd/democtl	[no test files]
+ok  	llm-gateway/cmd/gateway	17.256s
+ok  	llm-gateway/cmd/loadtest	2.639s
+ok  	llm-gateway/cmd/metering	2.325s
+?   	llm-gateway/cmd/migrate	[no test files]
+?   	llm-gateway/cmd/upstream-mock	[no test files]
+ok  	llm-gateway/internal/appenv	2.264s
+ok  	llm-gateway/internal/auth	1.864s
+ok  	llm-gateway/internal/billing	16.997s
+ok  	llm-gateway/internal/console	3.107s
+ok  	llm-gateway/internal/control	7.047s
+ok  	llm-gateway/internal/controlclient	1.913s
+ok  	llm-gateway/internal/gatewayguard	3.172s
+ok  	llm-gateway/internal/httperr	1.351s
+ok  	llm-gateway/internal/iam	3.042s
+ok  	llm-gateway/internal/limiter	1.896s
+ok  	llm-gateway/internal/loadtest	1.814s
+ok  	llm-gateway/internal/metering	11.364s
+ok  	llm-gateway/internal/metrics	1.477s
+ok  	llm-gateway/internal/observability	1.524s
+ok  	llm-gateway/internal/organization	6.181s
+ok  	llm-gateway/internal/provider	1.983s
+ok  	llm-gateway/internal/provider/sse	1.455s
+ok  	llm-gateway/internal/proxy	2.546s
+ok  	llm-gateway/internal/ready	1.482s
+ok  	llm-gateway/internal/testsupport/failpoint	1.446s
+ok  	llm-gateway/internal/upstreammock	1.611s
+ok  	llm-gateway/migrations	2.261s
+?   	llm-gateway/proto/control	[no test files]

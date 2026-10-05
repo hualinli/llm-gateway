@@ -40,10 +40,17 @@ make demo-clean               # 显式删除 PostgreSQL/Redis/Grafana/spool 卷
 - Prometheus/Grafana 是可选 profile：`make demo-observability`（`:9090` / `:3000`）。
 - 首次启动前 Gateway 没有 Provider：`/livez` 200、`/readyz` 503，直到 `demo-config` 成功。
 
-> **平台级 5 分钟 Demo（成员登录/Key 调用 → 企业查费 → 余额拒绝 → 撤销传播 → 故障恢复 → 平台审计）
-> 尚未产出证据**：T12 的发布候选证据目录 `docs/verification/2026-10-01/t12-*` 在本工作树中不存在，
-> 该演示脚本与步骤标记为 **未验证**，待 T12 验证任务产出后在此补充。当前可用的是上面的
-> `make demo-accept`（计量/切备/对账）与 Console/Web 的三角色路径（见下文，前端数字为 T08 分支自报）。
+平台级发布候选已有[冷启动、三角色、资金与安全验收证据](docs/verification/2026-10-01/t12-release-candidate/README.md)。
+主线 `3bc04a7` 的 [CI #18](https://github.com/hualinli/llm-gateway/actions/runs/37321863065) 已通过 Go、真实 PG/Redis、前端和三角色 E2E。
+
+本次补充由三个分支交付：`codex/funds-review-console`（人工资金操作）、
+`codex/transport-recovery-alerts`（长故障恢复与告警）、`codex/project-status-refresh`（组合验证与文档）。
+第三个分支包含前两个分支，尚未合入 main；验证范围见[补充报告](docs/verification/2026-10-05/platform-supplements.md)。
+
+- 平台管理员在「计费运维」页查看人工队列，填写理由并确认释放或人工结算，查看账户与账本结果。操作人取自登录会话。
+- Redis 传输失败按有界退避持续重试；旧传输异常有带审计的受控重投入口。未知 usage 仍需人工判断。
+- `make demo-observability` 后在 [Prometheus 告警页](http://localhost:9090/alerts) 查看六类计费告警；按当前选择暂不接外部通知。
+  规则与处置步骤见[恢复与告警手册](docs/runbooks/dispatch-recovery-alerts.md)。
 
 ## 项目状态与证据
 
@@ -66,7 +73,7 @@ make demo-clean               # 显式删除 PostgreSQL/Redis/Grafana/spool 卷
 | 结算延迟（40 req/s 稳态） | receipt→settled p50 199ms / p95 352ms / p99 1764ms；8 个故障场景 RTO <1s、资金零差异 | `6cd44e8`（T11），[t11-recovery-report](docs/verification/2026-10-01/t11-recovery-report/README.md) |
 | 并发抢同一钱包 | 100 并发、钱包只够 37 次 → 恰好 37 准入 / 63 拒绝；两 Gateway 抢最后一笔 → 1×200 + 1×402 | base `1164886`（T06B）、`6cd44e8`（T10 F11） |
 | 有界四层对账 | 114,500 个事实，healthy 只取回 500 行、堆增长 256 KB | `03d019c`（T07C），[t07c-reconcile-statements §3](docs/verification/2026-10-01/t07c-reconcile-statements/README.md) |
-| 三角色 Web | Playwright 33 passed / 0 failed、28 张截图、vitest 60 用例；gzip ≈466 kB | `a051fa8`（T08，**分支自报，本候选未复跑**），[docs/web/README.md](docs/web/README.md) §9 |
+| 三角色 Web | Playwright 33 passed / 0 failed、28 张截图、vitest 60 用例；gzip ≈466 kB | `a051fa8`（T08 历史测量；主线 CI 已复验前端与 E2E），[docs/web/README.md](docs/web/README.md) §9 |
 
 ## 架构（一张图）
 
@@ -126,13 +133,14 @@ curl -i -X POST localhost:8092/api/v1/auth/login -H 'Content-Type: application/j
 | GET/POST | `/api/v1/admin/prices` | 平台管理员；价格版本不可变，同 `(model, effective_at)` → 409 |
 | POST | `/api/v1/admin/billing/accounts/{org}/adjustments` | 平台管理员 + CSRF + `Idempotency-Key` + `reason`；「额度调整」不是充值 |
 | POST | `/api/v1/admin/billing/exceptions/{exception}/resolution` | 平台管理员 + CSRF；`charged/waived/dismissed/reopened`，note 必填 |
+| GET/POST | `/api/v1/admin/billing/review-required`、`/{execution}/{release,settle}` | 平台管理员；写操作要求 CSRF 与理由；操作人来自会话 |
 | GET | `/livez`、`/readyz` | 无 |
 
 **会话与 CSRF**：`gw_session`（HttpOnly/SameSite=Lax，prod 强制 Secure，服务端只存 SHA-256）+
 `gw_csrf` 双提交；所有非安全方法必须带 `X-CSRF-Token`，失败一律 403。
 
 浏览器前端在 [web/](web/)（React 19 + TypeScript + Vite + Ant Design，只消费真实 API，无 mock/随机数；
-13 项契约缺口以 `ContractGap` 块显式标注，见 [docs/web/README.md](docs/web/README.md) §8）：
+剩余契约缺口以 `ContractGap` 块显式标注，见 [docs/web/README.md](docs/web/README.md) §8）：
 
 ```bash
 cd web
@@ -209,9 +217,8 @@ gofmt -l cmd internal migrations
   `scripts/security-matrix.sh`、`scripts/backup-restore-drill.sh`、`scripts/two-gateway-experiment.py`。
   failpoint 只在 `-tags failpoint` 构建中存在，且所有构建的生产 preflight 都拒绝 `GATEWAY_FAILPOINTS`
   （[ADR-0006](docs/decisions/ADR-0006-test-failpoints.md)）。
-- CI：`.github/workflows/ci.yml` 单 job `verify`（`go test` / `go test -race` / `go vet` / `go build` /
-  `make integration-test`，Redis/PG 由 `docker-compose.test.yml` 提供）。**没有前端步骤**；
-  **远端 CI 是否跑绿未验证**（仓库未公开，无 badge/日志）。
+- CI：Go 回归/vet/build、真实 PG/Redis race 集成、前端 typecheck/单元/构建、隔离发布候选三角色 E2E；
+  定时全量 race。主线 CI #18 已通过。恢复分支另加 promtool 告警规则检查；尚无生产自动部署。
 
 ## ADR
 
@@ -230,15 +237,12 @@ gofmt -l cmd internal migrations
 
 - **范围外**：真实支付/充值（只有平台额度调整）、HA PostgreSQL（单节点 + 单 Redis，RPO = 备份间隔）、
   多 Control writer、Kubernetes、第二 Provider 协议。
-- **未验证**：T12 发布候选（从零启动 / 5 分钟 Demo / CI 最终候选 / 秘密扫描 / 诊断暴露 / Cookie/CSRF /
-  默认 Key / secret 权限）；远端 CI；`prod` 正例启动与生产 mTLS；60 min soak 与 durable finalization P99；
+- **未验证**：`prod` 正例启动与生产 mTLS；60 min soak 与 durable finalization P99；
   ≥200 收据/s 的结算 SLO；1000 钱包 / 10k Key / 大事件 / 管理 API 容量；真实模型 token 上界。
-- **语义边界**：Redis 停机 >约 2 分钟会把 receipt 打成终态 `exception`（钱不动，需人工队列）；
-  usage 不可用 → `review_required` 人工 24h 队列，且该队列当前**没有接线的人工释放/结算入口**
-  （store seam 存在，异常决议只写轨迹、不动资金）；没有 per-attempt 供应商成本账；被限流拒绝的请求仍写资金通路行；
-  每实例流上限可相加（不是跨实例配额）。
-- **本机测量**：所有性能数字来自单机（Intel macOS + OrbStack，发压器与依赖同机），
-  不能外推生产容量；前端数字是 T08 分支自报，本候选未复跑。
+- **语义边界**：新增恢复分支让传输失败持续退避；未知 usage 仍需人工审核，24h 超时不触发资金动作。
+  Console 新增资金操作与普通异常决议不同，后者只写轨迹。没有 per-attempt 供应商成本账；
+  被限流拒绝的请求仍写资金通路行；每实例流上限可相加。
+- **本机测量**：性能数字来自单机，不能外推生产容量；历史前端截图与体积保留原测量口径。
 
 ## 目录结构
 

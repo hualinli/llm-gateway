@@ -1,0 +1,9 @@
+=== RUN   TestHTTPReviewDispositionPostsOnceAndLeavesAuditedMoney
+--- PASS: TestHTTPReviewDispositionPostsOnceAndLeavesAuditedMoney (0.39s)
+PASS
+ok  	llm-gateway/internal/console	2.514s
+=== RUN   TestStaleSettlementRefusalCannotRePoisonOperatorRetriedReceipt
+2026/10/06 00:05:49 settlement refused event_id=evt_stale_refusal execution_id=exec_stale_refusal err=billing: the receipt or its execution is not in a settleable state: receipt is already an exception: receipt exec_stale_refusal is an exception (usage cannot back a charge)
+--- PASS: TestStaleSettlementRefusalCannotRePoisonOperatorRetriedReceipt (0.36s)
+PASS
+ok  	llm-gateway/internal/metering	2.458s

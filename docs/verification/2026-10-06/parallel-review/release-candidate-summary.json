@@ -1,0 +1,67 @@
+{
+  "run_id": "parallel-review-20261006",
+  "compose_project": "gateway-parallel-review",
+  "acceptance_ok": true,
+  "acceptance_steps": 9,
+  "acceptance_hard_failures": [],
+  "acceptance_observations": {
+    "SEED-OK": {},
+    "S1": {
+      "login_negative_status": 401
+    },
+    "S2": {
+      "accept_latency_s": 0.165,
+      "status": 200,
+      "done": true
+    },
+    "S3": {
+      "available_micro_before": 100000000,
+      "available_micro_after": 99999912,
+      "settled_entries": 1,
+      "usage_rows": 1,
+      "settle_visible_after_s": 0.314
+    },
+    "S4": {
+      "refused_status": 402,
+      "control_status": 502,
+      "org_b_usage_rows": 0
+    },
+    "S5": {
+      "revocation_propagation_s": 0.006,
+      "gateway_status": 401
+    },
+    "S6": {
+      "removal_propagation_s": 0.008,
+      "gateway_status": 403
+    },
+    "S7": {
+      "exception_open": "0",
+      "audit_actions": [
+        "billing.adjustment",
+        "billing.execution.failed_no_charge",
+        "billing.execution.reserved",
+        "billing.receipt.recorded",
+        "billing.settlement.settled",
+        "org.key.create",
+        "org.key.revoke",
+        "org.member.remove",
+        "org.member.role_change"
+      ],
+      "review_window_seconds": 7800,
+      "review_sla_seconds": 7200
+    },
+    "S8": {
+      "before": 200,
+      "during": 503,
+      "after": 200,
+      "outage_observed_after_s": 6.867,
+      "recover_after_s": 0.179
+    },
+    "S9": {}
+  },
+  "security_ok": true,
+  "security_failed": [],
+  "secret_scan_leaks": 0,
+  "secret_scan_known_defaults": 55,
+  "ok": true
+}

@@ -1,0 +1,11 @@
+Checking /etc/prometheus/prometheus.yml
+  SUCCESS: 1 rule files found
+ SUCCESS: /etc/prometheus/prometheus.yml is valid prometheus config file syntax
+
+Checking /etc/prometheus/rules/billing.yml
+  SUCCESS: 6 rules found
+
+Checking /rules/billing.yml
+  SUCCESS: 6 rules found
+
+  SUCCESS

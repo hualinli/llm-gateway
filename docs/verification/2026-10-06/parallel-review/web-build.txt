@@ -1,0 +1,18 @@
+
+> llm-gateway-web@0.1.0 build
+> tsc --noEmit && vite build
+
+vite v8.3.1 building client environment for production...
+transforming...
+✓ 3174 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                               0.77 kB │ gzip:   0.36 kB
+dist/assets/index-Au2CS0r3.css                1.67 kB │ gzip:   0.69 kB
+dist/assets/rolldown-runtime-CbXtAM7H.js      0.58 kB │ gzip:   0.36 kB
+dist/assets/vendor-CXHGlIjX.js               74.38 kB │ gzip:  23.93 kB
+dist/assets/index-DJ16UCHh.js               135.75 kB │ gzip:  39.60 kB
+dist/assets/react-DjX0U0Iu.js               218.84 kB │ gzip:  68.25 kB
+dist/assets/antd-DAd16HAR.js              1,053.80 kB │ gzip: 334.67 kB
+
+✓ built in 743ms

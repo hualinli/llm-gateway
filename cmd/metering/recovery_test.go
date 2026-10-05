@@ -517,3 +517,18 @@ func TestRecoveryReviewQueueCursorIsForwardedAsAPosition(t *testing.T) {
 		t.Fatalf("cursor=%+v", store.lastQueue.Cursor)
 	}
 }
+
+func TestRecoveryConfigRejectsWindowOverflowInEveryMode(t *testing.T) {
+	for _, mode := range []string{"off", "auto", "on"} {
+		t.Run(mode, func(t *testing.T) {
+			_, err := recoveryConfigFromEnv(recoveryLookup(map[string]string{
+				"METERING_RECOVERY":               mode,
+				"METERING_RECOVERY_MAX_EXECUTION": "2000000h",
+				"METERING_RECOVERY_GRACE":         "2000000h",
+			}))
+			if !errors.Is(err, billing.ErrInvalidArgument) {
+				t.Fatalf("overflow must fail startup even with the loop disabled: %v", err)
+			}
+		})
+	}
+}
