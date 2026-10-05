@@ -9,6 +9,11 @@
 *.local.yaml
 /data/
 
+# 本地工具缓存
+/.dockercfg/
+/.gocache/
+/.npm-cache/
+
 # IDE / 系统
 .idea/
 .vscode/
