@@ -256,6 +256,13 @@ type ExecutionStore interface {
 	// RecordFailure ends an execution as failed with no charge and returns its
 	// reservation exactly once. It is terminal and idempotent.
 	RecordFailure(ctx context.Context, executionID, reason string) (ExecutionResult, error)
+	// MarkAttemptAbandoned writes the durable abandonment marker of an attempt
+	// that ended with a certain, receipt-less outcome. It moves no money: it
+	// only tells T07B's recovery that the owning process itself observed the
+	// attempt end, which is what lets the release stop requiring the owner to be
+	// proven dead. It is idempotent, and it refuses a terminal execution or one
+	// that has a chargeable receipt (see abandon.go).
+	MarkAttemptAbandoned(ctx context.Context, executionID, reason string) (ExecutionResult, error)
 	// GetExecution returns one execution by id, or ErrExecutionNotFound.
 	GetExecution(ctx context.Context, executionID string) (Execution, error)
 	// AdjustTx applies one posting inside a transaction the caller owns, so a

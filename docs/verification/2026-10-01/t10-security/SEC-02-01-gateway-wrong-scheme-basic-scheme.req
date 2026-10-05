@@ -1,0 +1,8 @@
+POST http://127.0.0.1:58864/v1/chat/completions
+X-Request-ID: t10-SEC-02-01
+Accept: application/json
+X-CSRF-Token: <obj…<redacted:7> object at 0x10cd64880>
+Authorization: Basic Zm9vOmJhcg==
+Content-Type: application/json
+
+{"model": "t10-model", "messages": [{"role": "user", "content": "hi"}], "stream": true}

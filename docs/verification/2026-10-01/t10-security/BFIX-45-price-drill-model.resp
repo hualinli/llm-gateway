@@ -1,0 +1,9 @@
+HTTP 201 (0.003s)
+Server: hertz
+Date: Thu, 01 Oct 2026 06:46:56 GMT
+Content-Type: application/json
+Content-Length: 316
+X-Request-Id: t10-BFIX-45
+X-Trace-Id: 182477a8221a26c6577c0603c9a2be3c
+
+{"id":"3","model":"t10bk-model","currency":"CNY","input_price_micro_per_million":"1000000","output_price_micro_per_million":"1000000","provider_input_cost_micro_per_million":null,"provider_output_cost_micro_per_million":null,"effective_at":"2026-10-01T05:46:56Z","created_by":"1","created_at":"2026-10-01T06:46:56Z"}

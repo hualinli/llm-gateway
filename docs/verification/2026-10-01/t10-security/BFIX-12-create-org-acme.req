@@ -1,0 +1,8 @@
+POST http://127.0.0.1:50436/api/v1/organizations
+X-Request-ID: t10-BFIX-12
+Accept: application/json
+Cookie: gw_session=vKQ7…<redacted:18>; gw_csrf=cJiU…<redacted:18>
+X-CSRF-Token: cJiU…<redacted:18>
+Content-Type: application/json
+
+{"name": "t10-13427-acme"}

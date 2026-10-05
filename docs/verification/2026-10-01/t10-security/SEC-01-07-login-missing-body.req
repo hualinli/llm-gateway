@@ -1,0 +1,6 @@
+POST http://127.0.0.1:58872/api/v1/auth/login
+X-Request-ID: t10-SEC-01-07
+Accept: application/json
+Content-Type: application/json
+
+{}

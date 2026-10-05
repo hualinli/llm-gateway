@@ -23,6 +23,12 @@ var (
 	// errUsageInvalid: the upstream reported impossible usage. It must not
 	// become a negative or silently truncated charge.
 	errUsageInvalid = errors.New("terminal event carries invalid usage")
+	// errUsageInconsistent: the upstream's usage contradicts itself (a declared
+	// total_tokens that is not the sum of its components). The charge is
+	// computed from the components, so finalizing it would persist a receipt
+	// whose own total disagrees with the money it charges; the boundary is
+	// refused instead, exactly like missing or negative usage.
+	errUsageInconsistent = errors.New("terminal event carries a self-contradicting usage total")
 )
 
 // Stable reasons a UsageExceptionRecorder is given. They end up in
@@ -34,6 +40,9 @@ const (
 	// ReasonUsageInvalid is given when the terminal event carried impossible
 	// usage (a negative count).
 	ReasonUsageInvalid = "terminal event carries invalid usage"
+	// ReasonUsageInconsistent is given when total_tokens is neither absent nor
+	// the sum of prompt_tokens and completion_tokens (F04).
+	ReasonUsageInconsistent = "terminal event declares a total_tokens that is not the sum of its components"
 )
 
 // UsageExceptionRecorder is the optional companion of Finalizer: it records the
@@ -98,6 +107,10 @@ func (g *finalizationGate) OnTerminalEvent(ctx context.Context, event provider.T
 		g.recordException(ctx, event, ReasonUsageInvalid)
 		return errUsageInvalid
 	}
+	if !usageChargeable(event.Usage) {
+		g.recordException(ctx, event, ReasonUsageInconsistent)
+		return errUsageInconsistent
+	}
 	if g.done {
 		return nil
 	}
@@ -125,6 +138,27 @@ func usageValid(usage *provider.Usage) bool {
 		return false
 	}
 	return usage.PromptTokens >= 0 && usage.CompletionTokens >= 0 && usage.TotalTokens >= 0
+}
+
+// usageChargeable is the billing half of the predicate and is deliberately
+// stricter than usageValid: on top of "not absent, not negative" it refuses a
+// declared total_tokens that contradicts prompt_tokens + completion_tokens.
+//
+// The asymmetry with the metering event is intentional and is the F04 rule.
+// The event path records what the upstream said (T05's contract); the money
+// path must not. A receipt whose total_tokens is 999 while its charge is
+// computed from 2 + 3 tokens is a durable fact that disagrees with itself, and
+// the platform's rule for "usage we cannot reconcile" is a PostgreSQL exception
+// (review_required, reservation held), never a silent charge built on a number
+// nobody can defend. total_tokens == 0 means "the provider adapter derived it"
+// and is accepted: the adapter writes the derived sum, so it is consistent by
+// construction.
+func usageChargeable(usage *provider.Usage) bool {
+	if !usageValid(usage) {
+		return false
+	}
+	return usage.TotalTokens == 0 ||
+		usage.TotalTokens == usage.PromptTokens+usage.CompletionTokens
 }
 
 // recordException asks the finalizer's optional recorder to persist the refused

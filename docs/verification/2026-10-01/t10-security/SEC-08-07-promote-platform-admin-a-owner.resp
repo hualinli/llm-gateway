@@ -1,0 +1,10 @@
+HTTP 403 (0.001s)
+Server: hertz
+Date: Thu, 01 Oct 2026 06:44:38 GMT
+Content-Type: application/json
+Content-Length: 114
+X-Request-Id: t10-SEC-08-07
+X-Trace-Id: 9726999b11c6d38c6ad22a0c3a265197
+X-Content-Type-Options: nosniff
+
+{"error":{"code":"forbidden","message":"platform administrator privileges required","request_id":"t10-SEC-08-07"}}

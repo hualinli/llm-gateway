@@ -1,0 +1,10 @@
+HTTP 401 (0.001s)
+Server: hertz
+Date: Thu, 01 Oct 2026 06:44:33 GMT
+Content-Type: application/json
+Content-Length: 98
+X-Request-Id: t10-SEC-01-04
+X-Trace-Id: c0b8abec59bf78cd756743bc7062b3c8
+X-Content-Type-Options: nosniff
+
+{"error":{"code":"unauthorized","message":"authentication required","request_id":"t10-SEC-01-04"}}

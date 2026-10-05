@@ -1,0 +1,9 @@
+HTTP 201 (0.007s)
+Server: hertz
+Date: Thu, 01 Oct 2026 06:44:33 GMT
+Content-Type: application/json
+Content-Length: 563
+X-Request-Id: t10-FIX-40
+X-Trace-Id: 63dc4da2e94ed3c8312ef89b8a5aa427
+
+{"key":{"key_id":"key_5342ede0528f8aaeb8b187475fff5513","prefix":"sk-jQhHq...","organization_id":"4","owner_user_id":"2","created_by":"2","status":"active","expires_at":null,"revoked_at":null,"model_allowlist":null,"policy_version":"2","created_at":"2026-10-01T06:44:34Z","tenant_id":"org:4"},"secret":"sk-j…<redacted:46>","secret_returned_once":true,"replayed":false,"resulting_version":"9","notice":"Copy this secret now: it is shown only once and can never be retrieved again. If you lose it, revoke this key and create a new one."}

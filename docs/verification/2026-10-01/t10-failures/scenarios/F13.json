@@ -1,0 +1,73 @@
+{
+  "assertions": [
+    {
+      "assertion": "the scenario produced exactly one receipt to conflict with",
+      "detail": [
+        [
+          "exec_58d3c99fb86f96bafea93cc44afb5bc3",
+          "exec_58d3c99fb86f96bafea93cc44afb5bc3"
+        ]
+      ],
+      "ok": true
+    },
+    {
+      "assertion": "the database refuses a second receipt that reuses a billed event id",
+      "detail": "ERROR:  duplicate key value violates unique constraint \"usage_receipts_event_id_key\"\nDETAIL:  Key (event_id)=(exec_58d3c99fb86f96bafea93cc44afb5bc3) already exists.",
+      "ok": true
+    },
+    {
+      "assertion": "the refusal names the event-id uniqueness rule, not a silent DO NOTHING",
+      "detail": "ERROR:  duplicate key value violates unique constraint \"usage_receipts_event_id_key\"\nDETAIL:  Key (event_id)=(exec_58d3c99fb86f96bafea93cc44afb5bc3) already exists.",
+      "ok": true
+    },
+    {
+      "assertion": "the refused insert moved nothing",
+      "detail": 1,
+      "ok": true
+    }
+  ],
+  "evidence": {
+    "duplicate_event_insert": {
+      "database_response": "ERROR:  duplicate key value violates unique constraint \"usage_receipts_event_id_key\"\nDETAIL:  Key (event_id)=(exec_58d3c99fb86f96bafea93cc44afb5bc3) already exists.",
+      "receipts_for_org": 1,
+      "sql": "INSERT INTO usage_receipts (execution_id, event_id, org_id, user_id, key_id, model, prompt_tokens, output_tokens, total_tokens, price_version_id, charge_micro, occurred_at, digest, status, dispatch_after, claim_until, attempts, last_error, created_at, settled_at) SELECT 'exec_f13_duplicate', event_id, org_id, user_id, key_id, model, prompt_tokens, output_tokens, total_tokens, price_version_id, charge_micro, occurred_at, repeat('a', 64), status, dispatch_after, claim_until, attempts, last_error, created_at, settled_at FROM usage_receipts WHERE execution_id = 'exec_58d3c99fb86f96bafea93cc44afb5bc3';",
+      "succeeded": false,
+      "unique_constraint": "usage_receipts_event_id_key"
+    },
+    "same_adjustment_key_different_amount": {
+      "covered_by": "internal/billing/adjustment_conflict_pg_integration_test.go (same business id + kind, different amount -> ErrIdempotencyConflict, one entry)"
+    },
+    "same_execution_id_different_payload": {
+      "covered_by": "internal/billing/execution_pg_integration_test.go:TestReserveIsIdempotentPerExecutionID (same execution id, changed payload -> ErrIdempotencyConflict, no second reservation)",
+      "note": "an HTTP client cannot choose its execution id (the guard mints a random one per request), so this half of F13 is verified at the store level where the identity is an input.",
+      "rows": [
+        [
+          "exec_58d3c99fb86f96bafea93cc44afb5bc3",
+          "settled",
+          "89"
+        ]
+      ]
+    },
+    "stream": {
+      "body_head": "data: {\"choices\":[{\"delta\":{\"content\":\"ok \",\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0}],\"id\":\"chatcmpl-mock-ok\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"ok-1 ",
+      "body_tail": "\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"id\":\"chatcmpl-mock-ok\",\"object\":\"chat.completion.chunk\",\"usage\":{\"completion_tokens\":6,\"prompt_tokens\":12,\"total_tokens\":18}}\n\ndata: [DONE]\n\n",
+      "bytes": 1153,
+      "cancelled_by_client": false,
+      "classification": "complete",
+      "closed_seconds": 0.045201,
+      "done_seconds": 0.045199,
+      "error": null,
+      "events": 8,
+      "first_content_seconds": 0.014386,
+      "first_event_seconds": 0.014112,
+      "has_done": true,
+      "status": 200
+    }
+  },
+  "id": "F13",
+  "notes": [],
+  "partial_reason": null,
+  "seconds": 0.4,
+  "status": "PASS",
+  "title": "same event id with a different payload and the same idempotency key with a different amount are conflicts"
+}

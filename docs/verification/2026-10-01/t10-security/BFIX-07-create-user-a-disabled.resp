@@ -1,0 +1,9 @@
+HTTP 201 (0.177s)
+Server: hertz
+Date: Thu, 01 Oct 2026 06:46:53 GMT
+Content-Type: application/json
+Content-Length: 163
+X-Request-Id: t10-BFIX-07
+X-Trace-Id: fa3defd734904f7daefdb4aa4f39b2a4
+
+{"id":"7","email":"t10-13427-a-disabled@t10.test","status":"active","platform_admin":false,"created_at":"2026-10-01T06:46:54Z","updated_at":"2026-10-01T06:46:54Z"}

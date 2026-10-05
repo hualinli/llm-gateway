@@ -1,0 +1,6 @@
+GET http://127.0.0.1:58872/api/v1/orgs/4/usage?limit=5
+X-Request-ID: t10-SEC-12-17
+Accept: application/json
+Cookie: gw_session=_oFu…<redacted:18>; gw_csrf=7AjC…<redacted:18>
+X-CSRF-Token: 7AjC…<redacted:18>
+

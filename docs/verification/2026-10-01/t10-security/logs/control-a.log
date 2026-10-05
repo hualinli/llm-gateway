@@ -1,0 +1,26 @@
+2026/10/01 14:46:49 runtime profile=demo WARNING: demo mode, production checks are not enforced
+2026/10/01 14:46:49 WARNING: production check failed: CONTROL_REQUIRE_ADMIN_AUTH: must be true: the HTTP admin API cannot be anonymous in production
+2026/10/01 14:46:49 WARNING: production check failed: CONTROL_IDENTITY_SIGNING_SECRET: must be at least 16 characters
+2026/10/01 14:46:49 WARNING: production check failed: CONTROL_ALLOW_INSECURE_CREDENTIAL_RESOLVE: must not be enabled: provider credentials may only be resolved over mTLS gRPC
+2026/10/01 14:46:49 WARNING: production check failed: CONTROL_TLS_CERT_FILE/CONTROL_TLS_KEY_FILE: must both be set: control gRPC must not serve plaintext in production
+2026/10/01 14:46:49 WARNING: production check failed: CONTROL_TLS_REQUIRE_CLIENT_CERT/CONTROL_TLS_CA_FILE: must require client certificates and set the client CA file so gateway connections are mutually authenticated
+2026/10/01 14:46:49 WARNING: production check failed: CONTROL_DIAGNOSTICS_ADDR: must be set to a listener address different from the HTTP admin address "127.0.0.1:50429"
+2026/10/01 14:46:49 control store: postgres connected
+2026/10/01 14:46:49 control gateway status store: postgres (durable instance heartbeats)
+2026/10/01 14:46:49 provider credential resolve: CONTROL_ALLOW_INSECURE_CREDENTIAL_RESOLVE=true enables insecure local demo transport
+2026/10/01 14:46:49 provider credential master key loaded key_id=84d196c45702ea29
+2026/10/01 14:46:49 control admin service enabled for console identity "console"
+2026/10/01 14:46:49 control ready gRPC 127.0.0.1:50428 http 127.0.0.1:50429
+2026/10/01 14:46:49 control http listening on 127.0.0.1:50429
+2026/10/01 14:46:49 control listening on 127.0.0.1:50428
+2026/10/01 14:46:50 control: apply version=1 keys=0 routes=1 providers=1
+2026/10/01 14:46:55 control: admin snapshot version=2 keys=0 published
+2026/10/01 14:46:56 control: admin snapshot version=3 keys=1 published
+2026/10/01 14:46:56 control: admin snapshot version=4 keys=2 published
+2026/10/01 14:46:56 control: admin snapshot version=5 keys=3 published
+2026/10/01 14:46:56 control: admin snapshot version=6 keys=4 published
+2026/10/01 14:46:56 control: admin snapshot version=7 keys=5 published
+2026/10/01 14:46:56 control: admin snapshot version=8 keys=6 published
+2026/10/01 14:46:57 control: admin snapshot version=9 keys=6 published
+2026/10/01 14:46:57 control: admin snapshot version=10 keys=6 published
+2026/10/01 14:50:48 control exit

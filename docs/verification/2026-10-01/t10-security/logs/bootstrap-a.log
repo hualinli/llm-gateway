@@ -1,0 +1,10 @@
+WARNING: sonic/ast only supports (go1.17~1.26 and amd64 CPU) or (go1.20~1.26 and arm64 CPU), but your environment is not suitable and will fallback to encoding/json
+2026/10/01 06:46:49 runtime profile=demo WARNING: demo mode, production checks are not enforced
+2026/10/01 06:46:49 WARNING: production check failed: CONSOLE_DIAGNOSTICS_ADDR: must be set to a listener address different from the business address ":8092" so /metrics and /debug/pprof/* are not exposed on the API listener
+2026/10/01 06:46:49 WARNING: production check failed: CONSOLE_SECURE_COOKIES: must be true so the gw_session cookie is never sent over plaintext HTTP
+2026/10/01 06:46:49 WARNING: production check failed: CONTROL_ADDR: must be set: API keys are managed only through the Control AdminService, and policy publications converge only while that channel exists
+2026/10/01 06:46:49 WARNING: production check failed: CONTROL_TLS_CA_FILE: must be set so the Console verifies the Control server certificate over TLS
+2026/10/01 06:46:49 WARNING: production check failed: CONTROL_TLS_CLIENT_CERT_FILE/CONTROL_TLS_CLIENT_KEY_FILE: must both be set so the Console authenticates to Control with mTLS
+2026/10/01 06:46:49 WARNING: production check failed: CONTROL_CONSOLE_SERVICE_NAME: must be set to the identity Control trusts for this Console (CONTROL_CONSOLE_SERVICE_NAME on the Control side); it must match the client certificate CN or SAN
+2026/10/01 06:46:49 console bootstrap: profile=demo admin_email=admin@t10bk.test admin_user_id=1 admin_created=true
+2026/10/01 06:46:49 console bootstrap: personal_organization_id=1

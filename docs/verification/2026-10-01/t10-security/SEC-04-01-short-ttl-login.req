@@ -1,0 +1,6 @@
+POST http://127.0.0.1:58875/api/v1/auth/login
+X-Request-ID: t10-SEC-04-01
+Accept: application/json
+Content-Type: application/json
+
+{"email": "t10-z9162-a-member@t10.test", "password": "INzP…<redacted:18>"}

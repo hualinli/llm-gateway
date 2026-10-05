@@ -1,0 +1,8 @@
+POST http://127.0.0.1:58872/api/v1/admin/users/7/status
+X-Request-ID: t10-SEC-10-04
+Accept: application/json
+Cookie: gw_session=nBg6…<redacted:18>; gw_csrf=lEAl…<redacted:18>
+X-CSRF-Token: lEAl…<redacted:18>
+Content-Type: application/json
+
+{"status": "active"}

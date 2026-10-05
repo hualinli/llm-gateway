@@ -11,6 +11,7 @@ import (
 
 	"llm-gateway/internal/billing"
 	"llm-gateway/internal/metrics"
+	"llm-gateway/internal/testsupport/failpoint"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -406,6 +407,16 @@ func (c *SettlementConsumer) recordAnomaly(ctx context.Context, action string, e
 }
 
 func (c *SettlementConsumer) ack(ctx context.Context, m redis.XMessage) {
+	// T10 window: the settlement transaction is committed and the XACK has not
+	// been issued yet. Killing the consumer here is the F05 scenario — the
+	// message stays in the group's PEL, a restarted consumer reclaims it, and
+	// the redelivery must be a replay with exactly one debit.
+	if err := failpoint.Hit("settlement.ack_before"); err != nil {
+		// The settlement is already durable, so an injected failure here must
+		// not ack: leaving the message pending is the safe direction.
+		c.logf("settlement: ack withheld by failpoint id=%s: %v", m.ID, err)
+		return
+	}
 	// The settlement is already committed, so the ACK uses a bounded context
 	// detached from cancellation: a graceful stop must not turn a committed
 	// settlement into a redelivery (which would be harmless, but pointless).
@@ -416,7 +427,9 @@ func (c *SettlementConsumer) ack(ctx context.Context, m redis.XMessage) {
 		// and the redelivery is a replay, which is exactly why settlement is
 		// idempotent.
 		c.logf("settlement: xack failed id=%s err=%v", m.ID, err)
+		return
 	}
+	_ = failpoint.Hit("settlement.ack_after")
 }
 
 // deadLetter copies an unsettleable envelope into the bounded receipt DLQ and

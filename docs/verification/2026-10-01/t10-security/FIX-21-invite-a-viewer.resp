@@ -1,0 +1,9 @@
+HTTP 201 (0.004s)
+Server: hertz
+Date: Thu, 01 Oct 2026 06:44:32 GMT
+Content-Type: application/json
+Content-Length: 290
+X-Request-Id: t10-FIX-21
+X-Trace-Id: 9141b2de28bc79602873613102a881a3
+
+{"invitation":{"id":"3","organization_id":"4","email":"t10-z9162-a-viewer@t10.test","role":"billing_viewer","status":"pending","expires_at":"2026-10-04T06:44:32Z","accepted_at":null,"created_by":"2","created_at":"2026-10-01T06:44:32Z"},"token":"gV9N…<redacted:43>"}

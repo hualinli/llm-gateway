@@ -28,6 +28,7 @@ func main() {
 		eventLine     = flag.Int("event-line-bytes", 0, "pad each content event so its data: line reaches N bytes (>=1MiB is deliberately over the shared 1MiB line cap); 0 = historical small events")
 		roleOnlyFirst = flag.Bool("role-only-first", false, "emit a role-only first event before content events")
 		authorization = flag.String("authorization", os.Getenv("UPSTREAM_MOCK_AUTHORIZATION"), "required bearer token; empty disables the check")
+		usageMode     = flag.String("usage", "normal", "F04 usage shape in the terminal event: normal, missing, negative or mismatch")
 	)
 	flag.Parse()
 
@@ -45,6 +46,7 @@ func main() {
 		EventLineBytes:        *eventLine,
 		RoleOnlyFirst:         *roleOnlyFirst,
 		ExpectedAuthorization: *authorization,
+		UsageMode:             *usageMode,
 	})
 	srv := &http.Server{
 		Addr:              *listen,
@@ -55,7 +57,8 @@ func main() {
 		log.Printf("upstream-mock %s listening on %s ttft=%s token-interval=%s tokens=%d status=%d hang=%v fail-after=%d max-inflight=%d echo=%v event-line-bytes=%d role-only-first=%v authorization=%s",
 			*name, *listen, *ttft, *tokenInterval, *tokens, *status, *hang, *failAfter, *maxInflight, *echo,
 			*eventLine, *roleOnlyFirst, authorizationState(*authorization))
-		log.Printf("upstream-mock per-request overrides (mock-only, forwarded verbatim by the Gateway): x_mock_ttft_ms, x_mock_token_interval_ms, x_mock_tokens, x_mock_event_line_bytes, x_mock_role_only_first")
+		log.Printf("upstream-mock usage mode=%s", *usageMode)
+		log.Printf("upstream-mock per-request overrides (mock-only, forwarded verbatim by the Gateway): x_mock_ttft_ms, x_mock_token_interval_ms, x_mock_tokens, x_mock_event_line_bytes, x_mock_role_only_first, x_mock_usage")
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatal(err)
 		}

@@ -1,0 +1,875 @@
+2026/10/01 14:44:27 runtime profile=demo WARNING: demo mode, production checks are not enforced
+2026/10/01 14:44:27 WARNING: production check failed: CONTROL_TLS_CA_FILE: must be set so the gateway verifies the control-plane server certificate over TLS
+2026/10/01 14:44:27 WARNING: production check failed: CONTROL_TLS_CLIENT_CERT_FILE/CONTROL_TLS_CLIENT_KEY_FILE: must both be set so the gateway authenticates to the control plane with mTLS
+2026/10/01 14:44:27 limiter: redis=127.0.0.1:58854 rate=1000 burst=2000 queue=500ms on-redis-error=closed
+2026/10/01 14:44:27 gateway max active streams=64 (0 means unlimited)
+2026/10/01 14:44:27 access guard: pg pool max_open=8 max_idle=8 conn_max_lifetime=5m0s query_timeout=300ms statement_timeout=300ms
+2026/10/01 14:44:27 access guard mode=pg
+2026/10/01 14:44:27 billing: mode=pg pool max_open=8 max_idle=8 conn_max_lifetime=5m0s admission_timeout=2s receipt_timeout=1s verify_timeout=1s finalize_timeout=2s heartbeat_interval=10s
+2026/10/01 14:44:27 billing: policy messages<=256 message_bytes<=65536 input_bytes<=262144 output_tokens default=4096 max=32768 overhead per_message=16 per_request=8
+2026/10/01 14:44:27 gateway instance=gw-t10 started_at=2026-10-01T06:44:27.558712Z
+2026/10/01 14:44:27 gateway per-org active streams=32 (per instance, not a cross-instance quota; global per-instance limit=64)
+2026/10/01 14:44:27 gateway diagnostics listening on 127.0.0.1:58870 (/metrics, /debug/pprof/*)
+2026/10/01 14:44:27 gateway listening on 127.0.0.1:58864
+2026/10/01 14:44:27 control: hot reload to v1
+2026/10/01 14:44:32 control: hot reload to v2
+2026/10/01 14:44:33 control: hot reload to v3
+2026/10/01 14:44:33 control: hot reload to v4
+2026/10/01 14:44:33 control: hot reload to v5
+2026/10/01 14:44:33 control: hot reload to v6
+2026/10/01 14:44:33 control: hot reload to v7
+2026/10/01 14:44:33 control: hot reload to v8
+2026/10/01 14:44:34 control: hot reload to v9
+2026/10/01 14:44:34 billing admission model=t10-model result=admitted latency=10.035458ms
+2026/10/01 14:44:34 billing finalization model=t10-model result=ok latency=5.013359ms
+2026/10/01 14:44:34 request_id=t10-SEC-02-06 trace_id=34f2d12687a4399d4c1d67c4acda7e6b provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:44:34 control: hot reload to v10
+2026/10/01 14:44:34 control: hot reload to v11
+2026/10/01 14:44:38 control: hot reload to v12
+2026/10/01 14:44:39 billing admission model=t10-model result=admitted latency=4.326938ms
+2026/10/01 14:44:39 billing finalization model=t10-model result=ok latency=3.212553ms
+2026/10/01 14:44:39 request_id=t10-sec10-before trace_id=c50976494948d988c7c2b4013e75fca5 provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:44:39 access guard denied key_id=key_192634322377969f9518cbe4f71c1010 status=403 code=forbidden reason=owner user status is disabled
+2026/10/01 14:44:40 billing admission model=t10-model result=admitted latency=4.107281ms
+2026/10/01 14:44:40 billing finalization model=t10-model result=ok latency=3.316012ms
+2026/10/01 14:44:40 request_id=t10-sec10-recovered trace_id=18a13b1cebd949a256e768a5c77cf3dc provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:44:40 billing admission model=t10-model result=admitted latency=4.917822ms
+2026/10/01 14:44:40 billing finalization model=t10-model result=ok latency=3.786558ms
+2026/10/01 14:44:40 request_id=t10-sec11-before trace_id=83a8124e349351dbb41ef5d482f35245 provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:44:40 billing admission model=t10-model result=admitted latency=6.307606ms
+2026/10/01 14:44:42 control: hot reload to v13
+2026/10/01 14:44:44 billing finalization model=t10-model result=ok latency=3.169718ms
+2026/10/01 14:44:44 request_id=t10-sec11-inflight trace_id=4332ceb87b923588eea1dc256c7902b5 provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:12 TotalTokens:24}
+2026/10/01 14:44:45 access guard denied key_id=key_a4b22983f0d5fdf76158fbc89695465d status=403 code=forbidden reason=membership status is removed
+2026/10/01 14:44:45 billing admission model=t10-model result=admitted latency=4.750785ms
+2026/10/01 14:44:45 billing finalization model=t10-model result=ok latency=3.537678ms
+2026/10/01 14:44:45 request_id=t10-sec14-member trace_id=dde80618320234bf7a61739c6270ac9e provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:44:45 access guard denied key_id=key_6cdc62674b7d31e5fb9508bad316c38e status=403 code=forbidden reason=membership role may not generate: billing_viewer
+2026/10/01 14:44:45 billing admission model=t10-model result=admitted latency=4.13179ms
+2026/10/01 14:44:45 billing finalization model=t10-model result=ok latency=3.904334ms
+2026/10/01 14:44:45 request_id=t10-sec14-crossorg trace_id=95cfb1317239bf44a868e9ede9196f90 provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:44:48 billing admission model=t10-model result=admitted latency=3.849486ms
+2026/10/01 14:44:48 control sync ended: rpc error: code = Unavailable desc = error reading from server: EOF
+2026/10/01 14:44:51 billing admission model=t10-model result=admitted latency=4.322861ms
+2026/10/01 14:44:51 billing finalization model=t10-model result=ok latency=4.073138ms
+2026/10/01 14:44:51 request_id=t10-phase-probe trace_id=2705c489cba0c6eb3b0da5ee45e311de provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:44:52 billing admission model=t10-model result=admitted latency=3.811658ms
+2026/10/01 14:44:52 billing finalization model=t10-model result=ok latency=2.739355ms
+2026/10/01 14:44:52 request_id=t10-phase-probe trace_id=f75a7b37ec481787352dc68da7856f21 provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:44:53 billing admission model=t10-model result=admitted latency=3.328366ms
+2026/10/01 14:44:53 billing finalization model=t10-model result=ok latency=3.271766ms
+2026/10/01 14:44:53 request_id=t10-phase-probe trace_id=3bec5361610325e0f8eff7f73c344d69 provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:44:53 billing admission model=t10-model result=admitted latency=3.270007ms
+2026/10/01 14:44:53 billing finalization model=t10-model result=ok latency=2.95004ms
+2026/10/01 14:44:53 request_id=t10-phase-probe trace_id=5b24dd6d44361bae7948324d76f844b6 provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:44:53 control sync dial failed 127.0.0.1:58863: context deadline exceeded
+2026/10/01 14:44:54 billing admission model=t10-model result=admitted latency=5.74041ms
+2026/10/01 14:44:54 billing finalization model=t10-model result=ok latency=3.706793ms
+2026/10/01 14:44:54 request_id=t10-phase-probe trace_id=e32b031b700765386f51c7d4da5ef155 provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:44:55 billing admission model=t10-model result=admitted latency=5.667576ms
+2026/10/01 14:44:55 billing finalization model=t10-model result=ok latency=3.064061ms
+2026/10/01 14:44:55 request_id=t10-phase-probe trace_id=114305c9081214afe22798a1fda8e8e3 provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:44:55 billing admission model=t10-model result=admitted latency=3.829463ms
+2026/10/01 14:44:55 billing finalization model=t10-model result=ok latency=2.800278ms
+2026/10/01 14:44:55 request_id=t10-phase-probe trace_id=ddbe75b5f0969dcc9e4856123e0c0b28 provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:44:55 billing finalization model=t10-model result=ok latency=3.312727ms
+2026/10/01 14:44:55 request_id=t10-ctrl02-inflight trace_id=746016672edef1b1e0241516d70f4b26 provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:16 TotalTokens:28}
+2026/10/01 14:44:56 billing admission model=t10-model result=admitted latency=4.474625ms
+2026/10/01 14:44:56 billing finalization model=t10-model result=ok latency=2.700018ms
+2026/10/01 14:44:56 request_id=t10-phase-probe trace_id=89810be63aac99f8b33093341113a700 provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:44:57 billing admission model=t10-model result=admitted latency=4.906735ms
+2026/10/01 14:44:57 billing finalization model=t10-model result=ok latency=2.71989ms
+2026/10/01 14:44:57 request_id=t10-phase-probe trace_id=3d3425c64e327c899711583952382dce provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:44:57 billing admission model=t10-model result=admitted latency=5.094056ms
+2026/10/01 14:44:57 billing finalization model=t10-model result=ok latency=3.985143ms
+2026/10/01 14:44:57 request_id=t10-phase-probe trace_id=29b229c6eb7747cc8e9db7c551ccf703 provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:44:58 billing admission model=t10-model result=admitted latency=4.272186ms
+2026/10/01 14:44:58 billing finalization model=t10-model result=ok latency=5.878698ms
+2026/10/01 14:44:58 request_id=t10-phase-probe trace_id=0854357f0065a6be1cfbe8338e26d90a provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:44:58 billing admission model=t10-model result=admitted latency=4.278298ms
+2026/10/01 14:44:58 billing finalization model=t10-model result=ok latency=3.798184ms
+2026/10/01 14:44:58 request_id=t10-phase-probe trace_id=9f3ba08bce3913040f0b3900a5aa8087 provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:44:58 control sync dial failed 127.0.0.1:58863: context deadline exceeded
+2026/10/01 14:44:58 control sync: lease expired after 8s without a control snapshot; revoking local keys and org policies (instance=gw-t10)
+2026/10/01 14:45:03 control sync dial failed 127.0.0.1:58863: context deadline exceeded
+2026/10/01 14:45:08 control sync dial failed 127.0.0.1:58863: context deadline exceeded
+2026/10/01 14:45:13 control sync dial failed 127.0.0.1:58863: context deadline exceeded
+2026/10/01 14:45:18 control sync dial failed 127.0.0.1:58863: context deadline exceeded
+2026/10/01 14:45:21 control: hot reload to v14
+2026/10/01 14:45:22 billing admission model=t10-model result=admitted latency=7.293884ms
+2026/10/01 14:45:22 billing finalization model=t10-model result=ok latency=4.363846ms
+2026/10/01 14:45:22 request_id=t10-phase-probe trace_id=8e9862869b0316242a3aa5636726daa4 provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:45:22 billing admission model=t10-model result=admitted latency=4.825591ms
+2026/10/01 14:45:22 billing finalization model=t10-model result=ok latency=6.176492ms
+2026/10/01 14:45:22 request_id=t10-ctrl04-before trace_id=028b4116ba5df514dc8d3cdec04766ee provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:45:22 control: hot reload to v15
+2026/10/01 14:45:22 control sync ended: rpc error: code = Unavailable desc = error reading from server: EOF
+2026/10/01 14:45:23 billing admission model=t10-model result=admitted latency=5.055631ms
+2026/10/01 14:45:23 billing finalization model=t10-model result=ok latency=3.790919ms
+2026/10/01 14:45:23 request_id=t10-ctrl04-outage trace_id=67f9c5290fd3302d386ce6c065966257 provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:45:24 billing admission model=t10-model result=admitted latency=5.458071ms
+2026/10/01 14:45:24 billing finalization model=t10-model result=ok latency=4.214104ms
+2026/10/01 14:45:24 request_id=t10-ctrl04-outage trace_id=7069b872c4d22c47a046df35bebf0918 provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:45:25 billing admission model=t10-model result=admitted latency=5.252655ms
+2026/10/01 14:45:25 billing finalization model=t10-model result=ok latency=2.884169ms
+2026/10/01 14:45:25 request_id=t10-ctrl04-outage trace_id=282e4fba0104e53e1cc86b78cfd92bbc provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:45:25 billing admission model=t10-model result=admitted latency=4.727388ms
+2026/10/01 14:45:25 billing finalization model=t10-model result=ok latency=2.637825ms
+2026/10/01 14:45:25 request_id=t10-ctrl04-outage trace_id=0a1f6f946c5e8d57484e2d9f3f8e8aa4 provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:45:26 billing admission model=t10-model result=admitted latency=6.125022ms
+2026/10/01 14:45:26 billing finalization model=t10-model result=ok latency=3.087206ms
+2026/10/01 14:45:26 request_id=t10-ctrl04-outage trace_id=e46b7c874ecd500adea89ba928559a67 provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:45:26 billing admission model=t10-model result=admitted latency=4.737881ms
+2026/10/01 14:45:27 billing finalization model=t10-model result=ok latency=4.299529ms
+2026/10/01 14:45:27 request_id=t10-ctrl04-outage trace_id=453afba77a56a33880450810d3d69b76 provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:45:27 control sync dial failed 127.0.0.1:58863: context deadline exceeded
+2026/10/01 14:45:27 billing admission model=t10-model result=admitted latency=6.511311ms
+2026/10/01 14:45:27 billing finalization model=t10-model result=ok latency=3.493519ms
+2026/10/01 14:45:27 request_id=t10-ctrl04-outage trace_id=eb04fc5a2ba186f3c8e3ee9f5e6f13d0 provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:45:28 billing admission model=t10-model result=admitted latency=6.180556ms
+2026/10/01 14:45:28 billing finalization model=t10-model result=ok latency=4.434937ms
+2026/10/01 14:45:28 request_id=t10-ctrl04-outage trace_id=fd3001e56a7d243fd87b66d632d14751 provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:45:28 billing admission model=t10-model result=admitted latency=5.406315ms
+2026/10/01 14:45:28 billing finalization model=t10-model result=ok latency=3.364776ms
+2026/10/01 14:45:28 request_id=t10-ctrl04-outage trace_id=4aeee7f63a0a0adf77a5c2fe295fb450 provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:45:29 billing admission model=t10-model result=admitted latency=5.600044ms
+2026/10/01 14:45:29 billing finalization model=t10-model result=ok latency=3.041733ms
+2026/10/01 14:45:29 request_id=t10-ctrl04-outage trace_id=63adafbddc1104655318dec3f9dcd8ae provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:45:30 billing admission model=t10-model result=admitted latency=4.688905ms
+2026/10/01 14:45:30 billing finalization model=t10-model result=ok latency=2.748564ms
+2026/10/01 14:45:30 request_id=t10-ctrl04-outage trace_id=74f019050cd65cd16dcf630d3f31b2de provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:45:30 billing admission model=t10-model result=admitted latency=5.49003ms
+2026/10/01 14:45:30 billing finalization model=t10-model result=ok latency=4.209971ms
+2026/10/01 14:45:30 request_id=t10-ctrl04-outage trace_id=79b052d7f1987ed6b04d0fb3b6cf3f0e provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:45:31 billing admission model=t10-model result=admitted latency=6.051266ms
+2026/10/01 14:45:31 billing finalization model=t10-model result=ok latency=3.553747ms
+2026/10/01 14:45:31 request_id=t10-ctrl04-outage trace_id=510823bd41f640ba6da0b3ed7cc76015 provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:45:32 billing admission model=t10-model result=admitted latency=6.356696ms
+2026/10/01 14:45:32 billing finalization model=t10-model result=ok latency=5.548969ms
+2026/10/01 14:45:32 request_id=t10-ctrl04-outage trace_id=c9a47c9b28f670280a7aadbcf402f556 provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:45:32 control sync dial failed 127.0.0.1:58863: context deadline exceeded
+2026/10/01 14:45:32 control sync: lease expired after 8s without a control snapshot; revoking local keys and org policies (instance=gw-t10)
+2026/10/01 14:45:35 control: hot reload to v15
+2026/10/01 14:45:35 billing admission model=t10-model result=admitted latency=5.303748ms
+2026/10/01 14:45:35 billing finalization model=t10-model result=ok latency=3.323789ms
+2026/10/01 14:45:35 request_id=t10-ctrl04-recovered trace_id=9930beb82a32fe2a311bbc4345c666fd provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:45:35 billing admission model=t10-model result=admitted latency=5.003311ms
+2026/10/01 14:45:35 billing finalization model=t10-model result=ok latency=3.669121ms
+2026/10/01 14:45:35 request_id=t10-wait-key trace_id=b067191a498c7da849aa09d8d650dce4 provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:45:35 billing admission model=t10-model result=admitted latency=5.568399ms
+2026/10/01 14:45:42 billing finalization model=t10-model result=ok latency=3.178425ms
+2026/10/01 14:45:42 request_id=t10-rev01-inflight trace_id=1ff3bacf9db60e679770a6c13ba6dd75 provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:14 TotalTokens:26}
+2026/10/01 14:45:43 billing admission model=t10-model result=admitted latency=4.278149ms
+2026/10/01 14:45:43 billing finalization model=t10-model result=ok latency=2.655587ms
+2026/10/01 14:45:43 request_id=t10-rev01-fresh trace_id=bce793dffed5fabc2a08bfca0f41d743 provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:45:43 billing admission model=t10-model result=admitted latency=4.71756ms
+2026/10/01 14:45:43 billing finalization model=t10-model result=ok latency=2.930945ms
+2026/10/01 14:45:43 request_id=t10-wait-key trace_id=1b53346f45ae970b52d3cef3f2bc4f61 provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:45:43 control: hot reload to v16
+2026/10/01 14:45:43 billing admission model=t10-model result=admitted latency=5.31831ms
+2026/10/01 14:45:44 control: hot reload to v17
+2026/10/01 14:45:50 billing finalization model=t10-model result=ok latency=2.739938ms
+2026/10/01 14:45:50 request_id=t10-rev02-inflight trace_id=74faa8b580741018e8701852634ad13b provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:14 TotalTokens:26}
+2026/10/01 14:45:50 control: hot reload to v18
+2026/10/01 14:45:50 billing admission model=t10-model result=admitted latency=3.499889ms
+2026/10/01 14:45:50 billing finalization model=t10-model result=ok latency=2.581657ms
+2026/10/01 14:45:50 request_id=t10-rev03-warmup trace_id=41d60583bc8fe4cf3c89f87ef8257cf5 provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:45:50 billing admission model=t10-model result=admitted latency=5.476264ms
+2026/10/01 14:45:51 control: hot reload to v19
+2026/10/01 14:45:52 control: hot reload to v20
+2026/10/01 14:45:57 billing finalization model=t10-model result=ok latency=4.249137ms
+2026/10/01 14:45:57 request_id=t10-rev03-inflight trace_id=81c2c4f3a8ae5fd29a537f4ff39296dd provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:14 TotalTokens:26}
+2026/10/01 14:45:57 access guard denied key_id=key_5c0c9c1ec3a151b4e8bf1bd11e50714d status=403 code=forbidden reason=membership status is removed
+2026/10/01 14:45:59 control: hot reload to v21
+2026/10/01 14:46:01 billing admission model=default result=admitted latency=11.047205ms
+2026/10/01 14:46:01 billing admission model=default result=admitted latency=16.89159ms
+2026/10/01 14:46:01 billing admission model=default result=admitted latency=21.792316ms
+2026/10/01 14:46:01 billing admission model=default result=admitted latency=27.444947ms
+2026/10/01 14:46:01 billing admission model=default result=admitted latency=32.105307ms
+2026/10/01 14:46:01 billing admission model=default result=admitted latency=37.803757ms
+2026/10/01 14:46:01 billing admission model=default result=admitted latency=42.904698ms
+2026/10/01 14:46:01 billing admission model=default result=admitted latency=46.011223ms
+2026/10/01 14:46:01 billing finalization model=default result=ok latency=4.743841ms
+2026/10/01 14:46:01 request_id=ff1981a05f8ad01ca0381abb2a4d5e14 trace_id=acf61727540bc4d75c0f36029bc7bec9 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:01 billing admission model=default result=admitted latency=5.019536ms
+2026/10/01 14:46:01 billing finalization model=default result=ok latency=2.872818ms
+2026/10/01 14:46:01 request_id=a2dd5edc6744258bdab48de04f90e52a trace_id=ab747e61d44880a6db747e5648c61ec1 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:01 billing admission model=default result=admitted latency=4.701717ms
+2026/10/01 14:46:01 billing finalization model=default result=ok latency=5.08833ms
+2026/10/01 14:46:01 request_id=3cc8ec4fb98d760efe723d7b99046385 trace_id=7145ca972c1e85ef6802ca0b0d567f92 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:01 billing finalization model=default result=ok latency=3.282091ms
+2026/10/01 14:46:01 request_id=845251fabf7e791f941fc83c563c745b trace_id=a0e9cf3748eb19bc3e3ba05f77bbc42c provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:01 billing finalization model=default result=ok latency=2.96257ms
+2026/10/01 14:46:01 request_id=9ce0dbe94193d04a52c240970911f9f5 trace_id=6f48ba6da569ef6992fbcb7199d59508 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:01 billing admission model=default result=admitted latency=5.772014ms
+2026/10/01 14:46:01 billing admission model=default result=admitted latency=5.545907ms
+2026/10/01 14:46:01 billing finalization model=default result=ok latency=3.353808ms
+2026/10/01 14:46:01 request_id=4058f76e8a485e7b818cf6ec765c1795 trace_id=b2c0f345e7f41bb47aae911682ded601 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:01 billing admission model=default result=admitted latency=6.176885ms
+2026/10/01 14:46:01 billing finalization model=default result=ok latency=3.168562ms
+2026/10/01 14:46:01 request_id=2d9aea0b34b0754ba3988bd90d7bbaa3 trace_id=0edfde1bdefb514a6a452ea5fff22e9c provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:01 billing admission model=default result=admitted latency=6.455692ms
+2026/10/01 14:46:01 billing finalization model=default result=ok latency=3.829917ms
+2026/10/01 14:46:01 request_id=ba721a00ab4f9b5b0cb85ea8560cb5c0 trace_id=67ba28241d98f2f9f27c5a9d4aa29287 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:01 billing admission model=default result=admitted latency=5.784908ms
+2026/10/01 14:46:01 billing admission model=default result=admitted latency=5.347094ms
+2026/10/01 14:46:01 billing finalization model=default result=ok latency=5.62027ms
+2026/10/01 14:46:01 request_id=1f93bf05d6e716080bdcd517ac6c3ed7 trace_id=ab79e7801fb5b611951662385674af64 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:01 billing admission model=default result=admitted latency=5.7143ms
+2026/10/01 14:46:01 billing finalization model=default result=ok latency=4.900862ms
+2026/10/01 14:46:01 request_id=2a0fce61a17f9c68c6afc980b63e0750 trace_id=29d451fc524283636f8a903094a78166 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:01 billing finalization model=default result=ok latency=2.73709ms
+2026/10/01 14:46:01 request_id=e5fc88f334f3be16bb50404d13317046 trace_id=cd29436276939dac3d071b1a84ececbb provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:01 billing admission model=default result=admitted latency=5.321731ms
+2026/10/01 14:46:01 billing finalization model=default result=ok latency=2.962067ms
+2026/10/01 14:46:01 request_id=11f1ef155ec5f97fe812c4e3661eb629 trace_id=453b0bf2ef576cb59a928bed37be3428 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:01 billing admission model=default result=admitted latency=5.493964ms
+2026/10/01 14:46:01 billing finalization model=default result=ok latency=3.546824ms
+2026/10/01 14:46:01 request_id=ee52fed4bc119e8ff9d51d5abdad200c trace_id=40de6d23fe4c1503a95f838188021ed3 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:01 billing admission model=default result=admitted latency=5.217736ms
+2026/10/01 14:46:01 billing admission model=default result=admitted latency=5.319615ms
+2026/10/01 14:46:01 billing finalization model=default result=ok latency=3.413379ms
+2026/10/01 14:46:01 request_id=0db49fa83abea3609be4b062b64d5ac7 trace_id=7f2c830462417393a8a7c73fa0d99f3d provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:01 billing finalization model=default result=ok latency=5.164936ms
+2026/10/01 14:46:01 request_id=2189428632408013ccb32a75b0614345 trace_id=5f301946288ce32011fa690a8ea78e53 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:01 billing finalization model=default result=ok latency=3.888605ms
+2026/10/01 14:46:01 request_id=97be48126bfee25e2e07860caf12a50b trace_id=e2adb6eaa77cf04cf672b43064d81afd provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:01 billing admission model=default result=admitted latency=7.999971ms
+2026/10/01 14:46:01 billing admission model=default result=admitted latency=5.581106ms
+2026/10/01 14:46:01 billing admission model=default result=admitted latency=5.529728ms
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=3.691953ms
+2026/10/01 14:46:02 request_id=5048f5bf995d47bf59a2c5a7e3f3ccbe trace_id=11bafd7f99e9a147e79f6734d1fa15c5 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=5.55814ms
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=3.457641ms
+2026/10/01 14:46:02 request_id=aea03db4d83eb993d5fde1ba445274f1 trace_id=4d03bf622f0de24bb8715465f10102ad provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=6.672348ms
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=4.227454ms
+2026/10/01 14:46:02 request_id=94303861eea4f8b03b1f0f7c101e2361 trace_id=87bd95957119563d180d74bf3c277ee1 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=4.05114ms
+2026/10/01 14:46:02 request_id=aa8ed9e977ec7d0b66845ed472d3814c trace_id=0f4efe69d3797613b5b3c7d7e26272c6 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=3.791714ms
+2026/10/01 14:46:02 request_id=66eeb57bc7a856187af71d5fdfd0e5dd trace_id=9175d1deda2c662f04081871aad71014 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=6.437513ms
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=6.713486ms
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=3.501918ms
+2026/10/01 14:46:02 request_id=7fffe5b91aec4fccfb83b79451866409 trace_id=dbe76ac5cf34636d1f45e8e0cd25e1f2 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=9.81353ms
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=3.399647ms
+2026/10/01 14:46:02 request_id=3b2b2ca73ebf5d29175b958af8bd0d95 trace_id=5834505472d635544fda2c646708d4e2 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=3.633849ms
+2026/10/01 14:46:02 request_id=caa0c36edae83a4b699931279fdf24bc trace_id=15ef759fd8e15bebd362dd1129d40e6f provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=7.655482ms
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=6.600079ms
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=10.627958ms
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=3.80529ms
+2026/10/01 14:46:02 request_id=9ca3441df07ffededbe2587214c593ca trace_id=a72c26374f3021f2380ba348640871ac provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=2.567319ms
+2026/10/01 14:46:02 request_id=fe41ed23ba00a9042f605f8adf13bcc3 trace_id=2a30755bbd1675307091f35fb5c0bb1f provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=2.969066ms
+2026/10/01 14:46:02 request_id=6753f4f630736f3f0832fead736dc1d7 trace_id=403affc57b1b3385b875f3b1c5fabc35 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=2.636292ms
+2026/10/01 14:46:02 request_id=39d0d9335964d7fb1b10737f9bd8f947 trace_id=e563a00c4a6fb0de3e6b6aa5f163ea6b provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=2.780829ms
+2026/10/01 14:46:02 request_id=8b533b16deb7b329966d55a58c2140ac trace_id=48b5f210011a48f242b1d9bb155b26ee provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=3.376985ms
+2026/10/01 14:46:02 request_id=dfdd91df60c12d4a52db060c3c2cec47 trace_id=513d046ff776d6d27c7f45be48075989 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=2.807124ms
+2026/10/01 14:46:02 request_id=e01f5517bc6422d3a7aa174118e11a05 trace_id=95b2ccc1c14292185715816c7366ba29 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=3.488318ms
+2026/10/01 14:46:02 request_id=11b6b13099688e5ddc34d80054868efd trace_id=f2997f7370b773c95777f8e060b5236b provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=6.540711ms
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=9.257738ms
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=10.783ms
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=13.097548ms
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=15.67328ms
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=18.4735ms
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=20.41866ms
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=23.66922ms
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=4.977118ms
+2026/10/01 14:46:02 request_id=5f20dfcf6575995e397297ff2d77c8cd trace_id=6fbee3b03f8522c093eb617b4eca6e17 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=3.458047ms
+2026/10/01 14:46:02 request_id=9eef2eeae19ae2aaef1b47dfb9c1171d trace_id=4e9890459e17e2bea2195c527b773636 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=6.319589ms
+2026/10/01 14:46:02 request_id=f55d84fddd14dd905cf14060e859a29b trace_id=703ed8f9f4fce9475225bcc40de43881 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=7.478652ms
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=7.460675ms
+2026/10/01 14:46:02 request_id=e4f70a071eaad5fff9ea16cc9ead7618 trace_id=61cd61694aaecffb66c46710e4fb4659 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=8.397412ms
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=7.063426ms
+2026/10/01 14:46:02 request_id=bd18271596c4bc93b3987caeaf74f9de trace_id=55bdf5c7059d3561f3ab7aafa9f08680 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=4.441667ms
+2026/10/01 14:46:02 request_id=51bb5aa53ba44d73292f9f880693b121 trace_id=711d0b91a9b36229afd85a4b76c9129f provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=4.738189ms
+2026/10/01 14:46:02 request_id=28843d7ceb03ed90a008270d8b140c5e trace_id=209a8577599b16ba43a59f6955e88499 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=8.008926ms
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=4.177931ms
+2026/10/01 14:46:02 request_id=7048dcfa207eb5af4f45353ac58b42dd trace_id=f81da64ca360a0d56de4ac778d72b188 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=6.632705ms
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=7.93964ms
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=9.634252ms
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=11.373019ms
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=10.702741ms
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=9.303134ms
+2026/10/01 14:46:02 request_id=f9976aaa9cd5eb8407a0f7ceae27007b trace_id=6203d4dd5f88e6b5b447c4f4e55d1460 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=11.883279ms
+2026/10/01 14:46:02 request_id=f0125ebf93af4e394ebe4be70d76ea54 trace_id=a79b7c56e901febb62e062a52943575e provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=9.003508ms
+2026/10/01 14:46:02 request_id=bcf5077fe41ba15d910dcc9bf1e38946 trace_id=00956056e8be3f6ecf9084a8e0bca1b0 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=7.894099ms
+2026/10/01 14:46:02 request_id=57a6c2a6f766352b0a8930358739741f trace_id=a0abd0a83904d4a8fca7608fc36f6a7c provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=7.229695ms
+2026/10/01 14:46:02 request_id=6da015e06c4a6a6f37dea8ab9bb41254 trace_id=c2a78ee808d6a9a9ca1a88e3f2683f9e provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=7.796612ms
+2026/10/01 14:46:02 request_id=c424b42483f20dee647307a36a1dd40c trace_id=84776d387bd89cc352151f6bd430bd3e provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=9.801384ms
+2026/10/01 14:46:02 request_id=6fd499005af9bb0ec49adf9954e38bf7 trace_id=1a1e8f546110c125bb63b8b28c5de0d7 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=16.723245ms
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=9.470283ms
+2026/10/01 14:46:02 request_id=96f7ee51a8901287bf8a4bffba0a9099 trace_id=a9c957982c93390eed65b08e5a5bf98d provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=17.474846ms
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=19.340972ms
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=34.361906ms
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=36.199885ms
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=36.506429ms
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=35.623048ms
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=36.216178ms
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=3.475561ms
+2026/10/01 14:46:02 request_id=86ec09b756cfa637fc7f92041c52e290 trace_id=3aec2a038a0acbc428a322b93844f807 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=2.804284ms
+2026/10/01 14:46:02 request_id=b18560ef1e6efc042257a75629aff175 trace_id=8ae465901db2141448409837ea86ab0b provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=3.992786ms
+2026/10/01 14:46:02 request_id=063c853411156041f73ecc4e93ea525d trace_id=399d56e77eac5a13aa0f5e653bd57dc8 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=9.361377ms
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=7.72255ms
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=10.39153ms
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=3.727747ms
+2026/10/01 14:46:02 request_id=a714ba09b3ad18b4e314aa7a2bb1a260 trace_id=3aa482221f47ce1ef4b6095097ccfda1 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=3.464083ms
+2026/10/01 14:46:02 request_id=0c9c73c7372880ce0610d7c8084bae9f trace_id=9069012cbf7f68f9b67a0a44198c5f5f provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=3.559807ms
+2026/10/01 14:46:02 request_id=7fd85b8180e353d30327cefc890c23fc trace_id=6ee036059f2fbd219ecc56a3b7238267 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=6.272816ms
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=3.981988ms
+2026/10/01 14:46:02 request_id=717cf58ff44c422ddad77344321a5b87 trace_id=dee6f8d2b3d4f04bd1e01ea834c642c2 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=8.200639ms
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=3.874885ms
+2026/10/01 14:46:02 request_id=7c3e798c215e0e83fea76f6448faaf07 trace_id=baaa8a7cc7fafe8fbef8ec4a1eb26102 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=10.445711ms
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=8.846285ms
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=9.544439ms
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=2.769401ms
+2026/10/01 14:46:02 request_id=acab73ef6e2c92ac205fe0fc3215ca70 trace_id=30d28c4f5799b6f66886af20e8659111 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=3.298882ms
+2026/10/01 14:46:02 request_id=cca67c51522c0f33de22b21d61a81ed3 trace_id=586b6b4bd43d66e035d7690f0f476f2a provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=5.286648ms
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=4.750829ms
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=2.925656ms
+2026/10/01 14:46:02 request_id=ccc06bdd0ed73b38e0dc9ad6324e91f9 trace_id=3d57b282aa54492774eee8d2a9350e10 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=3.92059ms
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=2.949564ms
+2026/10/01 14:46:02 request_id=b6c1fad4dab2a2f1ffee77f047b376a7 trace_id=bdcc2c8363baeed715b485208c42a93c provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=2.818218ms
+2026/10/01 14:46:02 request_id=1080dd0b1dca140216f333bdc034f304 trace_id=4c5e906f8ec756633785c9084e11030b provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=4.958062ms
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=2.874913ms
+2026/10/01 14:46:02 request_id=e3cbcf425c56b8c0e9e72602b2f22564 trace_id=c9031be7efaddac83a83606ffa2bd569 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=5.575088ms
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=3.396508ms
+2026/10/01 14:46:02 request_id=66c6ee6fdff6a2d87671e0650a849ccf trace_id=c0becf65846840e7e3178e604a81d81b provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=3.100358ms
+2026/10/01 14:46:02 request_id=21d5d61c25ea28811ce122482758fccb trace_id=5e76f34baafed1726f2d1c070b178f6a provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=4.645443ms
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=7.038956ms
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=7.078135ms
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=3.67492ms
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=3.671652ms
+2026/10/01 14:46:02 request_id=1fd6cdd21148484fd23cf963674431cd trace_id=1974f20589aa2b7991c95a4ab20f2dab provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 request_id=221f967f6311760c371dca17d0f76b14 trace_id=1e6ac0670922ed99ea404e51d5797ecb provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=3.163939ms
+2026/10/01 14:46:02 request_id=9ef64f35a2e0f0df34392f9e9d047b99 trace_id=07822b713ea4e2cac1b1c5bd7f1bc70b provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=5.270874ms
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=7.649927ms
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=5.113048ms
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=3.025538ms
+2026/10/01 14:46:02 request_id=e168b9bbc375ab04c84659e4efe7bd65 trace_id=c08efc9276464d023a6fab64e132a531 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=6.390039ms
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=3.236034ms
+2026/10/01 14:46:02 request_id=623521709880abe172de2306829e5633 trace_id=7d5bc861b14691f6155cdb4f07dd701a provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=4.211998ms
+2026/10/01 14:46:02 request_id=a6baf339c4851e30d1dec3641151bf49 trace_id=c30d49184918677904eb64939b993a71 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=3.942974ms
+2026/10/01 14:46:02 request_id=1603b76095c7fc6d9cf5bd8acf8de582 trace_id=286fe6baaac6cd7d172ac980c2114620 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=5.808273ms
+2026/10/01 14:46:02 billing finalization model=default result=ok latency=4.038522ms
+2026/10/01 14:46:02 request_id=ff9a5b684d4117a35f22bc776248719a trace_id=fd393535800615f6639688e1423ad708 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=7.38576ms
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=6.855474ms
+2026/10/01 14:46:02 billing admission model=default result=admitted latency=7.239404ms
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=6.180526ms
+2026/10/01 14:46:03 request_id=0fa3b22a23abdeabad230d60fdd622bc trace_id=76245b4553530100a644b13db5b34785 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=7.33469ms
+2026/10/01 14:46:03 request_id=50b8d06ad252d37188b6ddef4794e24e trace_id=3d45c9dc743e2b543988995a87ba888b provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=7.793461ms
+2026/10/01 14:46:03 request_id=66e87c8704a6a50dceb356aff0d2f6cb trace_id=069073b19969c093f7aa577ee83a12fd provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=12.824156ms
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=7.905397ms
+2026/10/01 14:46:03 request_id=bee07c29bd986a98ef4b5dceab1ae359 trace_id=83d12e2e3951e991c3aaa2a86d742d53 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=23.009073ms
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=20.60651ms
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=6.163105ms
+2026/10/01 14:46:03 request_id=050caecccb166e58bf2b0847a19fb041 trace_id=f1d7f0c92b8c731be59d3bf67818e7c0 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=6.540334ms
+2026/10/01 14:46:03 request_id=c83cdd39332d756894e9e044aff0295b trace_id=332153358258a1f8b8ce0c87ac528757 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=6.440587ms
+2026/10/01 14:46:03 request_id=4de0b505a8eb0ba5e05ba84c686f1b92 trace_id=e2d961c306f711eef75ce32de5628ba8 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=6.159289ms
+2026/10/01 14:46:03 request_id=c0b8293a944adc19578f9ac95b4d4aba trace_id=43c53168e54d91794ffca23c82d35d62 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=17.863465ms
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=14.388697ms
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=11.222715ms
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=15.415139ms
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=15.492853ms
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=3.359173ms
+2026/10/01 14:46:03 request_id=38df76efd401d1192afebfd21b4af208 trace_id=e153cef944208a2201b0e540d85f7783 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=4.045952ms
+2026/10/01 14:46:03 request_id=785506496a56d8adbd9865900d7d7379 trace_id=0e4d8e6c4dd96f0d5495fd8889b6f696 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=7.552497ms
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=3.976596ms
+2026/10/01 14:46:03 request_id=3a23b7a3ac335c64aa9d501738e6a625 trace_id=df829f1ad15a935a53af039b990222e6 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=6.425509ms
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=7.423499ms
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=2.813763ms
+2026/10/01 14:46:03 request_id=63c785b4a9c10bb37bfd3d0713c34add trace_id=0f98aee6897e74f53e8a283685e74de5 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=4.060161ms
+2026/10/01 14:46:03 request_id=cab817d60923d911fa98bb32de40ad61 trace_id=b10af937d7273cb3f18511d6da214dc5 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=4.140238ms
+2026/10/01 14:46:03 request_id=ae2f1f3e39166024343bd3383abe0891 trace_id=3c6b03303e845add29a121620ea383db provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=6.081952ms
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=12.656017ms
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=4.215442ms
+2026/10/01 14:46:03 request_id=e7fed4d1f942e6ac2f9bf6e9c1b2c4a6 trace_id=8b9156796f7dab06b88236fc98dd8a07 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=4.295225ms
+2026/10/01 14:46:03 request_id=36a5239fc6299d30a36f5473f1353210 trace_id=90f9c70d0c0f0e9981e8cfa7cc6b84af provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=11.070865ms
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=8.739466ms
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=10.812235ms
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=3.299538ms
+2026/10/01 14:46:03 request_id=e307f3612c04337b7c15b7dceaa025eb trace_id=37baaa40a4f90ae1386d3079a106d07a provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=4.263841ms
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=2.140689ms
+2026/10/01 14:46:03 request_id=726c9099bd65692b38c1b5bc97a3abaf trace_id=f4ba1583cf81f0fb39c4f6c0c44740de provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=2.7399ms
+2026/10/01 14:46:03 request_id=42f08976fd98e1d53798cd89f4312643 trace_id=e0edf6ed608f5ebe9e3963eb88cde231 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=4.565725ms
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=4.728688ms
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=2.950993ms
+2026/10/01 14:46:03 request_id=dfed05556c28404bfa9b86dfe0bb5fe3 trace_id=4956162306ff5c0cb44365d70b22face provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=3.332558ms
+2026/10/01 14:46:03 request_id=bfb006c7ab6812792fdf933fa7a92b55 trace_id=e29b96d9c84d2f0ecd18a0bb32ee2731 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=5.124153ms
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=3.301391ms
+2026/10/01 14:46:03 request_id=3425df0283927dc0ce74a807818daa64 trace_id=3a263025f01d2ac8a38b374c41201093 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=5.514435ms
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=2.609399ms
+2026/10/01 14:46:03 request_id=a28584d62c30a077aa39bf78fa75a322 trace_id=ebce57753c16b0984e6db5c344b85e28 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=4.534122ms
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=2.521744ms
+2026/10/01 14:46:03 request_id=ffc5bb749ac6422d25fea3fd85e67ada trace_id=749a99f8a027d205ade6b6d3d0e0fcc7 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=4.986451ms
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=5.122281ms
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=3.354864ms
+2026/10/01 14:46:03 request_id=6589dc57c70c40267aa8cd5a9fbfaa7c trace_id=908edb527f4ad4ff58e5ed8fe0acb35b provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=4.361353ms
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=3.025568ms
+2026/10/01 14:46:03 request_id=f72945f8042626ad50f7d381fd31892f trace_id=f92cd13c9c7a1373547ae96d37c00386 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=2.983938ms
+2026/10/01 14:46:03 request_id=a84c1d1e82d227cc1d0c77c440db5d11 trace_id=f1b8778bcbbddb711a03cd0cd42ffb67 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=5.021702ms
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=4.269675ms
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=4.030293ms
+2026/10/01 14:46:03 request_id=c5203d8932ae95886ede1cd7058f3c32 trace_id=cda8ec79a4850d39374067ed571c306c provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=4.118648ms
+2026/10/01 14:46:03 request_id=16e9b024e5b01aa06dd01dd940ccdc1a trace_id=eac1479e0fe3a26c2fdcab890c0b255d provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=7.98316ms
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=4.145331ms
+2026/10/01 14:46:03 request_id=06c21140dad6c34d33f15fa25456868d trace_id=e6e6fe2e8c39fc0e4c5eadc8b21f5752 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=7.170384ms
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=3.64132ms
+2026/10/01 14:46:03 request_id=c65c29e5b5432d898f1aaaeaa033e8c3 trace_id=e06f40a1f3dafe1d1989e34524faec8c provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=3.536451ms
+2026/10/01 14:46:03 request_id=b90b0ba0058ef6157d6e33a8327020fc trace_id=e86e6038b62021dd04cfcdc1c10a6a43 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=6.505619ms
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=5.34151ms
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=5.677596ms
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=3.250973ms
+2026/10/01 14:46:03 request_id=e1a09aa74ab1508f1702533df03361df trace_id=a3d6f84181dbe78921322def254b5536 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=9.266691ms
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=5.532089ms
+2026/10/01 14:46:03 request_id=68d6da7bc90342ea105eed28cceda43b trace_id=56e0b10914224a2b93101faebdb45728 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=6.381651ms
+2026/10/01 14:46:03 request_id=c0e871ed236ac1485df7c801ab09e25d trace_id=e7040ffbb25e2f129c1a209f5675979a provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=9.831592ms
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=11.044981ms
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=5.940928ms
+2026/10/01 14:46:03 request_id=ddef6e0d8ca0873d2a6ff0e147e8a3aa trace_id=b22250dde08482bcdbf39568f6d453c9 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=5.36133ms
+2026/10/01 14:46:03 request_id=bffd516ffeebcd0f4616bee502b0edf3 trace_id=bfd6f8d23e70a9739d77a702d62500d1 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=7.083908ms
+2026/10/01 14:46:03 request_id=458708ab639bfe5d4da31e5082fe4945 trace_id=86466ad10b1a4b4a5e2745815401c47b provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=7.19293ms
+2026/10/01 14:46:03 request_id=82e77f9f1ad482201bea22d34fdd725b trace_id=064933c6ffac21f0a1f14c96a78bcf78 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=12.095617ms
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=6.861825ms
+2026/10/01 14:46:03 request_id=a82d15e109c0fc892f002e540e3199e8 trace_id=8f47976a901532d65730ffd6acf60553 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=12.532689ms
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=14.658776ms
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=15.860254ms
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=16.524601ms
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=3.828052ms
+2026/10/01 14:46:03 request_id=3a3977d9272bc9ae6ee22deefdbb665d trace_id=aac1ccc5e39358512f33b06686b985d5 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=5.363377ms
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=2.862978ms
+2026/10/01 14:46:03 request_id=9698016cee86f0fd0c850fb1c50ddea4 trace_id=c19c632c0f02f2f0498e5de13cc06e19 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=3.440789ms
+2026/10/01 14:46:03 request_id=92ac76e13cd2e223505f62da9f3f401c trace_id=fd41190dc19dea4a27c4a854657a4a53 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=5.970766ms
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=7.269253ms
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=3.110207ms
+2026/10/01 14:46:03 request_id=4ecd4a7dc7c86b8ff2a3f3a4e3283fb5 trace_id=692de5c2acf98eae250ff252f5856289 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=3.243106ms
+2026/10/01 14:46:03 request_id=ed7a3b3452b62ea21247e114ed1aa85c trace_id=07266e73cb7a4550d3418996c3d3b709 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=8.573136ms
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=9.09964ms
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=3.623585ms
+2026/10/01 14:46:03 request_id=1860c66cbdf66042935e7f21bd7329d8 trace_id=75b13c6dee15cea9ab48645795c3d8ff provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=4.019619ms
+2026/10/01 14:46:03 request_id=cfc137514b661e65db5d1d868712c587 trace_id=ca0f7fbae6cde63f8b284c14ced69fa8 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=4.373926ms
+2026/10/01 14:46:03 request_id=41262acdeba747532d3cd173f9c324a6 trace_id=475079d7bb929588daa7984eb5921a6d provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=6.393167ms
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=6.844721ms
+2026/10/01 14:46:03 billing admission model=default result=admitted latency=12.166353ms
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=3.057535ms
+2026/10/01 14:46:03 request_id=38291c0df18d78ab361547c5820c2004 trace_id=b962c8718fa5c26bd9a6113d056ccb3a provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=3.171912ms
+2026/10/01 14:46:03 request_id=944e9e6b4284ab6b40255f4795de41de trace_id=a7fd75c5b3a2e3422ff65189f795a2cf provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=3.452082ms
+2026/10/01 14:46:03 request_id=71e29eed332d137e9140b3c075d1c78d trace_id=bdd6f1dd418589b5aeef40ff8fdd5592 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=2.805172ms
+2026/10/01 14:46:03 request_id=37c6618a6cda37a694f0685341fca430 trace_id=93c407647bc400b80a99ce90935d5b49 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=2.601655ms
+2026/10/01 14:46:03 request_id=e6a224577cf226fa93271bdf1dc25ec4 trace_id=22d1dd8ad92c99ad498388305ff2da25 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=3.416577ms
+2026/10/01 14:46:03 request_id=4eb76451836ecad0dad198abbe420f34 trace_id=50b4e82260706d81e79e6ac1d8e1de0e provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=3.198633ms
+2026/10/01 14:46:03 request_id=6969f0b39c3952843063e306a0dca8ff trace_id=df2a362676309ebbc440642d8875d2ba provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:03 billing finalization model=default result=ok latency=3.347441ms
+2026/10/01 14:46:03 request_id=044946d948e7061801f043af9140b66f trace_id=a600989e610aca2e09a417314196086b provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:20 billing admission model=default result=admitted latency=7.961893ms
+2026/10/01 14:46:20 billing admission model=default result=admitted latency=11.266912ms
+2026/10/01 14:46:20 billing admission model=default result=admitted latency=15.571263ms
+2026/10/01 14:46:20 billing admission model=default result=admitted latency=18.412196ms
+2026/10/01 14:46:20 billing admission model=default result=admitted latency=21.418244ms
+2026/10/01 14:46:20 billing admission model=default result=admitted latency=24.671765ms
+2026/10/01 14:46:20 billing admission model=default result=admitted latency=27.628855ms
+2026/10/01 14:46:20 billing admission model=default result=admitted latency=31.884752ms
+2026/10/01 14:46:20 billing finalization model=default result=ok latency=4.466854ms
+2026/10/01 14:46:20 request_id=86ffc7555f10db433226c93f4f5cb565 trace_id=40ffd8f9246fbe14b1b84774800be776 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:20 billing finalization model=default result=ok latency=4.465806ms
+2026/10/01 14:46:20 request_id=e2a0e0806a79fafc11e8678f041abfcd trace_id=c40fe5572fc92c63244e1801149ce422 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:20 billing finalization model=default result=ok latency=4.027323ms
+2026/10/01 14:46:20 request_id=fabb9d50160b43d63da915cc911c1198 trace_id=14674b243349ca47822c4f6117035190 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:20 billing admission model=default result=admitted latency=6.140655ms
+2026/10/01 14:46:20 billing finalization model=default result=ok latency=4.286981ms
+2026/10/01 14:46:20 request_id=36a64eefb975f668cdec865786fe6461 trace_id=8762f18ff3bdd76d8afc8ecaedae289d provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:20 billing admission model=default result=admitted latency=8.785606ms
+2026/10/01 14:46:20 billing finalization model=default result=ok latency=5.472987ms
+2026/10/01 14:46:20 request_id=fd4d435a0925d0d17bdf91342dab3947 trace_id=e95cf15e34fa960b4a7cef4c16e7b822 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:20 billing finalization model=default result=ok latency=5.148976ms
+2026/10/01 14:46:20 request_id=470088ab3fed4e2240803ae7df09ed6e trace_id=652b61a7dc37e79af292461cee44a965 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:20 billing admission model=default result=admitted latency=9.649847ms
+2026/10/01 14:46:20 billing finalization model=default result=ok latency=6.65976ms
+2026/10/01 14:46:20 request_id=4d6ed061f1ce61cd81a9ed22551cc696 trace_id=1a078a429dd2f1349e482b680a908bff provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:20 billing admission model=default result=admitted latency=12.297175ms
+2026/10/01 14:46:20 billing finalization model=default result=ok latency=6.108341ms
+2026/10/01 14:46:20 request_id=df8f2767f49d24bd39c9875227e4e7cd trace_id=68f61af7a15b2aa6ef681776f521ec7d provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:20 billing admission model=default result=admitted latency=10.422376ms
+2026/10/01 14:46:20 billing admission model=default result=admitted latency=13.091026ms
+2026/10/01 14:46:20 billing admission model=default result=admitted latency=11.669817ms
+2026/10/01 14:46:20 billing admission model=default result=admitted latency=11.377579ms
+2026/10/01 14:46:20 billing finalization model=default result=ok latency=3.685275ms
+2026/10/01 14:46:20 request_id=43b17582426553773ba335a657268393 trace_id=6187a5ab94f7904af5225e50f1b5ed6c provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:20 billing finalization model=default result=ok latency=3.683498ms
+2026/10/01 14:46:20 request_id=51757b59ef50a46e05581f2aa4749dba trace_id=841165a561f0d0013551c89f6d73bc95 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:20 billing admission model=default result=admitted latency=9.169242ms
+2026/10/01 14:46:20 billing finalization model=default result=ok latency=4.669361ms
+2026/10/01 14:46:20 request_id=b5033a693c884a54b1ab1a5bcc1ea8a0 trace_id=9c924f10f3b2855b74f4511ec5f0e7a4 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:20 billing admission model=default result=admitted latency=7.301435ms
+2026/10/01 14:46:20 billing finalization model=default result=ok latency=4.523286ms
+2026/10/01 14:46:20 request_id=738007f63e8b066c47a4f330c9c350d5 trace_id=3d77c87f668ea1feadeb5ea5a2d502b3 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:20 billing admission model=default result=admitted latency=8.410631ms
+2026/10/01 14:46:20 billing finalization model=default result=ok latency=5.470232ms
+2026/10/01 14:46:20 request_id=620b685d176cffe668ffb6b531dfa31b trace_id=ab0b6866bcb34a3bf946a0a4fac11d69 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:20 billing finalization model=default result=ok latency=5.090125ms
+2026/10/01 14:46:20 request_id=e4c85fbb1af8a886718822b0d5da7d0f trace_id=a9b37aabba1ecdd21a06702110de4ecc provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:20 billing admission model=default result=admitted latency=8.086581ms
+2026/10/01 14:46:20 billing finalization model=default result=ok latency=5.145095ms
+2026/10/01 14:46:20 request_id=8d59eeea6f38011a01d204fe23597ab8 trace_id=145eca41c1bdb3939a6d9cf73e64b0fc provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:20 billing finalization model=default result=ok latency=6.229154ms
+2026/10/01 14:46:20 request_id=d669a0b175821497b0a0e2e9a65a1e1e trace_id=69f7434d758036b526408356731004f8 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:20 billing admission model=default result=admitted latency=9.402239ms
+2026/10/01 14:46:20 billing admission model=default result=admitted latency=11.778431ms
+2026/10/01 14:46:20 billing admission model=default result=admitted latency=13.018496ms
+2026/10/01 14:46:20 billing admission model=default result=admitted latency=14.26551ms
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=5.000792ms
+2026/10/01 14:46:21 request_id=c40933ccbf7cc0b138d73cdb38ed2fc6 trace_id=e20d72606b14257a76351f36f60a4eea provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=4.724375ms
+2026/10/01 14:46:21 request_id=e2779d16f8800de7b0f1fd580329b442 trace_id=1e1708f9c304ece82f7aae9d3f1248c7 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=7.231027ms
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=6.972382ms
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=4.14156ms
+2026/10/01 14:46:21 request_id=02673cd24ba181e9e658eb5de0dfa8da trace_id=aa8d7f82c57ad53edc9ff2ce0405dfc8 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=3.97667ms
+2026/10/01 14:46:21 request_id=da6dc42da17898714d8d627d77c6abcd trace_id=d85c8a4729299a5f1c6acc180b2079dc provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=6.221857ms
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=7.259104ms
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=4.174438ms
+2026/10/01 14:46:21 request_id=e75a2784a515cdb21077d6a299695050 trace_id=73fa7d60a3d1582f615b1361da0e1ffa provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=3.645698ms
+2026/10/01 14:46:21 request_id=dbcb0050dc500116979f6e70e34bc04c trace_id=11973eb6b27308910c814227ba4a8879 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=6.464143ms
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=3.745714ms
+2026/10/01 14:46:21 request_id=91f3752ee0fdf168fa060fdd38fb20f2 trace_id=898adc1c59b0784f84a0b43d9a091e2d provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=6.608924ms
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=4.777164ms
+2026/10/01 14:46:21 request_id=eae7f63f3d24eec5c3d0828d80fed58f trace_id=14b10274d4238f7124584b1bd50911d0 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=6.930779ms
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=6.594607ms
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=4.031692ms
+2026/10/01 14:46:21 request_id=eaa482da754b45d7c9d890fa24cae932 trace_id=e351d42c0b1e9df4fb751d4403238ec5 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=5.004952ms
+2026/10/01 14:46:21 request_id=a65bb29d86e8c3f06ea8fc20aa65513c trace_id=ba35c801eea97446c884f1959f337f34 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=7.572675ms
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=3.942347ms
+2026/10/01 14:46:21 request_id=fcd36f50e9edf7686e0f4da301be326d trace_id=70bdd87d9e4ee81afa1536c9df3858e5 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=7.404511ms
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=4.138817ms
+2026/10/01 14:46:21 request_id=361fdc03e4724a8ceafc6b41183bae37 trace_id=10a1e6e5e0d8e6269eca65bb05dbccf0 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=7.559017ms
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=7.53264ms
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=3.944155ms
+2026/10/01 14:46:21 request_id=1cdf9b631c41165df57ecdca80899f18 trace_id=c788d7b40616a970ef7471f24581391b provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=4.243514ms
+2026/10/01 14:46:21 request_id=732c20855f8fea180767812f2c44d59c trace_id=946841449b962e92c5d89243300f44a3 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=7.768296ms
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=4.217085ms
+2026/10/01 14:46:21 request_id=2af1071d33c69d49635fe824b4a99bc1 trace_id=674ce2602f8463c57150411100a33b37 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=6.800651ms
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=3.738501ms
+2026/10/01 14:46:21 request_id=31225468045b11c2c96c8bdf5f88c11e trace_id=34a51d1239d7fd9198f4a625bb2f524b provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=6.574589ms
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=5.628395ms
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=5.156092ms
+2026/10/01 14:46:21 request_id=3fa9586f245518ef0a1bccdfaef4eaab trace_id=e9e5be52ddfbc076a5b64a798aee0894 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=4.730143ms
+2026/10/01 14:46:21 request_id=d4a9ce11520d6e98e54b2dff2c9a2923 trace_id=9105ae6f61f7c19633d990e761d78c9d provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=8.840765ms
+2026/10/01 14:46:21 request_id=989fd50b737e23ebc6dae856353b8240 trace_id=c8d21734b788abaa60b495e5670020ed provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=13.677986ms
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=8.696701ms
+2026/10/01 14:46:21 request_id=5c411e01b40fb872c375d34f9638bc57 trace_id=091b1322157fcd772a2287841b20ee76 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=9.086376ms
+2026/10/01 14:46:21 request_id=ab85938432b68fe55b93568210c62a48 trace_id=99825b80f7453498ada6e7b333a704a2 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=9.389456ms
+2026/10/01 14:46:21 request_id=79de31d6d570ca80d44b316127bffa70 trace_id=93e80899129e9c4dec08983c0a7ea7b9 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=31.356228ms
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=8.363106ms
+2026/10/01 14:46:21 request_id=7afb543169e5c8e2de48ab0665a16783 trace_id=d1d41f48c34e0a5a1c1308e559237f33 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=9.333139ms
+2026/10/01 14:46:21 request_id=16ba1f744b073ff4ae80abb8a72bf259 trace_id=070e7b9e0048a09c6d8c8af8e56d93ac provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=28.455896ms
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=27.047978ms
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=40.485877ms
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=39.38677ms
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=41.476316ms
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=37.770377ms
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=4.352674ms
+2026/10/01 14:46:21 request_id=d06fe843932fefe333eb989afcc89780 trace_id=af46fe360e3016d5f5d3131400500c0c provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=8.060762ms
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=3.796662ms
+2026/10/01 14:46:21 request_id=b18b370f7a2c331effc2713b74e80ef5 trace_id=81f2b070c6bc6d69ad0496ce3607cb0c provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=6.421502ms
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=4.319783ms
+2026/10/01 14:46:21 request_id=116194ef03bbe436a966cfe986452c39 trace_id=0f79ea5b6df7a7d4886305f46af53279 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=4.906348ms
+2026/10/01 14:46:21 request_id=772665e582c4da41b2aed8ead97617fb trace_id=7c09219e080d61813f1deef10f4ba9ab provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=7.088351ms
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=10.547535ms
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=5.036234ms
+2026/10/01 14:46:21 request_id=664553e1b52d9f9cfe692a853d30812f trace_id=93a9a6985995ffd960e94be06a572c6e provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=5.524793ms
+2026/10/01 14:46:21 request_id=ac7c6d607f014f416f21d4af1745d0aa trace_id=252a6597e8ae6606b62b66d1657baeb8 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=5.011216ms
+2026/10/01 14:46:21 request_id=e76e4d885c21f347417d14e2c205f8b2 trace_id=9fc552bc8593c3ccedf9c82f886a1496 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=8.402212ms
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=4.669737ms
+2026/10/01 14:46:21 request_id=ce374903ae307f66a03fefc02c17e18a trace_id=ac314b70dfd48151c851a4f84b37da47 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=18.271068ms
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=19.46304ms
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=19.412806ms
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=3.490269ms
+2026/10/01 14:46:21 request_id=24f9f25c18de77c03cc2e6440c858bf8 trace_id=59073d65bff9db679dfd5dae7807a930 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=6.634066ms
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=4.300792ms
+2026/10/01 14:46:21 request_id=3a2108f17314097cd8c696dcf53bb113 trace_id=53be1505961f5cf9c0b4af52a3846feb provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=5.121355ms
+2026/10/01 14:46:21 request_id=c70e0cf4e0d0084ebaa893889e1a2ba7 trace_id=94099244aa4a9ba3ba51892ababe7ec7 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=12.665971ms
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=4.107078ms
+2026/10/01 14:46:21 request_id=8ffb415564b8888e0c56b9f10721ff74 trace_id=bd47e1ccc2935b31cfee780b308ebb49 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=8.718052ms
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=10.621667ms
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=4.655254ms
+2026/10/01 14:46:21 request_id=a0f9ce121ec7bdc971380aa23179b89c trace_id=96369c5360539b7851780b3721d3f5a7 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=6.52863ms
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=5.93253ms
+2026/10/01 14:46:21 request_id=3fad9fd99e5199e079bfb03037acc0c2 trace_id=c60e1cf2ab6415ca0068e007fe53dbb5 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=5.543937ms
+2026/10/01 14:46:21 request_id=003d704db00ae0163420730f965bb408 trace_id=b29ba9db2134236914595dc911f96392 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=4.737608ms
+2026/10/01 14:46:21 request_id=9e0ff7fd7d9595e14483c62a79f5f990 trace_id=8573b538f8da4be8fc689539141396c4 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=6.975206ms
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=7.351564ms
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=8.255992ms
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=3.749775ms
+2026/10/01 14:46:21 request_id=48074c659fa080be7f059751f2264d8a trace_id=26e8ca02bc8bde81e6256934603264bb provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=5.3784ms
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=7.582863ms
+2026/10/01 14:46:21 request_id=1cd497aff0f27348a92d38c03ffe306c trace_id=e5e0b62813af3107391515ce215f8604 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=7.267165ms
+2026/10/01 14:46:21 request_id=2d9af7554773ab3247bf4cd25dcd0b7d trace_id=cfa66af59f16faeadc735b5decf231fb provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=12.412006ms
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=6.739915ms
+2026/10/01 14:46:21 request_id=b35275d9d37485df9556bdebd2fb3bf4 trace_id=25544c9ca7acafc3a8911a8c20f33324 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=12.695855ms
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=6.477618ms
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=6.040443ms
+2026/10/01 14:46:21 request_id=fabd707720f3b4e507dea6fcfebdf8b8 trace_id=1911a56019f47fe9690264e68721c2d3 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=7.213288ms
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=5.233141ms
+2026/10/01 14:46:21 request_id=fae7389de1122f1aaf63bc6c37d27b1d trace_id=e1b3883cb35d8abccbe40ffc96595cab provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=3.881808ms
+2026/10/01 14:46:21 request_id=71a1153f01959fec881ce725d889ce13 trace_id=2c016a9c217eeb864c25fae09c617f3a provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=8.155156ms
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=4.079574ms
+2026/10/01 14:46:21 request_id=1220e70934dc27207f0526fe5177d8db trace_id=771b5c859bdd06f58d15524f4227bb20 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=8.009986ms
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=7.554817ms
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=4.076354ms
+2026/10/01 14:46:21 request_id=84855802b96e88ef5c88ee92ce0d097e trace_id=66889d70f16ad1789559df152fda5710 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=8.124337ms
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=11.236797ms
+2026/10/01 14:46:21 request_id=fcac376fce7462ad8de0e43b20540213 trace_id=8897a60182fc3966ca021b6e093ee70c provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=12.44218ms
+2026/10/01 14:46:21 request_id=95cd00163ce26be6066d6b7f49f383a2 trace_id=a4ad35366dc4ced6f0356794b14c8d7e provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=11.548662ms
+2026/10/01 14:46:21 request_id=e0d55f2906467e20f8f75b56567d4980 trace_id=6188120b575bf43e86110394265c7531 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:21 billing admission model=default result=admitted latency=16.832211ms
+2026/10/01 14:46:21 billing finalization model=default result=ok latency=8.7884ms
+2026/10/01 14:46:21 request_id=e9c3e5f2a80cb8dba36449bc4fa2c6d1 trace_id=93661d4de25551c329aac3ba21e6d5bc provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:22 billing finalization model=default result=ok latency=9.009094ms
+2026/10/01 14:46:22 request_id=cc80e22f6ace92533f963701b1c77790 trace_id=4eec0ae951ad0070bdbb969783619b3d provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:22 billing admission model=default result=admitted latency=29.677734ms
+2026/10/01 14:46:22 billing finalization model=default result=ok latency=8.224602ms
+2026/10/01 14:46:22 request_id=a243109baa89c51e8134a03cd3e1fc36 trace_id=3d210909b5a64d282a801098b16ccb1c provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:22 billing finalization model=default result=ok latency=7.285546ms
+2026/10/01 14:46:22 request_id=4a5cbd1b9aa0cc125c69989398ac17f8 trace_id=f165c34fbd1a1f4b63b6edd952554b70 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:22 billing admission model=default result=admitted latency=31.23826ms
+2026/10/01 14:46:22 billing admission model=default result=admitted latency=24.139217ms
+2026/10/01 14:46:22 billing admission model=default result=admitted latency=26.340967ms
+2026/10/01 14:46:22 billing admission model=default result=admitted latency=26.394194ms
+2026/10/01 14:46:22 billing admission model=default result=admitted latency=29.236223ms
+2026/10/01 14:46:22 billing finalization model=default result=ok latency=7.096792ms
+2026/10/01 14:46:22 request_id=17c618027860884cdf2253e6d66b6d1d trace_id=ed3803c288ed026f35faf5185dc2d5bf provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:22 billing admission model=default result=admitted latency=8.683766ms
+2026/10/01 14:46:22 billing finalization model=default result=ok latency=3.236327ms
+2026/10/01 14:46:22 request_id=5e1672e8b4bd9605f4716eb8a9b1b4df trace_id=e514fafcb7af4c1b4804e292652c879f provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:22 billing admission model=default result=admitted latency=7.399238ms
+2026/10/01 14:46:22 billing finalization model=default result=ok latency=3.085489ms
+2026/10/01 14:46:22 request_id=08bb6eed9bf5627e55aef3a38142e603 trace_id=0942794b6b102a63238169551b72281a provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:22 billing finalization model=default result=ok latency=4.421071ms
+2026/10/01 14:46:22 request_id=d61f6a3707ca719391106842a0c0662f trace_id=6784aef93df0ce0726d675de9530dcae provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:22 billing admission model=default result=admitted latency=8.043693ms
+2026/10/01 14:46:22 billing finalization model=default result=ok latency=4.24044ms
+2026/10/01 14:46:22 request_id=97cc871cbdc7055973bff43da4752192 trace_id=fb670674217fc1a15aa67e9182466af5 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:22 billing admission model=default result=admitted latency=8.715402ms
+2026/10/01 14:46:22 billing admission model=default result=admitted latency=15.294547ms
+2026/10/01 14:46:22 billing finalization model=default result=ok latency=4.807319ms
+2026/10/01 14:46:22 request_id=ba1902938aeeb50877360b5255916b98 trace_id=913823eb691910c4bff6843fcbbd2494 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:22 billing finalization model=default result=ok latency=4.212742ms
+2026/10/01 14:46:22 request_id=49f29cb653a63c6c0e867d649ac8d704 trace_id=b5de929f1a98913a7ba825f6aa6e9aa0 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:22 billing admission model=default result=admitted latency=8.129464ms
+2026/10/01 14:46:22 billing finalization model=default result=ok latency=4.598122ms
+2026/10/01 14:46:22 request_id=ca4cfef96296aa4fd3964aafb810204b trace_id=23c1348bf0bbd38c5b71c25f2b09fd97 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:22 billing admission model=default result=admitted latency=11.992732ms
+2026/10/01 14:46:22 billing admission model=default result=admitted latency=9.306577ms
+2026/10/01 14:46:22 billing finalization model=default result=ok latency=3.432253ms
+2026/10/01 14:46:22 request_id=e84c75266b7cb4812724cdb6889582c3 trace_id=3cad60160c4ad615a368b9bfc2488e64 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:22 billing admission model=default result=admitted latency=10.870891ms
+2026/10/01 14:46:22 billing finalization model=default result=ok latency=4.299124ms
+2026/10/01 14:46:22 request_id=d3e65fa4a78e328225de20a20aa42836 trace_id=7277d07ef413b660c014a4f39e82cb31 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:22 billing admission model=default result=admitted latency=6.476486ms
+2026/10/01 14:46:22 billing finalization model=default result=ok latency=3.14517ms
+2026/10/01 14:46:22 request_id=f49ab0b9f4eaf4adafbca2d046960cdb trace_id=7b6afa97580fe69966eccb6b1a938623 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:22 billing admission model=default result=admitted latency=8.787966ms
+2026/10/01 14:46:22 billing finalization model=default result=ok latency=5.132228ms
+2026/10/01 14:46:22 request_id=96c12ea7748e1fb9e5a35997e9a4fb38 trace_id=403f051afd7977bd1fdc679bbe5d7fdd provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:22 billing finalization model=default result=ok latency=4.749817ms
+2026/10/01 14:46:22 request_id=0c000621ccc5bdc3c13b7174b211dd62 trace_id=bb55c5ea495800b5d3dd97c5a095c9ea provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:22 billing admission model=default result=admitted latency=7.26826ms
+2026/10/01 14:46:22 billing finalization model=default result=ok latency=4.243771ms
+2026/10/01 14:46:22 request_id=4d528a5387922957bb4b46cbb6a988f2 trace_id=cdadb3ddc3a3e7c4ca794287aed54744 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:22 billing admission model=default result=admitted latency=15.626147ms
+2026/10/01 14:46:22 billing finalization model=default result=ok latency=4.978765ms
+2026/10/01 14:46:22 request_id=14c0e104c11f7b9be6373552d3b8f577 trace_id=348b7da44ac99f5cdf152ae918597f0e provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:22 billing admission model=default result=admitted latency=11.75439ms
+2026/10/01 14:46:22 billing finalization model=default result=ok latency=6.019396ms
+2026/10/01 14:46:22 request_id=cac871eaa68ea166ddc0efae8c89e1f4 trace_id=1ea236fc8beb5df9ca62d046b285fe26 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:22 billing admission model=default result=admitted latency=10.769975ms
+2026/10/01 14:46:22 billing admission model=default result=admitted latency=8.359367ms
+2026/10/01 14:46:22 billing finalization model=default result=ok latency=4.501748ms
+2026/10/01 14:46:22 request_id=d89f3d36ba20423b6e307bc7673f65e0 trace_id=062e061ab5bb174639ffc2ebe9f9efae provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:22 billing finalization model=default result=ok latency=4.373624ms
+2026/10/01 14:46:22 request_id=360297402eedbec5dfc0dd911ee92ac8 trace_id=4d63f8bdf3ec68d2f4a3c20000b3f343 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:22 billing finalization model=default result=ok latency=6.424778ms
+2026/10/01 14:46:22 request_id=6fc2878245ec14c2e5df9e83bb14cba5 trace_id=0c06339e176f44c957a8129441f4fb7e provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:22 billing finalization model=default result=ok latency=5.283637ms
+2026/10/01 14:46:22 request_id=18e3da786380025e4fd9b6f7d58041ce trace_id=5f265264510f17744674fdb5da539c85 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:22 billing finalization model=default result=ok latency=3.496868ms
+2026/10/01 14:46:22 request_id=0f581fcf8ec62ca4fbf4ddeaa624144d trace_id=9e546a63d90bb8fb5ad4fd9150ad806b provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:22 billing finalization model=default result=ok latency=3.925767ms
+2026/10/01 14:46:22 request_id=f89922e34ae77edb4891311415a44b6c trace_id=d07634fae53872e315c6b774fa0c0ad9 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:22 billing finalization model=default result=ok latency=4.591504ms
+2026/10/01 14:46:22 billing finalization model=default result=ok latency=3.917545ms
+2026/10/01 14:46:22 request_id=bd94c937488b9e1a9b16064a5dcef349 trace_id=fc8f4c85535a02e448e4bdc90c7194c3 provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:22 request_id=10effe23daa4ffc4ba6e5d6fb518f842 trace_id=f537d9e94f003abf4b2e7ae6dca0a37a provider=primary model=default usage={PromptTokens:12 CompletionTokens:8 TotalTokens:20}
+2026/10/01 14:46:23 billing admission model=t10-model result=admitted latency=7.16132ms
+2026/10/01 14:46:23 billing admission model=t10-model result=admitted latency=6.549517ms
+2026/10/01 14:46:23 billing admission model=t10-model result=admitted latency=6.395307ms
+2026/10/01 14:46:23 billing admission model=t10-model result=admitted latency=6.394685ms
+2026/10/01 14:46:23 billing admission model=t10-model result=admitted latency=5.685507ms
+2026/10/01 14:46:23 billing admission model=t10-model result=admitted latency=5.739742ms
+2026/10/01 14:46:31 billing finalization model=t10-model result=ok latency=3.529501ms
+2026/10/01 14:46:31 request_id=t10-iso03-3 trace_id=c21a05a1215c191afee7b8533ba9577c provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:14 TotalTokens:26}
+2026/10/01 14:46:31 billing finalization model=t10-model result=ok latency=3.117023ms
+2026/10/01 14:46:31 request_id=t10-iso03-2 trace_id=eda07819dbd255f8d89c6c47796817e8 provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:14 TotalTokens:26}
+2026/10/01 14:46:31 billing finalization model=t10-model result=ok latency=3.956926ms
+2026/10/01 14:46:31 request_id=t10-iso03-0 trace_id=dfbaa66954f2dfb554d60b999ea7de37 provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:14 TotalTokens:26}
+2026/10/01 14:46:31 billing finalization model=t10-model result=ok latency=2.885154ms
+2026/10/01 14:46:31 request_id=t10-iso03-1 trace_id=956a72c068d709d7bdf18a9e74709e0f provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:14 TotalTokens:26}
+2026/10/01 14:46:31 billing finalization model=t10-model result=ok latency=3.08855ms
+2026/10/01 14:46:31 request_id=t10-iso03-5 trace_id=1405af1607af19a42ada92369201ec31 provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:14 TotalTokens:26}
+2026/10/01 14:46:31 billing finalization model=t10-model result=ok latency=2.74062ms
+2026/10/01 14:46:31 request_id=t10-iso03-4 trace_id=0f0b96af2fd53d3cee1476909de25c08 provider=primary model=t10-model usage={PromptTokens:12 CompletionTokens:14 TotalTokens:26}
+2026/10/01 14:46:31 shutting down...
+2026/10/01 14:46:31 exit

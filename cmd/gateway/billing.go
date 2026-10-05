@@ -17,8 +17,10 @@ import (
 	"llm-gateway/internal/billing"
 	"llm-gateway/internal/gatewayguard"
 	"llm-gateway/internal/httperr"
+	"llm-gateway/internal/metrics"
 	"llm-gateway/internal/observability"
 	"llm-gateway/internal/proxy"
+	"llm-gateway/internal/testsupport/failpoint"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
@@ -37,6 +39,13 @@ type billingStore interface {
 	// RecordFailure ends an execution as failed without charge and returns the
 	// reservation exactly once.
 	RecordFailure(ctx context.Context, executionID, reason string) (billing.ExecutionResult, error)
+	// MarkAttemptAbandoned writes the durable "this attempt ended with a
+	// certain, receipt-less outcome" marker (F02-1). It moves no money and
+	// changes no status: T07B's recovery releases the reservation after its
+	// window, with the no-chargeable-receipt precondition and its audit row,
+	// and the marker is what lets that release stop requiring the owning
+	// process to be proven dead.
+	MarkAttemptAbandoned(ctx context.Context, executionID, reason string) (billing.ExecutionResult, error)
 	// FinalizeReceipt commits the durable usage receipt before "[DONE]".
 	FinalizeReceipt(ctx context.Context, params billing.FinalizeReceiptParams) (billing.FinalizeReceiptResult, error)
 	// RecordUsageException leaves the PG state of a boundary whose usage cannot
@@ -240,6 +249,18 @@ type billingAttempt struct {
 	// read after the response returned.
 	receipt   atomic.Bool
 	exception atomic.Bool
+	// exceptionVetoed is set as soon as a terminal boundary is refused for
+	// missing/invalid/self-contradicting usage, *before* the recorder is asked
+	// to persist it. Such a boundary is a review case (F04) even when the
+	// recorder's write fails, so it must never be mistaken for "no terminal
+	// boundary was ever seen" and marked abandoned.
+	exceptionVetoed atomic.Bool
+	// finalizeFailed is set when the durable finalization was attempted and did
+	// not succeed. That is the uncertain case — a COMMIT whose outcome is
+	// unknown, a refused write, PostgreSQL unreachable — where the upstream
+	// cost may be real and may still be chargeable. It keeps the hold and the
+	// T07B/review path: no abandonment marker is written for it.
+	finalizeFailed atomic.Bool
 }
 
 func (a *billingAdapter) attemptFromContext(ctx context.Context) *billingAttempt {
@@ -306,6 +327,16 @@ func (a *billingAdapter) admit(w http.ResponseWriter, r *http.Request) (*billing
 		return nil, admissionRefused
 	}
 
+	// T10 window: the identity is verified and the price is pinned, but no
+	// reservation exists yet. A kill here must leave no execution row and no
+	// held funds.
+	if err := failpoint.Hit("admission.before_reserve"); err != nil {
+		a.refuse(w, r, http.StatusServiceUnavailable, httperr.CodeBillingUnavailable,
+			"billing is unavailable; the request was not sent upstream")
+		a.observeAdmission(bounds.Model, "unavailable", time.Since(started))
+		return nil, admissionRefused
+	}
+
 	reservation, err := a.store.Reserve(r.Context(), billing.ReserveParams{
 		ExecutionID:       attribution.ExecutionID,
 		OrgID:             attribution.OrgID,
@@ -324,6 +355,17 @@ func (a *billingAdapter) admit(w http.ResponseWriter, r *http.Request) (*billing
 		log.Printf("request_id=%s execution_id=%s model=%s billing admission refused: %v", requestID, attribution.ExecutionID, bounds.Model, err)
 		a.refuse(w, r, status, code, message)
 		a.observeAdmission(bounds.Model, admissionResultLabel(err), time.Since(started))
+		return nil, admissionRefused
+	}
+
+	// T10 window: Reserve committed — the execution row exists and the funds
+	// are held — and MarkExecuting has not run. A kill here must leave a
+	// recoverable `reserved` execution, never an unbounded hold and never a
+	// blind TTL release (the T07B recovery owns it).
+	if err := failpoint.Hit("admission.after_reserve"); err != nil {
+		a.refuse(w, r, http.StatusServiceUnavailable, httperr.CodeBillingUnavailable,
+			"billing is unavailable; the request was not sent upstream")
+		a.observeAdmission(bounds.Model, "unavailable", time.Since(started))
 		return nil, admissionRefused
 	}
 
@@ -347,44 +389,149 @@ func (a *billingAdapter) admit(w http.ResponseWriter, r *http.Request) (*billing
 		a.observeAdmission(bounds.Model, "unavailable", time.Since(started))
 		return nil, admissionRefused
 	}
+	// T10 window: the execution is `executing` and the upstream call is about
+	// to start (the proxy runs next). A kill here means the upstream may or may
+	// not have been called, which is exactly the state recovery must treat as
+	// unknown rather than as "no cost".
+	if err := failpoint.Hit("admission.after_mark_executing"); err != nil {
+		a.refuse(w, r, http.StatusServiceUnavailable, httperr.CodeBillingUnavailable,
+			"billing is unavailable; the request was not sent upstream")
+		a.observeAdmission(bounds.Model, "unavailable", time.Since(started))
+		return nil, admissionRefused
+	}
 	a.observeAdmission(bounds.Model, "admitted", time.Since(started))
 	return attempt, admissionAdmitted
 }
 
-// releaseIfFailed returns the reservation when the proxy refused the request
-// before any upstream byte, and keeps it in every other case:
+// Attempt-abandonment reasons (F02-1). The vocabulary is closed and bounded on
+// purpose: the reason is written into billing_executions.terminal_reason as
+// "abandoned:<reason>" (where T07B matches it), it labels a Prometheus counter,
+// and it appears in the billing.execution.abandoned audit row. No status code,
+// organization, execution or client identity ever belongs in it.
+const (
+	// abandonedReasonClientCancelled: the client went away while the attempt was
+	// in flight (or before its first byte). Nothing the upstream produces can
+	// still be delivered or charged, and the platform policy for an undelivered
+	// answer is "the customer is not charged".
+	abandonedReasonClientCancelled = "client_cancelled"
+	// abandonedReasonStreamBroken: the upstream connection ended before its
+	// terminal event, so no usage and no end marker were ever seen. The stream
+	// reached the client incomplete, which is not billable and not settleable.
+	abandonedReasonStreamBroken = "upstream_stream_broken"
+	// abandonedReasonNoResponse: the attempt ended without the proxy writing a
+	// single response byte and without the client's context ending (a provider
+	// failure while the client was already gone, a write failure). No durable
+	// decision exists and none can be reconstructed from the wire.
+	abandonedReasonNoResponse = "attempt_ended_without_response"
+	// abandonedReasonReleaseWriteFailed: the confirmed pre-first-byte failure
+	// could not apply its immediate RecordFailure write. The execution has no
+	// receipt and cannot have one, so the durable marker is what keeps it
+	// recoverable by the window instead of held forever by a live owner.
+	abandonedReasonReleaseWriteFailed = "release_write_failed"
+)
+
+// releaseIfFailed decides the reservation's fate after the response returned.
+// The decision tree is the money policy, so it is spelled out:
 //
-//   - a durable receipt or exception was committed: T07 settles, never T06C;
-//   - HTTP 2xx committed (SSE started, client cancelled, usage unknown): the
-//     upstream cost may exist, so the reservation stays and T07B's recovery
-//     decides with an execution-state check and an audit trail;
-//   - no response at all (client vanished mid-admission): the execution row is
-//     the anchor, not a licence to release.
+//   - a durable receipt or usage exception was committed: T07 owns the
+//     execution (settlement or the review queue). Nothing to do;
+//   - the finalization was attempted and failed: the outcome is *uncertain*
+//     (COMMIT unknown, a refused write, PostgreSQL unreachable). The upstream
+//     cost may be real and may still be chargeable, so the reservation stays
+//     held and T07B/review owns it. This is the path
+//     cmd/gateway/billing_http_integration_test.go pins as "a failed
+//     finalization must not silently release money";
+//   - a terminal boundary was refused for missing/invalid usage: that is the
+//     F04 review case even when the exception record could not be written, so
+//     it is not an abandonment either;
+//   - HTTP >= 400 (no byte ever reached the client, so no gate ran and no
+//     receipt can exist): the attempt failed before the first byte and the
+//     reservation is returned *now* through RecordFailure. If even that write
+//     cannot be applied, the durable abandonment marker keeps the execution
+//     recoverable instead of held forever;
+//   - anything else with no durable decision: the attempt is over and no
+//     receipt can exist (mid-stream break, client cancel, an attempt that ended
+//     with no response at all). The gateway writes the durable abandonment
+//     marker and T07B releases after its window — it never releases here, so
+//     the money decision keeps its audit trail and its receipt precondition.
 func (a *billingAdapter) releaseIfFailed(r *http.Request, status *billingStatusWriter, attempt *billingAttempt) {
 	if attempt == nil || attempt.receipt.Load() || attempt.exception.Load() {
 		return
 	}
-	if status.status == 0 || status.status < http.StatusBadRequest {
-		// Either a successful stream (the reservation is settled by T07) or an
-		// aborted request with no terminal answer. Releasing here would guess.
-		log.Printf("execution_id=%s billing reservation kept (http_status=%d, no durable receipt); T07 recovery owns this execution",
+	if attempt.finalizeFailed.Load() {
+		log.Printf("execution_id=%s billing reservation kept (http_status=%d, finalization outcome unknown); the hold and the T07B/review path own this execution",
 			attempt.executionID, status.status)
 		return
 	}
-	reason := fmt.Sprintf("gateway: upstream request failed before the first byte (http_status=%d)", status.status)
-	a.recordFailure(r, attempt.executionID, reason)
+	if attempt.exceptionVetoed.Load() {
+		log.Printf("execution_id=%s billing reservation kept (http_status=%d, terminal boundary refused for unknown usage); the review queue owns this execution",
+			attempt.executionID, status.status)
+		return
+	}
+	if status.status >= http.StatusBadRequest {
+		// A pre-first-byte provider failure: the proxy wrote the unified error
+		// envelope, so not a single upstream byte reached the client and no
+		// terminal gate ever ran. The reservation is returned immediately;
+		// recordFailure falls back to the durable marker if that write fails.
+		a.recordFailure(r, attempt.executionID,
+			fmt.Sprintf("gateway: upstream request failed before the first byte (http_status=%d)", status.status))
+		return
+	}
+	reason := abandonedReasonNoResponse
+	switch {
+	case r.Context().Err() != nil:
+		reason = abandonedReasonClientCancelled
+	case status.status >= http.StatusOK && status.status < http.StatusBadRequest:
+		// Bytes were committed to the client and the stream ended without a
+		// terminal event.
+		reason = abandonedReasonStreamBroken
+	}
+	a.markAttemptAbandoned(r, attempt.executionID, reason)
+}
+
+// markAttemptAbandoned writes the durable evidence that an attempt ended with a
+// certain, receipt-less outcome, so T07B's recovery can release the reservation
+// after its window even while this process is alive. It never moves money and
+// never changes the execution's status: it is a statement about the attempt, not
+// a release decision. The client may already be gone, so the write uses the same
+// detached, bounded context as every other post-response write.
+func (a *billingAdapter) markAttemptAbandoned(r *http.Request, executionID, reason string) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), a.decisionTimeout)
+	defer cancel()
+	if _, err := a.store.MarkAttemptAbandoned(ctx, executionID, reason); err != nil {
+		log.Printf("execution_id=%s reason=%s billing attempt abandonment could not be recorded (reservation kept for T07 recovery): %v",
+			executionID, reason, err)
+		return
+	}
+	metrics.GatewayBillingAttemptAbandonedTotal.WithLabelValues(reason).Inc()
+	log.Printf("execution_id=%s reason=%s billing attempt marked abandoned (%s%s): no chargeable receipt, no status change, no money moved; T07 recovery releases after the window",
+		executionID, reason, billing.AbandonedReasonPrefix, reason)
 }
 
 // recordFailure ends an execution as failed without charge. The client may
 // already be gone, so the write uses a bounded context detached from the
 // request; a failure here leaves the execution row (still holding the
 // reservation) as the recovery anchor and is logged, never retried inline.
+//
+// A *refused* failure (the execution is terminal, or a chargeable receipt says
+// it must be settled) is another path's decision, not a failure of this write:
+// it is logged and left alone, because an abandonment marker would be refused
+// for exactly the same reason. An operational failure, on the other hand, means
+// the customer's funds are still held with no durable statement about why, so
+// the abandonment marker is written as the fallback: the execution stays
+// recoverable by T07B's window instead of being held forever by a live owner.
 func (a *billingAdapter) recordFailure(r *http.Request, executionID, reason string) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), a.decisionTimeout)
 	defer cancel()
-	if _, err := a.store.RecordFailure(ctx, executionID, reason); err != nil {
-		log.Printf("execution_id=%s billing record-failure failed (reservation kept for T07 recovery): %v", executionID, err)
+	_, err := a.store.RecordFailure(ctx, executionID, reason)
+	if err == nil {
+		return
 	}
+	log.Printf("execution_id=%s billing record-failure failed (reservation kept for T07 recovery): %v", executionID, err)
+	if errors.Is(err, billing.ErrExecutionState) || errors.Is(err, billing.ErrExecutionHasReceipt) {
+		return
+	}
+	a.markAttemptAbandoned(r, executionID, abandonedReasonReleaseWriteFailed)
 }
 
 // Finalize implements proxy.Finalizer: it commits the durable usage receipt
@@ -412,6 +559,12 @@ func (a *billingAdapter) Finalize(ctx context.Context, req proxy.FinalizeRequest
 		Model:        req.Model,
 	})
 	if err != nil {
+		if attempt != nil {
+			// The outcome is unknown (COMMIT unknown, refused write, PostgreSQL
+			// unreachable): this attempts is never marked abandoned, so the
+			// hold and the review/recovery path stay in charge of the money.
+			attempt.finalizeFailed.Store(true)
+		}
 		result := finalizationResultLabel(err)
 		if errors.Is(err, billing.ErrExecutionState) && a.recordLateUsage(ctx, req, err) {
 			// The execution ended (typically an audited recovery release) and a
@@ -437,6 +590,14 @@ func (a *billingAdapter) Finalize(ctx context.Context, req proxy.FinalizeRequest
 	if result.CommitUnknownResolved {
 		log.Printf("execution_id=%s billing COMMIT outcome was unknown; the re-query found the committed receipt (no second charge)", req.ExecutionID)
 	}
+	// T10 window: the durable receipt is committed and the gate has not
+	// released "[DONE]" yet. A kill here must leave the receipt as the charge
+	// of record — the client never saw a clean end, and the upstream cost is
+	// real, so this is billable, not refundable.
+	if err := failpoint.Hit("receipt.after_commit_before_done"); err != nil {
+		a.observeFinalization(req.Model, finalizationResultLabel(err), time.Since(started))
+		return err
+	}
 	a.observeFinalization(req.Model, finalizationResultLabel(nil), time.Since(started))
 	return nil
 }
@@ -453,6 +614,13 @@ func (a *billingAdapter) RecordUsageException(ctx context.Context, req proxy.Fin
 		return errors.New("billing: a usage exception requires an execution identity")
 	}
 	attempt := a.attemptFromContext(ctx)
+	if attempt != nil {
+		// Recorded before the write is attempted: the veto is the decision, and
+		// a recorder that cannot write must not turn a refused terminal boundary
+		// (missing/invalid usage, F04) into an "attempt ended with no decision"
+		// that the abandonment path could then release.
+		attempt.exceptionVetoed.Store(true)
+	}
 	started := time.Now()
 	_, err := a.store.RecordUsageException(ctx, billing.UsageExceptionParams{
 		ExecutionID: req.ExecutionID,
@@ -498,6 +666,8 @@ func (a *billingAdapter) recordLateUsage(ctx context.Context, req proxy.Finalize
 			req.ExecutionID, req.EventID, err)
 		return false
 	}
+	log.Printf("execution_id=%s event_id=%s billing late usage recorded as a settlement anomaly (the execution can no longer be charged: no receipt, no money moved)",
+		req.ExecutionID, req.EventID)
 	return true
 }
 

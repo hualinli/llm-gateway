@@ -1,0 +1,12 @@
+HTTP 401 (0.001s)
+Server: hertz
+Date: Thu, 01 Oct 2026 06:44:34 GMT
+Content-Type: application/json
+Content-Length: 104
+X-Request-Id: t10-SEC-03-04
+X-Trace-Id: a74d1b5f3b5fc4e0a9bbe65390fbac89
+X-Content-Type-Options: nosniff
+Set-Cookie: gw_session=; max-age=0; path=/; HttpOnly; SameSite=Lax
+Set-Cookie: gw_csrf=; max-age=0; path=/; HttpOnly; SameSite=Lax
+
+{"error":{"code":"unauthorized","message":"session is invalid or expired","request_id":"t10-SEC-03-04"}}

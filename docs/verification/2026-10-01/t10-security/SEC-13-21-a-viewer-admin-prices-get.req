@@ -1,0 +1,6 @@
+GET http://127.0.0.1:58872/api/v1/admin/prices
+X-Request-ID: t10-SEC-13-21
+Accept: application/json
+Cookie: gw_session=_oFu…<redacted:18>; gw_csrf=7AjC…<redacted:18>
+X-CSRF-Token: 7AjC…<redacted:18>
+

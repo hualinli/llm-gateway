@@ -1,0 +1,43 @@
+2026/10/01 14:47:02 runtime profile=demo WARNING: demo mode, production checks are not enforced
+2026/10/01 14:47:02 WARNING: production check failed: CONTROL_REQUIRE_ADMIN_AUTH: must be true: the HTTP admin API cannot be anonymous in production
+2026/10/01 14:47:02 WARNING: production check failed: CONTROL_IDENTITY_SIGNING_SECRET: must be at least 16 characters
+2026/10/01 14:47:02 WARNING: production check failed: CONTROL_ALLOW_INSECURE_CREDENTIAL_RESOLVE: must not be enabled: provider credentials may only be resolved over mTLS gRPC
+2026/10/01 14:47:02 WARNING: production check failed: CONTROL_TLS_CERT_FILE/CONTROL_TLS_KEY_FILE: must both be set: control gRPC must not serve plaintext in production
+2026/10/01 14:47:02 WARNING: production check failed: CONTROL_TLS_REQUIRE_CLIENT_CERT/CONTROL_TLS_CA_FILE: must require client certificates and set the client CA file so gateway connections are mutually authenticated
+2026/10/01 14:47:02 WARNING: production check failed: CONTROL_DIAGNOSTICS_ADDR: must be set to a listener address different from the HTTP admin address "127.0.0.1:50443"
+2026/10/01 14:47:02 control store: postgres connected
+2026/10/01 14:47:02 control: restored v10 from store
+2026/10/01 14:47:02 control gateway status store: postgres (durable instance heartbeats)
+2026/10/01 14:47:02 provider credential resolve: CONTROL_ALLOW_INSECURE_CREDENTIAL_RESOLVE=true enables insecure local demo transport
+2026/10/01 14:47:02 provider credential master key loaded key_id=df9cc2555e2512d4
+2026/10/01 14:47:02 provider credential master key cannot decrypt active credentials
+2026/10/01 14:47:02 runtime profile=demo WARNING: demo mode, production checks are not enforced
+2026/10/01 14:47:02 WARNING: production check failed: CONTROL_REQUIRE_ADMIN_AUTH: must be true: the HTTP admin API cannot be anonymous in production
+2026/10/01 14:47:02 WARNING: production check failed: CONTROL_IDENTITY_SIGNING_SECRET: must be at least 16 characters
+2026/10/01 14:47:02 WARNING: production check failed: CONTROL_ALLOW_INSECURE_CREDENTIAL_RESOLVE: must not be enabled: provider credentials may only be resolved over mTLS gRPC
+2026/10/01 14:47:02 WARNING: production check failed: CONTROL_TLS_CERT_FILE/CONTROL_TLS_KEY_FILE: must both be set: control gRPC must not serve plaintext in production
+2026/10/01 14:47:02 WARNING: production check failed: CONTROL_TLS_REQUIRE_CLIENT_CERT/CONTROL_TLS_CA_FILE: must require client certificates and set the client CA file so gateway connections are mutually authenticated
+2026/10/01 14:47:02 WARNING: production check failed: CONTROL_DIAGNOSTICS_ADDR: must be set to a listener address different from the HTTP admin address "127.0.0.1:50443"
+2026/10/01 14:47:02 control store: postgres connected
+2026/10/01 14:47:02 control: restored v10 from store
+2026/10/01 14:47:02 control gateway status store: postgres (durable instance heartbeats)
+2026/10/01 14:47:02 provider credential resolve: CONTROL_ALLOW_INSECURE_CREDENTIAL_RESOLVE=true enables insecure local demo transport
+2026/10/01 14:47:02 provider credential master key is not loaded; credential operations fail closed
+2026/10/01 14:47:02 provider credential master key cannot decrypt active credentials
+2026/10/01 14:47:02 runtime profile=demo WARNING: demo mode, production checks are not enforced
+2026/10/01 14:47:02 WARNING: production check failed: CONTROL_REQUIRE_ADMIN_AUTH: must be true: the HTTP admin API cannot be anonymous in production
+2026/10/01 14:47:02 WARNING: production check failed: CONTROL_IDENTITY_SIGNING_SECRET: must be at least 16 characters
+2026/10/01 14:47:02 WARNING: production check failed: CONTROL_ALLOW_INSECURE_CREDENTIAL_RESOLVE: must not be enabled: provider credentials may only be resolved over mTLS gRPC
+2026/10/01 14:47:02 WARNING: production check failed: CONTROL_TLS_CERT_FILE/CONTROL_TLS_KEY_FILE: must both be set: control gRPC must not serve plaintext in production
+2026/10/01 14:47:02 WARNING: production check failed: CONTROL_TLS_REQUIRE_CLIENT_CERT/CONTROL_TLS_CA_FILE: must require client certificates and set the client CA file so gateway connections are mutually authenticated
+2026/10/01 14:47:02 WARNING: production check failed: CONTROL_DIAGNOSTICS_ADDR: must be set to a listener address different from the HTTP admin address "127.0.0.1:50443"
+2026/10/01 14:47:02 control store: postgres connected
+2026/10/01 14:47:02 control: restored v10 from store
+2026/10/01 14:47:02 control gateway status store: postgres (durable instance heartbeats)
+2026/10/01 14:47:02 provider credential resolve: CONTROL_ALLOW_INSECURE_CREDENTIAL_RESOLVE=true enables insecure local demo transport
+2026/10/01 14:47:02 provider credential master key loaded key_id=84d196c45702ea29
+2026/10/01 14:47:02 control admin service enabled for console identity "console"
+2026/10/01 14:47:02 control ready gRPC 127.0.0.1:50442 http 127.0.0.1:50443
+2026/10/01 14:47:02 control http listening on 127.0.0.1:50443
+2026/10/01 14:47:02 control listening on 127.0.0.1:50442
+2026/10/01 14:50:49 control exit

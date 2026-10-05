@@ -1,0 +1,52 @@
+2026/10/01 14:44:26 runtime profile=demo WARNING: demo mode, production checks are not enforced
+2026/10/01 14:44:26 WARNING: production check failed: CONTROL_REQUIRE_ADMIN_AUTH: must be true: the HTTP admin API cannot be anonymous in production
+2026/10/01 14:44:26 WARNING: production check failed: CONTROL_IDENTITY_SIGNING_SECRET: must be at least 16 characters
+2026/10/01 14:44:26 WARNING: production check failed: CONTROL_TLS_CERT_FILE/CONTROL_TLS_KEY_FILE: must both be set: control gRPC must not serve plaintext in production
+2026/10/01 14:44:26 WARNING: production check failed: CONTROL_TLS_REQUIRE_CLIENT_CERT/CONTROL_TLS_CA_FILE: must require client certificates and set the client CA file so gateway connections are mutually authenticated
+2026/10/01 14:44:26 WARNING: production check failed: CONTROL_DIAGNOSTICS_ADDR: must be set to a listener address different from the HTTP admin address "127.0.0.1:58862"
+2026/10/01 14:44:26 control store: postgres connected
+2026/10/01 14:44:26 control gateway status store: postgres (durable instance heartbeats)
+2026/10/01 14:44:26 provider credential resolve disabled until mTLS is configured; set CONTROL_ALLOW_INSECURE_CREDENTIAL_RESOLVE=true only for local demo
+2026/10/01 14:44:26 provider credential master key is not loaded; credential operations fail closed
+2026/10/01 14:44:26 control admin service enabled for console identity "console"
+2026/10/01 14:44:26 control ready gRPC 127.0.0.1:58859 http 127.0.0.1:58862
+2026/10/01 14:44:26 control http listening on 127.0.0.1:58862
+2026/10/01 14:44:26 control listening on 127.0.0.1:58859
+2026/10/01 14:44:27 control: apply version=1 keys=0 routes=2 providers=1
+2026/10/01 14:44:32 control: admin snapshot version=2 keys=0 published
+2026/10/01 14:44:33 control: admin snapshot version=3 keys=0 published
+2026/10/01 14:44:33 control: admin snapshot version=4 keys=1 published
+2026/10/01 14:44:33 control: admin snapshot version=5 keys=2 published
+2026/10/01 14:44:33 control: admin snapshot version=6 keys=3 published
+2026/10/01 14:44:33 control: admin snapshot version=7 keys=4 published
+2026/10/01 14:44:33 control: admin snapshot version=8 keys=5 published
+2026/10/01 14:44:34 control: admin snapshot version=9 keys=6 published
+2026/10/01 14:44:34 control: admin snapshot version=10 keys=6 published
+2026/10/01 14:44:34 control: admin snapshot version=11 keys=6 published
+2026/10/01 14:44:38 control: admin snapshot version=12 keys=6 published
+2026/10/01 14:44:42 control: admin snapshot version=13 keys=6 published
+2026/10/01 14:44:51 control: apply version=14 keys=6 routes=2 providers=1
+2026/10/01 14:45:22 control: admin snapshot version=15 keys=6 published
+2026/10/01 14:45:22 control exit
+2026/10/01 14:45:32 runtime profile=demo WARNING: demo mode, production checks are not enforced
+2026/10/01 14:45:32 WARNING: production check failed: CONTROL_REQUIRE_ADMIN_AUTH: must be true: the HTTP admin API cannot be anonymous in production
+2026/10/01 14:45:32 WARNING: production check failed: CONTROL_IDENTITY_SIGNING_SECRET: must be at least 16 characters
+2026/10/01 14:45:32 WARNING: production check failed: CONTROL_TLS_CERT_FILE/CONTROL_TLS_KEY_FILE: must both be set: control gRPC must not serve plaintext in production
+2026/10/01 14:45:32 WARNING: production check failed: CONTROL_TLS_REQUIRE_CLIENT_CERT/CONTROL_TLS_CA_FILE: must require client certificates and set the client CA file so gateway connections are mutually authenticated
+2026/10/01 14:45:32 WARNING: production check failed: CONTROL_DIAGNOSTICS_ADDR: must be set to a listener address different from the HTTP admin address "127.0.0.1:58862"
+2026/10/01 14:45:32 control store: postgres connected
+2026/10/01 14:45:32 control: restored v15 from store
+2026/10/01 14:45:32 control gateway status store: postgres (durable instance heartbeats)
+2026/10/01 14:45:32 provider credential resolve disabled until mTLS is configured; set CONTROL_ALLOW_INSECURE_CREDENTIAL_RESOLVE=true only for local demo
+2026/10/01 14:45:32 provider credential master key is not loaded; credential operations fail closed
+2026/10/01 14:45:32 control admin service enabled for console identity "console"
+2026/10/01 14:45:32 control ready gRPC 127.0.0.1:58859 http 127.0.0.1:58862
+2026/10/01 14:45:32 control http listening on 127.0.0.1:58862
+2026/10/01 14:45:32 control listening on 127.0.0.1:58859
+2026/10/01 14:45:43 control: admin snapshot version=16 keys=7 published
+2026/10/01 14:45:44 control: admin snapshot version=17 keys=7 published
+2026/10/01 14:45:50 control: admin snapshot version=18 keys=8 published
+2026/10/01 14:45:51 control: admin snapshot version=19 keys=8 published
+2026/10/01 14:45:52 control: admin snapshot version=20 keys=8 published
+2026/10/01 14:45:59 control: apply version=21 keys=8 routes=2 providers=1
+2026/10/01 14:46:32 control exit

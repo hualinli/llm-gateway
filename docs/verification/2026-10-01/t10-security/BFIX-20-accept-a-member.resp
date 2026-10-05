@@ -1,0 +1,9 @@
+HTTP 200 (0.006s)
+Server: hertz
+Date: Thu, 01 Oct 2026 06:46:55 GMT
+Content-Type: application/json
+Content-Length: 107
+X-Request-Id: t10-BFIX-20
+X-Trace-Id: e604ca37493dd4bdbf998ca10acc1528
+
+{"organization_id":"4","user_id":"4","role":"member","status":"active","created_at":"2026-10-01T06:46:55Z"}

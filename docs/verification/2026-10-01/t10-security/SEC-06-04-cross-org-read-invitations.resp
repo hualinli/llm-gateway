@@ -1,0 +1,10 @@
+HTTP 404 (0.002s)
+Server: hertz
+Date: Thu, 01 Oct 2026 06:44:38 GMT
+Content-Type: application/json
+Content-Length: 94
+X-Request-Id: t10-SEC-06-04
+X-Trace-Id: bbcaa483b672985cb2f18bda41a114a1
+X-Content-Type-Options: nosniff
+
+{"error":{"code":"not_found","message":"organization not found","request_id":"t10-SEC-06-04"}}

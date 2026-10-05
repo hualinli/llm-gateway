@@ -93,6 +93,18 @@ var (
 		Help: "Streams that wrote response bytes but ended before a complete provider response",
 	}, []string{"tenant", "model"})
 
+	// GatewayBillingAttemptAbandonedTotal counts the attempts whose owner
+	// recorded the durable F02-1 abandonment marker: the attempt ended with a
+	// certain, receipt-less outcome (a mid-stream break, a client cancel, an
+	// attempt that ended with no response, or a pre-first-byte failure whose
+	// immediate release write failed). It moves no money; the reservation is
+	// returned later by T07B's audited recovery release. The label is the closed
+	// abandonment-reason vocabulary of cmd/gateway, never a status or identity.
+	GatewayBillingAttemptAbandonedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "gateway_billing_attempt_abandoned_total",
+		Help: "Attempts marked durably abandoned (no chargeable receipt; the reservation is released later by T07 recovery), by reason",
+	}, []string{"reason"})
+
 	// 计量
 	MeteringDroppedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "metering_events_dropped_total",

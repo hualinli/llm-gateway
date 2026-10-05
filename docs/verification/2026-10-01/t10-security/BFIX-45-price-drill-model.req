@@ -1,0 +1,8 @@
+POST http://127.0.0.1:50436/api/v1/admin/prices
+X-Request-ID: t10-BFIX-45
+Accept: application/json
+Cookie: gw_session=5bME…<redacted:18>; gw_csrf=VMd6…<redacted:18>
+X-CSRF-Token: VMd6…<redacted:18>
+Content-Type: application/json
+
+{"model": "t10bk-model", "currency": "CNY", "input_price_micro_per_million": "1000000", "output_price_micro_per_million": "1000000", "effective_at": "2026-10-01T05:46:56Z"}

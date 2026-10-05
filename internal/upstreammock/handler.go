@@ -48,6 +48,38 @@ type Config struct {
 	// ExpectedAuthorization, when set, requires Authorization: Bearer <value>.
 	// An empty value keeps the historical unauthenticated behavior.
 	ExpectedAuthorization string
+	// UsageMode injects the F04 usage shapes into the terminal usage event.
+	// Empty and "normal" report the configured prompt/completion/total.
+	// "missing" omits the usage object entirely, "negative" reports a negative
+	// prompt_tokens, and "mismatch" reports a total_tokens that is not the sum
+	// of its components. All three must reach PostgreSQL as a usage exception
+	// on the money path, never as a silent zero (or contradictory) charge.
+	UsageMode string
+}
+
+// Usage modes understood by Config.UsageMode and the per-request
+// x_mock_usage override.
+const (
+	UsageModeNormal   = "normal"
+	UsageModeMissing  = "missing"
+	UsageModeNegative = "negative"
+	UsageModeMismatch = "mismatch"
+)
+
+// parseUsageMode validates a usage mode, returning the canonical value.
+func parseUsageMode(raw string) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", UsageModeNormal:
+		return UsageModeNormal, true
+	case UsageModeMissing:
+		return UsageModeMissing, true
+	case UsageModeNegative:
+		return UsageModeNegative, true
+	case UsageModeMismatch:
+		return UsageModeMismatch, true
+	default:
+		return "", false
+	}
 }
 
 // Handler serves POST /v1/chat/completions and GET /healthz.
@@ -73,6 +105,11 @@ func NewHandler(cfg Config) *Handler {
 	h := &Handler{cfg: cfg}
 	if cfg.MaxInflight > 0 {
 		h.sem = make(chan struct{}, cfg.MaxInflight)
+	}
+	if mode, ok := parseUsageMode(cfg.UsageMode); ok {
+		cfg.UsageMode = mode
+	} else {
+		cfg.UsageMode = UsageModeNormal
 	}
 	return h
 }
@@ -189,8 +226,7 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	total := cfg.PromptTokens + cfg.CompletionTokens
-	if err := writeSSE(w, map[string]any{
+	terminal := map[string]any{
 		"id":     id,
 		"object": "chat.completion.chunk",
 		"choices": []map[string]any{{
@@ -198,12 +234,11 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 			"delta":         map[string]any{},
 			"finish_reason": "stop",
 		}},
-		"usage": map[string]int{
-			"prompt_tokens":     cfg.PromptTokens,
-			"completion_tokens": cfg.CompletionTokens,
-			"total_tokens":      total,
-		},
-	}); err != nil {
+	}
+	if usage := usagePayload(cfg); usage != nil {
+		terminal["usage"] = usage
+	}
+	if err := writeSSE(w, terminal); err != nil {
 		return
 	}
 	flush()
@@ -216,6 +251,9 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 type chatRequest struct {
 	Stream   *bool         `json:"stream"`
 	Messages []chatMessage `json:"messages"`
+	// MockUsage is the per-request F04 usage shape. It reaches the mock
+	// verbatim because the Gateway forwards unknown request fields unchanged.
+	MockUsage *string `json:"x_mock_usage"`
 
 	// Mock-only per-request shape overrides. They are deliberately not part of
 	// the OpenAI protocol: a real provider rejects or ignores them, while the
@@ -319,12 +357,48 @@ func (h *Handler) effectiveConfig(req chatRequest) (Config, error) {
 	if req.MockRoleOnlyFirst != nil {
 		cfg.RoleOnlyFirst = *req.MockRoleOnlyFirst
 	}
+	if req.MockUsage != nil {
+		mode, ok := parseUsageMode(*req.MockUsage)
+		if !ok {
+			return cfg, fmt.Errorf("x_mock_usage must be normal, missing, negative or mismatch")
+		}
+		cfg.UsageMode = mode
+	}
 	if cfg.EventLineBytes > 0 && cfg.CompletionTokens > 0 {
 		if int64(cfg.EventLineBytes)*int64(cfg.CompletionTokens) > maxMockStreamBytes {
 			return cfg, fmt.Errorf("requested stream size exceeds %d bytes", maxMockStreamBytes)
 		}
 	}
 	return cfg, nil
+}
+
+// usagePayload renders the terminal usage object for one of the F04 shapes, or
+// nil for "there is no usage object at all" (the missing-usage boundary).
+func usagePayload(cfg Config) map[string]int {
+	switch cfg.UsageMode {
+	case UsageModeMissing:
+		return nil
+	case UsageModeNegative:
+		return map[string]int{
+			"prompt_tokens":     -1,
+			"completion_tokens": cfg.CompletionTokens,
+			"total_tokens":      cfg.CompletionTokens - 1,
+		}
+	case UsageModeMismatch:
+		// Deliberately not the component sum: total_tokens is a number the
+		// components cannot explain.
+		return map[string]int{
+			"prompt_tokens":     cfg.PromptTokens,
+			"completion_tokens": cfg.CompletionTokens,
+			"total_tokens":      cfg.PromptTokens + cfg.CompletionTokens + 7,
+		}
+	default:
+		return map[string]int{
+			"prompt_tokens":     cfg.PromptTokens,
+			"completion_tokens": cfg.CompletionTokens,
+			"total_tokens":      cfg.PromptTokens + cfg.CompletionTokens,
+		}
+	}
 }
 
 // contentEvent builds one content chunk. When target > 0 the content string is

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"llm-gateway/internal/testsupport/failpoint"
+
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
@@ -449,6 +451,22 @@ func projectEntry(account Account, kind string, signedMicro int64) (posted, rese
 }
 
 func (s *PGAccountStore) withTx(ctx context.Context, fn func(*sql.Tx) error) error {
+	return s.withTxNamed(ctx, "", fn)
+}
+
+// withTxNamed is withTx with a T10 failpoint label. A non-empty op names the
+// operation whose commit boundary failpoints may stop at:
+//
+//	<op>.before_commit         the body is written, COMMIT has not run
+//	<op>.after_commit          COMMIT returned successfully
+//	<op>.commit_response_lost  COMMIT succeeded but the caller is handed an
+//	                           error, which is how a lost COMMIT response is
+//	                           injected deterministically (F19)
+//
+// op == "" (every caller with no failpoint window) skips the lookups entirely,
+// so the unnamed path is behaviourally identical to before. In a build without
+// the `failpoint` tag every Hit is a no-op (see internal/testsupport/failpoint).
+func (s *PGAccountStore) withTxNamed(ctx context.Context, op string, fn func(*sql.Tx) error) error {
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -457,7 +475,26 @@ func (s *PGAccountStore) withTx(ctx context.Context, fn func(*sql.Tx) error) err
 	if err := fn(tx); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if op != "" {
+		if err := failpoint.Hit(op + ".before_commit"); err != nil {
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	if op != "" {
+		if err := failpoint.Hit(op + ".after_commit"); err != nil {
+			return err
+		}
+		if err := failpoint.Hit(op + ".commit_response_lost"); err != nil {
+			// The commit is durable; the caller must treat this exactly like a
+			// lost COMMIT response and resolve it by business id, never by
+			// assuming a rollback.
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *PGAccountStore) withTimeout(ctx context.Context) (context.Context, context.CancelFunc) {

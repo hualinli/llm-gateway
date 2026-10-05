@@ -1,0 +1,6 @@
+GET http://127.0.0.1:58872/api/v1/me
+X-Request-ID: t10-SEC-10-05
+Accept: application/json
+Cookie: gw_session=wmip…<redacted:18>; gw_csrf=BEkh…<redacted:18>
+X-CSRF-Token: BEkh…<redacted:18>
+

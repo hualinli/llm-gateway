@@ -1,0 +1,9 @@
+HTTP 201 (0.007s)
+Server: hertz
+Date: Thu, 01 Oct 2026 06:44:31 GMT
+Content-Type: application/json
+Content-Length: 164
+X-Request-Id: t10-FIX-12
+X-Trace-Id: 4e4d3cf3a9c867e77d972a5fb8f048e3
+
+{"organization":{"id":"4","type":"enterprise","name":"t10-z9162-acme","status":"active","legacy_tenant_id":null,"created_at":"2026-10-01T06:44:32Z"},"role":"owner"}

@@ -1,0 +1,9 @@
+HTTP 201 (0.170s)
+Server: hertz
+Date: Thu, 01 Oct 2026 06:44:30 GMT
+Content-Type: application/json
+Content-Length: 161
+X-Request-Id: t10-FIX-05
+X-Trace-Id: 8768f577911bcf3b5ef89d33f0fd0170
+
+{"id":"5","email":"t10-z9162-a-viewer@t10.test","status":"active","platform_admin":false,"created_at":"2026-10-01T06:44:30Z","updated_at":"2026-10-01T06:44:30Z"}

@@ -1,0 +1,10 @@
+HTTP 403 (0.001s)
+Server: hertz
+Date: Thu, 01 Oct 2026 06:44:39 GMT
+Content-Type: application/json
+Content-Length: 101
+X-Request-Id: t10-SEC-09-26
+X-Trace-Id: a2507ef688635ef00da9effa2c9353d5
+X-Content-Type-Options: nosniff
+
+{"error":{"code":"forbidden","message":"missing or invalid CSRF token","request_id":"t10-SEC-09-26"}}

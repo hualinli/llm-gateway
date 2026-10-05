@@ -1,0 +1,9 @@
+POST http://127.0.0.1:58872/api/v1/admin/billing/accounts/6/adjustments
+X-Request-ID: t10-FIX-44
+Accept: application/json
+Cookie: gw_session=nBg6…<redacted:18>; gw_csrf=lEAl…<redacted:18>
+X-CSRF-Token: lEAl…<redacted:18>
+Idempotency-Key: t10-fund-6
+Content-Type: application/json
+
+{"amount_micro": "5000000", "direction": "credit", "reason": "t10 security matrix funding"}

@@ -1,0 +1,6 @@
+GET http://127.0.0.1:58872/api/v1/me
+X-Request-ID: t10-SEC-02-07
+Accept: application/json
+Cookie: gw_session=!!!n…<redacted:17>; gw_csrf=x…<redacted:1>
+X-CSRF-Token: x…<redacted:1>
+

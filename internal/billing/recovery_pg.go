@@ -42,23 +42,38 @@ const (
 	// visible fact (queryRecoveryOwnerUnknown) instead of a permanent
 	// head-of-line refusal. recoverExecutionTx re-verifies the whole predicate:
 	// this SQL decides nothing.
+	//
+	// F02-1: an execution that carries the durable abandonment marker
+	// (terminal_reason LIKE 'abandoned:%') is a candidate *without* the liveness
+	// half. The owning process itself recorded that the attempt ended, so
+	// "the owner is still alive" is not evidence of an in-flight request any
+	// more. The LEFT JOIN is what lets a marker survive an owner with no
+	// heartbeat row at all; every other execution keeps the exact previous
+	// predicate (a NULL owner makes NOT(...) NULL, which is not TRUE, so it is
+	// still excluded and still counted by RecoveryGap). The window
+	// (`updated_at < $1`, written by the marker) still applies to both halves.
 	queryListRecoveryCandidates = `SELECT ` + executionColumnsAliased + `
 FROM billing_executions e
-JOIN gateway_instances i ON i.instance_id = e.gateway_id
+LEFT JOIN gateway_instances i ON i.instance_id = e.gateway_id
 WHERE e.status IN ('reserved', 'executing')
   AND e.updated_at < $1
-  AND NOT (i.last_seen_at > $2 AND i.started_at <= e.created_at)
+  AND (e.terminal_reason LIKE '` + AbandonedReasonPrefix + `%'
+       OR NOT (i.last_seen_at > $2 AND i.started_at <= e.created_at))
 ORDER BY e.updated_at, e.execution_id
 LIMIT $3`
 
 	// The gap: stuck past the whole window with no liveness record at all for the
 	// owner (including gateway_id IS NULL, for which NOT EXISTS is true). These
 	// can never be released automatically, so they are counted for a human
-	// instead of being retried forever.
+	// instead of being retried forever. An execution that carries the durable
+	// abandonment marker is *not* part of this gap: its release no longer needs
+	// the liveness record, so counting it here would report a stuck execution
+	// that the automatic path can in fact handle.
 	queryRecoveryOwnerUnknown = `SELECT count(*)::bigint, min(e.updated_at)
 FROM billing_executions e
 WHERE e.status IN ('reserved', 'executing')
   AND e.updated_at < $1
+  AND (e.terminal_reason IS NULL OR e.terminal_reason NOT LIKE '` + AbandonedReasonPrefix + `%')
   AND NOT EXISTS (SELECT 1 FROM gateway_instances i WHERE i.instance_id = e.gateway_id)`
 
 	queryReviewRequiredBacklog = `SELECT
@@ -180,7 +195,12 @@ func (s *PGAccountStore) RecoveryGap(ctx context.Context, params RecoveryGapPara
 //     decision (params.Manual plus a stated actor, i.e. an operator acting on
 //     the 24h SLA) may proceed when the owner is alive or unknown — that is a
 //     human decision, recorded as manual_override=true in the audit row — but
-//     never skips the window, the receipt guard or the check record;
+//     never skips the window, the receipt guard or the check record. F02-1: an
+//     execution that carries the durable abandonment marker
+//     (terminal_reason LIKE 'abandoned:%') waives the *requirement* — the owner
+//     itself recorded that the attempt ended, which is stronger evidence than
+//     its death — and the liveness read is recorded with
+//     owner_liveness_waived=true instead of deciding;
 //  6. receipt check: a chargeable receipt (pending_dispatch, dispatched or
 //     settled) is ErrExecutionHasReceipt — that execution belongs to
 //     settlement. An `exception` receipt is allowed: it means "usage unknown,
@@ -206,7 +226,9 @@ func (s *PGAccountStore) RecoverExecution(ctx context.Context, params RecoveryPa
 	defer cancel()
 
 	var result RecoveryResult
-	err := s.withTx(ctx, func(tx *sql.Tx) error {
+	// T10 failpoint label: the recovery release window
+	// (recovery.before_commit / recovery.after_commit).
+	err := s.withTxNamed(ctx, "recovery", func(tx *sql.Tx) error {
 		var err error
 		result, err = s.recoverExecutionTx(ctx, tx, params)
 		return err
@@ -252,15 +274,29 @@ func (s *PGAccountStore) recoverExecutionTx(ctx context.Context, tx *sql.Tx, par
 		ReceiptChecked: true,
 		PlatformPolicy: RecoveryPlatformPolicy,
 	}
+	// F02-1: the owning process recorded that the attempt ended with a certain,
+	// receipt-less outcome. That marker *replaces* the owner-liveness proof —
+	// the process is alive, and that is precisely why it could state the fact —
+	// so the automatic path may release without waiting for the owner to die.
+	// Everything else stays mandatory: the window above, the receipt guard
+	// below, the recorded check, and the billing.execution.recovered audit row.
+	// A marker is never invented here: it is read from the row this transaction
+	// locked.
+	abandonmentReason := AbandonedReason(*execution)
+	checks.AbandonmentReason = abandonmentReason
+	checks.OwnerLivenessWaived = abandonmentReason != ""
 
 	// 5. owner liveness, read inside this transaction.
 	//
 	// "No liveness fact" and "a fresh heartbeat" are different facts, but the
 	// automatic path refuses both: unknown is never dead, and alive is never
-	// abandoned. A *manual* release (params.Manual, audited with an actor) may
-	// proceed in either case — that is the human decision the 24h SLA exists for
-	// — while still requiring the window, the receipt guard and the recorded
-	// check.
+	// abandoned — unless the execution carries the durable abandonment marker,
+	// in which case the owner's own recorded statement is the evidence and the
+	// liveness read below is recorded for the audit instead of deciding. A
+	// *manual* release (params.Manual, audited with an actor) may proceed when
+	// the owner is alive or unknown even without a marker — that is the human
+	// decision the 24h SLA exists for — while still requiring the window, the
+	// receipt guard and the recorded check.
 	ownerID := ""
 	if execution.GatewayID != nil {
 		ownerID = trimSpace(*execution.GatewayID)
@@ -268,10 +304,12 @@ func (s *PGAccountStore) recoverExecutionTx(ctx context.Context, tx *sql.Tx, par
 	checks.OwnerInstance = ownerID
 	switch {
 	case ownerID == "":
-		checks.ManualOverride = true
-		if !params.Manual {
-			return RecoveryResult{}, fmt.Errorf("%w: execution %s records no gateway_id, so its owner cannot be proven dead",
-				ErrRecoveryOwnerUnknown, params.ExecutionID)
+		if !checks.OwnerLivenessWaived {
+			checks.ManualOverride = true
+			if !params.Manual {
+				return RecoveryResult{}, fmt.Errorf("%w: execution %s records no gateway_id, so its owner cannot be proven dead",
+					ErrRecoveryOwnerUnknown, params.ExecutionID)
+			}
 		}
 	default:
 		instance, err := getInstanceTx(ctx, tx, ownerID)
@@ -281,7 +319,7 @@ func (s *PGAccountStore) recoverExecutionTx(ctx context.Context, tx *sql.Tx, par
 			checks.OwnerLastSeen = instance.LastSeenAt
 			checks.OwnerAge = instance.Age(now)
 			checks.OwnerAlive = InstanceAliveFor(instance, execution.CreatedAt, now, params.LivenessLease)
-			if checks.OwnerAlive {
+			if checks.OwnerAlive && !checks.OwnerLivenessWaived {
 				if !params.Manual {
 					return RecoveryResult{}, fmt.Errorf("%w: instance %q last reported %s ago (lease %s) and its process lifetime covers the admission %s",
 						ErrRecoveryInstanceAlive, ownerID, checks.OwnerAge.Round(time.Second), params.LivenessLease,
@@ -290,10 +328,12 @@ func (s *PGAccountStore) recoverExecutionTx(ctx context.Context, tx *sql.Tx, par
 				checks.ManualOverride = true
 			}
 		case errors.Is(err, ErrInstanceNotFound):
-			checks.ManualOverride = true
-			if !params.Manual {
-				return RecoveryResult{}, fmt.Errorf("%w: instance %q has never written a heartbeat",
-					ErrRecoveryOwnerUnknown, ownerID)
+			if !checks.OwnerLivenessWaived {
+				checks.ManualOverride = true
+				if !params.Manual {
+					return RecoveryResult{}, fmt.Errorf("%w: instance %q has never written a heartbeat",
+						ErrRecoveryOwnerUnknown, ownerID)
+				}
 			}
 		default:
 			return RecoveryResult{}, err
@@ -494,6 +534,8 @@ func insertRecoveryAuditTx(ctx context.Context, tx txExecutor, execution Executi
 		"liveness_lease_ms":      strconv.FormatInt(checks.LivenessLease.Milliseconds(), 10),
 		"owner_alive":            strconv.FormatBool(checks.OwnerAlive),
 		"manual_override":        strconv.FormatBool(checks.ManualOverride),
+		"abandonment_reason":     checks.AbandonmentReason,
+		"owner_liveness_waived":  strconv.FormatBool(checks.OwnerLivenessWaived),
 		"receipt_checked":        strconv.FormatBool(checks.ReceiptChecked),
 		"receipt_found":          strconv.FormatBool(checks.ReceiptFound),
 		"receipt_status":         checks.ReceiptStatus,

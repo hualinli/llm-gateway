@@ -1,0 +1,66 @@
+2026/10/01 14:46:51 runtime profile=demo WARNING: demo mode, production checks are not enforced
+2026/10/01 14:46:51 WARNING: production check failed: METERING_DIAGNOSTICS_ADDR: must be set to a listener address different from the business address "127.0.0.1:50434" so metrics/pprof are not exposed on the query listener
+2026/10/01 14:46:51 pg ledger connected
+2026/10/01 14:46:51 metering consumer name=lihualindeMac-Pro.local-13858
+2026/10/01 14:46:51 metering admin token configured: /ledger/count, /ledger/balance and /reconcile require Authorization: Bearer
+2026/10/01 14:46:51 metering consumer group=metering-group consumer=lihualindeMac-Pro.local-13858 stream=usage:events
+2026/10/01 14:46:51 metering reconciliation loop interval=5m0s window=24h0m0s page_size=1000
+2026/10/01 14:46:51 settlement pipeline started: dispatcher[batch=64 concurrency=8 poll=500ms lease=30s redispatch=3s..15m0s max_attempts=8 backoff=1s..5m0s] settlement-consumer=lihualindeMac-Pro.local-13858 stream=usage:events:receipts backlog_interval=15s stale_after=2m0s
+2026/10/01 14:46:51 metering admin endpoints /receipts/backlog and /receipts/exceptions registered
+2026/10/01 14:46:51 execution recovery started: window=40m0s (max_execution=30m0s grace=10m0s) lease=1m0s batch=32 interval=30s sla=24h0m0s
+2026/10/01 14:46:51 execution recovery policy: platform_absorbs_unknown_upstream_cost; a release requires a dead owner (heartbeat older than 1m0s), no chargeable receipt, and the recorded check; the human SLA is 24h0m0s and nothing is released because the SLA elapsed
+2026/10/01 14:46:51 metering admin endpoints /recovery/status and /recovery/review-required registered
+2026/10/01 14:46:51 receipt dispatcher started batch=64 concurrency=8 poll=500ms lease=30s redispatch=3s..15m0s max_attempts=8 backoff=1s..5m0s
+2026/10/01 14:46:51 settlement consumer group=settlement-group consumer=lihualindeMac-Pro.local-13858 stream=usage:events:receipts
+2026/10/01 14:46:51 metering listening on 127.0.0.1:50434
+2026/10/01 14:46:51 metering consumer group=metering-group stream=usage:events
+2026/10/01 14:46:57 settlement committed event_id=exec_9d51c987369a79150ce218d6fe0bd953 execution_id=exec_9d51c987369a79150ce218d6fe0bd953 charge_micro=20 lag=72.496ms
+2026/10/01 14:46:57 ledger add event_id=exec_9d51c987369a79150ce218d6fe0bd953 client_request_id=t10bk-setup-0 trace_id=e3ae735898f53ab552acb8bcad0b7336 tenant=org:4 cost=20
+2026/10/01 14:46:57 ledger add event_id=exec_9944159bc1286c5517549de66c0655d5 client_request_id=t10bk-setup-1 trace_id=f9c6ecf0ccd2c58eeaad773be0d970eb tenant=org:4 cost=20
+2026/10/01 14:46:57 ledger add event_id=exec_e59465fa91db064d0ffb9aa402ff9a39 client_request_id=t10bk-setup-2 trace_id=ac06aa2fd8e762f219f85cbdd4144f89 tenant=org:4 cost=20
+2026/10/01 14:46:57 ledger add event_id=exec_095802c110c3a0b117d8c41c4e9b6c58 client_request_id=t10bk-setup-3 trace_id=61569bfb0a9bb1c79c489c8aa808298c tenant=org:4 cost=20
+2026/10/01 14:46:57 ledger add event_id=exec_11999a6bc931bca9f00f941ec51a1be0 client_request_id=t10bk-setup-4 trace_id=011850aaaf8f50e326c0954e2118ed6c tenant=org:4 cost=20
+2026/10/01 14:46:57 ledger add event_id=exec_e7e4f8c7ed54ec19b0341e1cc954645a client_request_id=t10bk-setup-5 trace_id=599976a7ed049f4fa33c642c263680e9 tenant=org:4 cost=20
+2026/10/01 14:46:57 ledger add event_id=exec_c464b9aa9f8b1f9ce31a7896aefcd318 client_request_id=t10bk-setup-6 trace_id=313ef8a80ff8d05039e67ff2b7159048 tenant=org:4 cost=20
+2026/10/01 14:46:57 ledger add event_id=exec_efeeaf03fb8c28a15b872f07b750d67c client_request_id=t10bk-setup-7 trace_id=a731e6901c7f4812b5bd1d2bc52624b8 tenant=org:4 cost=20
+2026/10/01 14:46:57 ledger add event_id=exec_54fecf85053348c9718c96428d3da1a2 client_request_id=t10bk-setup-8 trace_id=f44bc8b9a4248b9e052c22044fed5d02 tenant=org:4 cost=20
+2026/10/01 14:46:57 settlement committed event_id=exec_11999a6bc931bca9f00f941ec51a1be0 execution_id=exec_11999a6bc931bca9f00f941ec51a1be0 charge_micro=20 lag=299.94ms
+2026/10/01 14:46:57 settlement committed event_id=exec_9944159bc1286c5517549de66c0655d5 execution_id=exec_9944159bc1286c5517549de66c0655d5 charge_micro=20 lag=532.097ms
+2026/10/01 14:46:57 settlement committed event_id=exec_e7e4f8c7ed54ec19b0341e1cc954645a execution_id=exec_e7e4f8c7ed54ec19b0341e1cc954645a charge_micro=20 lag=269.741ms
+2026/10/01 14:46:57 settlement committed event_id=exec_c464b9aa9f8b1f9ce31a7896aefcd318 execution_id=exec_c464b9aa9f8b1f9ce31a7896aefcd318 charge_micro=20 lag=212.581ms
+2026/10/01 14:46:57 settlement committed event_id=exec_095802c110c3a0b117d8c41c4e9b6c58 execution_id=exec_095802c110c3a0b117d8c41c4e9b6c58 charge_micro=20 lag=428.395ms
+2026/10/01 14:46:57 settlement committed event_id=exec_efeeaf03fb8c28a15b872f07b750d67c execution_id=exec_efeeaf03fb8c28a15b872f07b750d67c charge_micro=20 lag=165.141ms
+2026/10/01 14:46:57 settlement committed event_id=exec_54fecf85053348c9718c96428d3da1a2 execution_id=exec_54fecf85053348c9718c96428d3da1a2 charge_micro=20 lag=105.145ms
+2026/10/01 14:46:57 settlement committed event_id=exec_e59465fa91db064d0ffb9aa402ff9a39 execution_id=exec_e59465fa91db064d0ffb9aa402ff9a39 charge_micro=20 lag=521.771ms
+2026/10/01 14:46:57 ledger add event_id=exec_0211606023796c13d534d299fbdd9da9 client_request_id=t10bk-setup-9 trace_id=989f6780947eff7ce97a7177656116ff tenant=org:4 cost=20
+2026/10/01 14:46:57 ledger add event_id=exec_8085c022dc6535cf72f5619045b671ac client_request_id=t10bk-setup-10 trace_id=9cec1c5c2c0202c66d95fdbedfeb74f3 tenant=org:4 cost=20
+2026/10/01 14:46:57 ledger add event_id=exec_863071040b97040bce58ab2638c034a2 client_request_id=t10bk-setup-11 trace_id=c9cecb696caecd9680aa816bb687a64f tenant=org:4 cost=20
+2026/10/01 14:46:58 settlement committed event_id=exec_0211606023796c13d534d299fbdd9da9 execution_id=exec_0211606023796c13d534d299fbdd9da9 charge_micro=20 lag=486.001ms
+2026/10/01 14:46:58 settlement committed event_id=exec_863071040b97040bce58ab2638c034a2 execution_id=exec_863071040b97040bce58ab2638c034a2 charge_micro=20 lag=369.274ms
+2026/10/01 14:46:58 settlement committed event_id=exec_8085c022dc6535cf72f5619045b671ac execution_id=exec_8085c022dc6535cf72f5619045b671ac charge_micro=20 lag=445.774ms
+2026/10/01 14:46:59 ledger add event_id=exec_c405f5471af8811abea43322009c3be4 client_request_id=t10bk-rpo-0 trace_id=95905c21d073a421ff58124ed029f71b tenant=org:4 cost=20
+2026/10/01 14:46:59 ledger add event_id=exec_4549fdb8601fbce271f8ac2043d7f9b3 client_request_id=t10bk-rpo-1 trace_id=42b9c17b04bb014a4963b7d986dcf124 tenant=org:4 cost=20
+2026/10/01 14:46:59 ledger add event_id=exec_b3931c9f894a1c854a6ef5264698ea70 client_request_id=t10bk-rpo-2 trace_id=978f8ae246a7247169140cb2f1f3eab4 tenant=org:4 cost=20
+2026/10/01 14:47:00 settlement committed event_id=exec_b3931c9f894a1c854a6ef5264698ea70 execution_id=exec_b3931c9f894a1c854a6ef5264698ea70 charge_micro=20 lag=208.05ms
+2026/10/01 14:47:00 ledger add event_id=exec_3c444d1e83892314e0bfb1183c9dd702 client_request_id=t10bk-rpo-3 trace_id=603f4df3fc605c669ca0edd8a3be2eaa tenant=org:4 cost=20
+2026/10/01 14:47:00 ledger add event_id=exec_89c69f9bb6a9b54ea32f50e593ca119a client_request_id=t10bk-rpo-4 trace_id=7e73c20e83e9e24f1a85669e5f09a684 tenant=org:4 cost=20
+2026/10/01 14:47:00 ledger add event_id=exec_e9d05ed4be9446804fe62bd3adc618cd client_request_id=t10bk-rpo-5 trace_id=59680aba778fc8a8aa2a642824c2bc92 tenant=org:4 cost=20
+2026/10/01 14:47:00 settlement committed event_id=exec_3c444d1e83892314e0bfb1183c9dd702 execution_id=exec_3c444d1e83892314e0bfb1183c9dd702 charge_micro=20 lag=166.733ms
+2026/10/01 14:47:00 settlement committed event_id=exec_c405f5471af8811abea43322009c3be4 execution_id=exec_c405f5471af8811abea43322009c3be4 charge_micro=20 lag=363.394ms
+2026/10/01 14:47:00 settlement committed event_id=exec_4549fdb8601fbce271f8ac2043d7f9b3 execution_id=exec_4549fdb8601fbce271f8ac2043d7f9b3 charge_micro=20 lag=306.497ms
+2026/10/01 14:47:00 settlement committed event_id=exec_e9d05ed4be9446804fe62bd3adc618cd execution_id=exec_e9d05ed4be9446804fe62bd3adc618cd charge_micro=20 lag=55.528ms
+2026/10/01 14:47:00 settlement committed event_id=exec_89c69f9bb6a9b54ea32f50e593ca119a execution_id=exec_89c69f9bb6a9b54ea32f50e593ca119a charge_micro=20 lag=126.594ms
+2026/10/01 14:47:00 ledger add event_id=exec_f795905f75b78a30523fd262e395e5c1 client_request_id=t10bk-rpo-6 trace_id=56213361fde6194ea42c5b3b359b20ee tenant=org:4 cost=20
+2026/10/01 14:47:00 ledger add event_id=exec_0eaac784845495bf2a62890ec46c76b1 client_request_id=t10bk-rpo-7 trace_id=71039e443c6475b5ee26f349661dc47f tenant=org:4 cost=20
+2026/10/01 14:47:00 ledger add event_id=exec_8f69593ea1cdc8ad6fdcf8e71be71490 client_request_id=t10bk-rpo-8 trace_id=b818540d86fc220ed241740a98cb9278 tenant=org:4 cost=20
+2026/10/01 14:47:00 ledger add event_id=exec_894689d14b8791356f49929cd2bb7608 client_request_id=t10bk-rpo-9 trace_id=a0e0072835e79f6432fe670f7a029d36 tenant=org:4 cost=20
+2026/10/01 14:47:00 ledger add event_id=exec_dcc51a8542c6f07208c57f0e8e378e52 client_request_id=t10bk-rpo-10 trace_id=bc276e3db659ccb04cbb25ce2ed479d3 tenant=org:4 cost=20
+2026/10/01 14:47:00 ledger add event_id=exec_10254b92505717cb56fa1a340d8649bc client_request_id=t10bk-rpo-11 trace_id=871c1905d8d2acbdbd981f786c20e259 tenant=org:4 cost=20
+2026/10/01 14:47:00 settlement committed event_id=exec_10254b92505717cb56fa1a340d8649bc execution_id=exec_10254b92505717cb56fa1a340d8649bc charge_micro=20 lag=129.317ms
+2026/10/01 14:47:00 settlement committed event_id=exec_dcc51a8542c6f07208c57f0e8e378e52 execution_id=exec_dcc51a8542c6f07208c57f0e8e378e52 charge_micro=20 lag=206.041ms
+2026/10/01 14:47:00 settlement committed event_id=exec_f795905f75b78a30523fd262e395e5c1 execution_id=exec_f795905f75b78a30523fd262e395e5c1 charge_micro=20 lag=474.66ms
+2026/10/01 14:47:00 settlement committed event_id=exec_0eaac784845495bf2a62890ec46c76b1 execution_id=exec_0eaac784845495bf2a62890ec46c76b1 charge_micro=20 lag=427.365ms
+2026/10/01 14:47:00 settlement committed event_id=exec_894689d14b8791356f49929cd2bb7608 execution_id=exec_894689d14b8791356f49929cd2bb7608 charge_micro=20 lag=304.026ms
+2026/10/01 14:47:00 settlement committed event_id=exec_8f69593ea1cdc8ad6fdcf8e71be71490 execution_id=exec_8f69593ea1cdc8ad6fdcf8e71be71490 charge_micro=20 lag=381.837ms
+2026/10/01 14:50:48 shutting down metering...
+2026/10/01 14:50:48 receipt dispatcher stopped
