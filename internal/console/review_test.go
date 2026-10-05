@@ -3,10 +3,11 @@ package console
 import (
 	"context"
 	"errors"
-	"llm-gateway/internal/billing"
 	"net/http"
 	"testing"
 	"time"
+
+	"llm-gateway/internal/billing"
 )
 
 type fakeReview struct {
@@ -15,9 +16,24 @@ type fakeReview struct {
 	err        error
 }
 
+type fakeReviewPolicySource struct {
+	policy ReviewPolicy
+	err    error
+	calls  int
+}
+
+func (f *fakeReviewPolicySource) GetReviewPolicy(context.Context) (ReviewPolicy, error) {
+	f.calls++
+	return f.policy, f.err
+}
+
+func defaultTestReviewPolicy() ReviewPolicy {
+	return ReviewPolicy{WindowMinAge: 40 * time.Minute, LivenessLease: 90 * time.Second, HumanReviewSLA: 24 * time.Hour}
+}
+
 func (f *fakeReview) ListReviewRequiredExecutions(_ context.Context, p billing.ReviewQueueParams) (billing.ReviewQueuePage, error) {
 	f.queueCalls++
-	return billing.ReviewQueuePage{Now: p.Now, Totals: billing.ReviewBacklog{Open: 1, SLA: 24 * time.Hour}, Items: []billing.ReviewQueueItem{{Execution: billing.Execution{ExecutionID: "exec_1", OrgID: 7, ReservedMicro: 9007199254740993}}}}, f.err
+	return billing.ReviewQueuePage{Now: p.Now, Totals: billing.ReviewBacklog{Open: 1, SLA: p.SLA}, Items: []billing.ReviewQueueItem{{Execution: billing.Execution{ExecutionID: "exec_1", OrgID: 7, ReservedMicro: 9007199254740993}, Reason: stringPointer("missing usage")}}}, f.err
 }
 func (f *fakeReview) ReleaseExecutionManually(_ context.Context, p billing.ManualDispositionParams) (billing.ManualDispositionResult, error) {
 	f.calls = append(f.calls, p)
@@ -28,7 +44,8 @@ func (f *fakeReview) SettleExecutionManually(ctx context.Context, p billing.Manu
 }
 func TestReviewRequiresAdminAndCSRFAndUsesSessionActor(t *testing.T) {
 	f := &fakeReview{}
-	h := newHarness(t, func(o *Options) { o.Review = f })
+	policy := &fakeReviewPolicySource{policy: ReviewPolicy{WindowMinAge: 2 * time.Hour, LivenessLease: 2 * time.Minute, HumanReviewSLA: 3 * time.Hour}}
+	h := newHarness(t, func(o *Options) { o.Review = f; o.ReviewPolicySource = policy })
 	fixture := defaultFixture()
 	h.withSessionFixture(fixture)
 	path := "/api/v1/admin/billing/review-required/exec_1/release"
@@ -64,8 +81,11 @@ func TestReviewRequiresAdminAndCSRFAndUsesSessionActor(t *testing.T) {
 	if r.Code != 200 {
 		t.Fatalf("%d %s", r.Code, r.Body.String())
 	}
-	if len(f.calls) != 1 || f.calls[0].ActorUserID != fixture.user.ID || f.calls[0].MinAge != 40*time.Minute || f.calls[0].RequestID != "review-request" {
+	if len(f.calls) != 1 || f.calls[0].ActorUserID != fixture.user.ID || f.calls[0].MinAge != 2*time.Hour || f.calls[0].LivenessLease != 2*time.Minute || f.calls[0].RequestID != "review-request" {
 		t.Fatalf("call=%+v", f.calls)
+	}
+	if policy.calls != 1 {
+		t.Fatalf("policy calls=%d, want a fresh read for the money operation", policy.calls)
 	}
 	var result struct{ Account billingAccountDTO }
 	decodeBillingBody(t, r.Body.Bytes(), &result)
@@ -75,7 +95,8 @@ func TestReviewRequiresAdminAndCSRFAndUsesSessionActor(t *testing.T) {
 }
 func TestReviewCursorBoundsAndConflict(t *testing.T) {
 	f := &fakeReview{}
-	h := newHarness(t, func(o *Options) { o.Review = f })
+	policy := &fakeReviewPolicySource{policy: defaultTestReviewPolicy()}
+	h := newHarness(t, func(o *Options) { o.Review = f; o.ReviewPolicySource = policy })
 	fixture := defaultFixture()
 	h.withSessionFixture(fixture)
 	cookies := cookieHeader(fixture.rawToken, fixture.csrfToken)
@@ -87,6 +108,14 @@ func TestReviewCursorBoundsAndConflict(t *testing.T) {
 	r := h.serve(http.MethodGet, "/api/v1/admin/billing/review-required", nil, cookies)
 	if r.Code != 200 {
 		t.Fatal(r.Code)
+	}
+	var queue struct {
+		SLASeconds float64         `json:"sla_seconds"`
+		Items      []reviewItemDTO `json:"items"`
+	}
+	decodeBillingBody(t, r.Body.Bytes(), &queue)
+	if queue.SLASeconds != (24*time.Hour).Seconds() || len(queue.Items) != 1 || queue.Items[0].Reason == nil || *queue.Items[0].Reason != "missing usage" {
+		t.Fatalf("queue=%+v", queue)
 	}
 	for _, err := range []error{billing.ErrExecutionState, billing.ErrExecutionHasReceipt, billing.ErrRecoveryTooYoung, billing.ErrExecutionNotFound, errors.New("postgres unavailable")} {
 		f.err = err
@@ -103,3 +132,24 @@ func TestReviewCursorBoundsAndConflict(t *testing.T) {
 		}
 	}
 }
+
+func TestReviewPolicyUnavailableFailsClosedBeforeStoreCalls(t *testing.T) {
+	store := &fakeReview{}
+	policy := &fakeReviewPolicySource{err: errors.New("metering unavailable")}
+	h := newHarness(t, func(o *Options) { o.Review = store; o.ReviewPolicySource = policy })
+	fixture := defaultFixture()
+	h.withSessionFixture(fixture)
+	cookies := cookieHeader(fixture.rawToken, fixture.csrfToken)
+	csrf := hdr("X-CSRF-Token", fixture.csrfToken)
+	if rec := h.serve(http.MethodGet, "/api/v1/admin/billing/review-required", nil, cookies); rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("queue=%d %s", rec.Code, rec.Body.String())
+	}
+	if rec := h.serve(http.MethodPost, "/api/v1/admin/billing/review-required/exec_1/release", jsonBody(`{"reason":"reviewed"}`), cookies, csrf); rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("release=%d %s", rec.Code, rec.Body.String())
+	}
+	if len(store.calls) != 0 || store.queueCalls != 0 {
+		t.Fatalf("failed policy read reached review store: calls=%d queue=%d", len(store.calls), store.queueCalls)
+	}
+}
+
+func stringPointer(value string) *string { return &value }

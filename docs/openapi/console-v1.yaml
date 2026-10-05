@@ -1737,7 +1737,7 @@ paths:
               type: object
               required: [reason]
               properties:
-                reason: {type: string, minLength: 1, maxLength: 512}
+                reason: {type: string, minLength: 1, description: Required after trimming; maximum 512 UTF-8 bytes}
       responses:
         '200':
           description: Committed account projection and debit/release ledger entries
@@ -2207,10 +2207,11 @@ components:
   schemas:
     ReviewQueue:
       type: object
-      required: [items, next_cursor, totals, now, min_age_seconds]
+      required: [items, next_cursor, totals, now, min_age_seconds, sla_seconds]
       properties:
         now: {type: string, format: date-time}
         min_age_seconds: {type: number}
+        sla_seconds: {type: number, description: Current Metering human-review SLA in seconds}
         next_cursor:
           type: [object, 'null']
           properties:
@@ -2234,7 +2235,7 @@ components:
               updated_at: {type: string, format: date-time}
               age_seconds: {type: number}
               sla_breached: {type: boolean}
-              reason: {type: [string, 'null']}
+              reason: {type: [string, 'null'], description: Terminal reason or usage receipt's last_error}
     ReviewDisposition:
       type: object
       properties:

@@ -56,7 +56,6 @@ import (
 	"log"
 	"time"
 
-	"llm-gateway/internal/billing"
 	"llm-gateway/internal/iam"
 	"llm-gateway/internal/organization"
 
@@ -211,10 +210,11 @@ type Options struct {
 	Statements StatementService
 	// Exceptions backs the durable money-exception queue (migration 000011) and
 	// the platform resolution write. nil answers 503.
-	Exceptions   MoneyExceptionService
-	Review       ReviewService
-	ReviewMinAge time.Duration
-	ReviewLease  time.Duration
+	Exceptions MoneyExceptionService
+	Review     ReviewService
+	// ReviewPolicySource fetches the current Metering policy for each queue read
+	// and manual money operation. nil fails closed.
+	ReviewPolicySource ReviewPolicySource
 	// Now is the clock used for the usage window and key-expiry validation. nil
 	// means time.Now().UTC().
 	Now func() time.Time
@@ -241,8 +241,7 @@ type server struct {
 	statements       StatementService
 	exceptions       MoneyExceptionService
 	review           ReviewService
-	reviewMinAge     time.Duration
-	reviewLease      time.Duration
+	reviewPolicy     ReviewPolicySource
 	secureCookies    bool
 	sessionTTL       time.Duration
 	retryAfter       time.Duration
@@ -272,8 +271,7 @@ func newServer(opts Options) (*server, error) {
 		statements:       opts.Statements,
 		exceptions:       opts.Exceptions,
 		review:           opts.Review,
-		reviewMinAge:     opts.ReviewMinAge,
-		reviewLease:      opts.ReviewLease,
+		reviewPolicy:     opts.ReviewPolicySource,
 		secureCookies:    opts.SecureCookies,
 		sessionTTL:       opts.SessionTTL,
 		retryAfter:       opts.RetryAfter,
@@ -305,12 +303,6 @@ func newServer(opts Options) (*server, error) {
 	}
 	if s.exceptions == nil {
 		s.exceptions = unavailableMoneyExceptionService{}
-	}
-	if s.reviewMinAge <= 0 {
-		s.reviewMinAge = billing.DefaultRecoveryMaxExecutionDuration + billing.DefaultRecoveryGrace
-	}
-	if s.reviewLease <= 0 {
-		s.reviewLease = billing.DefaultLivenessLease
 	}
 	if s.sessionTTL <= 0 {
 		s.sessionTTL = DefaultSessionTTL

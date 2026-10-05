@@ -3,12 +3,14 @@ package console
 import (
 	"context"
 	"errors"
-	"github.com/cloudwego/hertz/pkg/app"
-	"llm-gateway/internal/billing"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
+
+	"llm-gateway/internal/billing"
+
+	"github.com/cloudwego/hertz/pkg/app"
 )
 
 // ReviewService reuses the audited money transactions. Only a session-bound
@@ -52,6 +54,11 @@ func (s *server) listReviewQueue(ctx context.Context, c *app.RequestContext) {
 		}
 		params.Cursor = &billing.ReviewCursor{UpdatedAt: at, ExecutionID: cursorID}
 	}
+	policy, ok := s.currentReviewPolicy(ctx, c)
+	if !ok {
+		return
+	}
+	params.SLA = policy.HumanReviewSLA
 	page, err := s.review.ListReviewRequiredExecutions(ctx, params)
 	if err != nil {
 		s.writeReviewError(c, err)
@@ -63,7 +70,7 @@ func (s *server) listReviewQueue(ctx context.Context, c *app.RequestContext) {
 		items = append(items, reviewItemDTO{
 			ExecutionID: e.ExecutionID, OrganizationID: strconv.FormatInt(e.OrgID, 10), Model: e.Model,
 			ReservedMicro: billing.FormatMicro(e.ReservedMicro), UpdatedAt: e.UpdatedAt.Format(time.RFC3339Nano),
-			AgeSeconds: item.Age.Seconds(), SLABreached: item.Breached, Reason: e.TerminalReason,
+			AgeSeconds: item.Age.Seconds(), SLABreached: item.Breached, Reason: item.Reason,
 		})
 	}
 	var cursor any
@@ -72,7 +79,7 @@ func (s *server) listReviewQueue(ctx context.Context, c *app.RequestContext) {
 	}
 	c.JSON(http.StatusOK, map[string]any{"items": items, "next_cursor": cursor, "now": page.Now,
 		"totals":          map[string]any{"open": strconv.FormatInt(page.Totals.Open, 10), "sla_breaches": strconv.FormatInt(page.Totals.Breaches, 10), "oldest_age_seconds": page.Totals.OldestAge(page.Now).Seconds()},
-		"min_age_seconds": s.reviewMinAge.Seconds()})
+		"min_age_seconds": policy.WindowMinAge.Seconds(), "sla_seconds": policy.HumanReviewSLA.Seconds()})
 }
 
 func (s *server) disposeReviewExecution(ctx context.Context, c *app.RequestContext) {
@@ -95,11 +102,19 @@ func (s *server) disposeReviewExecution(ctx context.Context, c *app.RequestConte
 	if !s.decodeJSON(c, &body) {
 		return
 	}
+	if err := billing.ValidateTerminalReason(body.Reason); err != nil {
+		s.writeReviewError(c, err)
+		return
+	}
+	policy, ok := s.currentReviewPolicy(ctx, c)
+	if !ok {
+		return
+	}
 	auth, _ := authFrom(c)
 	now := s.now()
 	params := billing.NormalizeManualDisposition(billing.ManualDispositionParams{
 		ExecutionID: id, Action: action, Reason: body.Reason, ActorUserID: auth.User.ID,
-		MinAge: s.reviewMinAge, LivenessLease: s.reviewLease, ObservedAt: now, Now: now, RequestID: requestIDFrom(c),
+		MinAge: policy.WindowMinAge, LivenessLease: policy.LivenessLease, ObservedAt: now, Now: now, RequestID: requestIDFrom(c),
 	})
 	if err := billing.ValidateManualDisposition(params); err != nil {
 		s.writeReviewError(c, err)
@@ -127,6 +142,20 @@ func (s *server) disposeReviewExecution(ctx context.Context, c *app.RequestConte
 	}
 	c.JSON(http.StatusOK, map[string]any{"execution_id": result.Execution.ExecutionID, "organization_id": strconv.FormatInt(result.Execution.OrgID, 10), "status": result.Execution.Status, "action": result.Action,
 		"charge_micro": billing.FormatMicro(result.ChargeMicro), "policy": result.Policy, "account": toBillingAccountDTO(result.Account), "debit_entry": debit, "release_entry": release, "request_id": requestIDFrom(c)})
+}
+
+func (s *server) currentReviewPolicy(ctx context.Context, c *app.RequestContext) (ReviewPolicy, bool) {
+	if s.reviewPolicy == nil {
+		s.writeError(c, http.StatusServiceUnavailable, "", "review policy is not configured")
+		return ReviewPolicy{}, false
+	}
+	policy, err := s.reviewPolicy.GetReviewPolicy(ctx)
+	if err != nil || ValidateReviewPolicy(policy) != nil {
+		s.logger.Printf("review policy unavailable request_id=%s", requestIDFrom(c))
+		s.writeError(c, http.StatusServiceUnavailable, "", "review policy is unavailable; try again later")
+		return ReviewPolicy{}, false
+	}
+	return policy, true
 }
 
 func (s *server) writeReviewError(c *app.RequestContext, err error) {

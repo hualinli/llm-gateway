@@ -3,7 +3,6 @@ package main
 import (
 	"strings"
 	"testing"
-	"time"
 
 	"llm-gateway/internal/appenv"
 )
@@ -239,17 +238,24 @@ func setenv(t *testing.T, values map[string]string) {
 	}
 }
 
-func TestReviewWindowUsesMeteringSafetyConfiguration(t *testing.T) {
+func TestReviewPolicyConfigurationIsDedicatedAndOptional(t *testing.T) {
+	t.Setenv("CONSOLE_METERING_URL", "")
+	t.Setenv("CONSOLE_METERING_POLICY_TOKEN", "")
 	setenv(t, map[string]string{"METERING_RECOVERY_MAX_EXECUTION": "5m", "METERING_RECOVERY_GRACE": "2m", "METERING_RECOVERY_LEASE": "90s"})
 	cfg, err := loadConfig(appenv.Demo)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.ReviewMinAge != 7*time.Minute || cfg.ReviewLease != 90*time.Second {
-		t.Fatalf("window=%s lease=%s", cfg.ReviewMinAge, cfg.ReviewLease)
+	if cfg.MeteringURL != "" || cfg.MeteringPolicyToken != "" {
+		t.Fatalf("missing policy config should remain optional: %+v", cfg)
 	}
-	t.Setenv("METERING_RECOVERY_MAX_EXECUTION", "-1s")
-	if _, err := loadConfig(appenv.Demo); err == nil {
-		t.Fatal("negative safety window accepted")
+	t.Setenv("CONSOLE_METERING_URL", " http://metering:8091/ ")
+	t.Setenv("CONSOLE_METERING_POLICY_TOKEN", " read-only-policy-token ")
+	cfg, err = loadConfig(appenv.Demo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.MeteringURL != "http://metering:8091" || cfg.MeteringPolicyToken != "read-only-policy-token" {
+		t.Fatalf("policy config not normalized: %+v", cfg)
 	}
 }

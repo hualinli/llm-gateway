@@ -1030,6 +1030,9 @@ func ValidateReviewQueuePage(params ReviewQueueParams) error {
 // ReviewQueueItem is one waiting execution with its derived age.
 type ReviewQueueItem struct {
 	Execution Execution
+	// Reason is the execution's terminal reason, or the usage receipt's last
+	// error when the execution itself has no terminal reason.
+	Reason *string
 	// Age is now - updated_at: how long the execution has been waiting for a
 	// human decision.
 	Age time.Duration
