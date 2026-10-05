@@ -30,6 +30,16 @@
 //	POST /api/v1/orgs/{org}/keys                  session + CSRF + matrix
 //	POST /api/v1/orgs/{org}/keys/{key}/revoke     session + CSRF + matrix
 //	GET  /api/v1/orgs/{org}/usage                 session + matrix (own usage / org usage)
+//
+// T05 billing surface (ADR-0004):
+//
+//	GET  /api/v1/admin/prices                                    session + platform admin
+//	POST /api/v1/admin/prices                                    session + platform admin + CSRF
+//	GET  /api/v1/orgs/{org}/billing/account                      session + matrix (view_org_usage)
+//	GET  /api/v1/orgs/{org}/billing/entries                      session + matrix (view_org_usage)
+//	POST /api/v1/admin/billing/accounts/{org}/adjustments        session + platform admin + CSRF
+//	                                                             + Idempotency-Key
+//
 //	GET  /livez, GET /readyz                      public
 package console
 
@@ -74,6 +84,14 @@ const (
 	PathOrgKeys      = "/api/v1/orgs/:org/keys"
 	PathOrgKeyRevoke = "/api/v1/orgs/:org/keys/:key/revoke"
 	PathOrgUsage     = "/api/v1/orgs/:org/usage"
+
+	// T05 billing surface (ADR-0004). Prices are platform facts; accounts and
+	// entries are read in an organization scope; adjustments are a platform
+	// write on an arbitrary organization.
+	PathAdminPrices             = "/api/v1/admin/prices"
+	PathAdminBillingAdjustments = "/api/v1/admin/billing/accounts/:org/adjustments"
+	PathOrgBillingAccount       = "/api/v1/orgs/:org/billing/account"
+	PathOrgBillingEntries       = "/api/v1/orgs/:org/billing/entries"
 
 	PathLivez               = "/livez"
 	PathReadyz              = "/readyz"
@@ -166,6 +184,13 @@ type Options struct {
 	// Usage backs GET /api/v1/orgs/{org}/usage. nil answers 500 internal_error,
 	// like a missing audit store: an empty page would be a lie.
 	Usage UsageStore
+	// Prices backs GET/POST /api/v1/admin/prices. nil means no billing store is
+	// configured: those routes answer 503 instead of pretending no model has a
+	// price.
+	Prices PriceService
+	// Accounts backs the organization billing reads and the platform
+	// adjustment write. nil answers 503, for the same reason as Prices.
+	Accounts BillingAccountService
 	// Now is the clock used for the usage window and key-expiry validation. nil
 	// means time.Now().UTC().
 	Now func() time.Time
@@ -187,6 +212,8 @@ type server struct {
 	orgs             OrganizationService
 	keys             KeyService
 	usage            UsageStore
+	prices           PriceService
+	accounts         BillingAccountService
 	secureCookies    bool
 	sessionTTL       time.Duration
 	retryAfter       time.Duration
@@ -211,6 +238,8 @@ func newServer(opts Options) (*server, error) {
 		orgs:             opts.Organizations,
 		keys:             opts.Keys,
 		usage:            opts.Usage,
+		prices:           opts.Prices,
+		accounts:         opts.Accounts,
 		secureCookies:    opts.SecureCookies,
 		sessionTTL:       opts.SessionTTL,
 		retryAfter:       opts.RetryAfter,
@@ -230,6 +259,12 @@ func newServer(opts Options) (*server, error) {
 	}
 	if s.usage == nil {
 		s.usage = unavailableUsageStore{}
+	}
+	if s.prices == nil {
+		s.prices = unavailablePriceService{}
+	}
+	if s.accounts == nil {
+		s.accounts = unavailableBillingAccountService{}
 	}
 	if s.sessionTTL <= 0 {
 		s.sessionTTL = DefaultSessionTTL
@@ -324,6 +359,15 @@ func Register(engine *route.Engine, opts Options) error {
 	engine.POST(PathOrgKeys, s.withSession, s.withCSRF, s.createOrgKey)
 	engine.POST(PathOrgKeyRevoke, s.withSession, s.withCSRF, s.revokeOrgKey)
 	engine.GET(PathOrgUsage, s.withSession, s.listOrgUsage)
+
+	// T05 (ADR-0004): price versions are a platform-admin surface; the account
+	// and its ledger are organization reads (view_org_usage); an adjustment is a
+	// platform-admin write that additionally requires an Idempotency-Key header.
+	engine.GET(PathAdminPrices, s.withSession, s.withPlatformAdmin, s.listAdminPrices)
+	engine.POST(PathAdminPrices, s.withSession, s.withCSRF, s.withPlatformAdmin, s.createAdminPrice)
+	engine.GET(PathOrgBillingAccount, s.withSession, s.getOrgBillingAccount)
+	engine.GET(PathOrgBillingEntries, s.withSession, s.listOrgBillingEntries)
+	engine.POST(PathAdminBillingAdjustments, s.withSession, s.withCSRF, s.withPlatformAdmin, s.adjustBillingAccount)
 	return nil
 }
 

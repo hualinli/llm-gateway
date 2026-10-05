@@ -58,6 +58,10 @@ func serve(opts serveOptions) error {
 		Keys: opts.keys,
 		// T03: usage reads metering_events; a nil store answers 500.
 		Usage: opts.usage,
+		// T05 (ADR-0004): price versions, billing accounts and the append-only
+		// ledger. A nil store answers 503.
+		Prices:   opts.prices,
+		Accounts: opts.accounts,
 		// T03: mutations are audited into console_audit_events (PG sink) and the
 		// audit endpoint reads the same table. When no sink is wired the trail
 		// falls back to the T02 log sink and the read endpoint answers 500.

@@ -7,6 +7,10 @@
 > **T01A 更新（2026-10-01）**：§4.4 增加运行时 profile/生产 fail-fast、诊断与查询 listener 分离、统一错误信封与入口指标、隔离基线 runner、本地证书 bootstrap；§3 第 5 条与 §5 的对应风险已按 T01A 结果更新。基线命令与结果见 §7。
 >
 > **T02 更新（2026-10-01）**：新增 Console API（Hertz）与用户/组织/会话基础（migration 000004，`users`/`sessions`/`organizations`/`memberships`）；决策见 [ADR-0002](decisions/ADR-0002-iam-identity-and-organizations.md)，接口冻结见 [console-v1.yaml](openapi/console-v1.yaml)，验收证据见 [T02 验收](verification/2026-10-01/t02-console-iam/README.md)。§4.5 与 §5 对应行已更新。
+>
+> **T03 更新（2026-10-01，任务分支 `codex/t03-enterprise-rbac`，代码 HEAD `f2c083c`，证据提交 `2fef64e`）**：企业 RBAC（邀请、角色矩阵、最后 owner 保护、owner 转移）、Control `api_keys` 事实表与内部 `AdminService`、Gateway PG access guard、计量归属（migration 000005/000006/000007，schema 版本 7）以及 Console 的成员/邀请/Key/用量/审计端点已实现；决策见 [ADR-0003](decisions/ADR-0003-enterprise-rbac-keys-and-policy.md)，黑盒验收 **12/12 PASS**（0 SKIP、0 阻断缺陷），证据见 [T03 验收](verification/2026-10-01/t03-enterprise-rbac/README.md)。另有 2 条产品发现（1 条间歇性数据面问题、1 条校验顺序偏差），后者**已在当前分支修复**；两者记入 §5 与 §7.4。
+>
+> **T04 更新（2026-10-01，任务分支 `codex/t04-web-console`，HEAD `f28ee74`）**：`web/` 最小 Web 产品闭环（React + TypeScript + Vite，只消费已冻结的 Console API 与 Gateway `/v1`，10 项契约缺口显式列出）在该分支上交付，并自报 `tsc --noEmit`、vitest 33/33 与生产构建通过。**该分支尚未合入本分支**——本工作区没有 `web/`、`docs/web/README.md`，前端命令本轮未在本分支复验；证据、来源与限制见 §4.5、§7.5、§8。
 
 > **当前产品目标与实施顺序**见 [生产导向多租户计费平台路线](plans/PRODUCTION-INTERVIEW-ROADMAP-2026-10-01.md)，配套 [压测与故障验收规格](plans/BENCHMARK-AND-ACCEPTANCE-2026-10-01.md) 与 [Agent 执行 Prompt 与任务包](plans/AGENT-PROMPTS-2026-10-01.md)（T00–T12）。[PROJECT-ROADMAP.md](PROJECT-ROADMAP.md) 自 2026-10-01 起只作为历史路线保留（其中系统不变量与 Agent 协议仍有效）。
 >
@@ -26,7 +30,7 @@
 - 远端 GitHub Actions 运行（本地有 workflow 文件与本地通过记录，远端结果未知）；
 - 任何压测/容量实验（2026-09-26 数据是历史证据，不是本次复测）。
 
-测试数量口径：当前代码有 **155 个 `func Test...` 声明**（`grep -rn "^func Test" --include="*_test.go"`）。声明数不等于本轮执行用例数；依赖集成用例在无环境变量时 skip，本轮没有逐个统计 skip/not-run（该基线属于 T01A）。
+测试数量口径：当前代码有 **155 个 `func Test...` 声明**（`grep -rn "^func Test" --include="*_test.go"`）。声明数不等于本轮执行用例数；依赖集成用例在无环境变量时 skip，本轮没有逐个统计 skip/not-run（该基线属于 T01A）。T03/T04 复核：同一口径在 base `2fef64e` 上为 **443 个**声明（`git grep -h "^func Test" 2fef64e -- '*_test.go' | wc -l`），155 是 T00 基线 `5129e03` 的数字；见 §7.4/§7.5。
 
 ## 2. 状态标记
 
@@ -125,13 +129,14 @@
 | 状态 | 目标能力 | 当前事实 |
 |---|---|---|
 | ✅ | users / sessions / 登录退出（T02） | `users`/`sessions` 表（migration 000004）；bcrypt cost 12、随机不透明 session token 只存 SHA-256；`gw_session` HttpOnly/SameSite=Lax/固定 TTL，prod 强制 Secure；登出、禁用、`auth_version` 递增都立即失效旧会话；登录按 email+IP 节流（429 + `Retry-After`） |
-| 🟡 | organizations / memberships（T02 基础） | `organizations`/`memberships` 表 + 个人组织部分唯一索引 + `legacy_tenant_id` 映射列；个人组织幂等创建（含 owner 成员关系）、企业组织创建、按用户列出、非成员一律 404。**尚未实现**：邀请、角色变更、最后 owner 保护、成员策略投影（T03） |
-| ⬜ | invitations / RBAC 策略（T03） | 只有表结构与角色枚举约束（`owner/admin/member/billing_viewer`），没有邀请与权限矩阵执行 |
-| ⬜ | Key 归属（org/user/created_by/expires/model allowlist） | Key 仍只有 tenant 字符串；T03 增加归属与迁移步骤 |
-| ⬜ | 不可变价格版本与精确金额 | `CostCents = TotalTokens`；无 `price_versions` |
-| ⬜ | 钱包、预占、receipt/outbox、幂等结算 | `/ledger/balance` 是累计消费；无 `billing_accounts`/`billing_executions`/`usage_receipts` |
-| ✅ | Console API（Hertz，T02 会话/组织子集） | `cmd/console` + `internal/console`（Hertz 原生中间件、独立 DB pool、`migrations.Check` 不自动迁移、诊断 listener 分离、prod fail-fast）；OpenAPI 见 [docs/openapi/console-v1.yaml](openapi/console-v1.yaml)。**尚无 Web UI**（T04/T08） |
-| ⬜ | 多实例：心跳、策略租约、stale 判定 | 报告仅存 Control 内存，无心跳/目标集合/过期 |
+| ✅ | organizations / memberships / 企业 RBAC（T02+T03） | `organizations`/`memberships` 表 + 个人组织部分唯一索引 + `legacy_tenant_id` 映射列；个人组织幂等创建（含 owner 成员关系）、企业组织创建、按用户列出、非成员一律 404（T02）。**T03 补齐**（migration 000005）：邀请（token 只存 SHA-256、固定 email+role、一次性）、`owner/admin/member/billing_viewer` 角色矩阵（service 层唯一执行点，HTTP 只映射状态码）、组织级串行化短事务与“至少一个 owner”保护、owner 转移是授予 owner 的唯一路径、每次变更递增 `org_revision` 并写 `policy_publications`。**未验证**：并发 owner 用例的 HTTP 级复刻、策略发布在 Gateway 的实际收敛（T09）、成员级模型限制尚不可表达 |
+| ✅ | Key 事实表与 Control `AdminService`（T03） | `api_keys` 是 Key 的唯一事实（hash/prefix/org/owner/created_by/status/expires/model_allowlist/policy_version/operation_id），与 `control_config` 派生投影、`control_audit_events`、`control_operations` 同事务写入（migration 000006）；Console 只能经内部 gRPC `AdminService`（CreateApiKey/RevokeApiKey/ListApiKeys/GetOperation/ApplyOrgPolicy）提交命令；raw secret 只在创建响应出现一次，同 `operation_id` 异 payload → 409，`GetOperation` 回查只回元数据 |
+| ✅ | Gateway PG access guard 与计量归属（T03） | `GATEWAY_ACCESS_GUARD=pg`：Key 解析之后、进入上游之前用独立 PG 池复查 user/member/organization 当前有效性（有界 statement timeout、PG 错误 fail-closed 503）；`metering_events` 新增 `org_id`/`user_id`/`key_id`/`execution_id`（migration 000007）并由 Gateway 写入。黑盒 check08 实测：成员 Key → 200、Console 撤销后 → 401、`billing_viewer` Key → 403，且成功请求落带归属的计量行 |
+| ✅ | Console API（Hertz，T02 会话/组织 + T03 成员/邀请/Key/用量/审计） | `cmd/console` + `internal/console`（Hertz 原生中间件、独立 DB pool、`migrations.Check` 不自动迁移、诊断 listener 分离、prod fail-fast）；OpenAPI 见 [console-v1.yaml](openapi/console-v1.yaml)。T03 新增 `/api/v1/orgs/{org}/` 下的 members、invitations、owner-transfer、audit、keys、usage 与 `/api/v1/invitations/{token}/accept`；Console 侧发布 loop 由 `CONSOLE_PUBLICATION_INTERVAL` 驱动 |
+| ✅ | Web UI 最小闭环（T04，分支未合入） | T04 分支 `codex/t04-web-console`（`f28ee74`）的 `web/` + `docs/web/README.md`：React + TypeScript + Vite 单页应用，只消费已冻结的 Console API 与 Gateway `/v1`（无 mock 数据）；loading/empty/error/stale/forbidden 五态、同源 cookie + CSRF、secret 只留内存。**契约缺口显式列出（10 项）**：无钱包/余额/预占/结算、无价格目录、无平台用户列表、无邀请撤销、无审计过滤、无按模型/成员聚合、无 Key 轮换、无组织策略读取端点等；`cost_cents` 一律标注 `demo_consumption`。本分支没有这两个路径 |
+| ⬜ | 不可变价格版本与精确金额（T05） | T03/T04 验收时仍只有 `CostCents = TotalTokens` 固定演示价（`internal/proxy/proxy.go` 的 1 token = 1 分）；价格版本属 T05，**未交付、未验收**，其状态以 T05 的验收证据为准 |
+| ⬜ | 钱包、预占、receipt/outbox、幂等结算（T05/T06） | T03/T04 验收时 `/ledger/balance` 仍是累计消费（无余额/预占语义），没有钱包、`billing_executions`、`usage_receipts` 端点；属 T05/T06，**未交付、未验收** |
+| ⬜ | 多实例：心跳、策略租约、stale 判定（T09） | 报告仅存 Control 内存，无心跳/目标集合/过期；`policy_publications` 只到“Control 已持久化 desired”，Gateway 实际收敛未断言 |
 
 ## 5. 当前风险与未验证边界（按新路线任务归属）
 
@@ -142,12 +147,15 @@
 | 远端 CI 是否跑绿 | 无证据（仓库非公开，无法查询） | T12（发布候选） |
 | `cmd/loadtest` 过载时降低发压、TTFT 口径、固定 10s timeout | 存在 | T01B |
 | 压测环境未隔离（使用日常 Compose/端口/卷） | T01A 已提供隔离 runner（`scripts/isolated-baseline.py`） | T01A（已完成） |
-| ~~无用户/组织/权限/会话模型~~ | **T02 已提供会话/组织基础**；邀请、角色矩阵、最后 owner 保护与策略投影仍缺 | T02（会话/组织基础已完成）、T03 |
+| ~~无用户/组织/权限/会话模型~~ | **T02 提供会话/组织基础，T03 补齐企业 RBAC**（邀请、角色矩阵、最后 owner 保护、owner 转移、策略发布记录）；剩余：策略到 Gateway 的实际收敛无断言（T09）、并发 owner 只有 service 层测试 | T02/T03（已完成）、T09 |
+| 成员级模型权限不可表达 | `model_allowlist` 三态只在 Key 层可写；成员级限制当前不可表达，org ∩ member ∩ Key 的交集语义（`[]` vs NULL 的 deny-all）**未做 HTTP 级验证**（T03 证据 §6.3） | T03 遗留（未验证） |
 | 配置 persisted 不等于 active，无心跳/租约/stale 判定 | 存在 | T09 |
-| 累计消费被误当余额 | 文档风险已纠正，接口语义待新接口替换 | T05 |
+| 累计消费被误当余额 / 无钱包 | 文档风险已纠正；T03/T04 验收时**没有**钱包、余额、预占与 receipt 端点，`cost_cents` 仍是 1 token = 1 分的演示价（Web 端标注 `demo_consumption`） | T05 / T06 |
 | 成功流在 `[DONE]` 后、flush 前 SIGKILL 丢事件 | 存在，代码可见 | T06C / T07A |
 | DLQ 近似裁剪、对账全量读取、无保留策略 | 存在 | T07C / T10 |
 | pending 超 32 页预算的后部公平性 | 无证据 | T09 |
+| 数据面 SSE 在 `data: [DONE]` 之后不结束（间歇性 70–90s） | T03 验收两次观测（06:42:42、06:44:33；`curl --max-time 150` 得到 `time_total=90.048`，而响应体早已完整），最终运行 6 次同款请求全部在 0.05s 内正常结束，**不可稳定复现、触发条件未定位**；不影响 guard 判定（401/403 毫秒级返回），但会让不设超时的流式客户端挂住 | T09 / T10（数据面域） |
+| ~~`owner-transfer` self-target 的校验顺序（非成员 400 而非 404、plain admin 400 而非 403）~~ | **fixed in this branch**：目标校验移入组织级事务回调（在调用者成员关系与权限矩阵之后）；非成员 → `ErrNotFound`（404）、admin → `ErrForbidden`（403）、owner 自转 → `ErrTransferTarget`（400），拒绝时不改角色、不递增 `org_revision`；回归用例 `TestTransferOwnershipChecksActorBeforeTarget` | T03（已完成） |
 | 真实 Provider、容量拐点、慢客户端、多实例容量 | 未验证 | T10 / T11 |
 
 ## 6. 已关闭的历史问题（不再作为新增任务）
@@ -217,6 +225,33 @@
 | 验收发现的产品缺陷 BUG-1（登录节流按 IP 而非 email+IP，造成同 IP 跨账号锁定） | ✅ 已修复并复验：`internal/iam.Login` 自建 `email\|clientKey` 桶 + 回归测试 + 黑盒重跑（check12 由 429 变 200，0 product bug） | 修复记录见证据文档 §10 |
 | 未验证 | ⚠️ prod profile 的真实 HTTPS `Secure` cookie、12h 会话过期、`/admin/users` 可选 organizations 字段、审计持久化契约、多实例共享节流、浏览器 SameSite 行为 | 见证据文档 §9 |
 
+### 7.4 T03（2026-10-01，任务分支 `codex/t03-enterprise-rbac`，代码 HEAD `f2c083c`，证据提交 `2fef64e`）
+
+| 检查 | 结果 | 说明 |
+|---|---|---|
+| 隔离依赖与迁移 | ✅ `make test-up`（测试栈 `postgres:16.15` + `redis:7.4.11`）；scratch 库 `t03_rbac` 迁移到 **version=7 dirty=false** | 只用测试栈；并行的 T02 Console 与 t01a Compose 全程未被停止或修改 |
+| 黑盒验收 `bash scripts/console-rbac-accept.sh --base-url http://127.0.0.1:18092 --admin-email admin@t03.test --admin-password-file … --state-file … --evidence-dir docs/verification/2026-10-01/t03-enterprise-rbac --gateway-url http://127.0.0.1:18090` | ✅ **PASS（12 PASS，0 SKIP，0 product bug），exit 0** | 证据：[T03 验收](verification/2026-10-01/t03-enterprise-rbac/README.md)（`summary.json`、`console-rbac-accept-run.log`、338 个 `.req/.resp` 逐请求文件（含 `setup-*` 与 `check*`）、各进程日志）；脚本 sha256 `f5cdb5af5dd9caab273e06b906d229b5069d32edba12924d79dc92438b632c9d` 与本分支 `scripts/console-rbac-accept.sh` 当前内容一致 |
+| 覆盖范围（12 项） | ✅ | fixture 创建与登录 + check01–check11：登录与角色矩阵读取、跨组织读写 404 且无元数据泄露、权限矩阵负例、最后 owner 保护与 owner 晋升、邀请一次性与 email/role 不可篡改、Key 归属与 secret 一次性、Gateway access guard 与计量归属（真实 HTTP 200/401/403）、用量 self/organization 隔离、审计归属、全局泄密扫描（163 个响应体、14 个 secret 只出现在各自创建响应） |
+| 端口/通道偏差 | ⚠️ | Console 使用 **18092**（8092 被并行 T02 占用）；Control 以容器运行在 **15051/15052**（代码内 `:50051` 被 t01a demo 占用）并启用本地明文逃生开关；`make dev-certs`/mTLS 形态的 Console→Control 通道未验证 |
+| T03 遗留未验证 | ⚠️ | 并发 owner 用例的 HTTP 级复刻、`policy_publications` 到 Gateway 的实际收敛（T09）、org ∩ member ∩ Key 模型权限交集、legacy 计量行（`org_id IS NULL`）与 tenant→org 映射（证据文档 §6） |
+| T03 产品发现 §7.1：`data: [DONE]` 之后 SSE 响应不结束 | ⚠️ 未修复（属数据面域） | 两次观测（06:42:42、06:44:33）：客户端毫秒级就收到完整响应体（末尾 `data: [DONE]`），但 chunked 响应直到约 **70–90s** 才结束（`curl --max-time 8` → `rc=28`；`--max-time 150` → `time_total=90.048`，状态始终 200）。最终运行连续 6 次同款请求全部在 0.05s 内正常结束 ⇒ **不可稳定复现**，怀疑与 Control 热重载/Provider 实例重建同请求并发有关但**未证实**；不影响 guard 判定（401/403 毫秒级），但会让不设超时的流式客户端挂住。转 T09/T10 定位 |
+| 本轮补修：owner-transfer 校验顺序 | ✅ **fixed in this branch** | `internal/organization/members.go` 的 `TransferOwnership` 把目标校验移入 `mutateMembership` 回调（在调用者成员关系 + 权限矩阵之后）；新增回归用例 `TestTransferOwnershipChecksActorBeforeTarget`：非成员 → `ErrNotFound`、admin → `ErrForbidden`、合法 owner 自转 → `ErrTransferTarget`，且三者都不改角色、不递增 `org_revision`。人为恢复旧顺序时该用例确实失败（`non-member transfer to self = … invalid ownership transfer target, want ErrNotFound`），确认它锁住了这次回归 |
+| 回归测试 `IAM_TEST_POSTGRES_DSN='postgres://gateway_test:test_only_local@127.0.0.1:15433/gateway_test?sslmode=disable' go test ./internal/organization/ ./internal/console/ -count=1` | ✅ 两个 package `ok` | `-v` 统计 **114 个顶层用例 PASS、0 FAIL、0 SKIP**（含 PG 集成用例；在 base `2fef64e` + 本次补修上执行，随后 `make test-down`） |
+
+### 7.5 T04（2026-10-01，任务分支 `codex/t04-web-console`，`f28ee74`；**未合入本分支**）
+
+> 本节事实全部来自该分支的 `docs/web/README.md` §8 与提交信息。本工作区没有 `web/`、`docs/web/README.md`，前端命令**本轮未在本分支复验**，因此结果按“T04 分支自报证据”引用；未复验项标为未验证。
+
+| 检查 | 结果 | 说明 |
+|---|---|---|
+| `npm ci` | ✅（T04 自报） | 118 个包、0 漏洞报告，lockfile 可复现（先 `rm -rf node_modules dist`）；node v26.8.2 / npm 11.19.1，要求 Node ≥ 20.19 |
+| `npx tsc --noEmit` | ✅（T04 自报） | strict + `noUncheckedIndexedAccess` + `exactOptionalPropertyTypes` + `verbatimModuleSyntax`，0 error |
+| `npm test`（vitest run） | ✅（T04 自报）**3 个文件 / 33 个用例全部通过** | 错误映射与 CSRF 行为 22 例、Gateway SSE 流式解析 7 例、源码级“无 Web Storage / 无 secret 进 console”护栏 4 例 |
+| `npm run build`（`tsc --noEmit && vite build`） | ✅（T04 自报） | 3168 modules；`dist/` 合计约 1.38 MB、gzip 约 **438 kB**（antd 块最大，约 323 kB gzip）；react/antd/vendor/应用代码分包 |
+| 运行时冒烟（Vite dev server + 真实后端） | 🟡（T04 自报） | `/api/v1/me` 经代理到 Console 并原样返回 401 信封；`/v1/models` 代理到 Gateway，携带真实 Bearer Key 时返回 `{"data":[…],"object":"list"}`。`/v1/chat/completions` 因该环境没有可达上游返回 `502 upstream_unavailable` ⇒ **流式链路端到端未验证**（SSE 逐块解析由单测覆盖） |
+| 浏览器端用例 | ⬜ 未验证 | Playwright 三类角色（member / org admin / platform admin）用例归 T08；`docs/web/README.md` 的 14 项人工检查清单本轮未执行 |
+| 契约缺口 | ⚠️ | 10 项显式缺口：无钱包/余额/预占/结算、无价格目录、无平台用户列表、无邀请撤销、无审计过滤、无按模型/成员聚合、无成功/断流分类、无 Key 轮换、无组织策略读取端点、控制面探针未接线；界面不伪造数字 |
+
 ## 8. 证据索引
 
 | 证据 | 日期 / 适用 commit | 覆盖 | 限制 |
@@ -229,5 +264,9 @@
 | [T01A 运行基线证据](verification/2026-10-01/t01a-prod-profiles/README.md)（+ race/integration/demo 原始输出） | 2026-10-01，`c069666` / `d15dcc2` | profile 与生产 fail-fast、诊断 listener 分离、查询鉴权、错误信封、入口指标、`go test -race ./...`、`make integration-test`、`make demo-accept` 三轮 | 无真实 PG/Redis 的 prod 正例启动；构建使用离线 GOPROXY 回退副本；demo 脚本 `start --wait` 兼容性已修复 |
 | [T01A 隔离低负载基线](verification/2026-10-01/t01a-baseline/README.md) | 2026-10-01，`c069666`（干净工作区）+ 首次 dirty 运行 `0ffe182` | 独立 Compose project/端口/卷/run_id；直连 vs Gateway 的低负载闭环与固定到达对照、资源采样、对账 | 单机低负载合成流；两条路径差值在噪声内，不能宣称零开销；`--keep`/`--no-build`/提前停止路径未执行 |
 | [T02 Console/IAM 验收](verification/2026-10-01/t02-console-iam/README.md)（+ `summary.json`、`summary-fixed-1.json`、逐检查 `.req/.resp`、迁移/bootstrap/服务日志） | 2026-10-01，任务分支 `codex/t02-console-iam`（base `b505bfd`） | 迁移 v3→4 与全新 0→4、bootstrap 幂等、11 项黑盒 HTTP 验收（登录/会话/CSRF/组织/跨组织 404/登出/平台管理员/禁用/节流/错误信封）、诊断端口分离、prod 守卫，以及 BUG-1 的修复复验 | 使用隔离测试 PG；prod 的真实 HTTPS Secure cookie、12h 过期、多实例节流、审计持久化契约未验证；验收脚本 `scripts/console-accept.sh` 需已运行的 Console |
-| [ADR-0002 身份与组织边界](decisions/ADR-0002-iam-identity-and-organizations.md) + [console-v1.yaml](openapi/console-v1.yaml) | 2026-10-01 | T02 冻结的决策、数据模型、API 契约与配置 | 契约只覆盖 T02 子集；邀请/RBAC/Key 归属属 T03 |
+| [T03 企业 RBAC 验收](verification/2026-10-01/t03-enterprise-rbac/README.md)（+ `summary.json`、`console-rbac-accept-run.log`、338 个 `.req/.resp`（含 `setup-*`/`check*`）、`fixtures.json`、`gateway.log`/`console-serve.log`/`metering.log`/`bootstrap.log`/`migrate-*.log`/`teardown.log`） | 2026-10-01，任务分支 `codex/t03-enterprise-rbac` @ `f2c083c`（证据提交 `2fef64e`） | 12 项黑盒检查全 PASS（0 SKIP、0 阻断缺陷）：角色矩阵、跨组织读写 404 无元数据泄露、权限矩阵负例、最后 owner 保护、邀请一次性、Key 归属与 secret 一次性、Gateway access guard（200/401/403）与计量归属、用量隔离、审计归属、全局泄密扫描 | 使用 18092/15051 端口与 Control 本地明文逃生开关（8092/50051 被并行栈占用）；并发 owner 用例、策略到 Gateway 的收敛、模型权限交集、legacy 计量行未验证；2 条产品发现见该文档 §7（§7.1 间歇性 SSE 未结束、§7.2 校验顺序偏差，后者已在本分支修复） |
+| `scripts/console-rbac-accept.sh`（sha256 `f5cdb5af…b632c9d`） | 2026-10-01，随 T03 分支提交 | 纯黑盒验收脚本（bash + curl + python3 stdlib）：负例优先、逐请求落证、secret 全量脱敏、`--state-file` 复用 fixture，退出码 0/1/2 | 需已运行的 Console（check07/08 还需 Control/Gateway 能力，缺失时记 SKIP 而不是 PASS）；不启动、不迁移、不读数据库 |
+| `web/` + `docs/web/README.md`（T04 Web 控制台） | 2026-10-01，T04 分支 `codex/t04-web-console` @ `f28ee74`；**本分支不存在这两个路径** | React + TypeScript + Vite 最小闭环：只消费已冻结的 Console API 与 Gateway `/v1`、五态渲染、同源 cookie + CSRF、secret 只留内存、10 项契约缺口显式呈现；该分支自报 `tsc --noEmit`、vitest 33/33、`npm run build` 通过 | 前端命令本轮未在本分支复验；流式链路端到端、Playwright 浏览器用例（T08）与 14 项人工清单未验证 |
+| [ADR-0002 身份与组织边界](decisions/ADR-0002-iam-identity-and-organizations.md) + [console-v1.yaml](openapi/console-v1.yaml) | 2026-10-01 | T02 冻结的决策、数据模型、API 契约与配置 | 契约只覆盖 T02 子集；邀请/RBAC/Key 归属已由 T03 落地（见上行与 ADR-0003） |
+| [ADR-0003 企业成员、Key 归属与策略发布](decisions/ADR-0003-enterprise-rbac-keys-and-policy.md) | 2026-10-01 | T03 冻结的决策：权限矩阵、Control `AdminService`、邀请、组织级短事务与最后 owner、策略发布、Gateway PG access guard、迁移编号 | 首版不含成员硬预算/钱包（T05/T06）、OIDC/SSO/MFA、自定义角色、全局强一致撤销（T09） |
 | 新路线三个计划文档 + [计划审查](plans/PLAN-REVIEW-2026-10-01.md) | 2026-10-01，基线 `a38999c` | 产品目标、架构边界、任务包与验收规格 | 计划本身不是实现证据 |

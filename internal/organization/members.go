@@ -149,11 +149,19 @@ func (s *Service) RemoveMember(ctx context.Context, actorUserID, orgID, targetUs
 // TransferOwnership 是授予 owner 的唯一路径：目标成员在同一事务里升为 owner，
 // 调用者降为 admin（owner 数量不变，因此不需要“最后 owner”判断）。只有 owner
 // 能调用（transfer_owner）。目标必须是组织的 active 成员，且不能是自己。
+//
+// 校验顺序是有约束的：调用者的成员关系与权限矩阵先判（mutateMembership 已完
+// 成），目标合法性后判。非成员必须拿到 ErrNotFound（不泄露组织存在性）、plain
+// admin 必须拿到 ErrForbidden（矩阵拒绝），不能因为“目标是调用者自己”这种目标
+// 侧问题先返回 ErrTransferTarget——否则同一请求对非成员/无权限者会变成 400，
+// 既泄露了目标校验细节，也绕过了 404/403 契约。
 func (s *Service) TransferOwnership(ctx context.Context, actorUserID, orgID, targetUserID int64) error {
-	if targetUserID == actorUserID {
-		return ErrTransferTarget
-	}
 	return s.mutateMembership(ctx, actorUserID, orgID, ActionTransferOwner, func(tx *sql.Tx, actorRole string) error {
+		// 目标校验排在 actor 成员关系 + 矩阵之后：合法的 owner 转移到自己仍
+		// 是 400（ErrTransferTarget），但非成员/admin 在那之前就已被拒绝。
+		if targetUserID == actorUserID {
+			return ErrTransferTarget
+		}
 		target, err := memberInTx(ctx, tx, orgID, targetUserID)
 		if err != nil {
 			return err
