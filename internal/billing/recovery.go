@@ -229,6 +229,8 @@ func ValidateRecoveryOptions(opts RecoveryOptions) error {
 		return fmt.Errorf("%w: the maximum execution duration must be positive", ErrInvalidArgument)
 	case opts.Grace <= 0:
 		return fmt.Errorf("%w: the recovery grace period must be positive", ErrInvalidArgument)
+	case opts.MaxExecutionDuration > time.Duration(1<<63-1)-opts.Grace:
+		return fmt.Errorf("%w: the maximum execution duration plus recovery grace exceeds the supported duration", ErrInvalidArgument)
 	case opts.LivenessLease <= 0:
 		return fmt.Errorf("%w: the liveness lease must be positive", ErrInvalidArgument)
 	case opts.LivenessLease <= DefaultHeartbeatInterval:
