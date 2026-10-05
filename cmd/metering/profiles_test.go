@@ -18,6 +18,7 @@ func goodMeteringEnv() map[string]string {
 		"METERING_REQUIRE_POSTGRES": "true",
 		"POSTGRES_DSN":              "postgres://gateway:gateway@postgres:5432/llm_gateway?sslmode=disable",
 		"METERING_ADMIN_TOKEN":      "0123456789abcdef",
+		"METERING_POLICY_TOKEN":     "fedcba9876543210",
 		"METERING_ADDR":             ":8091",
 		"METERING_DIAGNOSTICS_ADDR": "127.0.0.1:9093",
 	}
@@ -50,6 +51,7 @@ func TestMeteringChecksCoverEveryRequiredItem(t *testing.T) {
 		"METERING_REQUIRE_POSTGRES",
 		"POSTGRES_DSN",
 		"METERING_ADMIN_TOKEN",
+		"METERING_POLICY_TOKEN",
 		"METERING_DIAGNOSTICS_ADDR",
 	}
 	names := make([]string, 0, len(checks))
@@ -94,6 +96,21 @@ func TestMeteringChecksRejectRelaxedSettings(t *testing.T) {
 			name:    "admin token too short",
 			mutate:  func(env map[string]string) { env["METERING_ADMIN_TOKEN"] = "0123456789abcde" },
 			failing: "METERING_ADMIN_TOKEN",
+		},
+		{
+			name:    "policy token is optional for existing deployments",
+			mutate:  func(env map[string]string) { delete(env, "METERING_POLICY_TOKEN") },
+			failing: "",
+		},
+		{
+			name:    "policy token too short",
+			mutate:  func(env map[string]string) { env["METERING_POLICY_TOKEN"] = "0123456789abcde" },
+			failing: "METERING_POLICY_TOKEN",
+		},
+		{
+			name:    "policy token equals admin token",
+			mutate:  func(env map[string]string) { env["METERING_POLICY_TOKEN"] = env["METERING_ADMIN_TOKEN"] },
+			failing: "METERING_POLICY_TOKEN",
 		},
 		{
 			name:    "diagnostics address unset",
