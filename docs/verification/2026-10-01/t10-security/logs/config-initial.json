@@ -1,1 +1,0 @@
-{"desired_version":1,"keys":[],"org_policies":{},"providers":{"primary":{"credential_ref":"","id":"primary","mock_delay_ms":0,"model":"t10-model","model_mapping":null,"protocol":"openai-compatible","timeouts":{"attempt_timeout_ms":90000},"url":"http://127.0.0.1:58876"}},"result":"persisted","routes":{"default":["primary"],"t10-model":["primary"]},"version":1}

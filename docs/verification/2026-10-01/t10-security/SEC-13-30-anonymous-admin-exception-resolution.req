@@ -1,7 +1,0 @@
-POST http://127.0.0.1:58872/api/v1/admin/billing/exceptions/99999999/resolution
-X-Request-ID: t10-SEC-13-30
-Accept: application/json
-X-CSRF-Token: <obj…<redacted:7> object at 0x10cd64880>
-Content-Type: application/json
-
-{"decision": "dismiss", "reason": "sec13 probe"}

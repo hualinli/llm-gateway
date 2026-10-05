@@ -1,10 +1,10 @@
 name: CI
 
-# 分层见 docs/plans/PRODUCTION-INTERVIEW-ROADMAP-2026-10-01.md §9.3：
+# 分层见 docs/DEVELOPMENT.md：
 #   * 每个 PR：普通测试/vet/build、关键 package race、migration/Redis/PG 集成、
 #     frontend typecheck/build/unit、关键 RBAC/账本/三角色 E2E。
 #   * 夜间/手动：完整 race。
-#   * 容量与长时间压测不放在共享 runner 上（见验收规格 §6.2/§9.3）。
+#   * 容量与长时间压测不放在共享 runner 上（本地隔离运行）。
 on:
   push:
   pull_request:
@@ -140,7 +140,7 @@ jobs:
         with:
           name: t12-release-candidate-evidence
           path: |
-            docs/verification/2026-10-01/t12-release-candidate/runs/**
+            data/verification/release-candidate/**
             web/playwright-report/**
             web/test-results/**
           if-no-files-found: warn

@@ -10,7 +10,7 @@ import (
 
 // T07B: gateway instance liveness.
 //
-// The recovery policy (PRODUCTION-INTERVIEW-ROADMAP §6.5) only allows an audited
+// The recovery policy (docs/runbooks/billing-recovery.md) only allows an audited
 // release of a stuck reservation after the owning gateway process is proven
 // dead. "Proven dead" has to survive the death of *both* processes involved, so
 // the fact lives in PostgreSQL (migration 000012, gateway_instances) and not in

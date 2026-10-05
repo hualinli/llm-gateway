@@ -1,5 +1,0 @@
-=== RUN   TestGatewayShutdownFlushesAfterCancelingLongStream
-2026/09/11 09:35:51 metering flush failed batch=2 err=redis client is nil; persisted to spool
---- PASS: TestGatewayShutdownFlushesAfterCancelingLongStream (0.03s)
-PASS
-ok  	llm-gateway/cmd/gateway	1.239s

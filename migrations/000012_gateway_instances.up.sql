@@ -1,6 +1,6 @@
 -- 000012：Gateway 实例心跳（T07B 恢复前置条件）。
 --
--- T07B（PRODUCTION-INTERVIEW-ROADMAP §6.5）规定：僵尸 reserved/executing 只有在
+-- T07B（docs/runbooks/billing-recovery.md）规定：僵尸 reserved/executing 只有在
 -- 「实例失活、最大 attempt 时长 + 恢复宽限已过、同 execution 不存在成功 receipt、
 -- 恢复检查留证」之后才能有审计地释放。前两条里唯一无法从内存/Redis 得到的事实是
 -- 「拥有这条 execution 的 gateway 进程现在还活着吗」—— 进程的存活必须写在一个

@@ -1,8 +1,0 @@
-POST http://127.0.0.1:58872/api/v1/admin/users
-X-Request-ID: t10-SEC-13-13
-Accept: application/json
-Cookie: gw_session=zBIO…<redacted:18>; gw_csrf=4cFh…<redacted:18>
-X-CSRF-Token: 4cFh…<redacted:18>
-Content-Type: application/json
-
-{"email": "x@t10.test", "password": "WSMc…<redacted:16>"}

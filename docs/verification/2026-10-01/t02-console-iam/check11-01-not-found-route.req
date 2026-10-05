@@ -1,3 +1,0 @@
-GET /api/v1/definitely-not-a-route HTTP/1.1
-X-Request-ID: acc-check11-01
-Accept: application/json

@@ -1,6 +1,6 @@
 // Package console implements the Hertz HTTP layer of the Console service:
 // browser sessions, organizations and the platform-admin user entry points
-// frozen by docs/decisions/ADR-0002-iam-identity-and-organizations.md.
+// frozen by docs/decisions.md.
 //
 // The layer is deliberately thin and framework-adjacent only: it authenticates,
 // validates, calls the internal/iam and internal/organization services through

@@ -1,9 +1,0 @@
-HTTP 200 (0.005s)
-Server: hertz
-Date: Thu, 01 Oct 2026 06:46:55 GMT
-Content-Type: application/json
-Content-Length: 115
-X-Request-Id: t10-BFIX-23
-X-Trace-Id: 826043bed34b1ac2a4615280d3d61724
-
-{"organization_id":"4","user_id":"5","role":"billing_viewer","status":"active","created_at":"2026-10-01T06:46:55Z"}

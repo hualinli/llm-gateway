@@ -1,4 +1,0 @@
-2026/10/01 14:44:25 upstream-mock primary listening on 127.0.0.1:58876 ttft=5ms token-interval=5ms tokens=8 status=200 hang=false fail-after=0 max-inflight=0 echo=false event-line-bytes=0 role-only-first=false authorization=off
-2026/10/01 14:44:25 upstream-mock usage mode=normal
-2026/10/01 14:44:25 upstream-mock per-request overrides (mock-only, forwarded verbatim by the Gateway): x_mock_ttft_ms, x_mock_token_interval_ms, x_mock_tokens, x_mock_event_line_bytes, x_mock_role_only_first, x_mock_usage
-2026/10/01 14:46:31 upstream-mock exit

@@ -1,9 +1,0 @@
-HTTP 201 (0.008s)
-Server: hertz
-Date: Thu, 01 Oct 2026 06:46:56 GMT
-Content-Type: application/json
-Content-Length: 563
-X-Request-Id: t10-BFIX-36
-X-Trace-Id: 319af03d1a6aa354a8836335c352a486
-
-{"key":{"key_id":"key_7c00dc7d270289187ad03301817f83f8","prefix":"sk-NjuGk...","organization_id":"4","owner_user_id":"6","created_by":"6","status":"active","expires_at":null,"revoked_at":null,"model_allowlist":null,"policy_version":"1","created_at":"2026-10-01T06:46:56Z","tenant_id":"org:4"},"secret":"sk-N…<redacted:46>","secret_returned_once":true,"replayed":false,"resulting_version":"4","notice":"Copy this secret now: it is shown only once and can never be retrieved again. If you lose it, revoke this key and create a new one."}

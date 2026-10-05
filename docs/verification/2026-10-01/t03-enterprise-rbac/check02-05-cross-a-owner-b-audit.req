@@ -1,6 +1,0 @@
-GET http://127.0.0.1:18092/api/v1/orgs/13/audit?limit=1
-X-Request-ID: t03-check02-05
-Accept: application/json
-Cookie: gw_session=w8jW…<redacted:18>; gw_csrf=Pr8c…<redacted:18>
-X-CSRF-Token: Pr8c…<redacted:18>
-

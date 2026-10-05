@@ -1,3 +1,0 @@
-GET /livez HTTP/1.1
-X-Request-ID: acc-check01-01
-Accept: application/json

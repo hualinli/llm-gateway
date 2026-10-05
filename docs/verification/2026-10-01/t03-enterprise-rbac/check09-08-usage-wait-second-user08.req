@@ -1,6 +1,0 @@
-GET http://127.0.0.1:18092/api/v1/orgs/12/usage?limit=100
-X-Request-ID: t03-check09-08
-Accept: application/json
-Cookie: gw_session=gctg…<redacted:18>; gw_csrf=lg-l…<redacted:18>
-X-CSRF-Token: lg-l…<redacted:18>
-

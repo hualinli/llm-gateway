@@ -1,6 +1,0 @@
-=== RUN   TestRedisReconcileRejectsConflictingDuplicatePayload
-    consumer_test.go:84: different payload was silently classified as safe redelivery: {StreamMessages:2 UniqueEvents:1 InvalidEvents:0 DuplicateEvents:1 PendingMessages:0 DLQMessages:0 LedgerRows:1 Valid:1 DuplicateKeys:[tenant-a:same-event] StreamOnly:[] LedgerOnly:[] PayloadMismatch:[]}
---- FAIL: TestRedisReconcileRejectsConflictingDuplicatePayload (0.03s)
-FAIL
-FAIL	llm-gateway/internal/metering	1.069s
-FAIL

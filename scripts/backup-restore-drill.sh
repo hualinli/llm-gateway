@@ -28,7 +28,7 @@ script_name="$(basename "$0")"
 # shellcheck source=scripts/t10-lab-common.sh
 source "$script_dir/t10-lab-common.sh"
 
-evidence_dir="$T10_ROOT/docs/verification/2026-10-01/t10-security"
+evidence_dir="$T10_ROOT/data/verification/t10-security"
 timeout_seconds=20
 keep_lab=0
 live_requests=12
@@ -40,7 +40,7 @@ usage() {
   scripts/backup-restore-drill.sh [选项]
 
 选项:
-  --evidence-dir DIR    证据目录（默认 docs/verification/2026-10-01/t10-security）
+  --evidence-dir DIR    证据目录（默认 data/verification/t10-security）
   --timeout-seconds N   单个 curl 超时，默认 20
   --live-requests N     备份前用真实流量写入的计费请求数，默认 12
   --flush-requests N    Redis 清空演练里"已投递未结算"的收据数，默认 8

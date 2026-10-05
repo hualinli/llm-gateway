@@ -1,6 +1,0 @@
-DELETE http://127.0.0.1:58872/api/v1/orgs/6/members/10
-X-Request-ID: t10-SEC-07-04
-Accept: application/json
-Cookie: gw_session=2aq8…<redacted:18>; gw_csrf=Fn-5…<redacted:18>
-X-CSRF-Token: Fn-5…<redacted:18>
-

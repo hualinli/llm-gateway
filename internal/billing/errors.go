@@ -2,7 +2,7 @@
 // versions, exact integer charges, organisation billing accounts and the
 // append-only ledger behind them.
 //
-// The rules are frozen by docs/decisions/ADR-0004-money-and-price-versions.md:
+// The rules are frozen by docs/decisions.md:
 //
 //   - the ledger unit is the micro-yuan (10^-6 CNY) held in an int64; float64 is
 //     never used for money anywhere in this package;

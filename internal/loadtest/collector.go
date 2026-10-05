@@ -9,7 +9,7 @@ import (
 )
 
 // MaxLoadgenDroppedPercent is the generator-validity threshold from
-// docs/plans/BENCHMARK-AND-ACCEPTANCE-2026-10-01.md §2.1: when the load
+// cmd/loadtest/README.md: when the load
 // generator itself drops more than this share of scheduled arrivals, the round
 // says nothing about the capacity of the system under test and must be re-run
 // with a bigger generator (more resources or a separate load host).
@@ -26,7 +26,7 @@ const MinArrivalRateRatio = 0.99
 const CapacityRule = "generator-side drops above 0.1% of scheduled arrivals, " +
 	"and arrivals delivered below 99% of the planned rate, invalidate that round for capacity " +
 	"conclusions; re-run with more generator resources or a separate load host " +
-	"(BENCHMARK-AND-ACCEPTANCE-2026-10-01 §2.1)"
+	"(cmd/loadtest/README.md)"
 
 const httpStatusOK = http.StatusOK
 

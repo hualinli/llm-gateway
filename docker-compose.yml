@@ -17,7 +17,7 @@ services:
     entrypoint: ["/usr/local/bin/control"]
     environment:
       # 本地 Demo 显式声明 demo profile；生产必须满足
-      # docs/decisions/ADR-0001-runtime-profiles.md 中列出的全部检查，缺失即拒绝启动。
+      # docs/decisions.md 中列出的全部检查，缺失即拒绝启动。
       GATEWAY_PROFILE: demo
       POSTGRES_DSN: postgres://gateway:gateway@postgres:5432/llm_gateway?sslmode=disable
       CONTROL_REQUIRE_POSTGRES: "true"
@@ -54,7 +54,7 @@ services:
     entrypoint: ["/usr/local/bin/metering"]
     environment:
       # demo profile：/ledger/* 与 /reconcile 无 token 时保持开放并打印警告；
-      # 生产见 docs/decisions/ADR-0001-runtime-profiles.md。
+      # 生产见 docs/decisions.md。
       GATEWAY_PROFILE: demo
       REDIS_ADDR: redis:6379
       POSTGRES_DSN: postgres://gateway:gateway@postgres:5432/llm_gateway?sslmode=disable
@@ -83,7 +83,7 @@ services:
     environment:
       # demo profile：Secure cookie 关闭（本机 http 调试）、诊断与业务同端口，
       # 未满足的生产检查只打印 WARNING；生产见
-      # docs/decisions/ADR-0002-iam-identity-and-organizations.md §5。
+      # docs/decisions.md。
       GATEWAY_PROFILE: demo
       POSTGRES_DSN: postgres://gateway:gateway@postgres:5432/llm_gateway?sslmode=disable
       CONSOLE_SECURE_COOKIES: "false"
@@ -118,7 +118,7 @@ services:
     entrypoint: ["/usr/local/bin/gateway"]
     environment:
       # demo profile 保留宽松默认（内存 key store、诊断与业务同端口）；
-      # 生产见 docs/decisions/ADR-0001-runtime-profiles.md。
+      # 生产见 docs/decisions.md。
       GATEWAY_PROFILE: demo
       REDIS_ADDR: redis:6379
       CONTROL_ADDR: control:50051

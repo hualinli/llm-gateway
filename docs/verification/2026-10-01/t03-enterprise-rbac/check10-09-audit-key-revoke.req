@@ -1,6 +1,0 @@
-POST http://127.0.0.1:18092/api/v1/orgs/12/keys/key_21b8f6a83c9d5b552f94b99c689deabe/revoke
-X-Request-ID: t03-check10-09
-Accept: application/json
-Cookie: gw_session=gctg…<redacted:18>; gw_csrf=lg-l…<redacted:18>
-X-CSRF-Token: lg-l…<redacted:18>
-

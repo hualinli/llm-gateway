@@ -1,8 +1,0 @@
-POST http://127.0.0.1:58872/api/v1/orgs/4/keys
-X-Request-ID: t10-FIX-36
-Accept: application/json
-Cookie: gw_session=cf5c…<redacted:18>; gw_csrf=fqaa…<redacted:18>
-X-CSRF-Token: fqaa…<redacted:18>
-Content-Type: application/json
-
-{}

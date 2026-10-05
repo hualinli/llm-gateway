@@ -41,7 +41,7 @@ func parseBillingMode(raw string) (billingMode, error) {
 }
 
 // admissionPolicy is the documented token-bound policy that makes a
-// reservation provable (PRODUCTION-INTERVIEW-ROADMAP §6.3 step 2). The platform
+// reservation provable (docs/decisions.md). The platform
 // refuses a request it cannot bound instead of admitting it with a guessed
 // upper bound:
 //

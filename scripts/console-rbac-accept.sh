@@ -12,9 +12,9 @@
 #     不泄露元数据），越权写入必须 403/404，最后一个 owner 必须 409。
 #
 # 契约来源：
-#   * docs/decisions/ADR-0003-enterprise-rbac-keys-and-policy.md §2.2–§2.9、§5
+#   * docs/decisions.md
 #   * docs/openapi/console-v1.yaml（/api/v1/orgs/* 冻结子集）
-#   * docs/decisions/ADR-0002-iam-identity-and-organizations.md §4/§5（会话/CSRF）
+#   * docs/decisions.md（会话/CSRF）
 #
 # 退出码：0 = 无硬失败（可能含 SKIP / NOT VERIFIED）；1 = 首个硬失败；2 = 用法/环境错误。
 #

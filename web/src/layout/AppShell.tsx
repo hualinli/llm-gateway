@@ -269,7 +269,7 @@ export function AppShell(): ReactNode {
         <Sider theme="light" width={248} breakpoint="lg" style={{ borderInlineEnd: '1px solid #f0f0f0' }}>
           <div className="app-brand">
             <Link to="/">LLM Gateway</Link>
-            <span>Console</span>
+            <span>模型 API 与团队计费平台</span>
           </div>
           {menu}
         </Sider>

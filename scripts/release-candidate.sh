@@ -9,7 +9,7 @@
 # 撤销与被移除成员的 Key 被拒、平台异常/审计面、Redis 与 Gateway 故障恢复）
 # → 安全/profile 检查 → 证据归档 → 只回收自己的资源。
 #
-# 约束（与 docs/plans/BENCHMARK-AND-ACCEPTANCE-2026-10-01.md §7/§8 一致）：
+# 约束（与 docs/DEVELOPMENT.md 一致）：
 #   * 只操作自己的 compose project：每条 docker compose 命令都显式带
 #     --project-name "$RC_PROJECT" 和自己的 -f 文件；down 只 drop 自己的 project。
 #     绝不执行无 -p 的 `docker compose down`、`docker system prune`，也不触碰 demo 栈。
@@ -76,7 +76,7 @@ rc_usage() {
 用法:
   scripts/release-candidate.sh [run] [选项]   构建 → 全栈 → bootstrap/seed → 端到端验收 → 安全检查 → 证据 → 回收
   scripts/release-candidate.sh up   [选项]    只做 构建/启动/bootstrap/seed，保留栈继续运行
-  scripts/release-candidate.sh demo [选项]    对着已运行的栈走 5 分钟 Demo（配合 DEMO.md）
+  scripts/release-candidate.sh demo [选项]    对着已运行的栈走 5 分钟 Demo（操作见 docs/DEVELOPMENT.md）
   scripts/release-candidate.sh e2e  [选项]    对着已运行的栈跑 Playwright 三角色套件
   scripts/release-candidate.sh security [选]  对着已运行的栈只跑安全/profile 检查
   scripts/release-candidate.sh status [选项]  显示本项目容器与证据位置
@@ -86,7 +86,7 @@ rc_usage() {
 选项:
   --project-name NAME    compose project 名（默认 t12rc-<pid>；拒绝 "default"）
   --work-dir DIR         运行期工作目录（默认 data/release-candidate/<UTC 时间戳>-<pid>）
-  --evidence-dir DIR     证据目录（默认 docs/verification/2026-10-01/t12-release-candidate/runs/<时间戳>）
+  --evidence-dir DIR     证据目录（默认 data/verification/release-candidate/<时间戳>）
   --keep                 结束后保留容器与卷（run 默认回收）
   --skip-build           复用已存在的镜像，不重新 build
   --pull                 构建前 docker compose pull（基础镜像）
@@ -249,7 +249,7 @@ rc_prepare_dirs() {
   chmod 700 "$RC_WORK_DIR/secrets"
 
   if [[ "$RC_EVIDENCE_DIR_SET" == "0" ]]; then
-    RC_EVIDENCE_DIR="$RC_ROOT/docs/verification/2026-10-01/t12-release-candidate/runs/$RC_RUN_ID"
+    RC_EVIDENCE_DIR="$RC_ROOT/data/verification/release-candidate/$RC_RUN_ID"
   fi
   mkdir -p "$RC_EVIDENCE_DIR"
   RC_EVIDENCE_DIR="$(cd "$RC_EVIDENCE_DIR" && pwd)"
@@ -1805,7 +1805,7 @@ rc_accept() {
     --console "http://127.0.0.1:$RC_CONSOLE_PORT" \
     --gateway "http://127.0.0.1:$RC_GATEWAY_PORT" \
     --control "http://127.0.0.1:$RC_CONTROL_HTTP_PORT" \
-    --admin-token "$(cat "$RC_WORK_DIR/secrets/control-admin-token")" \
+    --admin-token="$(cat "$RC_WORK_DIR/secrets/control-admin-token")" \
     --admin-email "$RC_ADMIN_EMAIL" \
     --admin-password-file "$RC_WORK_DIR/secrets/admin-password" \
     --identities "$RC_WORK_DIR/secrets/identities.json" \
@@ -1865,9 +1865,7 @@ rc_e2e() {
   ( cd "$RC_ROOT/web" && npm ci >>"$RC_WORK_DIR/logs/e2e.log" 2>&1 ) \
     || { tail -20 "$RC_WORK_DIR/logs/e2e.log" >&2; rc_die "npm ci 失败"; }
   rc_log "==> Playwright 三角色套件（Console=$RC_CONSOLE_PORT Gateway=${RC_GATEWAY_PORT}）"
-  # screenshots.spec.ts 会把 PNG 写进被跟踪的 docs/web/screenshots/（属于 T04/T08 的
-  # 交付物）。发布候选运行不允许覆盖别的任务的受跟踪文件，因此按标题排除，
-  # 并在证据 README 里把这条记为"有意跳过 + 原因"。
+  # 此处只跑功能断言；截图用例可单独运行，输出到 data/verification/web-screenshots。
   set +e
   ( cd "$RC_ROOT/web" && \
     E2E_CONSOLE_URL="http://127.0.0.1:$RC_CONSOLE_PORT" \
@@ -2024,7 +2022,7 @@ for rel in tracked:
     for kind, rx in tracked_patterns:
         for _ in rx.finditer(text):
             category = ("test_fixture" if rel.endswith("_test.go")
-                        else "prior_evidence" if rel.startswith("docs/verification/")
+                        else "prior_evidence" if rel.startswith("data/verification/")
                         else "other")
             tracked_literals.append({"file": rel, "kind": kind, "category": category})
     defaults += scan_soft(p, rel)

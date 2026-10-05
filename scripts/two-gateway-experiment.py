@@ -1135,7 +1135,7 @@ class Experiment:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--output", default="docs/verification/2026-10-01/t09-multi-instance",
+    parser.add_argument("--output", default="data/verification/t09-multi-instance",
                         help="directory for raw evidence")
     parser.add_argument("--revocation-rounds", type=int, default=20)
     parser.add_argument("--hang-rounds", type=int, default=12)

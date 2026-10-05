@@ -1,5 +1,0 @@
-GET http://127.0.0.1:58872/api/v1/me
-X-Request-ID: t10-SEC-01-01
-Accept: application/json
-X-CSRF-Token: <obj…<redacted:7> object at 0x10cd64880>
-

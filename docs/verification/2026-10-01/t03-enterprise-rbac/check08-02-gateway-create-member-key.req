@@ -1,8 +1,0 @@
-POST http://127.0.0.1:18092/api/v1/orgs/12/keys
-X-Request-ID: t03-check08-02
-Accept: application/json
-Cookie: gw_session=gctg…<redacted:18>; gw_csrf=lg-l…<redacted:18>
-X-CSRF-Token: lg-l…<redacted:18>
-Content-Type: application/json
-
-{"operation_id": "t03-20260930T225028Z-e3c5-gateway-allowed"}

@@ -1,9 +1,0 @@
-HTTP 200 (0.001s)
-Server: hertz
-Date: Wed, 30 Sep 2026 22:50:32 GMT
-Content-Type: application/json
-Content-Length: 428
-X-Request-Id: t03-setup-35
-X-Trace-Id: 3eac1ab9c88b47d6e33ad23eb157cc77
-
-{"user":{"id":"10","email":"t03-17c0af-a-invitee@t03.test","status":"active","platform_admin":false,"created_at":"2026-09-30T22:50:30Z","updated_at":"2026-09-30T22:50:30Z"},"organizations":[{"organization":{"id":"4","type":"personal","name":"t03-17c0af-a-invitee@t03.test","status":"active","legacy_tenant_id":null,"created_at":"2026-09-30T22:50:30Z"},"role":"owner"}],"csrf_token":"9nGu…<redacted:18>"}

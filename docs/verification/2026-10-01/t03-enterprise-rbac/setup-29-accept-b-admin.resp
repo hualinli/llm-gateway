@@ -1,9 +1,0 @@
-HTTP 200 (0.004s)
-Server: hertz
-Date: Wed, 30 Sep 2026 22:50:32 GMT
-Content-Type: application/json
-Content-Length: 107
-X-Request-Id: t03-setup-29
-X-Trace-Id: 43ed692971984e7bb7b00cb78edfe810
-
-{"organization_id":"13","user_id":"7","role":"admin","status":"active","created_at":"2026-09-30T22:50:32Z"}

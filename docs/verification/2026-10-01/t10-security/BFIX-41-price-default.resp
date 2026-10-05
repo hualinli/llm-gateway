@@ -1,9 +1,0 @@
-HTTP 201 (0.003s)
-Server: hertz
-Date: Thu, 01 Oct 2026 06:46:56 GMT
-Content-Type: application/json
-Content-Length: 312
-X-Request-Id: t10-BFIX-41
-X-Trace-Id: 8be78b4e667dff56627dc6a6360765f8
-
-{"id":"1","model":"default","currency":"CNY","input_price_micro_per_million":"1000000","output_price_micro_per_million":"1000000","provider_input_cost_micro_per_million":null,"provider_output_cost_micro_per_million":null,"effective_at":"2026-10-01T05:46:56Z","created_by":"1","created_at":"2026-10-01T06:46:56Z"}

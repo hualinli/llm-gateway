@@ -1,8 +1,0 @@
-POST http://127.0.0.1:58872/api/v1/organizations
-X-Request-ID: t10-FIX-14
-Accept: application/json
-Cookie: gw_session=975L…<redacted:18>; gw_csrf=uoPl…<redacted:18>
-X-CSRF-Token: uoPl…<redacted:18>
-Content-Type: application/json
-
-{"name": "t10-z9162-beta"}

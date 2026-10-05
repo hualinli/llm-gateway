@@ -1,8 +1,0 @@
-POST http://127.0.0.1:58872/api/v1/orgs/4/invitations
-X-Request-ID: t10-SEC-09-01
-Accept: application/json
-Cookie: gw_session=2aq8…<redacted:18>; gw_csrf=Fn-5…<redacted:18>
-X-CSRF-Token: Fn-5…<redacted:18>
-Content-Type: application/json
-
-{"email": "t10-z9162-a-invitee@t10.test", "role": "member"}

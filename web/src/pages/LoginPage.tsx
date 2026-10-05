@@ -56,7 +56,7 @@ export function LoginPage(): ReactNode {
             LLM Gateway Console
           </Typography.Title>
           <Typography.Text type="secondary">
-            使用管理员创建的账号登录。没有自助注册、没有邮件找回。
+            统一接入模型 API，管理团队权限、调用用量与费用。
           </Typography.Text>
         </Space>
 
@@ -133,8 +133,7 @@ export function LoginPage(): ReactNode {
         </div>
 
         <Typography.Paragraph type="secondary" style={{ marginTop: 16, marginBottom: 0 }}>
-          本地 demo 账号由 <code>make console-bootstrap</code>（或{' '}
-          <code>make console-bootstrap-demo</code>）创建，密码只写在服务器本地文件中。
+          使用管理员提供的账号登录。需要开通账号或重置密码，请联系平台管理员。
         </Typography.Paragraph>
       </Card>
     </div>

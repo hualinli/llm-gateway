@@ -1,9 +1,0 @@
-HTTP 201 (0.005s)
-Server: hertz
-Date: Wed, 30 Sep 2026 22:50:33 GMT
-Content-Type: application/json
-Content-Length: 565
-X-Request-Id: t03-check08-06
-X-Trace-Id: 05afc9e6f36e5d04b47714485f96fee0
-
-{"key":{"key_id":"key_73ffef0c422c88b39c720cef576b2070","prefix":"sk-psDLy...","organization_id":"12","owner_user_id":"5","created_by":"3","status":"active","expires_at":null,"revoked_at":null,"model_allowlist":null,"policy_version":"1","created_at":"2026-09-30T22:50:33Z","tenant_id":"org:12"},"secret":"sk-p…<redacted:46>","secret_returned_once":true,"replayed":false,"resulting_version":"8","notice":"Copy this secret now: it is shown only once and can never be retrieved again. If you lose it, revoke this key and create a new one."}

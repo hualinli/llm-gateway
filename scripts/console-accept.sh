@@ -8,7 +8,7 @@
 #   * 密码、session token、CSRF token 在输出与证据文件里一律只以
 #     "前缀…<redacted:N>" 形式出现，明文既不打印也不落盘。
 #
-# 契约来源：docs/decisions/ADR-0002-iam-identity-and-organizations.md §4/§5、
+# 契约来源：docs/decisions.md、
 # docs/openapi/console-v1.yaml（T02 冻结子集）。
 #
 # 退出码：0 = 全部硬检查通过（可能含非致命 OBSERVED 发现）；1 = 首个硬失败；2 = 用法/环境错误。

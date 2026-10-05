@@ -1,6 +1,6 @@
 -- 000013：Gateway 实例的「已应用配置」持久事实（T09）。
 --
--- T09（PRODUCTION-INTERVIEW-ROADMAP §9.1「配置」）要求：PG persisted ≠ 全实例
+-- T09（docs/ARCHITECTURE.md）要求：PG persisted ≠ 全实例
 -- active；心跳超时必须显示 unknown/stale，单 writer 必须明确。000012 的
 -- gateway_instances 只回答「这个进程还活着吗」（T07B 恢复用），不回答「它应用
 -- 了哪个版本」。本表补上后半句，并让它在 Control 重启后依然可读。

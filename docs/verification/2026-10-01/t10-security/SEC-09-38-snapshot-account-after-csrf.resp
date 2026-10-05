@@ -1,9 +1,0 @@
-HTTP 200 (0.002s)
-Server: hertz
-Date: Thu, 01 Oct 2026 06:44:39 GMT
-Content-Type: application/json
-Content-Length: 368
-X-Request-Id: t10-SEC-09-38
-X-Trace-Id: e648e5a0bca4cc0b91a7fb5fcf23e875
-
-{"organization_id":"4","currency":"CNY","posted_balance_micro":"49999980","reserved_micro":"0","available_micro":"49999980","status":"active","version":"5","created_at":"2026-10-01T06:44:34Z","updated_at":"2026-10-01T06:44:34Z","available_note":"available_micro = posted_balance_micro - reserved_micro. A negative available amount is a debt, not a spendable balance."}

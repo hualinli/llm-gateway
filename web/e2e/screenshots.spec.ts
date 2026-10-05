@@ -1,6 +1,6 @@
 /**
  * Screenshots for the three perspectives at 1440 (desktop-1440 project) and 390
- * (narrow-390 project), written to `docs/web/screenshots/`.
+ * (narrow-390 project), written to `data/verification/web-screenshots/`.
  *
  * These are captured from the real app against the real Console: they are
  * evidence, not mockups. A page that shows a `403` shows the `403`.
@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { AUTH, button, expect, gotoOrg, loadState, requireBackend, test } from './fixtures';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const OUT_DIR = join(here, '..', '..', 'docs', 'web', 'screenshots');
+const OUT_DIR = join(here, '..', '..', 'data', 'verification', 'web-screenshots');
 
 const state = loadState();
 

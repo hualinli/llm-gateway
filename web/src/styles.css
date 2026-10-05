@@ -80,6 +80,50 @@ body {
   flex: 1 1 auto;
 }
 
+.product-intro {
+  background: linear-gradient(120deg, #eff6ff, #fff 80%);
+  border-color: #d6e4ff;
+}
+
+.product-eyebrow {
+  color: #1d39c4;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+.product-title.ant-typography {
+  margin-top: 12px;
+  font-size: clamp(24px, 3vw, 34px);
+}
+
+.product-description {
+  max-width: 760px;
+  color: #475569;
+  line-height: 1.8;
+}
+
+.product-flow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  border-top: 1px solid #d6e4ff;
+  padding-top: 20px;
+  margin-top: 24px;
+  color: #475569;
+  font-size: 13px;
+}
+
+.product-step {
+  height: 100%;
+}
+
+.product-step-number {
+  color: #1d39c4;
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .playground-output {
   border: 1px solid #f0f0f0;
   border-radius: 6px;

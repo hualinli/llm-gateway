@@ -1,8 +1,0 @@
-POST http://127.0.0.1:50436/api/v1/invitations/dhv7…<redacted:43>/accept
-X-Request-ID: t10-BFIX-20
-Accept: application/json
-Cookie: gw_session=ib0F…<redacted:18>; gw_csrf=4BvI…<redacted:18>
-X-CSRF-Token: 4BvI…<redacted:18>
-Content-Type: application/json
-
-{}

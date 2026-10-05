@@ -46,10 +46,10 @@ Usage
 -----
     python3 -m venv /tmp/t11venv && /tmp/t11venv/bin/pip install 'psycopg[binary]' redis
     /tmp/t11venv/bin/python scripts/hotspot-ab.py sqlcheck
-    /tmp/t11venv/bin/python scripts/hotspot-ab.py hotspot --output docs/verification/2026-10-01/t11-hotspots
-    /tmp/t11venv/bin/python scripts/hotspot-ab.py query   --output docs/verification/2026-10-01/t11-hotspots
-    /tmp/t11venv/bin/python scripts/hotspot-ab.py settle  --output docs/verification/2026-10-01/t11-recovery-report
-    /tmp/t11venv/bin/python scripts/hotspot-ab.py recovery --output docs/verification/2026-10-01/t11-recovery-report
+    /tmp/t11venv/bin/python scripts/hotspot-ab.py hotspot --output data/verification/t11-hotspots
+    /tmp/t11venv/bin/python scripts/hotspot-ab.py query   --output data/verification/t11-hotspots
+    /tmp/t11venv/bin/python scripts/hotspot-ab.py settle  --output data/verification/t11-recovery-report
+    /tmp/t11venv/bin/python scripts/hotspot-ab.py recovery --output data/verification/t11-recovery-report
 
 Requires: docker, go, python3 with ``psycopg`` (and ``redis`` for ``settle``).
 """

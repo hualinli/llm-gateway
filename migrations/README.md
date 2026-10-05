@@ -1,63 +1,26 @@
-# 数据库结构迁移
+# 数据库结构
 
-本项目使用 golang-migrate v4，未引入 GORM 或 AutoMigrate。迁移 SQL 随二进制嵌入，命令不依赖当前目录；日常查询 SQL 独立放在各模块 queries 目录。
+迁移由 golang-migrate 执行，SQL 随二进制嵌入；服务仅检查版本和 dirty 状态，不自动迁移。当前版本以 `migrations.Version` 为准。
 
-## 执行顺序
+## 操作
 
-先停止旧版本 Control、Metering 和 Gateway，设置目标数据库的 POSTGRES_DSN，再执行：
+停止需要升级的服务，为目标数据库设置 `POSTGRES_DSN`，然后执行：
 
 ```sh
 make migrate-up
 make migrate-version
 ```
 
-当前版本为 13。成功后启动新版服务。服务只读取 schema_migrations 校验版本和 dirty 状态，不会自动改变表结构。数据库已连接但版本不符合时直接失败，不会静默切换内存台账。Control 与 Metering 默认共用数据库；如果使用不同数据库，需要分别运行迁移，当前每个库都会建立完整项目 schema。
+没有新迁移时重复执行 up 视为成功。Control、Metering、Console、Gateway 使用的数据库均需匹配 schema；不同数据库需要分别迁移。
 
-命令入口是 cmd/migrate，内部调用 golang-migrate。up 运行所有尚未执行的迁移；再次运行没有新版本时视为成功。迁移库负责版本记录、dirty 标记和 PostgreSQL 迁移锁。SQL 使用显式事务，失败时不会留下半套业务表结构，但 dirty 状态仍需人工调查。
+开发阶段允许重建数据库，不要求兼容旧数据。新业务目标见 [业务方案](../docs/BUSINESS.md)。当前编号迁移仍描述现有实现，文档整理不会改变 schema。
 
-## 文件与旧数据
+## 修改与故障
 
-- 000001_initial：建立计量、控制配置、审计表。IF NOT EXISTS 用于接纳此前没有迁移版本表的开发数据库。
-- 000002_event_id：若存在旧 request_id 列，则重命名为 event_id；已经完成改名的开发库跳过这一步。原 ID、金额和约束保留。
-- 000003_provider_credentials：新增 `provider_credentials`，只保存 AES-256-GCM 密文、nonce、key id 和指纹；审计表增加 credential/provider/gateway 元数据列。历史 `env://` 或 `env:` Provider 引用不会被读取或写入数据库。升级前要先把密钥导入凭据仓库，并把配置改成 `control://provider-credentials/<id>`，否则 Control 会拒绝该快照。
-- 000004_iam_organizations：新增 Console 身份与组织四张表 `users` / `sessions` / `organizations` / `memberships`（ADR-0002 §3）。个人组织唯一、`legacy_tenant_id` 唯一都由部分唯一索引保证；**本迁移不写入任何行**，历史 tenant 不伪造用户或成员归属，`legacy_tenant_id` 只提供可空列供后续显式映射。会话只存 token/CSRF 的 SHA-256 摘要。
-- 000005_console_rbac_and_policy：新增 `invitations`、`console_audit_events`、`policy_publications`，并给 `organizations` 增加 `org_revision`（ADR-0003 §2.4–2.6）。成员/邀请变更在组织级短事务内递增 revision 并写入同事务的 pending 发布记录。
-- 000006_control_api_keys：新增 `api_keys`（Key 唯一事实：hash/prefix/org/owner/created_by/status/expires/model_allowlist/policy_version/operation_id，`org_id` 外键指向 `organizations(id)`）与 `control_operations`（幂等命令：operation_id/payload_digest/actor_scope/result/resulting_version）。快照降级为派生投影，同事务写入。
-- 000007_metering_attribution：为 `metering_events` 增加可空的 `org_id`/`user_id`/`key_id`/`execution_id` 归属列与 `(org_id, created_at DESC)`、`(user_id, created_at DESC)` 索引（ADR-0003 §2.8）。不回溯历史数据；旧记录保持未知归属。
-- 000008_price_accounts：不可变 `price_versions`（model+effective_at 唯一、客户价与上游成本分离）、`billing_accounts` 投影、append-only `billing_entries`（`UNIQUE(business_id, kind)` + `payload_digest` + 拒绝 UPDATE/DELETE 的触发器），并把计量索引升级为 `(org_id|user_id, created_at DESC, event_id DESC)`（ADR-0004）。
-- 000009_billing_executions：执行身份与固定 price_version、上界与 7 态状态机（T06B）。
-- 000010_usage_receipts：receipt 兼作逻辑 outbox（派发字段可变、业务列由触发器冻结）（T06C）。
-- 000011_billing_exceptions：PG 资金异常 + append-only 处置轨迹 + 对账索引（T07C）。
-- 000012_gateway_instances：数据面心跳，仅用于恢复判活（T07B）。
-- 000013_gateway_instance_status：Control 写入的实例状态（applied/rejected、时间戳，单调 upsert），与 000012 刻意分离（T09）。
-- 每个版本都有 up.sql / down.sql。已有迁移发布后保持不变，后续变更增加新编号。
-- check.sql 仅供服务读取版本，不属于编号迁移。
+- 迁移 SQL 使用显式事务；版本、dirty 标记和迁移锁由迁移库管理。
+- 编号文件成对提供 up/down；新增结构变更时保持版本常量和迁移一致。
+- `check.sql` 是服务启动时的只读检查，不是编号迁移。
+- dirty 时先调查失败原因和实际 schema，不应直接跳过版本检查。
+- `make migrate-down-one` 只回退一版，可能删除表和数据；先检查对应 down.sql，再使用匹配版本的程序。
 
-接纳旧库针对本项目已有的两种 schema（改名前/改名后），不是任意数据库结构修复器。应先用副本验证，不通过 force 跳过未知差异。此轮只在隔离测试数据库验证，没有对日常开发数据库执行迁移。
-
-## 回退与故障
-
-```sh
-make migrate-down-one
-```
-
-该命令只回退一个版本。4 → 3 按依赖顺序删除 `memberships`、`sessions`、`organizations`、`users`，会丢掉全部 Console 用户、会话、组织与成员数据，执行前必须确认；3 → 2 删除 `provider_credentials` 和审计扩展列，不删除账单或配置历史；2 → 1 仅恢复旧列名，不删除账单。回退后应使用匹配版本的程序。1 → 0 会删除业务表及其数据，执行前必须查看 down.sql。不要在运行中的服务旁执行不兼容迁移。
-
-如果状态为 dirty，先排查失败原因、确认事务和实际 schema。修复后再按 golang-migrate 运维流程校正版本；项目命令故意不提供自动 force 或自动清库。
-
-控制配置中旧 raw-key JSON 转换为 hash 的既有数据规范化仍由 PGStore.MigrateLegacyPayloads 处理，它涉及 Go/protobuf 逻辑，不是本次 schema 迁移；对应查询 SQL 也已分离。不要把 schema version 理解为这项数据转换的完成标志。
-
-## 验证
-
-```sh
-make integration-test
-```
-
-集成测试先显式迁移各自的测试数据库/schema，再创建业务 Store/Ledger。迁移专项测试覆盖：空库启动不建表、空库迁移、重复 up、两种无版本旧库保留账单升级、2 → 1 → 2、dirty 状态拒绝，以及业务计量迁移后的重复投递去重。IAM/组织迁移同样在 `IAM_TEST_POSTGRES_DSN` 下验证：空库 0 → 4 建表、迁移不写入任何行、4 → 3 回退删除四张表且保留 v1..v3 的表、再 up 回到 4：
-
-```sh
-make test-up
-IAM_TEST_POSTGRES_DSN='postgres://gateway_test:test_only_local@127.0.0.1:15433/gateway_test?sslmode=disable' \
-  go test ./internal/iam/ ./internal/organization/ -count=1 -v
-make test-down
-```
+表归属及资金约束见 [架构](../docs/ARCHITECTURE.md) 和 [技术决策](../docs/decisions.md)。

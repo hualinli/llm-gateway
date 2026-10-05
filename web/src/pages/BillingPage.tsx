@@ -23,6 +23,8 @@ import {
 } from '../components/BillingSections';
 import { useActiveOrg } from '../session/SessionProvider';
 import { CAN, ROLE_LABELS } from '../utils/permissions';
+import { Link } from 'react-router-dom';
+import { OrganizationContext } from '../components/ProductGuide';
 
 export function BillingPage(): ReactNode {
   const { orgId, role } = useActiveOrg();
@@ -32,7 +34,7 @@ export function BillingPage(): ReactNode {
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
       <PageHeader
         title="资金与结算"
-        description={`组织 ${orgId ?? '—'} · 角色 ${role ? ROLE_LABELS[role] : '—'} · 金额全部是 µ¥ 十进制字符串（1 元 = 1,000,000 µ¥）`}
+        description={`查看模型 API 调用产生的费用、余额与月度账单 · ${role ? ROLE_LABELS[role] : '—'}`}
         extra={
           <Space size={4} wrap>
             <Tag color={canRead ? 'green' : 'red'}>
@@ -42,6 +44,20 @@ export function BillingPage(): ReactNode {
           </Space>
         }
       />
+
+      <Alert
+        type="info"
+        showIcon
+        message="从模型调用，到用量和账单"
+        description={
+          <span>
+            应用通过 API Key 调用模型；在途调用先预占额度，取得可计费的用量后再结算。
+            这里核对的是当前组织的资金与消费记录。{' '}
+            <Link to={`/orgs/${encodeURIComponent(orgId ?? '')}/overview`}>查看平台介绍与使用步骤 →</Link>
+          </span>
+        }
+      />
+      <OrganizationContext />
 
       {!canRead ? (
         <Alert

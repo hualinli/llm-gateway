@@ -15,7 +15,7 @@ import (
 
 // T12: the manual disposition of an execution stuck in review_required.
 //
-// PRODUCTION-INTERVIEW-ROADMAP §6.5 states the policy this file is the
+// docs/runbooks/billing-recovery.md states the policy this file is the
 // executable form of:
 //
 //	人工释放/结算也走同一状态机，不能直接改 reserved 余额。

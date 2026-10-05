@@ -50,7 +50,7 @@ type FinalizeRequest struct {
 
 // Finalizer persists a finalization decision *inside* the streaming request,
 // at the terminal SSE event boundary and before "[DONE]" is released to the
-// client (PRODUCTION-INTERVIEW-ROADMAP §6.3 step 5).
+// client (docs/decisions.md).
 //
 // Returning an error vetoes the clean end: the provider stops without writing
 // the vetoed event, the client sees an incomplete stream, and the execution

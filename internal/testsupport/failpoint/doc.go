@@ -60,7 +60,7 @@
 // # Catalog
 //
 // The names below are the complete set. They are grouped by the window that
-// matters for the F-matrix in docs/plans/BENCHMARK-AND-ACCEPTANCE-2026-10-01.md
+// matters for the F-matrix in docs/DEVELOPMENT.md
 // §5. "kill" is the action the failure runner uses; the other actions exist so
 // a scenario can choose a different injected fault without a rebuild.
 //

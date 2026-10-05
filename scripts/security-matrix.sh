@@ -27,7 +27,7 @@ script_name="$(basename "$0")"
 # shellcheck source=scripts/t10-lab-common.sh
 source "$script_dir/t10-lab-common.sh"
 
-evidence_dir="$T10_ROOT/docs/verification/2026-10-01/t10-security"
+evidence_dir="$T10_ROOT/data/verification/t10-security"
 phases="all"
 timeout_seconds=20
 keep_lab=0
@@ -39,7 +39,7 @@ usage() {
   scripts/security-matrix.sh [选项]
 
 选项:
-  --evidence-dir DIR   证据目录（默认 docs/verification/2026-10-01/t10-security）
+  --evidence-dir DIR   证据目录（默认 data/verification/t10-security）
   --phases LIST        all（默认）或逗号分隔: security,control,longstream,isolation
   --timeout-seconds N  单个 curl 超时，默认 20
   --lease-seconds N    Gateway 控制面租约（CONTROL_CONFIG_LEASE），默认 8s；

@@ -1,5 +1,0 @@
-Command: go test -race ./internal/billing ./cmd/metering
-External PG/Redis variables were not provided in this supplemental run; it verifies package unit regressions, including recovery-window overflow. Real PG/Redis coverage is recorded separately in integration.txt and critical-regressions.txt.
-
-ok  	llm-gateway/internal/billing	2.182s
-ok  	llm-gateway/cmd/metering	2.658s

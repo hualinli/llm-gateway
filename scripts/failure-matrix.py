@@ -4,7 +4,7 @@
 What it is
 ----------
 An isolated, single-machine runner for the failure/correctness half of T10
-(docs/plans/BENCHMARK-AND-ACCEPTANCE-2026-10-01.md §5, F01..F19). It starts a
+(docs/DEVELOPMENT.md; F01..F19). It starts a
 private stack, seeds one organization per scenario, injects a fault at a named
 window with the T10 failpoints (internal/testsupport/failpoint), and classifies
 the outcome from PostgreSQL, Redis and the process logs.
@@ -41,7 +41,7 @@ Usage
     python3 scripts/failure-matrix.py --list
     python3 scripts/failure-matrix.py --scenarios F01,F07
     python3 scripts/failure-matrix.py            # every implemented scenario
-    python3 scripts/failure-matrix.py --output docs/verification/2026-10-01/t10-failures
+    python3 scripts/failure-matrix.py --output data/verification/t10-failures
 """
 
 import argparse
@@ -2863,7 +2863,7 @@ def ensure_baseline(stack):
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--output", default=str(ROOT / "docs/verification/2026-10-01/t10-failures"),
+    parser.add_argument("--output", default=str(ROOT / "data/verification/t10-failures"),
                         help="evidence directory")
     parser.add_argument("--scenarios", default=",".join(SCENARIOS),
                         help="comma-separated scenario ids (default: all implemented)")

@@ -1,6 +1,0 @@
-POST http://127.0.0.1:18092/api/v1/auth/login
-X-Request-ID: t03-setup-01
-Accept: application/json
-Content-Type: application/json
-
-{"email": "admin@t03.test", "password": "bUkX…<redacted:18>"}

@@ -37,6 +37,7 @@ import type { UsageEvent } from '../api/types';
 import { DataState, asApiError } from '../components/states';
 import { MicroYuan } from '../components/Money';
 import { ContractGap, PageHeader } from '../components/PageHeader';
+import { ProductGuide } from '../components/ProductGuide';
 import { useActiveOrg, useSession } from '../session/SessionProvider';
 import {
   formatCostCents,
@@ -83,6 +84,8 @@ export function OverviewPage(): ReactNode {
           <Link to={`/orgs/${encodeURIComponent(orgId ?? '')}/usage`}>查看完整用量</Link>
         }
       />
+
+      <ProductGuide />
 
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={12}>
