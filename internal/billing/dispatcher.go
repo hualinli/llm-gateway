@@ -49,8 +49,9 @@ type DispatcherOptions struct {
 	RedispatchInterval time.Duration
 	// RedispatchMaxInterval caps that delay as the attempts grow.
 	RedispatchMaxInterval time.Duration
-	// MaxAttempts bounds *failed* deliveries before the receipt becomes an
-	// audited exception.
+	// MaxAttempts is retained for configuration compatibility. Transport errors
+	// no longer turn durable chargeable receipts into terminal exceptions; they
+	// retry indefinitely with bounded backoff. Invalid payloads still stop immediately.
 	MaxAttempts int
 	// BackoffBase/BackoffMax shape the retry delay after a failed delivery.
 	BackoffBase time.Duration
@@ -284,11 +285,9 @@ func (d *ReceiptDispatcher) publishOne(ctx context.Context, claimed ClaimedRecei
 	publishCtx, cancelPublish := context.WithTimeout(context.WithoutCancel(ctx), d.opts.PublishTimeout)
 	defer cancelPublish()
 	if err := d.publisher.PublishReceipt(publishCtx, event); err != nil {
-		poisoned := claimed.Receipt.Attempts >= d.opts.MaxAttempts
-		d.recordFailure(ctx, claimed, "publish: "+err.Error(), poisoned)
-		if poisoned {
-			return dispatchPoisoned
-		}
+		// Redis availability is not a verdict on the immutable usage payload.
+		// Keep the durable receipt eligible, even beyond the old attempt budget.
+		d.recordFailure(ctx, claimed, "publish: "+err.Error(), false)
 		return dispatchFailed
 	}
 

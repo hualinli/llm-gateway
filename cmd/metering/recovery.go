@@ -253,6 +253,7 @@ func (r *recoveryRuntime) register(mux *http.ServeMux, adminToken string) {
 		return
 	}
 	mux.Handle("/recovery/status", requireBearer(http.HandlerFunc(r.handleStatus), adminToken))
+	mux.Handle("POST /receipts/{execution}/retry", requireBearer(http.HandlerFunc(r.handleDispatchRetry), adminToken))
 	mux.Handle("/recovery/review-required", requireBearer(http.HandlerFunc(r.handleReviewQueue), adminToken))
 	mux.Handle("POST /recovery/review-required/{execution}/release",
 		requireBearer(http.HandlerFunc(r.handleManualRelease), adminToken))

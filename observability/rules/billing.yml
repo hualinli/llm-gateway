@@ -1,0 +1,45 @@
+groups:
+  - name: billing-recovery
+    rules:
+      - alert: ReceiptTransportUnavailable
+        expr: sum(rate(metering_receipt_dispatch_total{result="publish_failed"}[5m])) > 0
+        for: 2m
+        labels: {severity: warning}
+        annotations:
+          summary: 收据传输持续失败
+          description: 收据仍保存在 PostgreSQL 并按有界退避重试。检查 Redis 连通性、认证和 Stream 类型；不要释放已完成请求的预占。
+      - alert: ReceiptSettlementStalled
+        expr: metering_receipt_oldest_unsettled_age_seconds > 300
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: 未结算收据积压超过五分钟
+          description: 检查 dispatcher、Redis 和 settlement consumer。恢复后确认积压下降及账本一致；不能只看新请求成功。
+      - alert: BillingReviewOverdue
+        expr: metering_billing_review_required_sla_breaches > 0
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: 人工资金队列超过处理时限
+          description: 使用平台计费运维页处理，记录理由并核对分录。时限到期不会自动扣款或释放。
+      - alert: ReceiptExceptionPending
+        expr: metering_receipt_backlog{status="exception"} > 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: 收据异常需要人工核查
+          description: 分清传输异常与未知 usage。只有带原始传输失败审计的有效收据可以使用受控重投接口。
+      - alert: BillingRecoveryOwnerUnknown
+        expr: metering_billing_recovery_owner_unknown_open > 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: 未知实例的占款需要复核
+          description: 自动恢复无法证明拥有者死亡。先查实例心跳和执行记录，不能把未知状态当作无消费。
+      - alert: MeteringUnavailable
+        expr: up{job="metering"} == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: 计费服务不可观测
+          description: 检查进程、诊断监听与 Prometheus 抓取目标。指标不可用不代表积压已清空。
