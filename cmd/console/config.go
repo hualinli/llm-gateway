@@ -49,6 +49,8 @@ type config struct {
 	// PublicationInterval is CONSOLE_PUBLICATION_INTERVAL: the publication loop
 	// period.
 	PublicationInterval time.Duration
+	MeteringURL         string
+	MeteringPolicyToken string
 }
 
 // loadConfig reads the ADR-0002 §5 variables plus the T03 control-channel
@@ -72,6 +74,8 @@ func loadConfig(profile appenv.Profile) (config, error) {
 		ControlAddr:               strings.TrimSpace(appenv.EnvLookup("CONTROL_ADDR")),
 		ControlConsoleServiceName: strings.TrimSpace(appenv.EnvLookup("CONTROL_CONSOLE_SERVICE_NAME")),
 		PublicationInterval:       DefaultPublicationInterval,
+		MeteringURL:               strings.TrimRight(strings.TrimSpace(appenv.EnvLookup("CONSOLE_METERING_URL")), "/"),
+		MeteringPolicyToken:       strings.TrimSpace(appenv.EnvLookup("CONSOLE_METERING_POLICY_TOKEN")),
 	}
 	if cfg.PostgresDSN == "" && !profile.IsProduction() {
 		cfg.PostgresDSN = demoPostgresDSN
@@ -106,6 +110,7 @@ func loadConfig(profile appenv.Profile) (config, error) {
 		}
 		cfg.PublicationInterval = interval
 	}
+
 	return cfg, nil
 }
 

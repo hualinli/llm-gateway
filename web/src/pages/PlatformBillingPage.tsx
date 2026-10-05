@@ -36,6 +36,7 @@ import { ReloadOutlined } from '@ant-design/icons';
 
 import { useAdjustBillingAccount, useBillingAccount } from '../api/queries';
 import type { AdjustmentResponse, BillingAccount, BillingDirection } from '../api/types';
+import { ReviewQueueSection } from '../components/ReviewQueue';
 import { BillingExceptionsSection } from '../components/BillingSections';
 import { MicroYuan, SignedMicroYuan } from '../components/Money';
 import { ContractGap, PageHeader } from '../components/PageHeader';
@@ -168,6 +169,8 @@ export function PlatformBillingPage(): ReactNode {
         message="「额度调整」是管理员记账，不是真实充值/支付"
         description="本版本没有接任何支付渠道：这里写入的是一条 append-only 的 adjustment 分录（含必填 reason、operator_user_id、request_id）。它不会伪装成微信/支付宝/PayPal 支付，也不产生发票。"
       />
+
+      <ReviewQueueSection />
 
       <Card
         size="small"

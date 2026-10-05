@@ -211,6 +211,10 @@ type Options struct {
 	// Exceptions backs the durable money-exception queue (migration 000011) and
 	// the platform resolution write. nil answers 503.
 	Exceptions MoneyExceptionService
+	Review     ReviewService
+	// ReviewPolicySource fetches the current Metering policy for each queue read
+	// and manual money operation. nil fails closed.
+	ReviewPolicySource ReviewPolicySource
 	// Now is the clock used for the usage window and key-expiry validation. nil
 	// means time.Now().UTC().
 	Now func() time.Time
@@ -236,6 +240,8 @@ type server struct {
 	accounts         BillingAccountService
 	statements       StatementService
 	exceptions       MoneyExceptionService
+	review           ReviewService
+	reviewPolicy     ReviewPolicySource
 	secureCookies    bool
 	sessionTTL       time.Duration
 	retryAfter       time.Duration
@@ -264,6 +270,8 @@ func newServer(opts Options) (*server, error) {
 		accounts:         opts.Accounts,
 		statements:       opts.Statements,
 		exceptions:       opts.Exceptions,
+		review:           opts.Review,
+		reviewPolicy:     opts.ReviewPolicySource,
 		secureCookies:    opts.SecureCookies,
 		sessionTTL:       opts.SessionTTL,
 		retryAfter:       opts.RetryAfter,
@@ -406,6 +414,8 @@ func Register(engine *route.Engine, opts Options) error {
 	engine.GET(PathOrgBillingExceptions, s.withSession, s.listOrgBillingExceptions)
 	engine.GET(PathOrgBillingException, s.withSession, s.getOrgBillingException)
 	engine.POST(PathAdminBillingExceptionResolution, s.withSession, s.withCSRF, s.withPlatformAdmin, s.resolveBillingException)
+	engine.GET("/api/v1/admin/billing/review-required", s.withSession, s.withPlatformAdmin, s.listReviewQueue)
+	engine.POST("/api/v1/admin/billing/review-required/:execution/:action", s.withSession, s.withCSRF, s.withPlatformAdmin, s.disposeReviewExecution)
 	return nil
 }
 

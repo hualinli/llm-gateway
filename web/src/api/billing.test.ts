@@ -421,3 +421,22 @@ describe('billing client', () => {
     });
   });
 });
+
+describe('manual review money operations', () => {
+ it('binds the action to the execution and sends only the reason with CSRF', async () => {
+  const {client,mock}=harness(()=>jsonResponse(200,{status:'released',charge_micro:'0',account:{posted_balance_micro:'9007199254740993'}}));
+  client.setCsrfToken(CSRF);
+  const result=await client.disposeReviewExecution('exec/a','release','provider verified');
+  const {url,init}=callAt(mock);
+  expect(url).toBe('/api/v1/admin/billing/review-required/exec%2Fa/release');
+  expect(init.method).toBe('POST');expect(headersOf(init)['X-CSRF-Token']).toBe(CSRF);
+  expect(JSON.parse(String(init.body))).toEqual({reason:'provider verified'});
+  expect(result.account.posted_balance_micro).toBe('9007199254740993');
+ });
+ it('preserves a concurrent disposition conflict without retrying the write', async()=>{
+  const {client,mock}=harness(()=>jsonResponse(409,{error:{code:'conflict',message:'refresh queue',request_id:'r'}}));
+  client.setCsrfToken(CSRF);
+  await expect(client.disposeReviewExecution('exec','settle','verified')).rejects.toMatchObject({kind:'conflict'});
+  expect(mock).toHaveBeenCalledTimes(1);
+ });
+});

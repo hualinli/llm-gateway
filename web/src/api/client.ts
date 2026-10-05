@@ -26,6 +26,7 @@ import {
   type ApiErrorKind,
 } from './errors';
 import type {
+  ReviewQueue, ReviewCursor, ReviewAction, ReviewDisposition,
   AdjustmentRequest,
   AdjustmentResponse,
   ApiKeyPage,
@@ -474,6 +475,15 @@ export class ConsoleClient {
       { body },
     );
   }
+ async reviewQueue(cursor?: ReviewCursor): Promise<ReviewQueue> {
+  const query = new URLSearchParams({limit: '50'});
+  if (cursor) { query.set('cursor_updated_at', cursor.updated_at); query.set('cursor_execution_id', cursor.execution_id); }
+  return this.request<ReviewQueue>('GET', `/admin/billing/review-required?${query}`);
+ }
+ async disposeReviewExecution(execution: string, action: ReviewAction, reason: string): Promise<ReviewDisposition> {
+  return this.request<ReviewDisposition>('POST', `/admin/billing/review-required/${encodeURIComponent(execution)}/${action}`, {body: {reason}});
+ }
+
 }
 
 /** Process-wide Console client; the React layer installs the 401 redirect. */

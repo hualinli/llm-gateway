@@ -635,6 +635,15 @@ func insertExecutionAuditTx(ctx context.Context, tx txExecutor, action string, e
 }
 
 func scanExecution(row interface{ Scan(...any) error }) (Execution, error) {
+	execution, _, err := scanExecutionFields(row, false)
+	return execution, err
+}
+
+func scanExecutionWithReason(row interface{ Scan(...any) error }) (Execution, *string, error) {
+	return scanExecutionFields(row, true)
+}
+
+func scanExecutionFields(row interface{ Scan(...any) error }, includeReason bool) (Execution, *string, error) {
 	var (
 		execution   Execution
 		userID      sql.NullInt64
@@ -645,12 +654,17 @@ func scanExecution(row interface{ Scan(...any) error }) (Execution, error) {
 		requestID   sql.NullString
 		receiptAt   sql.NullTime
 		terminal    sql.NullString
+		reason      sql.NullString
 	)
-	if err := row.Scan(&execution.ExecutionID, &execution.OrgID, &userID, &keyID, &gatewayID,
+	dest := []any{&execution.ExecutionID, &execution.OrgID, &userID, &keyID, &gatewayID,
 		&execution.PriceVersionID, &execution.Model, &execution.Status, &execution.ReservedMicro,
 		&inputUpper, &outputUpper, &requestID, &execution.CreatedAt, &execution.UpdatedAt,
-		&receiptAt, &terminal); err != nil {
-		return Execution{}, err
+		&receiptAt, &terminal}
+	if includeReason {
+		dest = append(dest, &reason)
+	}
+	if err := row.Scan(dest...); err != nil {
+		return Execution{}, nil, err
 	}
 	if userID.Valid {
 		value := userID.Int64
@@ -686,7 +700,12 @@ func scanExecution(row interface{ Scan(...any) error }) (Execution, error) {
 	}
 	execution.CreatedAt = execution.CreatedAt.UTC()
 	execution.UpdatedAt = execution.UpdatedAt.UTC()
-	return execution, nil
+	var reasonValue *string
+	if reason.Valid {
+		value := reason.String
+		reasonValue = &value
+	}
+	return execution, reasonValue, nil
 }
 
 // mapExecutionWriteError turns the constraint breaches this table can produce

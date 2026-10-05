@@ -127,6 +127,8 @@ func runServe(profile appenv.Profile, args []string) error {
 		accounts:            billingStore,
 		statements:          billing.NewPGStatementStore(db),
 		exceptions:          billing.NewPGExceptionStore(db),
+		review:              billingStore,
+		reviewPolicy:        console.NewHTTPReviewPolicySource(cfg.MeteringURL, cfg.MeteringPolicyToken),
 		publication:         channel.Publication(),
 		publicationInterval: cfg.PublicationInterval,
 		audit:               audit,
@@ -167,8 +169,10 @@ type serveOptions struct {
 	accounts console.BillingAccountService
 	// statements backs GET /api/v1/orgs/{org}/billing/statements and exceptions
 	// backs the durable money-exception queue (T07C). nil answers 503.
-	statements console.StatementService
-	exceptions console.MoneyExceptionService
+	statements   console.StatementService
+	exceptions   console.MoneyExceptionService
+	review       console.ReviewService
+	reviewPolicy console.ReviewPolicySource
 	// publication is optional: nil disables the policy-publication loop.
 	publication         publicationRunner
 	publicationInterval time.Duration
