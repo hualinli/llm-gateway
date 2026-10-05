@@ -1,0 +1,10 @@
+HTTP 404
+Server: hertz
+Date: Wed, 30 Sep 2026 21:00:02 GMT
+Content-Type: application/json
+Content-Length: 82
+X-Request-Id: acc-check11-01
+X-Trace-Id: 46deb074f6e8aa509c05801fe530b604
+X-Content-Type-Options: nosniff
+
+{"error":{"code":"not_found","message":"not found","request_id":"acc-check11-01"}}

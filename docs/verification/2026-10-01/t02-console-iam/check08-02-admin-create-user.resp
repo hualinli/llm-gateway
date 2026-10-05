@@ -1,0 +1,9 @@
+HTTP 201
+Server: hertz
+Date: Wed, 30 Sep 2026 20:58:58 GMT
+Content-Type: application/json
+Content-Length: 168
+X-Request-Id: acc-check08-02
+X-Trace-Id: c3736f29a2ee8c3317edd30be462ab52
+
+{"id":"6","email":"accept-victim-05cd486b@accept.test","status":"active","platform_admin":false,"created_at":"2026-09-30T20:58:59Z","updated_at":"2026-09-30T20:58:59Z"}

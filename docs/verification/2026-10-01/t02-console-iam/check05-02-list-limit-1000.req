@@ -1,0 +1,5 @@
+GET /api/v1/organizations?limit=1000 HTTP/1.1
+X-Request-ID: acc-check05-02
+Accept: application/json
+Cookie: gw_session=iPK3…<redacted:18>; gw_csrf=86aL…<redacted:18>
+X-CSRF-Token: 86aL…<redacted:18>

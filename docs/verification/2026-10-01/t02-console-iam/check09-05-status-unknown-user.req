@@ -1,0 +1,8 @@
+POST /api/v1/admin/users/9223372036854775807/status HTTP/1.1
+X-Request-ID: acc-check09-05
+Accept: application/json
+Cookie: gw_session=iC5T…<redacted:18>; gw_csrf=DjVw…<redacted:18>
+X-CSRF-Token: DjVw…<redacted:18>
+Content-Type: application/json
+
+{"status": "disabled"}

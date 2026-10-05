@@ -157,6 +157,7 @@ func TestCodeFor(t *testing.T) {
 		{http.StatusUnauthorized, CodeUnauthorized},
 		{http.StatusForbidden, CodeForbidden},
 		{http.StatusNotFound, CodeNotFound},
+		{http.StatusConflict, CodeConflict},
 		{http.StatusMethodNotAllowed, CodeMethodNotAllowed},
 		{http.StatusRequestTimeout, CodeInvalidRequest},
 		{http.StatusRequestEntityTooLarge, CodeInvalidRequest},
@@ -174,6 +175,25 @@ func TestCodeFor(t *testing.T) {
 		if got := CodeFor(tt.status); got != tt.want {
 			t.Fatalf("CodeFor(%d)=%q, want %q", tt.status, got, tt.want)
 		}
+	}
+}
+
+// 409 有了专属 code，但 result_class 词表不变（仍是 invalid_request），
+// 避免因为一个错误码就扩 Prometheus 标签取值集合。
+func TestConflictCodeKeepsResultClassUnchanged(t *testing.T) {
+	if got := CodeFor(http.StatusConflict); got != CodeConflict {
+		t.Fatalf("CodeFor(409)=%q, want %q", got, CodeConflict)
+	}
+	if got := Class(http.StatusConflict); got != ClassInvalidRequest {
+		t.Fatalf("Class(409)=%q, want %q (bounded vocabulary must not grow)", got, ClassInvalidRequest)
+	}
+	rec := httptest.NewRecorder()
+	WriteStatus(rec, httptest.NewRequest(http.MethodPost, "/api/v1/admin/users", nil), http.StatusConflict, "email already registered")
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status=%d, want %d", rec.Code, http.StatusConflict)
+	}
+	if got := decodeCode(t, rec.Body.Bytes()); got != CodeConflict {
+		t.Fatalf("code=%q, want %q", got, CodeConflict)
 	}
 }
 

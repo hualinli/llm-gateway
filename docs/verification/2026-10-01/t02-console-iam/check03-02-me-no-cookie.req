@@ -1,0 +1,3 @@
+GET /api/v1/me HTTP/1.1
+X-Request-ID: acc-check03-02
+Accept: application/json

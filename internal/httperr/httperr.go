@@ -26,6 +26,7 @@ const (
 	CodeUnauthorized        = "unauthorized"
 	CodeForbidden           = "forbidden"
 	CodeNotFound            = "not_found"
+	CodeConflict            = "conflict"
 	CodeMethodNotAllowed    = "method_not_allowed"
 	CodeRateLimited         = "rate_limited"
 	CodeInsufficientBalance = "insufficient_balance"
@@ -57,16 +58,20 @@ const (
 // CodeFor 把 HTTP 状态码映射为规范错误码。
 // 表里没有的状态码按大类收敛：4xx → invalid_request，5xx → internal_error，
 // 这样客户端总能拿到一个稳定 code，而不是裸状态码。
+//
+// 409 单独映射为 conflict（Console 用它表达 email/资源唯一性冲突）。Class 保持
+// 不变：result_class 的词表是封闭的，409 仍然归入 invalid_request。
 func CodeFor(status int) string {
 	switch status {
 	case http.StatusBadRequest,
-		http.StatusConflict,
 		http.StatusLengthRequired,
 		http.StatusRequestTimeout,
 		http.StatusRequestEntityTooLarge,
 		http.StatusUnsupportedMediaType,
 		http.StatusUnprocessableEntity:
 		return CodeInvalidRequest
+	case http.StatusConflict:
+		return CodeConflict
 	case http.StatusUnauthorized:
 		return CodeUnauthorized
 	case http.StatusPaymentRequired:

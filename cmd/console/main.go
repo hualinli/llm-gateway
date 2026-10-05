@@ -1,0 +1,113 @@
+package main
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"log"
+	"os"
+	"strings"
+
+	"llm-gateway/internal/appenv"
+	"llm-gateway/internal/console"
+	"llm-gateway/internal/iam"
+	"llm-gateway/internal/organization"
+	"llm-gateway/migrations"
+)
+
+// The console has two entry points: `serve` (the default) and `bootstrap`.
+func main() {
+	log.SetFlags(log.LstdFlags | log.LUTC)
+
+	profile, err := appenv.FromEnv()
+	if err != nil {
+		log.Fatalf("runtime profile: %v", err)
+	}
+	appenv.Log(profile)
+
+	checks := consoleChecks(appenv.EnvLookup)
+	if err := appenv.Validate(profile, checks); err != nil {
+		log.Fatalf("console production preflight failed:\n%v", err)
+	}
+	if !profile.IsProduction() {
+		warnFailedChecks(checks)
+	}
+
+	command, args := splitCommand(os.Args[1:])
+	switch command {
+	case "serve":
+		err = runServe(profile, args)
+	case "bootstrap":
+		err = runBootstrap(profile, args)
+	default:
+		log.Fatalf("console: unknown command %q (want serve or bootstrap)", command)
+	}
+	if err != nil {
+		log.Fatalf("console %s: %v", command, err)
+	}
+}
+
+// splitCommand treats a leading non-flag argument as the subcommand. Running
+// `console` with no argument serves; running `console --help` still lands in
+// serve, whose flag set explains the options.
+func splitCommand(args []string) (string, []string) {
+	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
+		return "serve", args
+	}
+	return args[0], args[1:]
+}
+
+// runServe starts the HTTP service: own pool, schema check, Hertz engine on the
+// business listener, optional separate diagnostics listener, graceful shutdown.
+func runServe(profile appenv.Profile, args []string) error {
+	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() > 0 {
+		return fmt.Errorf("unexpected argument %q", fs.Arg(0))
+	}
+
+	cfg, err := loadConfig(profile)
+	if err != nil {
+		return err
+	}
+	db, err := openDB(cfg.PostgresDSN)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = db.Close() }()
+
+	// Never auto-migrate: an out-of-date schema must be fixed explicitly with
+	// `migrate up` (migrations.Check is read-only).
+	if err := migrations.Check(db); err != nil {
+		return err
+	}
+
+	users := iam.NewService(db, iam.Options{
+		SessionTTL:         cfg.SessionTTL,
+		LoginRatePerMinute: cfg.LoginRate,
+		LoginBurst:         cfg.LoginBurst,
+	})
+	orgs := organization.NewService(db)
+
+	return serve(serveOptions{
+		config:  cfg,
+		profile: profile,
+		iam:     users,
+		orgs:    orgs,
+		ready:   db.PingContext,
+		logger:  log.Default(),
+	})
+}
+
+// serveOptions carries the wired dependencies into serve(). The service fields
+// are the console interfaces, so the wiring is testable with fakes.
+type serveOptions struct {
+	config  config
+	profile appenv.Profile
+	iam     console.IAMService
+	orgs    console.OrganizationService
+	ready   func(ctx context.Context) error
+	logger  *log.Logger
+}

@@ -1,4 +1,4 @@
-.PHONY: tidy up down run vet test test-up test-down integration-test mock-primary mock-backup demo-up demo-observability demo-config demo-smoke demo-smoke-backup demo-smoke-unavailable demo-accept demo-down demo-clean ensure-master-key
+.PHONY: tidy up down run vet test test-up test-down integration-test mock-primary mock-backup demo-up demo-observability demo-config demo-smoke demo-smoke-backup demo-smoke-unavailable demo-accept demo-down demo-clean ensure-master-key console-run console-bootstrap console-bootstrap-demo
 
 TEST_REDIS_ADDR ?= 127.0.0.1:16379
 TEST_POSTGRES_DSN ?= postgres://gateway_test:test_only_local@127.0.0.1:15433/gateway_test?sslmode=disable
@@ -50,6 +50,28 @@ ensure-master-key:
 run:
 	go run ./cmd/gateway
 
+# Console（控制面 IAM）：默认 serve。POSTGRES_DSN 缺失时 demo profile 回退本地
+# compose DSN（127.0.0.1:5433）。
+console-run:
+	go run ./cmd/console
+
+# 幂等 bootstrap：创建/复用平台管理员并保证其个人组织存在。
+# 密码只从文件读取，不会出现在命令行或日志里。
+CONSOLE_ADMIN_EMAIL ?= admin@example.com
+CONSOLE_ADMIN_PASSWORD_FILE ?= data/console-admin-password
+CONSOLE_BOOTSTRAP_FLAGS ?=
+
+console-bootstrap:
+	go run ./cmd/console bootstrap \
+		--admin-email '$(CONSOLE_ADMIN_EMAIL)' \
+		--admin-password-file '$(CONSOLE_ADMIN_PASSWORD_FILE)' \
+		$(CONSOLE_BOOTSTRAP_FLAGS)
+
+# 在 bootstrap 之上追加两家 demo 企业（各 3 名成员）。随机密码只写入
+# data/console-demo-credentials.txt（0600，只写一次），不打印、不提交。
+console-bootstrap-demo:
+	$(MAKE) console-bootstrap CONSOLE_BOOTSTRAP_FLAGS=--demo-data
+
 # Local OpenAI-compatible fakes. Gateway treats these as real HTTP providers.
 mock-primary:
 	go run ./cmd/upstream-mock -listen :18080 -name primary -ttft 20ms -token-interval 15ms
@@ -76,6 +98,7 @@ integration-test: test-up
 		METERING_TEST_REDIS_ADDR='$(TEST_REDIS_ADDR)' \
 		LIMITER_TEST_REDIS_ADDR='$(TEST_REDIS_ADDR)' \
 		CONTROL_TEST_POSTGRES_DSN='$(TEST_POSTGRES_DSN)' \
+		IAM_TEST_POSTGRES_DSN='$(TEST_POSTGRES_DSN)' \
 		METERING_TEST_POSTGRES_DSN='$(TEST_POSTGRES_DSN)' \
 		go test $(TEST_FLAGS) $(TEST_PACKAGES) -run '$(TEST_RUN)' -count=1 -timeout=120s
 

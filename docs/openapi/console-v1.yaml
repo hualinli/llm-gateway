@@ -1,0 +1,690 @@
+openapi: 3.1.0
+info:
+  title: LLM Gateway Console API
+  version: "1.0.0"
+  description: |
+    Console (control-plane IAM) HTTP API, task T02.
+
+    This document is the frozen contract of ADR-0002 §4 and describes **only**
+    the endpoints that are implemented by `internal/console` and served by
+    `cmd/console`. There is no self-service registration, no invitation flow, no
+    OIDC/SSO/MFA and no password recovery in this version.
+
+    Cross-cutting rules:
+
+    * All request and response bodies are JSON (`Content-Type: application/json`).
+    * Every 64-bit identifier is transported as a JSON **string** so no client
+      loses precision (RFC 8259 numbers are doubles in most runtimes).
+    * Every timestamp is RFC 3339 in UTC (`2026-10-01T12:00:00Z`).
+    * Every error response uses the shared envelope below, including the
+      correlation id echoed from `X-Request-ID`.
+    * List endpoints return `{"items": [...], "next_cursor": <string|null>}`,
+      ordered by `id ASC`. `limit` defaults to 20 and is clamped to 100.
+    * `/livez` and `/readyz` are the only unauthenticated, non-JSON endpoints.
+
+    Authentication is a browser session cookie (`gw_session`). The session token
+    is opaque, stored server-side only as a SHA-256 hash, and is revoked on
+    logout and when the user is disabled. Any state-changing request
+    (`POST`/`PATCH`/`DELETE`) must additionally present the session-bound CSRF
+    token in `X-CSRF-Token`; `SameSite` does not replace it.
+  license:
+    name: UNLICENSED
+servers:
+  - url: http://127.0.0.1:8092
+    description: Local demo / development (CONSOLE_ADDR default)
+tags:
+  - name: auth
+    description: Browser session lifecycle
+  - name: me
+    description: Current identity
+  - name: organizations
+    description: Organizations the caller can see
+  - name: admin
+    description: Platform-administrator-only user management
+  - name: probes
+    description: Liveness and readiness on the business listener
+
+paths:
+  /api/v1/auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      summary: Exchange email and password for a session
+      description: |
+        On success the response sets two HttpOnly, `SameSite=Lax`, `Path=/`
+        cookies: `gw_session` (the opaque session token) and `gw_csrf` (the CSRF
+        token companion, never readable from JavaScript). The same CSRF token is
+        returned in the body so a client can immediately issue unsafe requests.
+
+        The response is independent of whether the email exists: wrong password
+        and unknown email both produce `401 unauthorized`. Repeated failures are
+        throttled per `email + client IP` and produce `429 rate_limited` with
+        `Retry-After`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            examples:
+              default:
+                value: { email: admin@example.com, password: correct-horse-battery-staple }
+      responses:
+        '200':
+          description: Authenticated; session and CSRF cookies are set.
+          headers:
+            Set-Cookie:
+              description: |
+                `gw_session=<token>; Path=/; HttpOnly; SameSite=Lax` plus
+                `Secure` when `CONSOLE_SECURE_COOKIES` is enabled (mandatory in
+                prod). `gw_csrf` is set with the same attributes.
+              schema:
+                type: array
+                items: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+  /api/v1/auth/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      summary: Revoke the current session
+      description: |
+        Revocation is a server-side fact: the session row is marked revoked and
+        both cookies are expired. Replaying the previous `gw_session` value
+        afterwards produces `401`. Requires a session and a valid CSRF token.
+      parameters:
+        - $ref: '#/components/parameters/CSRFToken'
+      responses:
+        '204':
+          description: Session revoked; no body.
+          headers:
+            Set-Cookie:
+              description: Both cookies are expired (`Max-Age=0`).
+              schema:
+                type: array
+                items: { type: string }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+  /api/v1/me:
+    get:
+      tags: [me]
+      operationId: getMe
+      summary: Current user, visible organizations and the session CSRF token
+      responses:
+        '200':
+          description: Current identity.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+  /api/v1/organizations:
+    get:
+      tags: [organizations]
+      operationId: listOrganizations
+      summary: List the organizations the caller is an active member of
+      description: |
+        Ordered by organization `id ASC`. `next_cursor` is the last id of the
+        page, or `null` when there is no further page. Organizations the caller
+        cannot see are never listed.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: One page of memberships.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MembershipPage'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/Internal'
+    post:
+      tags: [organizations]
+      operationId: createOrganization
+      summary: Create an enterprise organization
+      description: |
+        The caller becomes `owner` of the new organization in the same
+        transaction. Requires a session and a valid CSRF token.
+      parameters:
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrganizationRequest'
+            examples:
+              default:
+                value: { name: acme }
+      responses:
+        '201':
+          description: Organization created; the caller is its owner.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Membership'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+  /api/v1/organizations/{org}:
+    get:
+      tags: [organizations]
+      operationId: getOrganization
+      summary: Read one organization the caller belongs to
+      description: |
+        A caller who is not an active member receives `404 not_found`, never
+        `403`: organization existence is not disclosed (ADR-0002 §2.2).
+      parameters:
+        - $ref: '#/components/parameters/OrgID'
+      responses:
+        '200':
+          description: Membership of the caller in that organization.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Membership'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+  /api/v1/admin/users:
+    post:
+      tags: [admin]
+      operationId: createUser
+      summary: Create a controlled user (platform administrators only)
+      description: |
+        Restricted to callers whose `platform_admin` flag is set; anyone else
+        receives `403 forbidden`. Requires a valid CSRF token. The action is
+        audited (actor, target, outcome, request/trace id — never the password).
+
+        The optional `organizations` field adds the new user as a `member` of the
+        listed organizations. The acting administrator must be able to see each
+        of them; an id they are not a member of produces `404 not_found` and the
+        user is not created.
+      parameters:
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+            examples:
+              default:
+                value:
+                  email: member@example.com
+                  password: correct-horse-battery-staple
+                  platform_admin: false
+                  organizations: ["2"]
+      responses:
+        '201':
+          description: User created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+  /api/v1/admin/users/{user}/status:
+    post:
+      tags: [admin]
+      operationId: setUserStatus
+      summary: Activate or disable a user (platform administrators only)
+      description: |
+        Disabling bumps the user's `auth_version`, so every existing session of
+        that user fails its next resolution with `401`. Re-activating does not
+        restore old sessions. Requires a valid CSRF token and is audited.
+      parameters:
+        - $ref: '#/components/parameters/CSRFToken'
+        - $ref: '#/components/parameters/UserID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetUserStatusRequest'
+            examples:
+              disable:
+                value: { status: disabled }
+      responses:
+        '200':
+          description: Updated user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+  /livez:
+    get:
+      tags: [probes]
+      operationId: livez
+      summary: Process liveness
+      description: Always `200 ok` while the process answers; it never touches PostgreSQL.
+      security: []
+      responses:
+        '200':
+          description: Process is alive.
+          content:
+            text/plain:
+              schema: { type: string }
+              examples:
+                default: { value: "ok\n" }
+
+  /readyz:
+    get:
+      tags: [probes]
+      operationId: readyz
+      summary: Business readiness
+      description: |
+        `200 ok` when the Console can serve traffic, which means PostgreSQL is
+        reachable. `503` with `postgres: <reason>` otherwise. Mounted on the
+        business listener, never on the diagnostics listener.
+      security: []
+      responses:
+        '200':
+          description: Ready.
+          content:
+            text/plain:
+              schema: { type: string }
+              examples:
+                default: { value: "ok\n" }
+        '503':
+          description: A dependency is unavailable.
+          content:
+            text/plain:
+              schema: { type: string }
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: gw_session
+      description: |
+        Opaque browser session token issued by `POST /api/v1/auth/login`.
+        `HttpOnly`, `SameSite=Lax`, `Path=/`, `Secure` per profile. Invalid,
+        expired, revoked and tampered values are all indistinguishable: `401`.
+  parameters:
+    OrgID:
+      name: org
+      in: path
+      required: true
+      description: Organization id as a decimal string.
+      schema: { type: string, pattern: '^[1-9][0-9]*$' }
+      examples:
+        default: { value: "2" }
+    UserID:
+      name: user
+      in: path
+      required: true
+      description: User id as a decimal string.
+      schema: { type: string, pattern: '^[1-9][0-9]*$' }
+      examples:
+        default: { value: "3" }
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: |
+        Page size. Defaults to 20. Values above 100 are clamped to 100; values
+        below 1, or non-numeric values, are rejected with `400 invalid_request`.
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: |
+        Last organization id of the previous page, as a decimal string. Absent
+        means the first page.
+      schema: { type: string, pattern: '^[0-9]+$' }
+    CSRFToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      description: |
+        Session-bound CSRF token returned by login and by `GET /api/v1/me`.
+        Missing or mismatching values produce `403 forbidden`.
+      schema: { type: string, minLength: 1 }
+  responses:
+    InvalidRequest:
+      description: Malformed body, invalid parameter or invalid enum value.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          examples:
+            default:
+              value:
+                error:
+                  code: invalid_request
+                  message: email and password are required
+                  request_id: 8f1c0b2e4d5a6f708192a3b4c5d6e7f8
+    Unauthorized:
+      description: Missing, invalid, expired, revoked or tampered session.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          examples:
+            default:
+              value:
+                error:
+                  code: unauthorized
+                  message: session is invalid or expired
+                  request_id: 8f1c0b2e4d5a6f708192a3b4c5d6e7f8
+    Forbidden:
+      description: |
+        Missing or mismatching CSRF token, a disabled user, or a caller without
+        platform-administrator privileges.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          examples:
+            default:
+              value:
+                error:
+                  code: forbidden
+                  message: missing or invalid CSRF token
+                  request_id: 8f1c0b2e4d5a6f708192a3b4c5d6e7f8
+    NotFound:
+      description: Unknown resource, or a resource the caller may not see.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          examples:
+            default:
+              value:
+                error:
+                  code: not_found
+                  message: organization not found
+                  request_id: 8f1c0b2e4d5a6f708192a3b4c5d6e7f8
+    Conflict:
+      description: Uniqueness conflict, for example an email that is already registered.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          examples:
+            default:
+              value:
+                error:
+                  code: conflict
+                  message: email is already registered
+                  request_id: 8f1c0b2e4d5a6f708192a3b4c5d6e7f8
+    RateLimited:
+      description: Login throttled for this email and client IP.
+      headers:
+        Retry-After:
+          description: Seconds until a retry may succeed.
+          schema: { type: integer, minimum: 1 }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          examples:
+            default:
+              value:
+                error:
+                  code: rate_limited
+                  message: too many login attempts, retry later
+                  request_id: 8f1c0b2e4d5a6f708192a3b4c5d6e7f8
+    Internal:
+      description: Unexpected server-side failure. Details are logged, never returned.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          examples:
+            default:
+              value:
+                error:
+                  code: internal_error
+                  message: internal error
+                  request_id: 8f1c0b2e4d5a6f708192a3b4c5d6e7f8
+  schemas:
+    ErrorEnvelope:
+      type: object
+      description: The shared T01A error envelope used by every service in this repository.
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, request_id]
+          properties:
+            code:
+              type: string
+              description: |
+                Stable, machine-readable error code. The canonical vocabulary is
+                `invalid_request`, `unauthorized`, `forbidden`, `not_found`,
+                `conflict`, `method_not_allowed`, `rate_limited`,
+                `insufficient_balance`, `config_pending`, `billing_unavailable`,
+                `upstream_unavailable`, `unavailable` and `internal_error`.
+                Console only emits the subset listed here.
+              enum:
+                - invalid_request
+                - unauthorized
+                - forbidden
+                - not_found
+                - conflict
+                - method_not_allowed
+                - rate_limited
+                - internal_error
+            message:
+              type: string
+              description: Human-readable explanation. Not a stable contract; never contains secrets.
+            request_id:
+              type: string
+              description: |
+                Correlation id, equal to the `X-Request-ID` response header.
+                Empty when the request id could not be established.
+
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 1
+          writeOnly: true
+
+    LoginResponse:
+      type: object
+      additionalProperties: false
+      required: [user, organizations, csrf_token]
+      properties:
+        user: { $ref: '#/components/schemas/User' }
+        organizations:
+          type: array
+          items: { $ref: '#/components/schemas/Membership' }
+        csrf_token:
+          type: string
+          description: Session-bound CSRF token for `X-CSRF-Token`.
+
+    MeResponse:
+      type: object
+      additionalProperties: false
+      required: [user, organizations, csrf_token]
+      properties:
+        user: { $ref: '#/components/schemas/User' }
+        organizations:
+          type: array
+          items: { $ref: '#/components/schemas/Membership' }
+        csrf_token:
+          type: string
+          description: |
+            The CSRF token bound to the current session, so a client that
+            reloaded the page can resume unsafe requests. Empty string when the
+            companion cookie is absent.
+
+    User:
+      type: object
+      additionalProperties: false
+      required: [id, email, status, platform_admin, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          description: 64-bit user id as a decimal string.
+        email:
+          type: string
+          format: email
+        status:
+          type: string
+          enum: [active, disabled]
+        platform_admin:
+          type: boolean
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    Organization:
+      type: object
+      additionalProperties: false
+      required: [id, type, name, status, created_at]
+      properties:
+        id:
+          type: string
+          description: 64-bit organization id as a decimal string.
+        type:
+          type: string
+          enum: [personal, enterprise]
+        name: { type: string }
+        status:
+          type: string
+          enum: [active, suspended]
+        legacy_tenant_id:
+          type: [string, "null"]
+          description: |
+            Optional mapping to a historical `metering_events.tenant_id`
+            string. Present only for organizations adopted from the legacy
+            tenant model; never fabricated for historical events.
+        created_at: { type: string, format: date-time }
+
+    Membership:
+      type: object
+      description: An organization together with the caller's role in it.
+      additionalProperties: false
+      required: [organization, role]
+      properties:
+        organization: { $ref: '#/components/schemas/Organization' }
+        role:
+          type: string
+          enum: [owner, admin, member, billing_viewer]
+
+    MembershipPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Membership' }
+        next_cursor:
+          type: [string, "null"]
+          description: Last organization id of this page, or `null` on the last page.
+
+    CreateOrganizationRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: Display name; surrounding whitespace is trimmed.
+
+    CreateUserRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 1
+          writeOnly: true
+        platform_admin:
+          type: boolean
+          default: false
+        organizations:
+          type: array
+          description: |
+            Organization ids (as strings) the new user is added to with the
+            `member` role. Each one must be visible to the acting administrator.
+          items: { type: string, pattern: '^[1-9][0-9]*$' }
+
+    SetUserStatusRequest:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [active, disabled]
+          description: |
+            `disabled` bumps the user's `auth_version`, immediately invalidating
+            every existing session of that user.
+
+security:
+  - sessionCookie: []
