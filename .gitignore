@@ -20,3 +20,11 @@ data/dev-certs/
 .idea/
 .vscode/
 .DS_Store
+
+# Web（T04：web/ 前端）
+web/node_modules/
+web/dist/
+web/coverage/
+web/.vite/
+web/*.tsbuildinfo
+web/npm-debug.log*
