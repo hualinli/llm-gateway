@@ -1,14 +1,16 @@
 # LLM Gateway
 
-一个面向 LLM 推理服务的 **生产导向网关原型**：支持流式 SSE 代理、多 Provider 路由、首字节前故障切换、按租户限流、异步计量和控制面热配置。
+一个面向 LLM 推理服务的 **生产导向网关原型**：支持流式 SSE 代理、多 Provider 路由、首字节前故障切换、按租户限流、异步计量和控制面热配置。当前正在按新路线扩展为**多租户 LLM API 平台**（用户/组织/权限、精确价格版本、余额预占与幂等结算、三角色 Web 工作台）。
+
+## 当前计划入口（2026-10-01）
+
+> **产品目标与实施顺序以这三个文档为准**：主路线 [生产导向多租户计费平台与生产级面试交付路线](docs/plans/PRODUCTION-INTERVIEW-ROADMAP-2026-10-01.md)、[压测与故障验收规格](docs/plans/BENCHMARK-AND-ACCEPTANCE-2026-10-01.md)、[Agent 执行 Prompt 与任务包](docs/plans/AGENT-PROMPTS-2026-10-01.md)（T00–T12 任务、依赖表与验收出口）。计划审查结论见 [最终计划审查](docs/plans/PLAN-REVIEW-2026-10-01.md)。
+>
+> 旧的 [项目演进路线图](docs/PROJECT-ROADMAP.md) 自 2026-10-01 起只作为历史背景保留（其中系统不变量与 Agent 协议仍有效）；冲突时以新路线和 [当前状态与证据索引](docs/PROJECT-STATUS.md) 中的代码事实为准。
+>
+> **本文中的完成度描述可能与计划文档重叠**：README 只保留已实现能力和最短运行路径；逐项“已实现/已验证/未验证/已知风险”以 [当前状态与证据索引](docs/PROJECT-STATUS.md) 为准。
 
 > 2026-09-11 正确性修复与验证见 [修复复盘](docs/verification/2026-09-11/REPAIR-REPORT.md)，原始架构评估见 [评估报告](ASSESSMENT-2026-09-11.md)。
-
-> 后续工作的统一优先级、阶段目标、系统不变量和 Agent 协作方式见 [项目演进路线图](docs/PROJECT-ROADMAP.md)。
-
-> **当前事实源**：截至 2026-09-22 的已完成功能、已关闭问题、剩余风险和验证结果见 [项目状态与问题清单](docs/PROJECT-STATUS.md)。本文后半部分保留了较多设计背景；判断当前完成度时以状态清单为准。
-
-> **项目当前定位**：核心服务已可由 Compose 一次启动，两个进程外 Mock 由操作者按需手工启动；热更新 Provider/路由、租户 Key、流式请求、首事件前切备和最终入账已跑通。项目仍是生产导向原型，不是生产级多 Provider 网关。
 
 ## 项目状态概览
 
@@ -18,18 +20,19 @@
 | SSE 故障切换边界 | ✅ 已完成核心语义 | 首事件前可切备，首事件后不重放；客户端取消、首事件和流式超时已有测试；慢客户端实网证据仍缺失 |
 | Provider | 🟡 单协议可用 | OpenAI-compatible、动态 protocol/url/credential_ref 和进程外 mock 已完成；第二协议不是当前阻断项 |
 | 限流 | 🟡 基础实现完成 | Redis Lua 令牌桶、有界轮询、fail-open/fail-closed 和全局活跃流上限已有；动态租户策略和高并发故障实验未完成 |
-| 计量 | 🟡 基础闭环完成 | 独立 event ID、Redis Stream、spool、PG 幂等、DLQ、pending 接管和事件级对账已有；Consumer 自愈、保留策略和大规模恢复仍缺失 |
+| 计量 | 🟡 基础闭环完成 | 独立 event ID、Redis Stream、spool、PG 幂等、DLQ、事件级对账已有；Consumer 建组自愈与 pending 游标分页（单轮 32 页）已实现；保留/归档、DLQ 近似裁剪和超 32 页后部公平性未验证；`[DONE]` 已发给客户端但事件仍在内存队列时进程被 kill -9 会丢记录 |
 | 控制面 | 🟡 一致性基础完成 | Get/Watch、PG 版本、原子 patch、防回退、TLS/mTLS、管理认证和 Gateway applied/rejected 回报已有；聚合 active 语义和报告时效未完成 |
 | 凭据管理 | ✅ 第一版完成 | `/keys` Create/List/Revoke、admin/tenant-user 授权核心和 PG 审计已有；正式身份签发/轮换流程未完成 |
 | 可观测性 | 🟡 基础实现完成 | Prometheus 已抓 Gateway/Metering，基础 Dashboard 已有；告警和指标口径仍需完善 |
-| 测试 | ✅ 当前回归通过 | 143 个测试；2026-09-22 普通 race、vet、build 和 Redis/PostgreSQL 集成测试通过 |
-| Demo 与 CI | 🟡 Demo v0 可运行 | `demo-up/config/smoke/down` 已接线，Mock 刻意保持手工启停；自动故障编排、连续证据和 CI 尚未完成 |
-| 性能证据 | 🟡 部分完成 | 已有可追溯本机直连/网关基线及故障切换报告；容量拐点、慢客户端和生产环境资源上界未验证 |
-| 生产安全性 | 🟡 Compose 已收紧一部分 | Compose 强制 PG、管理认证、fail-closed 和活跃流上限；gRPC 仍为 insecure，诊断/计量查询端点仍公开，直接运行二进制仍有宽松回退默认值 |
+| 测试 | 🟡 分层执行状态不同 | 155 个 `func Test` 声明（不等于本轮执行用例数）；2026-10-01 普通 `go build`/`go vet`/`go test ./... -count=1` 通过；race 与 Redis/PostgreSQL 集成基线由新路线 T01A 执行 |
+| Demo 与 CI | 🟡 已有编排、远端未确认 | `demo-up/config/smoke/down`、`scripts/demo-accept.sh` 三轮正常/切备/双故障/对账和 `.github/workflows/ci.yml` 已提交；**远端 CI 是否跑绿未知**；压测/实验环境尚未隔离 |
+| 性能证据 | 🟡 历史本机数据 | [2026-09-26 本机直连/网关基线与切备报告](docs/verification/2026-09-26/performance/README.md)是历史证据（闭环 `ec24990`、固定到达 `4459c83`）；容量拐点、慢客户端和生产资源上界未验证 |
+| 生产安全性 | 🟡 Compose 已收紧一部分 | Compose 强制 PG、管理认证、fail-closed 和活跃流上限；gRPC 仍为 insecure，诊断/计量查询端点（`/ledger/*`、`/reconcile`）无鉴权，直接运行二进制仍有宽松回退默认值 |
+| 多租户产品面 | ⬜ 未开始 | 仓库没有用户/组织/成员/会话/钱包/价格版本模型，也没有 `web/`；按新路线 T02–T08 实施 |
 
 当前更准确的简历定位是：
 
-> 使用 Go 实现了一个生产导向的 LLM 流式网关原型，完成了 OpenAI-compatible 流式数据面、版本化控制面、异步计量和可运行 Demo v0；后续重点是可靠性恢复、自动化故障场景、CI、安全默认值和可验证的性能数据。
+> 使用 Go 实现了一个生产导向的 LLM 流式网关原型，完成了 OpenAI-compatible 流式数据面、版本化控制面、异步计量和可运行 Demo v0；正在按新路线扩展为多租户 API 平台（用户/组织/权限、精确价格版本、余额预占与幂等结算、三角色 Web），当前重点是可靠性恢复、自动化故障场景、CI、安全默认值和可验证的性能数据。
 
 ---
 
@@ -189,7 +192,7 @@
 - PostgreSQL 台账使用唯一约束实现基础幂等；
 - 无法解析的消息进入 DLQ；
 - MemoryLedger 可在本地无 PostgreSQL 时运行 Demo；
-- 提供 `/ledger/count`、`/ledger/balance`、`/reconcile` 基础接口。
+- 提供 `/ledger/count`、`/ledger/balance`、`/reconcile` 基础接口。**注意口径**：`/ledger/balance` 返回的 `balance_cents` 是该 tenant 的**累计消费 SUM**（`cost_cents` 求和），不是可用余额或预付钱包；当前价格是 `CostCents = TotalTokens` 的演示价（1 token = 1 分），仓库没有价格版本和资金账户。
 
 当前限制：
 
@@ -259,8 +262,11 @@
 - `cmd/loadtest` 当前每个请求创建一个 Worker/client；底层仍使用共享 DefaultTransport，但工具本身缺少显式连接池参数、连接统计和分阶段诊断；
 - 没有统计 chunk 间隔抖动；
 - EOF 但没有 `[DONE]` 时已判为失败；仍缺少按断流原因分类和结构化错误明细；
-- 没有输出结构化 JSON 报告；
-- 没有和直连 Provider 的基准对比；
+- 已能输出结构化 JSON 报告（`cmd/loadtest -json`、`scripts/benchmark-local.py` 的 `raw/*.json`、`resource-samples.json`、`index.json`）；
+- 已有直连 vs Gateway 对照（[2026-09-26 压测记录](docs/verification/2026-09-26/performance/README.md)），但那是**闭环/固定到达但未饱和**的历史本机数据；真正的开环调度、慢客户端与长流参数属于新路线 T01B；
+- 固定到达模式在并发槽满时会阻塞调度（`sem <- struct{}{}`），会降低实际发压且没有 scheduled/dropped 计数；TTFT 是首个非空 `data:` 行（可能是 role-only），逐行解析不是完整 SSE event 解析；
+- 每条流硬编码 10s `context.WithTimeout`（没有 `-timeout` flag），超过 10s 的正常长流会被判为错误；
+- `scripts/benchmark-local.py` 使用**日常 Compose project** 与端口，会改写 demo 配置并创建 demo Key（`data/demo-api-key`），结束后只恢复 limiter，不恢复控制面配置；正式实验需要 T01A 的隔离 runner；
 - tenant/model 直接作为 Prometheus label，需限制高基数；
 - Prometheus 已抓取 Metering；Dashboard 仍未完整展示 spool、DLQ、pending 和 ledger failure；
 - 尚未形成 1 万并发、P95 额外延迟或固定内存上限的可信实测结果。
@@ -1084,6 +1090,7 @@ data: [DONE]
 ```bash
 curl -H 'Authorization: Bearer demo-control-token' http://localhost:50052/config
 curl http://localhost:8091/ledger/count
+# 下面是该 tenant 的累计消费金额（cost_cents 求和），不是可用余额；也没有鉴权
 curl 'http://localhost:8091/ledger/balance?tenant=tenant-demo'
 curl http://localhost:8091/reconcile
 curl http://localhost:8090/metrics
@@ -1151,15 +1158,16 @@ docker compose down -v
   - 真实 gRPC 网络调用和 mTLS；
   - 配置快照隔离、租约到期和恢复。
 
-当前验证命令：
+当前验证命令（2026-10-01 在 `5129e03` 上执行；`GOCACHE` 需指向可写目录）：
 
 ```text
-go test ./... -count=1    通过
+go build ./...            通过
 go vet ./...              通过
-go test -race ./...       通过
+go test ./... -count=1    通过（不含 race；需要 Redis/PG 的 opt-in 集成用例会 skip）
+go test -race ./...       未在本次通过中执行；基线由新路线 T01A 建立
 ```
 
-Redis 计量集成测试是显式 opt-in 的，需要一个专用 Redis：
+Redis 计量集成测试是显式 opt-in 的，需要一个专用 Redis（`make integration-test` 会拉起 `docker-compose.test.yml` 的隔离 Redis/PostgreSQL 并带 race 运行）：
 
 ```bash
 METERING_TEST_REDIS_ADDR=localhost:6379 \
@@ -1188,15 +1196,17 @@ CONTROL_TEST_POSTGRES_DSN='postgres://gateway:gateway@localhost:5433/llm_gateway
 仍需补充：
 
 - Redis Lua 高并发和组合故障注入；
-- spool 满盘、kill -9、断电和大文件恢复实验；
-- Consumer 建组自愈、pending cursor 分页和 DLQ 写失败的长期恢复；
+- spool 满盘、kill -9、断电和大文件恢复实验（含“`[DONE]` 已发给客户端、事件仍在内存队列时被 SIGKILL”的确定损失窗口）；
+- Consumer **DLQ 写失败**和超 32 页 pending 预算后的长期公平性（建组自愈与 cursor 分页已实现并有集成测试，但默认 skip，只有 `make integration-test` 会执行）；
 - 慢客户端真实网络测试；
 - 负载、故障注入、数据保留和恢复报告；
 - Control/Metering 生产模式启动与优雅退出的进程级测试。
 
 ---
 
-## 7. 推荐交付路线
+## 7. 推荐交付路线（历史里程碑，2026-10-01 起不再作为执行顺序）
+
+> 本节是 Demo v0 时期的分阶段验收清单，保留用于追溯已完成项。当前产品目标与任务顺序见 [主路线](docs/plans/PRODUCTION-INTERVIEW-ROADMAP-2026-10-01.md) 的 T00–T12 与 [任务包](docs/plans/AGENT-PROMPTS-2026-10-01.md)。
 
 ### Milestone 1：真实 Provider 垂直闭环
 
