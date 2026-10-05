@@ -12,7 +12,7 @@
 
 - Console 每次读取 Metering 权威安全窗口，缺失/超时/非法策略时返回 503；不再独立猜测 40 分钟窗口。只读凭据仅允许 GET `/recovery/policy`，不向 Console 共享 Metering 管理 token。
 - 人工队列联读 receipt 的真实异常原因，展示 Metering 配置的 SLA；理由限制统一为 512 UTF-8 字节。
-- 旧 consumer 拒绝异常收据后，与操作员重投交错时不再把 pending 收据重新打回 exception；确定性 PG/Redis 并发回归证明恢复后恰好结算一次。
+- 旧 consumer 拒绝异常收据后，与操作员重投交错时不再把 pending 收据重新打回 exception；确定性 PG/Redis 交错回归证明旧 consumer 不再覆盖 pending retry；独立 PG 重试、派发与结算重放用例验证最多一笔 debit。
 - loop=off/nil runtime 的策略端点和异常行为一致：前者返回真实配置，后者安全返回 503。
 - 最大执行时长加宽限的 duration 溢出在启动时拒绝，包括 off/auto/on 三种模式；测试覆盖最大合法和及下一纳秒溢出。
 - README/runbook 补齐只读凭据、Console URL、503 排查和多 Metering 副本策略一致配置要求。
