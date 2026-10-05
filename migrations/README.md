@@ -11,7 +11,7 @@ make migrate-up
 make migrate-version
 ```
 
-当前版本为 7。成功后启动新版服务。服务只读取 schema_migrations 校验版本和 dirty 状态，不会自动改变表结构。数据库已连接但版本不符合时直接失败，不会静默切换内存台账。Control 与 Metering 默认共用数据库；如果使用不同数据库，需要分别运行迁移，当前每个库都会建立完整项目 schema。
+当前版本为 13。成功后启动新版服务。服务只读取 schema_migrations 校验版本和 dirty 状态，不会自动改变表结构。数据库已连接但版本不符合时直接失败，不会静默切换内存台账。Control 与 Metering 默认共用数据库；如果使用不同数据库，需要分别运行迁移，当前每个库都会建立完整项目 schema。
 
 命令入口是 cmd/migrate，内部调用 golang-migrate。up 运行所有尚未执行的迁移；再次运行没有新版本时视为成功。迁移库负责版本记录、dirty 标记和 PostgreSQL 迁移锁。SQL 使用显式事务，失败时不会留下半套业务表结构，但 dirty 状态仍需人工调查。
 
@@ -24,6 +24,12 @@ make migrate-version
 - 000005_console_rbac_and_policy：新增 `invitations`、`console_audit_events`、`policy_publications`，并给 `organizations` 增加 `org_revision`（ADR-0003 §2.4–2.6）。成员/邀请变更在组织级短事务内递增 revision 并写入同事务的 pending 发布记录。
 - 000006_control_api_keys：新增 `api_keys`（Key 唯一事实：hash/prefix/org/owner/created_by/status/expires/model_allowlist/policy_version/operation_id，`org_id` 外键指向 `organizations(id)`）与 `control_operations`（幂等命令：operation_id/payload_digest/actor_scope/result/resulting_version）。快照降级为派生投影，同事务写入。
 - 000007_metering_attribution：为 `metering_events` 增加可空的 `org_id`/`user_id`/`key_id`/`execution_id` 归属列与 `(org_id, created_at DESC)`、`(user_id, created_at DESC)` 索引（ADR-0003 §2.8）。不回溯历史数据；旧记录保持未知归属。
+- 000008_price_accounts：不可变 `price_versions`（model+effective_at 唯一、客户价与上游成本分离）、`billing_accounts` 投影、append-only `billing_entries`（`UNIQUE(business_id, kind)` + `payload_digest` + 拒绝 UPDATE/DELETE 的触发器），并把计量索引升级为 `(org_id|user_id, created_at DESC, event_id DESC)`（ADR-0004）。
+- 000009_billing_executions：执行身份与固定 price_version、上界与 7 态状态机（T06B）。
+- 000010_usage_receipts：receipt 兼作逻辑 outbox（派发字段可变、业务列由触发器冻结）（T06C）。
+- 000011_billing_exceptions：PG 资金异常 + append-only 处置轨迹 + 对账索引（T07C）。
+- 000012_gateway_instances：数据面心跳，仅用于恢复判活（T07B）。
+- 000013_gateway_instance_status：Control 写入的实例状态（applied/rejected、时间戳，单调 upsert），与 000012 刻意分离（T09）。
 - 每个版本都有 up.sql / down.sql。已有迁移发布后保持不变，后续变更增加新编号。
 - check.sql 仅供服务读取版本，不属于编号迁移。
 

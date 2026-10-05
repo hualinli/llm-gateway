@@ -114,6 +114,13 @@ type fakeRecoveryStore struct {
 	queueErr   error
 	backlogErr error
 	gapErr     error
+	// T12: the scripted manual disposition.
+	manual       billing.ManualDispositionResult
+	manualErr    error
+	lastManual   billing.ManualDispositionParams
+	manualCalls  int
+	lastReleased string
+	lastSettled  string
 }
 
 func (s *fakeRecoveryStore) ListRecoveryCandidates(context.Context, billing.RecoveryCandidateScanParams) ([]billing.Execution, error) {
@@ -135,6 +142,24 @@ func (s *fakeRecoveryStore) ReviewRequiredBacklog(context.Context, billing.Revie
 func (s *fakeRecoveryStore) ListReviewRequiredExecutions(_ context.Context, params billing.ReviewQueueParams) (billing.ReviewQueuePage, error) {
 	s.lastQueue = params
 	return s.page, s.queueErr
+}
+
+func (s *fakeRecoveryStore) ReleaseExecutionManually(_ context.Context, params billing.ManualDispositionParams) (billing.ManualDispositionResult, error) {
+	s.manualCalls++
+	s.lastManual = params
+	s.lastReleased = params.ExecutionID
+	result := s.manual
+	result.Action = billing.ManualActionRelease
+	return result, s.manualErr
+}
+
+func (s *fakeRecoveryStore) SettleExecutionManually(_ context.Context, params billing.ManualDispositionParams) (billing.ManualDispositionResult, error) {
+	s.manualCalls++
+	s.lastManual = params
+	s.lastSettled = params.ExecutionID
+	result := s.manual
+	result.Action = billing.ManualActionSettle
+	return result, s.manualErr
 }
 
 func newRecoveryTestRuntime(store recoveryStore, loop *billing.ExecutionRecovery) *recoveryRuntime {

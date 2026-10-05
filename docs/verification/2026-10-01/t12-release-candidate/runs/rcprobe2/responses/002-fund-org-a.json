@@ -1,0 +1,37 @@
+{
+  "request": {
+    "org": "2",
+    "amount_micro": "100000000"
+  },
+  "response": {
+    "status": 201,
+    "body": {
+      "entry": {
+        "id": "1",
+        "organization_id": "2",
+        "kind": "adjustment",
+        "direction": "credit",
+        "amount_micro": "100000000",
+        "business_id": "rc-credit-rcprobe2",
+        "reason": "T12 release-candidate seed credit",
+        "operator_user_id": "1",
+        "request_id": "ad589089970cf6b5a1f5da84ca608f5c",
+        "posted_at": "2026-10-01T10:24:00Z",
+        "created_at": "2026-10-01T10:24:00Z"
+      },
+      "account": {
+        "organization_id": "2",
+        "currency": "CNY",
+        "posted_balance_micro": "100000000",
+        "reserved_micro": "0",
+        "available_micro": "100000000",
+        "status": "active",
+        "version": "2",
+        "created_at": "2026-10-01T10:24:00Z",
+        "updated_at": "2026-10-01T10:24:00Z",
+        "available_note": "available_micro = posted_balance_micro - reserved_micro. A negative available amount is a debt, not a spendable balance."
+      },
+      "replayed": false
+    }
+  }
+}

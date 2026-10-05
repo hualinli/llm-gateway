@@ -1,0 +1,11 @@
+{
+  "run_id": "rc-verify-01",
+  "phase": "accept",
+  "ok": true,
+  "steps_total": 9,
+  "steps_passed": 9,
+  "hard_failures": [],
+  "soft_findings": [],
+  "duration_s": 7.29,
+  "generated_at": "2026-10-01T10:58:56Z"
+}

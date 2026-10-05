@@ -1,0 +1,24 @@
+{
+  "request": {
+    "org": "2",
+    "actor": "member_a"
+  },
+  "response": {
+    "status": 201,
+    "key": {
+      "key_id": "key_21d19c5d6cbd230e4a9bcd2c5303cf32",
+      "prefix": "sk-Xcqj5...",
+      "organization_id": "2",
+      "owner_user_id": "6",
+      "created_by": "6",
+      "status": "active",
+      "expires_at": null,
+      "revoked_at": null,
+      "model_allowlist": null,
+      "policy_version": "1",
+      "created_at": "2026-10-01T10:58:50Z",
+      "tenant_id": "org:2"
+    },
+    "secret_returned_once": true
+  }
+}

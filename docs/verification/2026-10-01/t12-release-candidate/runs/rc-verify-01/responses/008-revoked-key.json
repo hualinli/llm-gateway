@@ -1,0 +1,11 @@
+{
+  "request": {
+    "key_id": "key_21d19c5d6cbd230e4a9bcd2c5303cf32"
+  },
+  "response": {
+    "revoke_status": 200,
+    "key_status": "revoked",
+    "gateway_status": 401,
+    "gateway_code": "unauthorized"
+  }
+}

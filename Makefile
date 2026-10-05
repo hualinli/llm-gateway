@@ -1,4 +1,4 @@
-.PHONY: tidy up down run vet test test-up test-down integration-test mock-primary mock-backup demo-up demo-observability demo-config demo-smoke demo-smoke-backup demo-smoke-unavailable demo-accept demo-down demo-clean ensure-master-key dev-certs console-run console-run-tls console-bootstrap console-bootstrap-demo
+.PHONY: tidy up down run vet test test-up test-down integration-test mock-primary mock-backup demo-up demo-observability demo-config demo-smoke demo-smoke-backup demo-smoke-unavailable demo-accept demo-down demo-clean ensure-master-key dev-certs console-run console-run-tls console-bootstrap console-bootstrap-demo release-candidate release-candidate-up release-candidate-demo release-candidate-e2e release-candidate-security release-candidate-down
 
 TEST_REDIS_ADDR ?= 127.0.0.1:16379
 TEST_POSTGRES_DSN ?= postgres://gateway_test:test_only_local@127.0.0.1:15433/gateway_test?sslmode=disable
@@ -137,3 +137,33 @@ migrate-version:
 # Rolls back one version. Review its down.sql before use.
 migrate-down-one:
 	go run ./cmd/migrate down-one
+
+# --- T12 发布候选 -----------------------------------------------------------
+# 一键可复现验收：构建镜像 → 空库迁移 → 三角色 bootstrap/seed → 全栈启动 →
+# 端到端验收（成员调用/企业查费/余额拒绝/撤销传播/故障恢复/平台审计）→
+# 安全 profile 检查 → 证据归档 → 只回收自己的 compose project。
+# 用法与证据：docs/verification/2026-10-01/t12-release-candidate/README.md
+RC_RUN_FLAGS ?=
+
+release-candidate:
+	bash scripts/release-candidate.sh run $(RC_RUN_FLAGS)
+
+# 先把栈拉起来并保留（用于 5 分钟 Demo 与 Playwright 套件）。
+release-candidate-up:
+	bash scripts/release-candidate.sh up $(RC_RUN_FLAGS)
+
+# 5 分钟 Demo：成员调用 → 企业查费 → 余额拒绝 → 撤销传播 → 故障恢复 → 平台审计。
+release-candidate-demo:
+	bash scripts/release-candidate.sh demo $(RC_RUN_FLAGS)
+
+# 对着已运行的栈跑 Playwright 三角色套件。
+release-candidate-e2e:
+	bash scripts/release-candidate.sh e2e $(RC_RUN_FLAGS)
+
+# 只跑 prod profile / 秘密扫描 / 默认凭据 / 诊断暴露 / Cookie 检查。
+release-candidate-security:
+	bash scripts/release-candidate.sh security $(RC_RUN_FLAGS)
+
+# 只回收本次发布候选的 compose project（含卷），不触碰其它 project。
+release-candidate-down:
+	bash scripts/release-candidate.sh down $(RC_RUN_FLAGS)

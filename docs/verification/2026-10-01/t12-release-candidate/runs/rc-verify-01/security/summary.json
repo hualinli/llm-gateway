@@ -1,0 +1,132 @@
+{
+  "ok": true,
+  "checks": [
+    {
+      "id": "prod_refusal",
+      "ok": true,
+      "hard": true,
+      "details": [
+        "gateway: exit=1 拒绝启动=True 缺少的检查项=无",
+        "control: exit=1 拒绝启动=True 缺少的检查项=无",
+        "metering: exit=1 拒绝启动=True 缺少的检查项=无",
+        "console: exit=1 拒绝启动=True 缺少的检查项=无"
+      ],
+      "observations": {
+        "gateway": {
+          "exit_code": 1,
+          "missing_checks": [],
+          "mentions_preflight": true
+        },
+        "control": {
+          "exit_code": 1,
+          "missing_checks": [],
+          "mentions_preflight": true
+        },
+        "metering": {
+          "exit_code": 1,
+          "missing_checks": [],
+          "mentions_preflight": true
+        },
+        "console": {
+          "exit_code": 1,
+          "missing_checks": [],
+          "mentions_preflight": true
+        }
+      }
+    },
+    {
+      "id": "cookie_flags",
+      "ok": true,
+      "hard": true,
+      "details": [
+        "login -> 200",
+        "Set-Cookie: gw_session=<redacted>; max-age=43200; path=/; HttpOnly; SameSite=Lax | gw_csrf=eKIqzEWt3SCnRLQAvRaigjJbK9P0KD55l1Vka9p7khI; max-age=43200; path=/; HttpOnly; SameSite=Lax",
+        "HttpOnly=True SameSite=True Secure=False（demo profile 下 Secure=false 是显式放宽；prod 会因 CONSOLE_SECURE_COOKIES!=true 拒绝启动，见 prod_refusal）"
+      ],
+      "observations": {
+        "httponly": true,
+        "samesite": true,
+        "secure": false
+      }
+    },
+    {
+      "id": "diagnostic_exposure",
+      "ok": true,
+      "hard": true,
+      "details": [
+        "control /gateways 未带 token -> 401（要求 401）",
+        "console /debug/pprof/ -> 404（要求 404/405 或不可达）",
+        "端口暴露矩阵: {\"gateway-biz/metrics\": 200, \"gateway-biz/debug/pprof/\": 200, \"gateway-biz/livez\": 200, \"gateway-biz/readyz\": 200, \"console-biz/metrics\": 200, \"console-biz/debug/pprof/\": 404, \"console-biz/livez\": 200, \"console-biz/readyz\": 200, \"metering-biz/metrics\": 200, \"metering-biz/debug/pprof/\": 404, \"metering-biz/ledger/count\": 200, \"metering-biz/reconcile\": 200, \"control-admin/metrics\": 404, \"control-admin/gateways\": 401, \"control-admin/healthz\": 200}",
+        "demo profile 的已知放宽: gateway /debug/pprof/ 在业务监听 200（demo 放宽；prod 要求 GATEWAY_DIAGNOSTICS_ADDR）；gateway /metrics 在业务监听 200（demo 放宽）；console /metrics 在业务监听 200（demo 放宽）；metering /ledger/count 匿名 200（demo 明确放开并打 WARNING）；metering /reconcile 匿名 200（demo 明确放开并打 WARNING）"
+      ],
+      "observations": {
+        "exposure": {
+          "gateway-biz/metrics": 200,
+          "gateway-biz/debug/pprof/": 200,
+          "gateway-biz/livez": 200,
+          "gateway-biz/readyz": 200,
+          "console-biz/metrics": 200,
+          "console-biz/debug/pprof/": 404,
+          "console-biz/livez": 200,
+          "console-biz/readyz": 200,
+          "metering-biz/metrics": 200,
+          "metering-biz/debug/pprof/": 404,
+          "metering-biz/ledger/count": 200,
+          "metering-biz/reconcile": 200,
+          "control-admin/metrics": 404,
+          "control-admin/gateways": 401,
+          "control-admin/healthz": 200
+        },
+        "demo_relaxations": [
+          "gateway /debug/pprof/ 在业务监听 200（demo 放宽；prod 要求 GATEWAY_DIAGNOSTICS_ADDR）",
+          "gateway /metrics 在业务监听 200（demo 放宽）",
+          "console /metrics 在业务监听 200（demo 放宽）",
+          "metering /ledger/count 匿名 200（demo 明确放开并打 WARNING）",
+          "metering /reconcile 匿名 200（demo 明确放开并打 WARNING）"
+        ]
+      }
+    },
+    {
+      "id": "default_credentials",
+      "ok": true,
+      "hard": true,
+      "details": [
+        "仓库中已知默认常量出现位置: test_postgres_password×74(Makefile,docker-compose.test.yml,docs/PROJECT-STATUS.md); postgres_password_default×19(cmd/console/config.go,cmd/console/config_test.go,cmd/control/profiles_test.go); control_admin_token_default×2(cmd/democtl/main.go,docker-compose.yml); grafana_admin_admin×1(docker-compose.yml)",
+        "运行中的 Control 管理面用 'demo-control-token' -> 401（要求 401/403；RC 每次生成随机 token）",
+        "Console 用弱口令 'admin' -> 401，'changeme' -> 401（要求 401）"
+      ],
+      "observations": {
+        "weak_token_status": 401,
+        "weak_login_status": [
+          401,
+          401
+        ],
+        "tracked_occurrences": {
+          "test_postgres_password": 32,
+          "postgres_password_default": 11,
+          "control_admin_token_default": 2,
+          "grafana_admin_admin": 1
+        }
+      }
+    },
+    {
+      "id": "secret_file_permissions",
+      "ok": true,
+      "hard": true,
+      "details": [
+        "work/secrets 权限: {\"admin-password\": \"0o600\", \"control-admin-token\": \"0o600\", \"identities.json\": \"0o600\", \"provider-credential-master-key\": \"0o600\"}",
+        "违规项: 无"
+      ],
+      "observations": {
+        "modes": {
+          "admin-password": "0o600",
+          "control-admin-token": "0o600",
+          "identities.json": "0o600",
+          "provider-credential-master-key": "0o600"
+        },
+        "violations": []
+      }
+    }
+  ],
+  "failed": []
+}

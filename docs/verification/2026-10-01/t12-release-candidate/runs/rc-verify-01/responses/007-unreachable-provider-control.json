@@ -1,0 +1,11 @@
+{
+  "request": {
+    "model": "rc-refuse-probe",
+    "org": "2"
+  },
+  "response": {
+    "status": 502,
+    "code": "upstream_unavailable",
+    "body": "{\"error\":{\"code\":\"upstream_unavailable\",\"message\":\"upstream request failed\",\"request_id\":\"c23f398f8461e444080c7ab8c7c5402b\"}}\n"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "request": {
+    "user_id": "8",
+    "key_id": "key_c9f7510120bc4c391a91fe3c87ae5243"
+  },
+  "response": {
+    "remove_status": 204,
+    "gateway_status": 403,
+    "gateway_code": "forbidden",
+    "member_org_read_status": 404
+  }
+}
