@@ -9,4 +9,3 @@ Checking /rules/billing.yml
   SUCCESS: 6 rules found
 
   SUCCESS
-
