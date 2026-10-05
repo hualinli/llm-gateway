@@ -1,0 +1,11 @@
+$ gofmt -l <all go files>
+(no output)
+
+$ go build ./...
+OK
+
+$ go vet ./...
+OK
+
+$ go test ./... -count=1
+(no failures)

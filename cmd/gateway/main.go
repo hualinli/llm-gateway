@@ -140,17 +140,24 @@ func main() {
 		proxyHandler.SetFinalizeTimeout(billingSettings.FinalizeTimeout)
 	}
 
-	// 控制面同步：GetConfig 补拉、Watch 低延迟推送、周期校验和可选租约。
+	// 控制面同步：GetConfig 补拉、Watch 低延迟推送、周期校验和策略租约。
 	// 版本跳跃由同步器接受，Gateway 只拒绝旧版本；租约到期时撤销本地 key。
+	//
+	// T09：租约默认 30s（CONTROL_CONFIG_LEASE）——失联超过租约的实例必须对新请求
+	// fail-closed，同时让在途流自然排水。心跳（ReportGatewayStatus）默认每 10s 一次，
+	// 即使配置没有变化也发，控制面才能区分「空闲但健康」和「失联」。
 	controlAddr := os.Getenv("CONTROL_ADDR")
 	if controlAddr == "" {
 		controlAddr = "localhost:50051"
 	}
 	controlCtx, controlCancel := context.WithCancel(context.Background())
-	log.Printf("gateway instance=%s", instanceID)
+	startedAt := time.Now().UTC()
+	log.Printf("gateway instance=%s started_at=%s", instanceID, startedAt.Format(time.RFC3339Nano))
 	controlSync := control.NewSynchronizer(controlAddr, control.SyncOptions{
-		PollInterval: durationEnv("CONTROL_CONFIG_POLL_INTERVAL", 30*time.Second),
-		LeaseTimeout: durationEnv("CONTROL_CONFIG_LEASE", 0),
+		PollInterval:   durationEnv("CONTROL_CONFIG_POLL_INTERVAL", 30*time.Second),
+		LeaseTimeout:   durationEnv("CONTROL_CONFIG_LEASE", 30*time.Second),
+		ReportInterval: durationEnv("CONTROL_STATUS_REPORT_INTERVAL", control.DefaultReportInterval),
+		StartedAt:      startedAt,
 		OnLeaseExpired: func() {
 			authStore.UpdateRecords(nil)
 			// 控制面失联：本地 key 全部撤销，同时清掉组织策略，避免用过期
@@ -186,11 +193,23 @@ func main() {
 	// 租户默认桶（单层令牌桶，不叠加）。
 	lim.SetOrgRates(orgPolicies)
 
+	// 每实例的活跃流上限：全局（proxy 内部，进入上游前 503）与组织级（这里，
+	// 429）。两者都是**单实例**保护，不做分布式并发租约：两个实例时一个组织
+	// 实际可达到的上限是 2x 配置值。跨实例共享的只有 Redis 里的 org RPM 令牌桶。
+	maxOrgStreams := intEnv("GATEWAY_MAX_ACTIVE_STREAMS_PER_ORG", 0)
+	lim.SetMaxActiveStreamsPerOrg(maxOrgStreams)
+	if maxOrgStreams > 0 {
+		log.Printf("gateway per-org active streams=%d (per instance, not a cross-instance quota; global per-instance limit=%d)", maxOrgStreams, maxStreams)
+	} else {
+		log.Printf("WARNING: GATEWAY_MAX_ACTIVE_STREAMS_PER_ORG is 0 (unlimited): per-organization concurrency is not bounded on this instance")
+	}
+
 	// 链路顺序：auth(提租户) → guard(权威校验+归属) → limiter(按 org/租户限) →
 	// billing(资金预占+fault-closed) → proxy(透传+计量)。计费必须在 guard 之后
 	// （需要已验证的 org/user/key/execution 归属）且在任何上游之前。
 	guarded := gatewayguard.Middleware(accessGuard, gatewayguard.Options{KnownModel: registry.HasModel})
-	admittedProxy := limiter.Middleware(lim)(proxyHandler)
+	// StreamLimit 只包住 SSE 出口：/v1/models 这类非流请求不占组织并发预算。
+	admittedProxy := limiter.Middleware(lim)(limiter.StreamLimit(lim)(proxyHandler))
 	if billingAdmission != nil {
 		admittedProxy = billingAdmission.Middleware(admittedProxy)
 	}

@@ -24,11 +24,11 @@
 | 控制面 | 🟡 一致性基础完成 | Get/Watch、PG 版本、原子 patch、防回退、TLS/mTLS、管理认证和 Gateway applied/rejected 回报已有；聚合 active 语义和报告时效未完成 |
 | 凭据管理 | ✅ 第一版完成 | `/keys` Create/List/Revoke、admin/tenant-user 授权核心和 PG 审计已有；正式身份签发/轮换流程未完成 |
 | 可观测性 | 🟡 基础实现完成 | Prometheus 已抓 Gateway/Metering，基础 Dashboard 已有；告警和指标口径仍需完善 |
-| 测试 | 🟡 分层执行状态不同 | base `2fef64e` 上 443 个 `func Test` 声明（≠ 执行用例数）；2026-10-01 T01A 的 `go build`/`go vet`/`go test ./...`/`go test -race ./...` 与 `make integration-test`（隔离 Redis 7.4.11 + PG 16.15）全部通过，证据见 [T01A 运行基线](docs/verification/2026-10-01/t01a-prod-profiles/README.md)。**T03**：黑盒 RBAC/Key/用量/审计验收 **12/12 PASS、0 SKIP、0 阻断缺陷**（[证据](docs/verification/2026-10-01/t03-enterprise-rbac/README.md)）；补修 owner-transfer 校验顺序后 `go test ./internal/organization/ ./internal/console/ -count=1`（含 PG 集成用例）通过。**T04** 已随 `f241e53` 合入 T08 基线（`tsc --noEmit` 通过、vitest 3 文件/33 用例、build gzip 约 438 kB）。**T08（分支 `codex/t08-three-role-ui`）**：`npx tsc --noEmit` 通过（含 `e2e/`）、`npm test` 4 文件/60 用例通过、`npm run build` 通过（gzip 约 466 kB，较 T04 +28 kB）、`npm run e2e`（Playwright，真实本地 Console）**33 passed / 0 failed**，证据见 [docs/web/README.md](docs/web/README.md) §9 与 [web/e2e/README.md](web/e2e/README.md) |
+| 测试 | 🟡 分层执行状态不同 | base `2fef64e` 上 443 个 `func Test` 声明（≠ 执行用例数）；本工作区 base `1164886` 上实测 697 个声明。2026-10-01 T01A 的 `go build`/`go vet`/`go test ./...`/`go test -race ./...` 与 `make integration-test`（隔离 Redis 7.4.11 + PG 16.15）全部通过，证据见 [T01A 运行基线](docs/verification/2026-10-01/t01a-prod-profiles/README.md)。**T03**：黑盒 RBAC/Key/用量/审计验收 **12/12 PASS、0 SKIP、0 阻断缺陷**（[证据](docs/verification/2026-10-01/t03-enterprise-rbac/README.md)）。**T05–T07**：本轮在 base `1164886` 上复跑依赖 PG/Redis 的关键用例——T05 价格/账户/账本 8 PASS、T06A 终态 gate 3 PASS、T06B 100 并发预占 PASS、T06C receipt-before-DONE 2 PASS、T07A 结算端到端 4 PASS、T07B 数据库层 kill-window PASS、T07C 100k 有界对账 + 月账单/异常 PASS（证据：[T06C](docs/verification/2026-10-01/t06c-usage-receipts/README.md)、[T07A](docs/verification/2026-10-01/t07a-settlement-dispatcher/README.md)、[T07C](docs/verification/2026-10-01/t07c-reconcile-statements/README.md)、[恢复 runbook](docs/runbooks/billing-recovery.md)；明细见 [PROJECT-STATUS §7.6–§7.8](docs/PROJECT-STATUS.md)）。**T04/T08**：`web/` 已合入本分支，T08 自报 `tsc --noEmit` 0 error、vitest 4 文件/60 用例、`vite build` 通过（gzip 约 466 kB）、Playwright 真实本地 Console **33 passed / 0 failed / 0 test-level skipped** + 28 张截图（[docs/web/README.md](docs/web/README.md) §9）。**未验证**：远端 CI 结果、T05/T07B 无独立验收报告、进程级 kill -9 窗口与多实例并发恢复 |
 | Demo 与 CI | 🟡 已有编排、远端未确认 | `demo-up/config/smoke/down`、`scripts/demo-accept.sh` 三轮正常/切备/双故障/对账和 `.github/workflows/ci.yml` 已提交；2026-10-01 `make demo-accept` 三轮 PASS；**远端 CI 是否跑绿未知**；实验环境已由 [隔离 runner](docs/verification/2026-10-01/t01a-baseline/README.md) 覆盖 |
-| 性能证据 | 🟡 历史本机数据 | [2026-09-26 本机直连/网关基线与切备报告](docs/verification/2026-09-26/performance/README.md)是历史证据（闭环 `ec24990`、固定到达 `4459c83`）；[T01A 隔离低负载对照](docs/verification/2026-10-01/t01a-baseline/README.md)在固定 commit 上复测了直连 vs Gateway；容量拐点、慢客户端和生产资源上界未验证 |
-| 生产安全性 | 🟡 生产 profile 已收紧，部署仍待验证 | `GATEWAY_PROFILE=prod` 缺任一必要配置即拒绝启动（禁 legacy raw-key/内存回退/匿名管理面/insecure 凭据解析，要求 mTLS、显式限流与活跃流上限、诊断 listener 分离）；诊断与业务 listener 可分离，`/ledger/*`、`/reconcile` 支持 `METERING_ADMIN_TOKEN` 鉴权；决策见 [ADR-0001](docs/decisions/ADR-0001-runtime-profiles.md)。**未验证**：真实 PG/Redis 的 prod 正例启动、诊断 listener 自身的认证、证书轮换 |
-| 多租户产品面 | 🟡 控制面 RBAC/Key/用量已闭环，Web 在 T04 分支 | T02 落地 Console API（Hertz，`cmd/console`）与会话/组织基础（migration 000004）。**T03** 落地企业 RBAC（邀请、角色矩阵、最后 owner 保护、owner 转移）、Control `api_keys` 事实表 + 内部 `AdminService`、Gateway PG access guard 与计量归属（migration 000005–000007，schema v7）以及 Console 的成员/邀请/Key/用量/审计端点，黑盒验收 12/12 PASS。**T04** 已合入 T08 基线（`f241e53`）：`web/` 最小 Web 闭环（React + TypeScript + Vite，契约缺口显式列出）。**T05/T06/T07A** 的 `/admin/prices`、`/orgs/{org}/billing/{account,entries,statements,exceptions}`、`/admin/billing/accounts/{org}/adjustments` 与异常决议端点已在 T08 工作树接线，**T08** 交付三角色完整 UI 与 Playwright（member / 企业管理员 / billing_viewer / 平台管理员 + 负向 RBAC/会话/CSRF，1440 与 390 截图），金额端到端保持十进制字符串。**仍缺**：多实例心跳与配置聚合状态（T09）、平台级用户/组织列表与 Provider 凭据/配置状态读取端点（UI 已标注契约缺口）。决策见 [ADR-0002](docs/decisions/ADR-0002-iam-identity-and-organizations.md)/[ADR-0003](docs/decisions/ADR-0003-enterprise-rbac-keys-and-policy.md)，接口见 [console-v1.yaml](docs/openapi/console-v1.yaml) |
+| 性能证据 | 🟡 历史本机数据 + 计费链路时延 | [2026-09-26 本机直连/网关基线与切备报告](docs/verification/2026-09-26/performance/README.md)是历史证据（闭环 `ec24990`、固定到达 `4459c83`）；[T01A 隔离低负载对照](docs/verification/2026-10-01/t01a-baseline/README.md)在固定 commit 上复测了直连 vs Gateway。**计费链路（本机 Docker PG 16.15、合成流）**：T06C admission p50 20.6 / p95 24.0 ms、finalization p50 9.0 / p95 10.6 ms、端到端 `GATEWAY_BILLING=pg` p50 31.1 / p95 34.5 ms vs `off` 0.32 / 0.51 ms（[T06C 证据](docs/verification/2026-10-01/t06c-usage-receipts/README.md) §3）；T06B 100 并发抢单钱包 admission p50 225.95 / p95 288.10 / p99 295.46 ms、burst wall 299.83 ms（本轮复跑）；T07C 100k 事实对账 healthy 只取回 500 行、堆增长约 256 KB（[T07C 证据](docs/verification/2026-10-01/t07c-reconcile-statements/README.md) §3）。**未验证**：容量拐点、慢客户端、真实 Provider、生产资源上界，以及 T07A 的 P99 ≤5s SLO 正式分布测量 |
+| 生产安全性 | 🟡 生产 profile 与计费 fail-closed 已收紧，部署仍待验证 | `GATEWAY_PROFILE=prod` 缺任一必要配置即拒绝启动（禁 legacy raw-key/内存回退/匿名管理面/insecure 凭据解析，要求 mTLS、显式限流与活跃流上限、诊断 listener 分离）；诊断与业务 listener 可分离，`/ledger/*`、`/reconcile`、`/receipts/*`、`/recovery/*` 支持 `METERING_ADMIN_TOKEN` 鉴权；决策见 [ADR-0001](docs/decisions/ADR-0001-runtime-profiles.md)。**计费安全**：`GATEWAY_BILLING=pg` 下余额不足 402、缺价或 PG 不可用 503 fail-closed 且不触达上游；金额只有 int64 微元与十进制字符串；价格版本与账本 append-only，账本与投影同事务；`[DONE]` 只在 receipt 提交后释放（demo/Compose 默认 `GATEWAY_BILLING=off`，没有这层保证）。**未验证/范围外**：真实 PG/Redis 的 prod 正例启动、诊断 listener 自身的认证、证书轮换；**没有真实支付/充值**（只有平台额度调整）、**单 Control writer**、**非 HA PostgreSQL**（[路线](docs/plans/PRODUCTION-INTERVIEW-ROADMAP-2026-10-01.md) 明确排除） |
+| 多租户产品面 | 🟡 计费主链与三角色 Web 已闭环，多实例待补 | T02 落地 Console API（Hertz，`cmd/console`）与会话/组织基础（migration 000004）；**T03** 落地企业 RBAC（邀请、角色矩阵、最后 owner 保护、owner 转移）、Control `api_keys` 事实表 + 内部 `AdminService`、Gateway PG access guard 与计量归属（000005–000007，schema v7），黑盒验收 12/12 PASS。**T05–T08 已合入本分支**（schema `migrations.Version = 12`）：精确价格版本 + 账户 + append-only 账本（000008，[ADR-0004](docs/decisions/ADR-0004-money-and-price-versions.md)）、原子预占与 SSE 终态 gate（000009 + [ADR-0005](docs/decisions/ADR-0005-terminal-event-gate.md)）、持久 receipt 与 `[DONE]` 边界（000010）、幂等结算/dispatcher、实例心跳与有界恢复（000012）、有界四层对账/月账单/资金异常（000011），以及三角色 Web 控制台（资金与结算、价格版本、平台额度调整与异常决议；Playwright 33 passed / 0 failed + 28 张 1440/390 截图）。金额端到端保持十进制字符串。**仍缺**：多实例心跳聚合与策略 stale 判定、双进程并发认领（T09），以及 13 项契约缺口（无单次执行结算查询、组织不可见价目、平台用户/组织列表、Provider 凭据/配置状态端点等，[docs/web/README.md](docs/web/README.md) §8）。决策见 [ADR-0002](docs/decisions/ADR-0002-iam-identity-and-organizations.md)/[ADR-0003](docs/decisions/ADR-0003-enterprise-rbac-keys-and-policy.md)/[ADR-0004](docs/decisions/ADR-0004-money-and-price-versions.md)/[ADR-0005](docs/decisions/ADR-0005-terminal-event-gate.md)，接口见 [console-v1.yaml](docs/openapi/console-v1.yaml) |
 
 当前更准确的简历定位是：
 
@@ -192,7 +192,7 @@
 - PostgreSQL 台账使用唯一约束实现基础幂等；
 - 无法解析的消息进入 DLQ；
 - MemoryLedger 可在本地无 PostgreSQL 时运行 Demo；
-- 提供 `/ledger/count`、`/ledger/balance`、`/reconcile` 基础接口。**注意口径**：`/ledger/balance` 返回的 `balance_cents` 是该 tenant 的**累计消费 SUM**（`cost_cents` 求和），不是可用余额或预付钱包；当前价格是 `CostCents = TotalTokens` 的演示价（1 token = 1 分），仓库没有价格版本和资金账户。
+- 提供 `/ledger/count`、`/ledger/balance`、`/reconcile` 基础接口。**注意口径**：`/ledger/balance` 返回的 `balance_cents` 是该 tenant 的**累计消费 SUM**（`cost_cents` 求和），不是可用余额或预付钱包；当前价格是 `CostCents = TotalTokens` 的演示价（1 token = 1 分）。**真实价格版本与资金账户已由 T05–T08 落地**（`price_versions`/`billing_accounts`/`billing_entries` + 预占/receipt/结算/有界对账，见 §5.7/§5.8 与 [PROJECT-STATUS](docs/PROJECT-STATUS.md) §4.5），但 `/ledger/*` 这条 legacy 路径不读取它们，也不代表余额。
 
 当前限制：
 
@@ -763,6 +763,8 @@ Provider 在首 event 后挂掉：
 
 #### 6. 会有重复消费吗？如何保证不会重复扣费？
 
+> **两条计费路径并存，先分清口径**：T05–T08 之后，真正决定“收多少钱”的是 PG 里的 `usage_receipts`（在 `[DONE]` 之前单事务提交）+ `billing_entries`（append-only 事实）+ `billing_accounts`（投影），幂等键是 `(business_id, kind)` + payload digest，结算与释放互斥（见 [PROJECT-STATUS](docs/PROJECT-STATUS.md) §4.5）。下面这段 at-least-once / 去重描述的是 legacy 计量路径 `metering_events`（`cost_cents` 演示价，1 token = 1 分）；它仍是历史累计消费的来源，但不是钱包余额，也不参与正式结算。只有在 `GATEWAY_BILLING=pg` 且安装 finalizer 时才有“receipt 先于 `[DONE]` 提交”的保证。
+
 会有重复消费，当前消息语义是 **at-least-once**。
 
 典型场景：
@@ -829,6 +831,8 @@ Provider 中途断开时的估算计费
 测试证据：`TestOpenAIMidStreamFailureDoesNotReplayBackup`、`TestOpenAIProviderIdleTimeoutDoesNotHidePartialStream`、`TestOpenAIClientDisconnectCancelsUpstream`。
 
 #### 8. 请求成功但是扣费失败怎么办？
+
+> **T06C 起，正式计费链不再“先回 200 再异步扣费”**：`GATEWAY_BILLING=pg` 时 finalize 失败/超时**不写 `[DONE]`**（客户端看到的是不完整流，而不是干净成功），usage 缺失/非法直接 veto 并在 PG 留 `exception` + `review_required`，预占保留；也就是说干净 `[DONE]` 是资金事实已落库的证据（见 [PROJECT-STATUS](docs/PROJECT-STATUS.md) §7.7）。下面这段“HTTP 成功后计费仍异步”描述的是 legacy `metering_events` 路径（demo 价），它仍在 `[DONE]` 之后异步 flush，因此 kill -9 丢事件的窗口依然存在于该路径。
 
 请求响应和计费是解耦的，因此 HTTP 成功后，计费仍可能处于异步处理中：
 
@@ -901,7 +905,7 @@ git diff --check
 
 面试时可以主动说明：
 
-> 当前版本已经用真实 vLLM OpenAI-compatible endpoint 贯通了 HTTP、SSE usage、timeout 和 failover，并证明了限流、配置 Watch 和异步计量的基础架构；计量 spool 已有第一版，但生产级背压、安全管理面、正确对账和正式性能数据尚未完成。
+> 当前版本已经用真实 vLLM OpenAI-compatible endpoint 贯通了 HTTP、SSE usage、timeout 和 failover，并证明了限流、配置 Watch 和异步计量的基础架构；T05–T08 又把正式计费链（不可变价格版本、原子预占、receipt 先于 `[DONE]`、幂等结算与恢复、有界四层对账、三角色 Web 控制台）做成了有测试与证据的闭环。但**真实支付/充值、HA PostgreSQL、多 Control writer 明确不在范围**；计量 spool 的生产级背压、多实例一致性（T09）、进程级 kill 窗口（T10）和正式容量数据仍未完成。
 
 主动说出限制，比把设计目标说成已完成更可信。
 
@@ -1193,6 +1197,13 @@ Console 是独立进程（`cmd/console`，HTTP 层 `internal/console`，Hertz）
 | POST | `/api/v1/orgs/{org}/keys` | 会话 + CSRF + 矩阵 → `201`；raw secret **只出现一次**，`secret_returned_once=true` 且响应内含提示文案；可带 `operation_id` 做幂等重试（重放不再返回 secret） |
 | POST | `/api/v1/orgs/{org}/keys/{key}/revoke` | 会话 + CSRF + 矩阵 → `200`；member 只能撤本人 Key（否则 404），admin/owner 可撤组织内任意 Key |
 | GET | `/api/v1/orgs/{org}/usage` | 会话 + 矩阵；member 只见本人行（`scope=self`），billing_viewer/admin/owner 见全组织 |
+| GET/POST | `/api/v1/admin/prices` | 会话 + 平台管理员（POST 还要 CSRF）；发布**不可变**价格版本，同 `(model, effective_at)` → `409`，没有覆盖路径 |
+| GET | `/api/v1/orgs/{org}/billing/account` | 会话 + 矩阵（`view_org_usage`）；可用/预占/已入账 + 服务端冻结口径 `available_note`；**没有账户行时 404**，不伪造 0 余额 |
+| GET | `/api/v1/orgs/{org}/billing/entries` | 会话 + 矩阵；append-only 账本，`kind` 过滤 + `(posted_at, id)` 游标分页，金额是十进制字符串 |
+| GET | `/api/v1/orgs/{org}/billing/statements?month=YYYY-MM` | 会话 + 矩阵；UTC 月度报表（整月 totals + 迟到结算归属），非法月份 400 |
+| GET | `/api/v1/orgs/{org}/billing/exceptions`（+ `/{exception}`） | 会话 + 矩阵；持久资金异常队列 / 单条 + append-only 决议轨迹，跨组织 404 |
+| POST | `/api/v1/admin/billing/accounts/{org}/adjustments` | 会话 + 平台管理员 + CSRF + `Idempotency-Key` + `reason`；同键同 payload → 200 `replayed=true`，异 payload → 409；返回 before/after 快照 |
+| POST | `/api/v1/admin/billing/exceptions/{exception}/resolution` | 会话 + 平台管理员 + CSRF；`charged`/`waived`/`dismissed`/`reopened`，note 必填，重复决议重放、冲突 409 |
 | GET | `/livez`、`/readyz` | 无 |
 
 **Cookie 与 CSRF**：登录成功返回 `Set-Cookie: gw_session=<opaque token>`（`HttpOnly`、`SameSite=Lax`、`Path=/`，`Secure` 由 profile 决定，prod 强制开启）以及同样属性的 `gw_csrf` 伴随 cookie；`gw_session` 服务端只存 SHA-256 摘要，明文只在登录响应中出现一次。所有非安全方法必须带 `X-CSRF-Token`，与会话记录比对失败一律 `403 forbidden`（`SameSite` 不替代 CSRF 校验）。`GET /api/v1/me` 会回显当前会话的 `csrf_token`，刷新页面后无需重新登录。
@@ -1252,7 +1263,7 @@ make dev-certs        # 生成/补齐 CA、control、gateway-client、console-cl
 make console-run-tls  # 带 CONTROL_ADDR + CONTROL_TLS_* 启动 Console（本地端口 50051）
 ```
 
-组合语义（`internal/controlclient` 的错误映射）：同一 `operation_id` 但 payload 不同 → `409 conflict`；`expected_version` 不匹配 → `409 conflict`（消息里带 `current_version`）；Console 身份不被 Control 信任或连不上 → `502 upstream_unavailable`；完全没配置通道 → `503 unavailable`。用量接口的 `cost_cents` 是**演示累计消费**（固定演示价 1 token = 1 分），字段上标了 `cost_kind=demo_consumption`，不是余额、不是账单；`org_id IS NULL` 的历史事件不属于任何组织范围。
+组合语义（`internal/controlclient` 的错误映射）：同一 `operation_id` 但 payload 不同 → `409 conflict`；`expected_version` 不匹配 → `409 conflict`（消息里带 `current_version`）；Console 身份不被 Control 信任或连不上 → `502 upstream_unavailable`；完全没配置通道 → `503 unavailable`。用量接口的 `cost_cents` 是**演示累计消费**（固定演示价 1 token = 1 分），字段上标了 `cost_kind=demo_consumption`，不是余额、不是账单；`org_id IS NULL` 的历史事件不属于任何组织范围。**真正的资金事实是另一条链**（T05–T07，见 §5.7 上方 billing 端点与 [PROJECT-STATUS](docs/PROJECT-STATUS.md) §4.5）：`price_versions`（不可变、admission 固定版本）→ `billing_executions`（原子预占）→ `usage_receipts`（在 `[DONE]` 之前提交）→ `billing_entries`（append-only 事实）+ `billing_accounts`（投影）→ 幂等结算/有界恢复/四层对账；`cost_cents` 与它不是一个口径，不能互相替代。
 
 ### 5.8 Web 控制台（T04 最小闭环 + T08 三视角完整 UI）
 
@@ -1279,6 +1290,8 @@ bash web/e2e/scripts/prepare-backend.sh   # 隔离 PG/Redis + migration + bootst
 bash web/e2e/scripts/start-console.sh     # Console on 127.0.0.1:18092
 npm run e2e                               # 33 例：三角色 + 负向 + 1440/390 截图
 ```
+
+T08 的验证结果（真实本地 Console，详见 [docs/web/README.md](docs/web/README.md) §9 与 [web/e2e/README.md](web/e2e/README.md)）：`npx tsc --noEmit` 0 error（含 `e2e/`）；`npm test`（vitest）**4 文件 / 60 用例全部通过**；`npm run build` 通过（`dist/` 约 1.48 MB，gzip 约 466 kB，较 T04 +28 kB gzip）；`npm run e2e`（Playwright）**33 passed / 0 failed / 0 test-level skipped**（narrow-390 截图 3 例 + desktop 30 例），`docs/web/screenshots/` 共 **28 张**（三角色 × 1440/390）。契约缺口 **13 项**（12 项 API/端点缺口 + 1 项探针未接线）在页面上以 `ContractGap` 块显式标注，不显示假数据；本机没有数据面/结算链路时，相关用例在用例内走空态断言并写 annotation，而不是删除或跳过。
 
 `web/nginx.conf` 是生产示例：静态资源 SPA 回退 + `/api/v1/` 反代 Console + `/v1/` 反代 Gateway（`proxy_buffering off`、`gzip off`、`chunked_transfer_encoding on`、`X-Accel-Buffering: no`、长读超时）。浏览器端 Playwright 覆盖由 T08 交付（三角色用例、负向 RBAC/会话/CSRF 用例、1440 与 390 截图），见 `web/e2e/`。
 

@@ -1,0 +1,720 @@
+{
+  "artifacts": [
+    "migrate.log",
+    "process-logs.txt"
+  ],
+  "checks": {
+    "a_both_serve": {
+      "control_view": {
+        "authoritative": true,
+        "desired_version": 1,
+        "instances": [
+          {
+            "applied_version": 1,
+            "desired_version": 1,
+            "durable": true,
+            "health": "active",
+            "in_sync": true,
+            "instance_id": "gw-a",
+            "last_report_at": "2026-10-01T04:41:56.459Z",
+            "liveness_last_seen_at": "2026-10-01T12:41:56.456241+08:00",
+            "liveness_started_at": "2026-10-01T12:41:56.45614+08:00",
+            "report_age_ms": 275,
+            "sources": [
+              "durable_status",
+              "control_memory_report",
+              "data_plane_liveness"
+            ],
+            "started_at": "2026-10-01T04:41:56.45618Z",
+            "state": "applied",
+            "version_lag": 0
+          },
+          {
+            "applied_version": 1,
+            "desired_version": 1,
+            "durable": true,
+            "health": "active",
+            "in_sync": true,
+            "instance_id": "gw-b",
+            "last_report_at": "2026-10-01T04:41:56.459Z",
+            "liveness_last_seen_at": "2026-10-01T12:41:56.456223+08:00",
+            "liveness_started_at": "2026-10-01T12:41:56.456142+08:00",
+            "report_age_ms": 275,
+            "sources": [
+              "durable_status",
+              "control_memory_report",
+              "data_plane_liveness"
+            ],
+            "started_at": "2026-10-01T04:41:56.456179Z",
+            "state": "applied",
+            "version_lag": 0
+          }
+        ],
+        "stale_after_seconds": 30,
+        "status_store": "postgres"
+      },
+      "gateway_a": {
+        "body_tail": "\",\"object\":\"chat.completion.chunk\",\"usage\":{\"completion_tokens\":8,\"prompt_tokens\":12,\"total_tokens\":20}}\n\ndata: [DONE]\n\n",
+        "bytes": 1554,
+        "done_seconds": 0.0432,
+        "error": null,
+        "has_done": true,
+        "status": 200,
+        "total_seconds": 0.043303,
+        "ttfb_seconds": 0.02154
+      },
+      "gateway_b": {
+        "body_tail": "\",\"object\":\"chat.completion.chunk\",\"usage\":{\"completion_tokens\":8,\"prompt_tokens\":12,\"total_tokens\":20}}\n\ndata: [DONE]\n\n",
+        "bytes": 1554,
+        "done_seconds": 0.043028,
+        "error": null,
+        "has_done": true,
+        "status": 200,
+        "total_seconds": 0.04308,
+        "ttfb_seconds": 0.02128
+      }
+    },
+    "b_revocation_propagation": {
+      "combined": {
+        "max": 0.23457884788513184,
+        "n": 40,
+        "p50": 0.030889034271240234,
+        "p95": 0.23405790328979492,
+        "p99": 0.23457884788513184
+      },
+      "per_gateway": {
+        "a": {
+          "max": 0.20331692695617676,
+          "n": 20,
+          "p50": 0.030889034271240234,
+          "p99": 0.20331692695617676
+        },
+        "b": {
+          "max": 0.23457884788513184,
+          "n": 20,
+          "p50": 0.06188535690307617,
+          "p99": 0.23457884788513184
+        }
+      },
+      "rounds": 20,
+      "samples": [
+        {
+          "action": "revoke",
+          "expected_status": 401,
+          "persist_seconds": 0.0014362335205078125,
+          "propagation_seconds": {
+            "a": 0.0006279945373535156,
+            "b": 0.0011258125305175781
+          },
+          "round": 0
+        },
+        {
+          "action": "restore",
+          "expected_status": 200,
+          "persist_seconds": 0.0013580322265625,
+          "propagation_seconds": {
+            "a": 0.03266406059265137,
+            "b": 0.06690788269042969
+          },
+          "round": 1
+        },
+        {
+          "action": "revoke",
+          "expected_status": 401,
+          "persist_seconds": 0.0017707347869873047,
+          "propagation_seconds": {
+            "a": 0.0004901885986328125,
+            "b": 0.0009372234344482422
+          },
+          "round": 2
+        },
+        {
+          "action": "restore",
+          "expected_status": 200,
+          "persist_seconds": 0.0015249252319335938,
+          "propagation_seconds": {
+            "a": 0.20214200019836426,
+            "b": 0.23456907272338867
+          },
+          "round": 3
+        },
+        {
+          "action": "revoke",
+          "expected_status": 401,
+          "persist_seconds": 0.0016069412231445312,
+          "propagation_seconds": {
+            "a": 0.0006101131439208984,
+            "b": 0.0010700225830078125
+          },
+          "round": 4
+        },
+        {
+          "action": "restore",
+          "expected_status": 200,
+          "persist_seconds": 0.0013132095336914062,
+          "propagation_seconds": {
+            "a": 0.20331692695617676,
+            "b": 0.23457884788513184
+          },
+          "round": 5
+        },
+        {
+          "action": "revoke",
+          "expected_status": 401,
+          "persist_seconds": 0.0015919208526611328,
+          "propagation_seconds": {
+            "a": 0.0005159378051757812,
+            "b": 0.0009140968322753906
+          },
+          "round": 6
+        },
+        {
+          "action": "restore",
+          "expected_status": 200,
+          "persist_seconds": 0.0016140937805175781,
+          "propagation_seconds": {
+            "a": 0.20257902145385742,
+            "b": 0.23331594467163086
+          },
+          "round": 7
+        },
+        {
+          "action": "revoke",
+          "expected_status": 401,
+          "persist_seconds": 0.0015439987182617188,
+          "propagation_seconds": {
+            "a": 0.0005829334259033203,
+            "b": 0.0010268688201904297
+          },
+          "round": 8
+        },
+        {
+          "action": "restore",
+          "expected_status": 200,
+          "persist_seconds": 0.001978158950805664,
+          "propagation_seconds": {
+            "a": 0.20081782341003418,
+            "b": 0.23160076141357422
+          },
+          "round": 9
+        },
+        {
+          "action": "revoke",
+          "expected_status": 401,
+          "persist_seconds": 0.0014691352844238281,
+          "propagation_seconds": {
+            "a": 0.0006489753723144531,
+            "b": 0.0010929107666015625
+          },
+          "round": 10
+        },
+        {
+          "action": "restore",
+          "expected_status": 200,
+          "persist_seconds": 0.0013391971588134766,
+          "propagation_seconds": {
+            "a": 0.03339862823486328,
+            "b": 0.06395173072814941
+          },
+          "round": 11
+        },
+        {
+          "action": "revoke",
+          "expected_status": 401,
+          "persist_seconds": 0.0015442371368408203,
+          "propagation_seconds": {
+            "a": 0.0008909702301025391,
+            "b": 0.0013871192932128906
+          },
+          "round": 12
+        },
+        {
+          "action": "restore",
+          "expected_status": 200,
+          "persist_seconds": 0.0018019676208496094,
+          "propagation_seconds": {
+            "a": 0.20165491104125977,
+            "b": 0.23388004302978516
+          },
+          "round": 13
+        },
+        {
+          "action": "revoke",
+          "expected_status": 401,
+          "persist_seconds": 0.0016062259674072266,
+          "propagation_seconds": {
+            "a": 0.0005717277526855469,
+            "b": 0.0010266304016113281
+          },
+          "round": 14
+        },
+        {
+          "action": "restore",
+          "expected_status": 200,
+          "persist_seconds": 0.0017669200897216797,
+          "propagation_seconds": {
+            "a": 0.20148706436157227,
+            "b": 0.23405790328979492
+          },
+          "round": 15
+        },
+        {
+          "action": "revoke",
+          "expected_status": 401,
+          "persist_seconds": 0.0015647411346435547,
+          "propagation_seconds": {
+            "a": 0.0005462169647216797,
+            "b": 0.0009663105010986328
+          },
+          "round": 16
+        },
+        {
+          "action": "restore",
+          "expected_status": 200,
+          "persist_seconds": 0.0012738704681396484,
+          "propagation_seconds": {
+            "a": 0.030889034271240234,
+            "b": 0.06188535690307617
+          },
+          "round": 17
+        },
+        {
+          "action": "revoke",
+          "expected_status": 401,
+          "persist_seconds": 0.0012857913970947266,
+          "propagation_seconds": {
+            "a": 0.0005040168762207031,
+            "b": 0.0008792877197265625
+          },
+          "round": 18
+        },
+        {
+          "action": "restore",
+          "expected_status": 200,
+          "persist_seconds": 0.0017402172088623047,
+          "propagation_seconds": {
+            "a": 0.20011496543884277,
+            "b": 0.23285913467407227
+          },
+          "round": 19
+        }
+      ],
+      "target_seconds": 5.0
+    },
+    "c_last_balance": {
+      "account": "121|121",
+      "admitted": [
+        "a"
+      ],
+      "execution_rows": 1,
+      "funded_micro": 121,
+      "organization": "second organization (org_b) so nothing is deleted to reset the wallet",
+      "refused_402": [
+        "b"
+      ],
+      "reserved_micro": 121,
+      "results": {
+        "a": {
+          "body_tail": "\",\"object\":\"chat.completion.chunk\",\"usage\":{\"completion_tokens\":8,\"prompt_tokens\":12,\"total_tokens\":20}}\n\ndata: [DONE]\n\n",
+          "bytes": 1554,
+          "done_seconds": 0.031349,
+          "error": null,
+          "has_done": true,
+          "status": 200,
+          "total_seconds": 0.031421,
+          "ttfb_seconds": 0.012412
+        },
+        "b": {
+          "body_tail": "on's available balance cannot cover the maximum cost of this request\",\"request_id\":\"8f7ce6d0d8236cedec783d9cc8737782\"}}\n",
+          "bytes": 185,
+          "done_seconds": null,
+          "error": null,
+          "has_done": false,
+          "status": 402,
+          "total_seconds": 0.005947,
+          "ttfb_seconds": null
+        }
+      }
+    },
+    "d_org_rpm_shared": {
+      "all_instances_applied": true,
+      "direction_a_exhausts_then_b": {
+        "gateway_a_statuses": [
+          200,
+          200
+        ],
+        "gateway_b_status": 429
+      },
+      "direction_b_exhausts_then_a": {
+        "gateway_a_status": 429,
+        "gateway_b_statuses": [
+          200,
+          200
+        ]
+      },
+      "per_instance_alternative": {
+        "note": "a per-instance bucket would let B serve a full burst after A spent one",
+        "would_allow": 4
+      },
+      "policy": {
+        "burst": 2,
+        "requests_per_minute": 60
+      },
+      "redis_key": "ratelimit:org:1"
+    },
+    "e_stale_instance": {
+      "inflight_bytes": 3581,
+      "inflight_stream_drained": true,
+      "inflight_stream_had_done": true,
+      "lease_configured_seconds": 30.0,
+      "metrics_while_stale": {
+        "gateway_control_applied_config_version": "31",
+        "gateway_control_lease_expired_total": "1",
+        "gateway_control_stale": "1"
+      },
+      "new_request_status_while_stale": 401,
+      "recovered_after_seconds": 39.12669610977173,
+      "recovered_status": 200,
+      "waited_seconds": 36.0
+    },
+    "f_watch_push": {
+      "max": 0.06537008285522461,
+      "n": 8,
+      "p50": 0.03192305564880371,
+      "p99": 0.06537008285522461,
+      "poll_interval_seconds": 2.0,
+      "response_end_seconds": {
+        "max": 0.032796,
+        "n": 8,
+        "note": "when the chunked response actually ended, measured while the snapshot was being republished",
+        "p50": 0.031876,
+        "p99": 0.032796
+      },
+      "samples": [
+        {
+          "expected": 401,
+          "latency": {
+            "a": 0.0006449222564697266,
+            "b": 0.0014178752899169922
+          },
+          "response_end_seconds": [
+            0.000546,
+            0.000714
+          ],
+          "round": 0
+        },
+        {
+          "expected": 200,
+          "latency": {
+            "a": 0.03192305564880371,
+            "b": 0.06421899795532227
+          },
+          "response_end_seconds": [
+            0.031876,
+            0.032228
+          ],
+          "round": 1
+        },
+        {
+          "expected": 401,
+          "latency": {
+            "a": 0.0005538463592529297,
+            "b": 0.0010249614715576172
+          },
+          "response_end_seconds": [
+            0.000491,
+            0.000415
+          ],
+          "round": 2
+        },
+        {
+          "expected": 200,
+          "latency": {
+            "a": 0.03249096870422363,
+            "b": 0.06537008285522461
+          },
+          "response_end_seconds": [
+            0.032435,
+            0.032796
+          ],
+          "round": 3
+        }
+      ]
+    },
+    "g_hang_probe": {
+      "done_seconds": [
+        0.030176,
+        0.030893,
+        0.031199,
+        0.032697,
+        0.034188,
+        0.030916,
+        0.031141,
+        0.031003,
+        0.031287,
+        0.030396,
+        0.031364,
+        0.03242
+      ],
+      "goroutine_dumps": [],
+      "note": "total_seconds measures when the chunked response actually ended; done_seconds when [DONE] arrived",
+      "rounds": 12,
+      "slow_or_unterminated": [],
+      "threshold_seconds": 5.0,
+      "total_seconds": [
+        0.030263,
+        0.030961,
+        0.031262,
+        0.032813,
+        0.034263,
+        0.030986,
+        0.031196,
+        0.031044,
+        0.031354,
+        0.030436,
+        0.03141,
+        0.032459
+      ]
+    },
+    "h_snapshot_size": {
+      "gateway_memory": {
+        "after_10003_keys": {
+          "a": {
+            "go_memstats_heap_alloc_bytes": 11448944.0,
+            "go_memstats_heap_inuse_bytes": 13434880.0,
+            "go_memstats_heap_objects": 65320.0,
+            "process_resident_memory_bytes": 30064640.0
+          },
+          "b": {
+            "go_memstats_heap_alloc_bytes": 11561064.0,
+            "go_memstats_heap_inuse_bytes": 13508608.0,
+            "go_memstats_heap_objects": 65275.0,
+            "process_resident_memory_bytes": 29609984.0
+          }
+        },
+        "after_1003_keys": {
+          "a": {
+            "go_memstats_heap_alloc_bytes": 5652800.0,
+            "go_memstats_heap_inuse_bytes": 7708672.0,
+            "go_memstats_heap_objects": 16034.0,
+            "process_resident_memory_bytes": 24190976.0
+          },
+          "b": {
+            "go_memstats_heap_alloc_bytes": 5580648.0,
+            "go_memstats_heap_inuse_bytes": 7651328.0,
+            "go_memstats_heap_objects": 15186.0,
+            "process_resident_memory_bytes": 23142400.0
+          }
+        },
+        "after_restore_after_gc": {
+          "a": {
+            "go_memstats_heap_alloc_bytes": 3316256.0,
+            "go_memstats_heap_inuse_bytes": 5832704.0,
+            "go_memstats_heap_objects": 6252.0,
+            "process_resident_memory_bytes": 30920704.0
+          },
+          "b": {
+            "go_memstats_heap_alloc_bytes": 3214736.0,
+            "go_memstats_heap_inuse_bytes": 5627904.0,
+            "go_memstats_heap_objects": 6144.0,
+            "process_resident_memory_bytes": 30490624.0
+          }
+        },
+        "before": {
+          "a": {
+            "go_memstats_heap_alloc_bytes": 3379768.0,
+            "go_memstats_heap_inuse_bytes": 5554176.0,
+            "go_memstats_heap_objects": 14731.0,
+            "process_resident_memory_bytes": 21970944.0
+          },
+          "b": {
+            "go_memstats_heap_alloc_bytes": 2701208.0,
+            "go_memstats_heap_inuse_bytes": 4866048.0,
+            "go_memstats_heap_objects": 8730.0,
+            "process_resident_memory_bytes": 21463040.0
+          }
+        }
+      },
+      "measurements": [
+        {
+          "desired_version": 28,
+          "keys": 1003,
+          "persist_seconds": 0.0128,
+          "request_bytes": 219602
+        },
+        {
+          "desired_version": 29,
+          "keys": 10003,
+          "persist_seconds": 0.0984,
+          "request_bytes": 2209602
+        }
+      ],
+      "note": "request_bytes is the JSON admin payload; the stored payload is protojson of the same records; memory is per Gateway process after it applied that snapshot"
+    }
+  },
+  "checks_summary": {
+    "a": {
+      "applied_versions": {
+        "gw-a": 1,
+        "gw-b": 1
+      },
+      "both_served": true,
+      "instances": [
+        "gw-a",
+        "gw-b"
+      ],
+      "pass": true
+    },
+    "b": {
+      "max_seconds": 0.23457884788513184,
+      "p99_seconds": 0.23457884788513184,
+      "pass": true,
+      "samples": 40
+    },
+    "c": {
+      "admitted": [
+        "a"
+      ],
+      "execution_rows": 1,
+      "pass": true,
+      "refused": [
+        "b"
+      ],
+      "reserved_micro": 121
+    },
+    "d": {
+      "direction_a_exhausts_then_b": {
+        "gateway_a_statuses": [
+          200,
+          200
+        ],
+        "gateway_b_status": 429
+      },
+      "direction_b_exhausts_then_a": {
+        "gateway_a_status": 429,
+        "gateway_b_statuses": [
+          200,
+          200
+        ]
+      },
+      "pass": true
+    },
+    "e": {
+      "drained": true,
+      "pass": true,
+      "recovered": true,
+      "stale_status": 401
+    },
+    "f": {
+      "max_seconds": 0.06537008285522461,
+      "note": "below the 2s poll interval proves the Watch push, not polling",
+      "pass": true
+    },
+    "g": {
+      "pass": true,
+      "rounds": 12,
+      "slow": []
+    },
+    "h": {
+      "measurements": [
+        {
+          "desired_version": 28,
+          "keys": 1003,
+          "persist_seconds": 0.0128,
+          "request_bytes": 219602
+        },
+        {
+          "desired_version": 29,
+          "keys": 10003,
+          "persist_seconds": 0.0984,
+          "request_bytes": 2209602
+        }
+      ],
+      "memory": {
+        "after_10003_keys": {
+          "a": {
+            "go_memstats_heap_alloc_bytes": 11448944.0,
+            "go_memstats_heap_inuse_bytes": 13434880.0,
+            "go_memstats_heap_objects": 65320.0,
+            "process_resident_memory_bytes": 30064640.0
+          },
+          "b": {
+            "go_memstats_heap_alloc_bytes": 11561064.0,
+            "go_memstats_heap_inuse_bytes": 13508608.0,
+            "go_memstats_heap_objects": 65275.0,
+            "process_resident_memory_bytes": 29609984.0
+          }
+        },
+        "after_1003_keys": {
+          "a": {
+            "go_memstats_heap_alloc_bytes": 5652800.0,
+            "go_memstats_heap_inuse_bytes": 7708672.0,
+            "go_memstats_heap_objects": 16034.0,
+            "process_resident_memory_bytes": 24190976.0
+          },
+          "b": {
+            "go_memstats_heap_alloc_bytes": 5580648.0,
+            "go_memstats_heap_inuse_bytes": 7651328.0,
+            "go_memstats_heap_objects": 15186.0,
+            "process_resident_memory_bytes": 23142400.0
+          }
+        },
+        "after_restore_after_gc": {
+          "a": {
+            "go_memstats_heap_alloc_bytes": 3316256.0,
+            "go_memstats_heap_inuse_bytes": 5832704.0,
+            "go_memstats_heap_objects": 6252.0,
+            "process_resident_memory_bytes": 30920704.0
+          },
+          "b": {
+            "go_memstats_heap_alloc_bytes": 3214736.0,
+            "go_memstats_heap_inuse_bytes": 5627904.0,
+            "go_memstats_heap_objects": 6144.0,
+            "process_resident_memory_bytes": 30490624.0
+          }
+        },
+        "before": {
+          "a": {
+            "go_memstats_heap_alloc_bytes": 3379768.0,
+            "go_memstats_heap_inuse_bytes": 5554176.0,
+            "go_memstats_heap_objects": 14731.0,
+            "process_resident_memory_bytes": 21970944.0
+          },
+          "b": {
+            "go_memstats_heap_alloc_bytes": 2701208.0,
+            "go_memstats_heap_inuse_bytes": 4866048.0,
+            "go_memstats_heap_objects": 8730.0,
+            "process_resident_memory_bytes": 21463040.0
+          }
+        }
+      },
+      "pass": true
+    }
+  },
+  "finished_at": "2026-10-01T04:42:46.805914Z",
+  "host": {
+    "platform": "macOS-14.8-x86_64-i386-64bit-Mach-O",
+    "python": "3.14.7"
+  },
+  "migration_version_workaround": {
+    "applied_version": 13,
+    "pinned_version": 12,
+    "t09_tables": [
+      "gateway_instance_status",
+      "gateway_instances"
+    ],
+    "why": "migrations.Version is owned by the parent task; services call migrations.Check and would refuse to start at 13"
+  },
+  "passed": true,
+  "seed": {
+    "key_b_id": "key_t09b_2bceccabde0b4b8f8a9c789e",
+    "key_id": "key_t09_d6ee2a97ddca456e6c87baee",
+    "model": "gpt-t09",
+    "org_b_id": 2,
+    "org_id": 1,
+    "revoked_key_id": "key_t09r_69c41a182a70b5b9275b7def",
+    "user_id": 1
+  },
+  "setup_version": 1,
+  "started_at": "2026-10-01T04:41:47.172768Z"
+}

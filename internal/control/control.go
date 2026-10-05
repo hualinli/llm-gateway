@@ -38,8 +38,17 @@ type Server struct {
 
 	// reports are observations from Gateway processes. They are not part of
 	// the persisted desired snapshot and are lost when this process restarts.
-	reportsMu sync.RWMutex
-	reports   map[string]GatewayReport
+	// statusStore (T09) is the durable half: when it is installed the status
+	// view is built from it, and the in-memory map is only a same-process
+	// freshness overlay.
+	reportsMu   sync.RWMutex
+	reports     map[string]GatewayReport
+	statusStore GatewayStatusStore
+	// liveness caches the last read of the data-plane liveness table, so the
+	// status view can show both facts for an instance. It is a read-only cache
+	// of another component's table.
+	livenessMu sync.RWMutex
+	liveness   map[string]GatewayInstanceLiveness
 
 	// providerCredentials is the encrypted secret repository. Nil fails closed
 	// for any control:// reference. Config snapshots still store only refs.
@@ -58,6 +67,7 @@ func NewServer(store Store) (*Server, error) {
 		store:    store,
 		watchers: make(map[chan *pb.Config]struct{}),
 		reports:  make(map[string]GatewayReport),
+		liveness: make(map[string]GatewayInstanceLiveness),
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -86,19 +96,21 @@ func (s *Server) ApplyConfig(keys map[string]string, routes map[string]*pb.Provi
 }
 
 // ApplyKeyRecords writes a safe credential snapshot: raw keys are never placed
-// in the Config message, store payload, or Watch broadcast.
+// in the Config message, store payload, or Watch broadcast. Published
+// org_policies are preserved: a credential-only write must not silently erase
+// the data-plane policy the Console published (T09).
 func (s *Server) ApplyKeyRecords(records []*pb.KeyRecord, routes map[string]*pb.ProviderList) (*pb.Config, error) {
 	return s.ApplyKeyRecordsAndProviders(records, routes, nil)
 }
 
 // ApplyKeyRecordsAndProviders writes a complete versioned snapshot, including
-// provider settings. Raw upstream credentials are never accepted in this
-// message; ProviderConfig.CredentialRef is an opaque reference resolved by the
-// Gateway locally.
+// provider settings and the org policies currently published. Raw upstream
+// credentials are never accepted in this message; ProviderConfig.CredentialRef
+// is an opaque reference resolved by the Gateway locally.
 func (s *Server) ApplyKeyRecordsAndProviders(records []*pb.KeyRecord, routes map[string]*pb.ProviderList, providers map[string]*pb.ProviderConfig) (*pb.Config, error) {
 	s.applyMu.Lock()
 	defer s.applyMu.Unlock()
-	return s.applyKeyRecordsLocked(records, routes, providers)
+	return s.applyKeyRecordsLocked(records, routes, providers, s.CurrentConfig().OrgPolicies)
 }
 
 var ErrConfigVersionConflict = errors.New("config version conflict")
@@ -110,9 +122,14 @@ var ErrInvalidConfig = errors.New("invalid control config")
 // ConfigPatch uses nil to preserve a field and an explicit empty collection
 // to clear it. ExpectedVersion enables optimistic concurrency for admin edits.
 type ConfigPatch struct {
-	KeyRecords      []*pb.KeyRecord
-	Routes          map[string]*pb.ProviderList
-	Providers       map[string]*pb.ProviderConfig
+	KeyRecords []*pb.KeyRecord
+	Routes     map[string]*pb.ProviderList
+	Providers  map[string]*pb.ProviderConfig
+	// OrgPolicies is the published per-organization policy map. nil preserves
+	// the current policies; an explicitly empty map clears them. Without this,
+	// every legacy /config write silently dropped org_policies and the
+	// data-plane RPM/allowlist policies the snapshot had just published (T09).
+	OrgPolicies     map[int64]*pb.OrgPolicy
 	ExpectedVersion *int64
 	LegacyKeys      map[string]string // local-demo compatibility; immediately hashed
 }
@@ -144,20 +161,27 @@ func (s *Server) PatchConfig(patch ConfigPatch) (*pb.Config, error) {
 	if providers == nil {
 		providers = current.Providers
 	}
-	return s.applyKeyRecordsLocked(records, routes, providers)
+	orgPolicies := patch.OrgPolicies
+	if orgPolicies == nil {
+		orgPolicies = current.OrgPolicies
+	}
+	return s.applyKeyRecordsLocked(records, routes, providers, orgPolicies)
 }
 
-func (s *Server) applyKeyRecordsLocked(records []*pb.KeyRecord, routes map[string]*pb.ProviderList, providers map[string]*pb.ProviderConfig) (*pb.Config, error) {
+func (s *Server) applyKeyRecordsLocked(records []*pb.KeyRecord, routes map[string]*pb.ProviderList, providers map[string]*pb.ProviderConfig, orgPolicies map[int64]*pb.OrgPolicy) (*pb.Config, error) {
 	if err := validateKeyRecords(records); err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrInvalidConfig, err)
 	}
 	if err := validateProviderConfigs(providers); err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrInvalidConfig, err)
 	}
+	if err := validateOrgPolicies(orgPolicies); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrInvalidConfig, err)
+	}
 	if err := s.bindProviderCredentials(providers); err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrInvalidConfig, err)
 	}
-	next := cloneConfig(&pb.Config{Version: s.CurrentConfig().Version, KeyRecords: records, Routes: routes, Providers: normalizeProviderConfigSnapshot(providers)})
+	next := cloneConfig(&pb.Config{Version: s.CurrentConfig().Version, KeyRecords: records, Routes: routes, Providers: normalizeProviderConfigSnapshot(providers), OrgPolicies: normalizeOrgPolicySnapshot(orgPolicies)})
 	next.Version++
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -261,6 +285,7 @@ func normalizeConfig(cfg *pb.Config) *pb.Config {
 		out.KeyRecords = keyRecordsFromLegacy(out.Keys)
 	}
 	out.Providers = normalizeProviderConfigSnapshot(out.Providers)
+	out.OrgPolicies = normalizeOrgPolicySnapshot(out.OrgPolicies)
 	// New snapshots never expose or persist the legacy raw-key field.
 	out.Keys = nil
 	return out
@@ -278,6 +303,57 @@ func normalizeProviderConfigSnapshot(configs map[string]*pb.ProviderConfig) map[
 			copyCfg.Id = id
 		}
 		out[id] = copyCfg
+	}
+	return out
+}
+
+// validateOrgPolicies checks the snapshot's org policy map. The map key is the
+// organization id; a policy whose org_id disagrees with its key would let a
+// snapshot carry two identities for one row, so it is refused.
+func validateOrgPolicies(policies map[int64]*pb.OrgPolicy) error {
+	for orgID, policy := range policies {
+		if orgID <= 0 {
+			return fmt.Errorf("org policy key %d must be a positive organization id", orgID)
+		}
+		if policy == nil {
+			return fmt.Errorf("org policy %d is nil", orgID)
+		}
+		if policy.OrgId != 0 && policy.OrgId != orgID {
+			return fmt.Errorf("org policy %d has mismatched org_id %d", orgID, policy.OrgId)
+		}
+		if policy.RequestsPerMinute != nil && policy.GetRequestsPerMinute() <= 0 {
+			return fmt.Errorf("org policy %d requests_per_minute must be positive when present", orgID)
+		}
+		if policy.Burst != nil && policy.GetBurst() <= 0 {
+			return fmt.Errorf("org policy %d burst must be positive when present", orgID)
+		}
+		if list := policy.GetModelAllowlist(); list != nil {
+			for _, model := range list.GetModels() {
+				if strings.TrimSpace(model) == "" {
+					return fmt.Errorf("org policy %d model allowlist contains an empty model", orgID)
+				}
+				if strings.ContainsAny(model, "\r\n") {
+					return fmt.Errorf("org policy %d model allowlist contains a newline", orgID)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// normalizeOrgPolicySnapshot deep-copies the map and stamps the key onto each
+// policy's org_id, so a restored or published snapshot has exactly one identity
+// per organization and the stored payload cannot alias caller memory.
+func normalizeOrgPolicySnapshot(policies map[int64]*pb.OrgPolicy) map[int64]*pb.OrgPolicy {
+	out := make(map[int64]*pb.OrgPolicy, len(policies))
+	for orgID, policy := range policies {
+		if policy == nil {
+			out[orgID] = nil
+			continue
+		}
+		copyPolicy := proto.Clone(policy).(*pb.OrgPolicy)
+		copyPolicy.OrgId = orgID
+		out[orgID] = copyPolicy
 	}
 	return out
 }

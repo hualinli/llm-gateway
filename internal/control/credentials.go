@@ -99,7 +99,7 @@ func (s *CredentialService) CreateAs(ctx context.Context, principal Principal, t
 		TenantId:  key.TenantID,
 		Status:    key.Status,
 	})
-	newConfig, err := s.server.applyKeyRecordsLocked(records, current.Routes, current.Providers)
+	newConfig, err := s.server.applyKeyRecordsLocked(records, current.Routes, current.Providers, current.OrgPolicies)
 	if err != nil {
 		audit.Error = "configuration persistence failed"
 		s.audit.Record(ctx, audit)
@@ -205,7 +205,7 @@ func (s *CredentialService) RevokeAs(ctx context.Context, principal Principal, k
 		s.audit.Record(ctx, audit)
 		return ErrKeyNotFound
 	}
-	newConfig, err := s.server.applyKeyRecordsLocked(records, current.Routes, current.Providers)
+	newConfig, err := s.server.applyKeyRecordsLocked(records, current.Routes, current.Providers, current.OrgPolicies)
 	if err != nil {
 		audit.Error = "configuration persistence failed"
 		s.audit.Record(ctx, audit)
