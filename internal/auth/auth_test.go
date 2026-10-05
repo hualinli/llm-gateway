@@ -1,9 +1,14 @@
 package auth
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"llm-gateway/internal/httperr"
+	"llm-gateway/internal/observability"
 )
 
 func TestMiddlewareRequiresBearerScheme(t *testing.T) {
@@ -87,5 +92,61 @@ func TestMemoryStoreUpdateReplacesSnapshot(t *testing.T) {
 	}
 	if tenant, ok := store.Validate("new"); !ok || tenant != "tenant-new" {
 		t.Fatalf("new key validation = %q, %v", tenant, ok)
+	}
+}
+
+// 401 的响应体是统一 JSON 错误信封，且 request_id 来自 observability 注入的
+// context；状态码与 message 语义保持不变。
+func TestMiddlewareUnauthorizedUsesJSONEnvelope(t *testing.T) {
+	store := NewMemoryStore(map[string]string{"test-key": "tenant-a"})
+	handler := observability.Middleware(Middleware(store)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Fatal("downstream handler ran for an unauthenticated request")
+	})))
+
+	tests := []struct {
+		name        string
+		header      string
+		wantMessage string
+	}{
+		{name: "missing Authorization", header: "", wantMessage: "missing Authorization"},
+		{name: "invalid scheme", header: "Basic test-key", wantMessage: "invalid Authorization"},
+		{name: "invalid api key", header: "Bearer not-a-key", wantMessage: "invalid api key"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+			req.Header.Set("X-Request-ID", "req-auth-401")
+			if tt.header != "" {
+				req.Header.Set("Authorization", tt.header)
+			}
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusUnauthorized {
+				t.Fatalf("status=%d, want 401", rec.Code)
+			}
+			if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
+				t.Fatalf("Content-Type=%q, want application/json", ct)
+			}
+			var body struct {
+				Error struct {
+					Code      string `json:"code"`
+					Message   string `json:"message"`
+					RequestID string `json:"request_id"`
+				} `json:"error"`
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatalf("invalid JSON body %s: %v", rec.Body.String(), err)
+			}
+			if body.Error.Code != httperr.CodeUnauthorized {
+				t.Fatalf("code=%q, want %q (body=%s)", body.Error.Code, httperr.CodeUnauthorized, rec.Body.String())
+			}
+			if body.Error.Message != tt.wantMessage {
+				t.Fatalf("message=%q, want %q", body.Error.Message, tt.wantMessage)
+			}
+			if body.Error.RequestID != "req-auth-401" {
+				t.Fatalf("request_id=%q, want req-auth-401", body.Error.RequestID)
+			}
+		})
 	}
 }

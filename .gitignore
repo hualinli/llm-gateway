@@ -8,6 +8,8 @@
 .env
 *.local.yaml
 /data/
+# scripts/dev-certs.sh 生成的本地 CA/证书/主密钥（/data/ 已覆盖，显式保留意图）
+data/dev-certs/
 
 # 本地工具缓存
 /.dockercfg/

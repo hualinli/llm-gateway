@@ -1,14 +1,19 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
+	"time"
 
+	"llm-gateway/internal/appenv"
 	"llm-gateway/internal/auth"
 	"llm-gateway/internal/control"
 	"llm-gateway/internal/observability"
@@ -19,6 +24,10 @@ import (
 // request body limit. Without it, an unauthenticated demo-mode client can
 // force an unbounded allocation through JSON decoding.
 const maxConfigBody = 4 << 20
+
+const (
+	defaultControlHTTPAddr = ":50052"
+)
 
 func redactKeyRecords(records []*pb.KeyRecord) []map[string]string {
 	out := make([]map[string]string, 0, len(records))
@@ -79,9 +88,11 @@ func principalRole(r *http.Request) control.Role {
 	return principal.Role
 }
 
+// flagEnv keeps the historical call sites but defers to appenv.BoolEnv, so the
+// runtime switch and the production preflight (which uses the same parsing over
+// an injected Lookup) can never disagree on spellings like " TRUE ".
 func flagEnv(name string) bool {
-	value := os.Getenv(name)
-	return value == "1" || value == "true" || value == "yes"
+	return appenv.BoolEnv(name)
 }
 
 func allowLegacyKeyInput(requireAdminAuth, requirePostgres bool) bool {
@@ -89,6 +100,31 @@ func allowLegacyKeyInput(requireAdminAuth, requirePostgres bool) bool {
 }
 
 func main() {
+	profile, err := appenv.FromEnv()
+	if err != nil {
+		log.Fatalf("runtime profile: %v", err)
+	}
+	appenv.Log(profile)
+
+	// Read the gRPC TLS material once: the production preflight and the running
+	// server must make the same decision.
+	tlsConfig := control.TLSConfigFromEnv()
+	checks := controlChecks(appenv.EnvLookup, tlsConfig != nil)
+	if err := appenv.Validate(profile, checks); err != nil {
+		log.Fatalf("control production preflight failed:\n%v", err)
+	}
+	if !profile.IsProduction() {
+		warnFailedChecks(checks)
+	}
+
+	// Listener addresses are resolved before anything binds, so a conflicting
+	// diagnostics address fails fast instead of after the gRPC port is taken.
+	httpAddr := appenv.StringEnv("CONTROL_HTTP_ADDR", defaultControlHTTPAddr)
+	diagnosticsAddr := strings.TrimSpace(os.Getenv("CONTROL_DIAGNOSTICS_ADDR"))
+	if diagnosticsAddr != "" && diagnosticsAddr == httpAddr {
+		log.Fatalf("CONTROL_DIAGNOSTICS_ADDR=%q must differ from CONTROL_HTTP_ADDR=%q", diagnosticsAddr, httpAddr)
+	}
+
 	store, err := control.NewStore()
 	if err != nil {
 		log.Fatalf("control store: %v", err)
@@ -130,7 +166,6 @@ func main() {
 	}
 
 	// gRPC :50051；配置证书后启用 TLS/mTLS，否则仅用于本地 Demo。
-	tlsConfig := control.TLSConfigFromEnv()
 	providerCredentials := configureProviderCredentials(srv, store, tlsConfig)
 	srv.EnableProviderCredentialResolver(providerCredentials, auditSink, flagEnv("CONTROL_ALLOW_INSECURE_CREDENTIAL_RESOLVE"))
 	go func() {
@@ -179,16 +214,136 @@ func main() {
 	mux.Handle("/provider-credentials/", providerAuth)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok\n")) })
 
+	// 生产要求 CONTROL_DIAGNOSTICS_ADDR 与 HTTP 管理面分离；设置后在独立
+	// listener 上同样提供 /healthz（本进程目前没有注册 metrics，不凭空发明）。
+	var diagnosticsSrv *http.Server
+	httpSrv := &http.Server{Addr: httpAddr, Handler: observability.Middleware(mux)}
 	go func() {
-		log.Println("control http listening on :50052")
-		log.Fatal(http.ListenAndServe(":50052", observability.Middleware(mux)))
+		log.Printf("control http listening on %s", httpAddr)
+		if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("control http: %v", err)
+		}
 	}()
+	if diagnosticsAddr != "" {
+		diagnosticsMux := http.NewServeMux()
+		diagnosticsMux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok\n")) })
+		diagnosticsSrv = &http.Server{
+			Addr:         diagnosticsAddr,
+			Handler:      diagnosticsMux,
+			ReadTimeout:  5 * time.Second,
+			WriteTimeout: 10 * time.Second,
+			IdleTimeout:  60 * time.Second,
+		}
+		go func() {
+			log.Printf("control diagnostics listening on %s (/healthz)", diagnosticsAddr)
+			if err := diagnosticsSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Fatalf("control diagnostics: %v", err)
+			}
+		}()
+	}
 
-	log.Println("control ready gRPC :50051 http :50052")
+	log.Printf("control ready gRPC :50051 http %s", httpAddr)
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
+	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancelShutdown()
+	if diagnosticsSrv != nil {
+		_ = diagnosticsSrv.Shutdown(shutdownCtx)
+	}
+	_ = httpSrv.Shutdown(shutdownCtx)
 	log.Println("control exit")
+}
+
+// controlChecks is the pure production preflight list for the control plane. It
+// never reads the process environment itself and has no side effects.
+func controlChecks(lookup appenv.Lookup, controlTLSConfigured bool) []appenv.Check {
+	httpAddr := strings.TrimSpace(lookup("CONTROL_HTTP_ADDR"))
+	if httpAddr == "" {
+		httpAddr = defaultControlHTTPAddr
+	}
+	diagnosticsAddr := strings.TrimSpace(lookup("CONTROL_DIAGNOSTICS_ADDR"))
+	certFile := strings.TrimSpace(lookup("CONTROL_TLS_CERT_FILE"))
+	keyFile := strings.TrimSpace(lookup("CONTROL_TLS_KEY_FILE"))
+	caFile := strings.TrimSpace(lookup("CONTROL_TLS_CA_FILE"))
+	// Mirror control.TLSConfigFromEnv() exactly for the client-cert switch, so a
+	// truthy spelling it does not honour can never satisfy the check.
+	requireClientCertValue := strings.TrimSpace(lookup("CONTROL_TLS_REQUIRE_CLIENT_CERT"))
+	requireClientCert := requireClientCertValue == "1" || requireClientCertValue == "true"
+
+	return []appenv.Check{
+		{
+			Name:   "CONTROL_REQUIRE_POSTGRES",
+			Detail: "must be true: production control state is stored in PostgreSQL, not memory",
+			OK:     truthy(lookup("CONTROL_REQUIRE_POSTGRES")),
+		},
+		{
+			Name:   "POSTGRES_DSN",
+			Detail: "must be set: CONTROL_REQUIRE_POSTGRES cannot be satisfied without a database URL",
+			OK:     strings.TrimSpace(lookup("POSTGRES_DSN")) != "",
+		},
+		{
+			Name:   "CONTROL_REQUIRE_ADMIN_AUTH",
+			Detail: "must be true: the HTTP admin API cannot be anonymous in production",
+			OK:     truthy(lookup("CONTROL_REQUIRE_ADMIN_AUTH")),
+		},
+		{
+			Name:   "CONTROL_ADMIN_TOKEN",
+			Detail: "must be at least 16 characters",
+			OK:     len(strings.TrimSpace(lookup("CONTROL_ADMIN_TOKEN"))) >= 16,
+		},
+		{
+			Name:   "CONTROL_IDENTITY_SIGNING_SECRET",
+			Detail: "must be at least 16 characters",
+			OK:     len(strings.TrimSpace(lookup("CONTROL_IDENTITY_SIGNING_SECRET"))) >= 16,
+		},
+		{
+			Name:   "LLM_GATEWAY_BOOTSTRAP_API_KEY",
+			Detail: "must be empty: production keys are issued through the credential service, not a raw bootstrap key",
+			OK:     strings.TrimSpace(lookup("LLM_GATEWAY_BOOTSTRAP_API_KEY")) == "",
+		},
+		{
+			Name:   "CONTROL_ALLOW_INSECURE_CREDENTIAL_RESOLVE",
+			Detail: "must not be enabled: provider credentials may only be resolved over mTLS gRPC",
+			OK:     !truthy(lookup("CONTROL_ALLOW_INSECURE_CREDENTIAL_RESOLVE")),
+		},
+		{
+			Name:   "CONTROL_TLS_CERT_FILE/CONTROL_TLS_KEY_FILE",
+			Detail: "must both be set: control gRPC must not serve plaintext in production",
+			OK:     controlTLSConfigured && certFile != "" && keyFile != "",
+		},
+		{
+			Name:   "CONTROL_TLS_REQUIRE_CLIENT_CERT/CONTROL_TLS_CA_FILE",
+			Detail: "must require client certificates and set the client CA file so gateway connections are mutually authenticated",
+			OK:     requireClientCert && caFile != "",
+		},
+		{
+			Name:   "CONTROL_DIAGNOSTICS_ADDR",
+			Detail: fmt.Sprintf("must be set to a listener address different from the HTTP admin address %q", httpAddr),
+			OK:     diagnosticsAddr != "" && diagnosticsAddr != httpAddr,
+		},
+	}
+}
+
+// warnFailedChecks is the demo/test path: every production requirement that is
+// not satisfied is logged, but the service still starts.
+func warnFailedChecks(checks []appenv.Check) {
+	for _, check := range checks {
+		if !check.OK {
+			log.Printf("WARNING: production check failed: %s: %s", check.Name, check.Detail)
+		}
+	}
+}
+
+// truthy mirrors the existing flagEnv()/store.go parsing for injected lookups:
+// only 1/true/yes enable a switch.
+func truthy(raw string) bool {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "1", "true", "yes":
+		return true
+	default:
+		return false
+	}
 }
 
 func newConfigHandler(srv *control.Server, auditSink control.AuditSink, legacyKeyInputAllowed bool) http.Handler {

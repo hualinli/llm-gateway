@@ -3,6 +3,8 @@
 > 审查日期：2026-10-01（Asia/Shanghai）
 > 审查基线：任务分支 `codex/t00-status-facts`，base `5129e03`（含新路线计划文档的计划提交）
 > 范围：业务源码、测试、迁移、Compose、CI workflow、Makefile、脚本与历史验证报告。
+>
+> **T01A 更新（2026-10-01）**：§4.4 增加运行时 profile/生产 fail-fast、诊断与查询 listener 分离、统一错误信封与入口指标、隔离基线 runner、本地证书 bootstrap；§3 第 5 条与 §5 的对应风险已按 T01A 结果更新。基线命令与结果见 §7。
 
 > **当前产品目标与实施顺序**见 [生产导向多租户计费平台路线](plans/PRODUCTION-INTERVIEW-ROADMAP-2026-10-01.md)，配套 [压测与故障验收规格](plans/BENCHMARK-AND-ACCEPTANCE-2026-10-01.md) 与 [Agent 执行 Prompt 与任务包](plans/AGENT-PROMPTS-2026-10-01.md)（T00–T12）。[PROJECT-ROADMAP.md](PROJECT-ROADMAP.md) 自 2026-10-01 起只作为历史路线保留（其中系统不变量与 Agent 协议仍有效）。
 >
@@ -41,7 +43,7 @@
 | 2 | “pending 每轮从 `0-0` 只取一页，没有沿返回 cursor 扫描”（同上） | **部分纠正**：reclaim 已沿 `XAUTOCLAIM` 返回的 cursor 分页（`start = next`），单轮上限 32 页；上限是**内联字面量**而非命名常量 | `consumer.go:264-289`（`for page := 0; page < 32 ...` 在 `:266`，`start = next` 在 `:288`）；测试 `consumer_test.go:299` `TestReclaimPaginatesPastPoisonPending` 覆盖 cursor 跟随，**不覆盖** 32 页预算 |
 | 3 | 旧文档未记录的新风险 | ⚠️ 每个 tick 的 reclaim 仍从 `start := "0-0"` 开始，`Consumer` 结构体不保存跨 tick cursor；超过 32 页病态 pending 时后部公平性**无证据**，也没有任何测试 | `consumer.go:265`；结构体字段 `consumer.go:27-35`；无测试 |
 | 4 | README 概览“自动故障编排、连续证据和 CI 尚未完成” | **已存在**：CI workflow、`scripts/demo-accept.sh` 三轮编排和 `make demo-accept` 已在代码库中；**远端 CI 是否跑绿未知** | `.github/workflows/ci.yml`、`scripts/demo-accept.sh`、`Makefile:38` |
-| 5 | 文档多处把 `/ledger/balance` 与“账户余额”混用 | 它是**累计消费**：`PGLedger.Balance` 执行 `SELECT COALESCE(SUM(cost_cents),0) FROM metering_events WHERE tenant_id=$1`；`CostCents = int64(TotalTokens)` 是固定演示价（1 token = 1 分）；仓库没有用户、组织、会话、钱包、预占或价格版本**实体/表**（`tenant` 只作为值/claim 存在于 `metering_events.tenant_id`、`KeyRecord.TenantID`、签名 token 的 `tenant_id`），也没有 `web/` | `cmd/metering/main.go:70-84`（响应字段 `tenant`/`balance_cents`，服务在 `:8091`，**无鉴权中间件**）、`internal/metering/queries/tenant_balance.sql:1`、`internal/proxy/proxy.go:232`；`migrations/` 只有 `000001_initial`、`000002_event_id`、`000003_provider_credentials`（当前 schema 版本 3，`migrations/README.md:14`），建表仅 `metering_events`、`control_config`、`control_audit_events`、`provider_credentials` |
+| 5 | 文档多处把 `/ledger/balance` 与“账户余额”混用 | 它是**累计消费**：`PGLedger.Balance` 执行 `SELECT COALESCE(SUM(cost_cents),0) FROM metering_events WHERE tenant_id=$1`；`CostCents = int64(TotalTokens)` 是固定演示价（1 token = 1 分）；仓库没有用户、组织、会话、钱包、预占或价格版本**实体/表**（`tenant` 只作为值/claim 存在于 `metering_events.tenant_id`、`KeyRecord.TenantID`、签名 token 的 `tenant_id`），也没有 `web/`。T01A 起该端点在设置 `METERING_ADMIN_TOKEN` 时要求 Bearer 鉴权，demo 默认仍开放 | `cmd/metering/main.go:70-84`（响应字段 `tenant`/`balance_cents`，服务在 `:8091`）、`internal/metering/queries/tenant_balance.sql:1`、`internal/proxy/proxy.go:232`；`migrations/` 只有 `000001_initial`、`000002_event_id`、`000003_provider_credentials`（当前 schema 版本 3，`migrations/README.md:14`），建表仅 `metering_events`、`control_config`、`control_audit_events`、`provider_credentials` |
 | 6 | README 已提示“内存队列不持久”，但需明确损失窗口 | ⚠️ 成立且窗口明确：hot/overflow channel 与 producer 循环缓冲都不持久；`[DONE]` 已写并 flush 给客户端、`Enqueue` 已返回之后、flush 之前 SIGKILL，事件不会进 spool，直接丢失。spool 只在两条队列都满时写入；**spool 落地之后**的重投是 at-least-once，不是丢失 | 队列 `internal/metering/producer.go:45-46,87-88,109-138`；`[DONE]` 写出 `internal/provider/openai.go:315-323`，`Enqueue` `internal/proxy/proxy.go:234`；flush 批 50/200ms `producer.go:200-228`；仅 SIGINT/SIGTERM 优雅关闭 `cmd/gateway/main.go:163-175`、`cmd/gateway/shutdown.go:88-94`；两条队列满且 spool 写失败则丢弃并计数 `producer.go:132-137`（`MeteringDroppedTotal{overflow_spool_failed}`） |
 | 7 | 旧文档未定义的保留/对账/发压边界 | ⚠️ DLQ 用近似 `MAXLEN ~ 10000`，会淘汰未人工处理的记录；“对账”是 `GET /reconcile` 的**按需**全量比较，`XRANGE - +` 加全量 ledger snapshot，没有时间窗口/高水位，也没有应用侧裁剪（裁剪只能来自外部操作或 Redis 淘汰，之后合法的 ledger-only 会被报为不一致）；`cmd/loadtest` 的固定到达调度在并发槽满时会停止调度后续到达 | DLQ `consumer.go:230-246`（`MaxLen: 10000, Approx: true`）；对账 `internal/metering/reconcile.go:54,84,117-121`、`cmd/metering/main.go:86-105`；发压见 §4.4 |
 
@@ -108,10 +110,13 @@
 | ✅ | 本机压测工具 | `cmd/loadtest` + `scripts/benchmark-local.py`：闭环并发、`-rate` 固定到达、直连对照、JSON 报告与资源采样（CPU/RSS/heap/GC count） |
 | ✅ | 历史性能证据 | [2026-09-26 本机 SSE 压测记录](verification/2026-09-26/performance/README.md)（闭环 `ec24990`、固定到达 `4459c83`）；单机合成流，不可外推生产容量 |
 | ✅ | 基础指标 | `internal/metrics`、Gateway/Metering `/metrics`、`prometheus.yml`、`grafana-dashboard.json` |
-| 🟡 | 指标口径 | `gateway_requests_total` 未覆盖 auth/limiter 提前返回；TTFT 是首个非空 `data:` 行（可能是 role-only），不是首内容 token |
+| 🟡 | 指标口径 | 入口覆盖已由 T01A 的 `gateway_entry_requests_total{route,result_class}` 补齐（含 auth/limiter 提前返回，标签有界）；遗留 `gateway_requests_total{tenant,model,status}` 仍是 proxy 级、带 tenant/model 高基数风险；TTFT/first_event 是首个非空 `data:` 行（可能是 role-only），**不是**首内容 token，first_content 未实现 |
 | 🟡 | 发压工具有效性 | `-rate` 的 ticker 在 `sem <- struct{}{}`（`cmd/loadtest/main.go:57`）处阻塞：槽满时停止调度后续到达，且没有 scheduled/started/dropped/dispatch_lag 计数；`--arrival-only` 只是 Python 侧的用例选择开关（`scripts/benchmark-local.py:59`），不是真正的开环调度；SSE 解析逐行而非完整 event（`internal/loadtest/worker.go:78-101`），未复用 `internal/provider/sse`；每条流硬编码 10s `context.WithTimeout`（`cmd/loadtest/main.go:63-65`，无 `-timeout` flag） |
-| ⚠️ | 压测环境未隔离 | `scripts/benchmark-local.py` 使用日常 Compose project/端口，会改写 demo 控制面配置、创建 demo Key（`data/demo-api-key`），结束后只恢复 limiter；正式实验需要独立 project/端口/卷/run_id（T01A） |
-| ⚠️ | 生产 profile | 直接运行二进制仍有宽松回退（内存台账、legacy raw-key、无管理认证、诊断与计量查询同 listener）；`/ledger/*`、`/reconcile`（`:8091`）无鉴权；新路线 T01A |
+| ✅ | 压测环境隔离（T01A） | 新增 `scripts/isolated-baseline.py`：独立 Compose project（`llm-gw-iso-<run_id>`）、运行时探测的空闲宿主端口、project 级独立卷，结束后只 `down -v` 自己的 project；要求工作区干净（固定 commit），产出 environment/parameters/raw/resources/reconciliation 与 validity limits。旧 `benchmark-local.py` 仍会改日常栈，仅作历史参考 |
+| ✅ | 运行时 profile 与生产 fail-fast（T01A） | `GATEWAY_PROFILE`/`APP_ENV` = `prod`/`demo`/`test`（空值 = demo，未知值启动失败）；`prod` 下缺任一必要配置即拒绝启动并一次列出全部失败项：Gateway（禁 legacy raw-key、限流必须 fail-closed、显式 rate/burst/活跃流上限、诊断 listener 分离、Control 通道 mTLS）、Control（PG + 管理认证 + 身份签名密钥 + mTLS + 禁 insecure 凭据解析）、Metering（PG + 查询 token + 诊断 listener）。实现 `internal/appenv`，决策见 [ADR-0001](decisions/ADR-0001-runtime-profiles.md)；demo 保持原宽松行为并在启动日志显式告警 |
+| ✅ | 诊断/查询 listener 分离与查询鉴权（T01A） | `GATEWAY_DIAGNOSTICS_ADDR` 把 `/metrics`、`/debug/pprof/*` 移出业务端口；Control 用 `CONTROL_DIAGNOSTICS_ADDR`；Metering 用 `METERING_DIAGNOSTICS_ADDR`，并在 `METERING_ADMIN_TOKEN` 非空时对 `/ledger/*`、`/reconcile` 要求 `Authorization: Bearer`（常数时间比较，401 + `WWW-Authenticate`）。demo 未设置 token 时保持开放并打印 WARNING；业务地址与诊断地址相同直接启动失败 |
+| ✅ | 统一错误信封与入口指标（T01A） | `internal/httperr` 输出 `{"error":{"code","message","request_id"}}`（含 `X-Content-Type-Options: nosniff`），auth/limiter/proxy 的提前返回全部改用稳定 code；`gateway_entry_requests_total{route,result_class}` 覆盖 auth/limiter 提前拒绝，标签有界（无 user/key/request）；`gateway_first_event_seconds` 与遗留 `gateway_ttft_seconds` 同时记录，定义见 [请求指标口径](observability/request-metrics.md)。**first_content 尚未实现**，由 T01B 的压测客户端测量 |
+| 🟡 | 本地证书 bootstrap（T01A） | `scripts/dev-certs.sh` 幂等生成本地 CA、Control 服务端证书、Gateway 客户端证书和主密钥到 gitignored `data/dev-certs/`，不打印密钥材料，`--force` 整体重建。仅为本地联调，不含轮换/吊销/KMS |
 
 ### 4.5 多租户产品面（新路线目标，当前未实现）
 
@@ -129,8 +134,8 @@
 
 | 风险/边界 | 现状 | 归属任务 |
 |---|---|---|
-| 生产 profile 静默回退（内存台账、legacy raw-key、无管理认证、诊断同 listener） | 存在 | T01A |
-| 计量/对账查询端点（`/ledger/*`、`/reconcile`，`:8091`）无鉴权 | 存在 | T01A |
+| ~~生产 profile 静默回退（内存台账、legacy raw-key、无管理认证、诊断同 listener）~~ | **T01A 已收敛**：显式 profile + prod fail-fast + 诊断 listener 分离 + metering 查询 token；残留风险是运维忘记设置 `GATEWAY_PROFILE=prod`，此时进程按 demo 启动并打印 WARNING（见 ADR-0001） | T01A（已完成）、T12 复核 |
+| ~~计量/对账查询端点（`/ledger/*`、`/reconcile`）无鉴权~~ | **T01A 已提供** `METERING_ADMIN_TOKEN` 鉴权；demo 未设置 token 时仍开放（有 WARNING），生产 profile 强制要求 token | T01A（已完成） |
 | 远端 CI 是否跑绿 | 无证据（仓库非公开，无法查询） | T12（发布候选） |
 | `cmd/loadtest` 过载时降低发压、TTFT 口径、固定 10s timeout | 存在 | T01B |
 | 压测环境未隔离（使用日常 Compose/端口/卷） | 存在 | T01A |
@@ -168,16 +173,31 @@
 
 ## 7. 本轮验证
 
+### 7.1 T00（2026-10-01，base `5129e03`，任务分支 `codex/t00-status-facts`）
+
 | 检查 | 结果 | 说明 |
 |---|---|---|
 | `go build ./...` | ✅ 通过 | 需要把 `GOCACHE` 指到工作区内可写目录（本机沙箱不允许写 `~/Library/Caches/go-build`） |
 | `go vet ./...` | ✅ 通过 | |
 | `go test ./... -count=1` | ✅ 通过 | 仅无外部依赖用例；不包含 race，也不包含需要 Redis/PG 的 opt-in 集成用例 |
-| `go test -race ./...` | 未运行 | 基线由 T01A 建立 |
-| `make integration-test` | 未运行 | 需要隔离 Redis/PostgreSQL |
-| Compose 冷启动 / `make demo-accept` | 未运行 | 历史证据见 §8，不能引用为本次结果 |
-| 远端 CI | 未知 | 未查询远端运行记录 |
+| `go test -race ./...` | 未运行 | 由 T01A 建立基线（见 7.2） |
+| `make integration-test` | 未运行 | 由 T01A 建立基线（见 7.2） |
+| Compose 冷启动 / `make demo-accept` | 未运行 | 由 T01A 建立基线（见 7.2）；历史证据见 §8 |
+| 远端 CI | 未知 | 未查询远端运行记录（仓库非公开） |
 | 真实公网 Provider | 未运行 | 不据此声明真实 Provider 容量或兼容性 |
+
+### 7.2 T01A（2026-10-01，提交 `c069666`；demo 脚本修复 `d15dcc2`）
+
+| 检查 | 结果 | 说明 |
+|---|---|---|
+| `gofmt -l cmd internal` / `go build ./...` / `go vet ./...` | ✅ 通过 | 见 [T01A 证据](verification/2026-10-01/t01a-prod-profiles/README.md) |
+| `go test ./... -count=1` | ✅ 通过 | 含新增的 `internal/appenv`、`internal/httperr`、`internal/metrics` 与 `cmd/*` profile 测试 |
+| `go test -race ./... -count=1` | ✅ 通过（全部 package） | 原始输出 [go-test-race.txt](verification/2026-10-01/t01a-prod-profiles/go-test-race.txt) |
+| `make integration-test`（隔离 Redis 7.4.11 + PG 16.15，`-race`） | ✅ 通过 | [make-integration-test.txt](verification/2026-10-01/t01a-prod-profiles/make-integration-test.txt) |
+| `make demo-accept`（三轮正常/切备/双故障/对账） | ✅ PASS，`ledger 0→2→4→6`，每轮 `pending=0`、`dlq=0`、`invalid=0` | [make-demo-accept.txt](verification/2026-10-01/t01a-prod-profiles/make-demo-accept.txt)；原始 JSON 在 gitignored `data/verification/` |
+| 隔离低负载直连 vs Gateway 对照 | ✅ 6 用例 × 3 轮全部有效，`/reconcile ok=true`、`pending=0` | [t01a-baseline/README.md](verification/2026-10-01/t01a-baseline/README.md)（run_id `20260930T201020Z-c069666d`） |
+| 生产 fail-fast / 诊断分离 / 查询鉴权烟测 | ✅ 三个二进制在 `prod` 缺配置时非零退出并列出全部失败项；补齐后通过 preflight；业务端口 `/metrics` 404 而诊断端口 200；无/错 token 401、正确 token 200 | 由 T01A 实现工作流执行，限制见证据文档 §4 |
+| 环境限制 | ⚠️ 构建容器无 `proxy.golang.org` 出网，demo/隔离构建临时使用 `GOPROXY=goproxy.cn` 的 Dockerfile 副本（运行后还原）；Docker CLI 需工作区本地 `DOCKER_CONFIG` | 不影响被测代码，但解释证据时须一并说明 |
 
 ## 8. 证据索引
 
@@ -188,4 +208,6 @@
 | [FEAT-001 Provider 动态凭据](features/FEAT-001-provider-credential-lifecycle.md) + [2026-09-22 验收](verification/2026-09-22/provider-credential-lifecycle/README.md) | 2026-09-22 | 凭据创建/热更新/重启恢复/轮换/撤销 | 不含多 Gateway 强制吊销与 master key 在线轮换 |
 | [2026-09-26 FEAT-001 合并前补充验收](verification/2026-09-26/feat001-merge-fixes/README.md) | 2026-09-26，基线 `28dc1ca` | 端口收紧、凭据事务、容器重启后入账 | 使用独立 Compose 项目，结束后删除 |
 | [2026-09-26 本机 SSE 压测记录](verification/2026-09-26/performance/README.md)（+ `closed-loop-raw.json`、`fixed-arrival-raw.json`） | 闭环 `ec24990`、固定到达 `4459c83` | 闭环并发 1/16/64/128、固定到达 100/300 RPS、直连对照、切备路径 | 单机 Docker Desktop 合成流；TTFT 为首个非空 `data:`；固定到达在过载档会降低实际发压；不可外推生产容量 |
+| [T01A 运行基线证据](verification/2026-10-01/t01a-prod-profiles/README.md)（+ race/integration/demo 原始输出） | 2026-10-01，`c069666` / `d15dcc2` | profile 与生产 fail-fast、诊断 listener 分离、查询鉴权、错误信封、入口指标、`go test -race ./...`、`make integration-test`、`make demo-accept` 三轮 | 无真实 PG/Redis 的 prod 正例启动；构建使用离线 GOPROXY 回退副本；demo 脚本 `start --wait` 兼容性已修复 |
+| [T01A 隔离低负载基线](verification/2026-10-01/t01a-baseline/README.md) | 2026-10-01，`c069666`（干净工作区）+ 首次 dirty 运行 `0ffe182` | 独立 Compose project/端口/卷/run_id；直连 vs Gateway 的低负载闭环与固定到达对照、资源采样、对账 | 单机低负载合成流；两条路径差值在噪声内，不能宣称零开销；`--keep`/`--no-build`/提前停止路径未执行 |
 | 新路线三个计划文档 + [计划审查](plans/PLAN-REVIEW-2026-10-01.md) | 2026-10-01，基线 `a38999c` | 产品目标、架构边界、任务包与验收规格 | 计划本身不是实现证据 |

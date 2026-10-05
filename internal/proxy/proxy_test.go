@@ -12,9 +12,28 @@ import (
 	"time"
 
 	"llm-gateway/internal/auth"
+	"llm-gateway/internal/httperr"
 	"llm-gateway/internal/metering"
 	"llm-gateway/internal/provider"
 )
+
+// decodeError 解析统一错误信封，返回 code 与 message。
+func decodeError(t *testing.T, rec *httptest.ResponseRecorder) (code, message string) {
+	t.Helper()
+	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
+		t.Fatalf("Content-Type=%q, want application/json (body=%s)", ct, rec.Body.String())
+	}
+	var body struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("invalid JSON error body %s: %v", rec.Body.String(), err)
+	}
+	return body.Error.Code, body.Error.Message
+}
 
 // fakeProvider 是可编排的假上游：先写 chunks（决定 written 边界），再返回 err。
 type fakeProvider struct {
@@ -196,8 +215,46 @@ func TestNonStreamRejected(t *testing.T) {
 	if rec.Code != 400 {
 		t.Fatalf("stream=false want 400, got %d", rec.Code)
 	}
+	if code, _ := decodeError(t, rec); code != httperr.CodeInvalidRequest {
+		t.Fatalf("code=%q, want %q (body=%s)", code, httperr.CodeInvalidRequest, rec.Body.String())
+	}
 	if called {
 		t.Fatal("provider must not be called for rejected non-stream request")
+	}
+}
+
+// 坏 JSON：当前实现按“非流式”拒绝（stream 缺省即 false），状态码仍是 400，
+// 只是错误体换成统一信封。
+func TestInvalidJSONBadRequest(t *testing.T) {
+	called := false
+	p := &fakeProvider{name: "a", called: &called}
+	rec := do(t, []provider.Provider{p}, `{"model":`)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d, want 400 (body=%s)", rec.Code, rec.Body.String())
+	}
+	code, message := decodeError(t, rec)
+	if code != httperr.CodeInvalidRequest {
+		t.Fatalf("code=%q, want %q (body=%s)", code, httperr.CodeInvalidRequest, rec.Body.String())
+	}
+	if !strings.Contains(message, "only streaming requests are supported") {
+		t.Fatalf("message=%q", message)
+	}
+	if called {
+		t.Fatal("provider must not be called for rejected bad JSON")
+	}
+}
+
+// 405 也是入口提前返回，必须用统一信封 + method_not_allowed。
+func TestMethodNotAllowedUsesJSONEnvelope(t *testing.T) {
+	reg := provider.NewRegistry(map[string][]provider.Provider{"m1": {&fakeProvider{name: "a"}}})
+	h := NewHandler(reg, nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/chat/completions", nil))
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status=%d, want 405 (body=%s)", rec.Code, rec.Body.String())
+	}
+	if code, _ := decodeError(t, rec); code != httperr.CodeMethodNotAllowed {
+		t.Fatalf("code=%q, want %q", code, httperr.CodeMethodNotAllowed)
 	}
 }
 
@@ -220,6 +277,9 @@ func TestTerminalErrorNoFailover(t *testing.T) {
 	if rec.Code != 400 {
 		t.Fatalf("terminal 400 want passthrough, got %d", rec.Code)
 	}
+	if code, _ := decodeError(t, rec); code != httperr.CodeInvalidRequest {
+		t.Fatalf("code=%q, want %q", code, httperr.CodeInvalidRequest)
+	}
 	if called2 {
 		t.Fatal("terminal error must not trigger failover")
 	}
@@ -234,6 +294,7 @@ func TestMidStreamFailureNoReplay(t *testing.T) {
 	if called2 {
 		t.Fatal("failover after first byte would duplicate the stream")
 	}
+	// 已提交的 SSE 响应不得追加任何错误信封：字节与改动前完全一致。
 	if rec.Code != 200 || rec.Body.String() != "data: partial-1\n\n" {
 		t.Fatalf("want truncated-but-not-duplicated stream, got %d %q", rec.Code, rec.Body.String())
 	}
@@ -241,11 +302,19 @@ func TestMidStreamFailureNoReplay(t *testing.T) {
 
 // 全部可重试失败 + 上游 5xx：属于网关配置域，回 502 而不是把上游 500 抛给客户端。
 func TestAllRetryable5xxMappedTo502(t *testing.T) {
-	p1 := &fakeProvider{name: "a", err: provider.NewUpstreamError(500, "x")}
+	p1 := &fakeProvider{name: "a", err: provider.NewUpstreamError(500, "secret-upstream-body")}
 	p2 := &fakeProvider{name: "b", err: provider.NewUpstreamError(503, "y")}
 	rec := do(t, []provider.Provider{p1, p2}, streamBody)
 	if rec.Code != 502 {
 		t.Fatalf("want 502, got %d", rec.Code)
+	}
+	code, message := decodeError(t, rec)
+	if code != httperr.CodeUpstreamUnavailable {
+		t.Fatalf("code=%q, want %q (body=%s)", code, httperr.CodeUpstreamUnavailable, rec.Body.String())
+	}
+	// 上游错误详情（含上游响应体）不能出现在客户端可见 message 里。
+	if strings.Contains(message, "secret-upstream-body") || strings.Contains(message, "upstream 500") {
+		t.Fatalf("upstream detail leaked to client: %q", message)
 	}
 }
 
@@ -255,6 +324,9 @@ func TestRateLimitPassthrough(t *testing.T) {
 	rec := do(t, []provider.Provider{p1}, streamBody)
 	if rec.Code != 429 {
 		t.Fatalf("want 429 passthrough, got %d", rec.Code)
+	}
+	if code, _ := decodeError(t, rec); code != httperr.CodeRateLimited {
+		t.Fatalf("code=%q, want %q", code, httperr.CodeRateLimited)
 	}
 }
 
@@ -272,8 +344,12 @@ func TestUnknownModelIsNotFound(t *testing.T) {
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), "/v1/models") {
-		t.Fatalf("body=%s", rec.Body.String())
+	code, message := decodeError(t, rec)
+	if code != httperr.CodeNotFound {
+		t.Fatalf("code=%q, want %q (body=%s)", code, httperr.CodeNotFound, rec.Body.String())
+	}
+	if !strings.Contains(message, "/v1/models") {
+		t.Fatalf("message=%q", message)
 	}
 }
 
@@ -285,6 +361,9 @@ func TestKnownModelWithNoProviderIsBadGateway(t *testing.T) {
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if code, _ := decodeError(t, rec); code != httperr.CodeUpstreamUnavailable {
+		t.Fatalf("code=%q, want %q", code, httperr.CodeUpstreamUnavailable)
 	}
 }
 
@@ -351,6 +430,9 @@ func TestMaxActiveStreamsRejectsBeforeUpstream(t *testing.T) {
 	close(release)
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if code, _ := decodeError(t, rec); code != httperr.CodeUnavailable {
+		t.Fatalf("code=%q, want %q (body=%s)", code, httperr.CodeUnavailable, rec.Body.String())
 	}
 	mu.Lock()
 	defer mu.Unlock()
