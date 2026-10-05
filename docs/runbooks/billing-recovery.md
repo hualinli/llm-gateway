@@ -1,5 +1,10 @@
 # Runbook：僵尸 execution 的有界恢复（T07B）与人工处置（T12）
 
+> 2026-10-05 补充分支：平台管理员可从 Console 人工资金队列执行现有 release/settle 政策。
+> 传输错误改为持续退避；旧传输异常可受控重投，六类告警先在 Prometheus 页面查看。
+> 具体条件、阈值和处置步骤见[传输恢复与告警手册](dispatch-recovery-alerts.md)。以下既有恢复状态机和资金边界继续有效。
+
+
 > 适用版本：schema `000012`（`gateway_instances`，`migrations.Version = 12`）及以后。
 > 上游决策：[PRODUCTION-INTERVIEW-ROADMAP §6.4/§6.5](../plans/PRODUCTION-INTERVIEW-ROADMAP-2026-10-01.md)（失败状态机、恢复与对账）、[ADR-0004 §5](../decisions/ADR-0004-money-and-price-versions.md)（预占/执行状态机）、[ADR-0005](../decisions/ADR-0005-terminal-event-gate.md)（finalize gate）。
 > 关联代码：`internal/billing/recovery.go`、`internal/billing/recovery_pg.go`、`internal/billing/manual.go`（人工处置）、`internal/billing/settlement_settle_pg.go`（结算发布，自动与人工共用）、`internal/billing/instance.go`、`internal/billing/instance_pg.go`、`internal/billing/execution_pg.go`（release guard）、`cmd/gateway/heartbeat.go`、`cmd/gateway/billing.go`（迟到 usage 异常）、`cmd/metering/recovery.go`、`migrations/000012_*`。

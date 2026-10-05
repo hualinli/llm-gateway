@@ -1,13 +1,8 @@
 # 已知限制（T12，穷尽清单）
 
-> 基线 `codex/t12-release-candidate` HEAD `9e8bd64`。
-> 本文汇总：T12 计划要求的限制项、T00–T11 各任务证据文件里的「未验证/限制」小节、
-> ADR 的「明确不覆盖」、以及本轮复核发现的文档漂移。
-> 规则：**有实现但无证据 = 未验证**；凡本文件没有证据路径的断言都不应出现在简历或对外材料里。
->
-> **T12 自身的发布候选验证尚未产出**：本工作树 `docs/verification/2026-10-01/` 下没有 `t12-*` 目录，
-> 因此「从零启动 / 5 分钟 Demo / CI 最终候选 / 秘密扫描」相关的清单项在本文件中一律标 **未验证**；
-> 待 T12 验证任务的证据落盘后，应把那里的发现逐条并入本文。
+> 更新：2026-10-05。主线基线 `3bc04a7`；本次功能在三个补充分支上，尚未合入 main。
+> 规则：有实现但无证据仍算未验证。历史性能数字不外推生产。
+> T12 验收与主线 CI 已有证据；本次变化见[补充报告](../verification/2026-10-05/platform-supplements.md)。
 
 ## A. 范围外（设计上不做，不是缺陷）
 
@@ -22,17 +17,17 @@
 | A7 | 通用 job engine、自动封账/`billing_periods`、多粒度预算、月账单高级导出 | roadmap §3.3、T07 非目标 |
 | A8 | Key 轮换与 secret 恢复（轮换 = 撤销 + 重建）；委托 token；Console SSE 代理 | `docs/web/README.md` §8 第 10 项；roadmap §7.1 |
 
-## B. 未验证（有实现或计划，但没有可追踪证据）
+## B. 验证状态与剩余边界
 
-### B1. 发布候选与 CI（T12 核心）
+### B1. 发布候选与 CI（已关闭项保留编号）
 
 | # | 未验证项 | 说明 |
 |---|---|---|
-| B1.1 | **新隔离环境按 README 从零启动、初始化三角色两企业、可控 Provider 与资金账户** | 未验证；无 `t12-*` 证据目录 |
-| B1.2 | **5 分钟 Demo 全链路**（成员登录/Key 调用 → 企业查费 → 余额拒绝 → 撤销传播 → 故障恢复 → 平台审计） | 未验证 |
-| B1.3 | **CI 最终候选**：Go 回归/race/vet/build、隔离 Redis/PG/migration、前端 typecheck/build、三角色 E2E | 未验证。现状：`.github/workflows/ci.yml` 只有单 job `verify`（`go test`、`go test -race`、`go vet`、`go build`、`make integration-test`），**没有前端步骤**，也没有故障/容量分层 |
-| B1.4 | **远端 CI 是否跑绿** | 未验证：仓库未公开、无 badge/运行日志；本地有通过记录 |
-| B1.5 | 秘密扫描、诊断暴露、Cookie/CSRF、默认 Key、secret 文件权限的最终候选复核 | 未验证（此前各任务做过局部扫描：T02/T03/T10 SEC-15） |
+| B1.1 | 隔离环境从零启动与三角色初始化 | 已验证：[T12 验收](../verification/2026-10-01/t12-release-candidate/README.md)，schema 13；生产形态仍未验证 |
+| B1.2 | 平台 Demo 资金与权限闭环 | 已验证：同上 S2–S9；不是生产上线证据 |
+| B1.3 | CI 最终候选 | Go、PG/Redis race 集成、前端及隔离三角色 E2E 均已接入；新告警检查在补充分支；没有生产 CD |
+| B1.4 | 远端 CI | [主线 #18](https://github.com/hualinli/llm-gateway/actions/runs/37321863065) 已成功；新增分支不能借用主线绿灯，需要各自通过 |
+| B1.5 | 候选秘密扫描、Cookie/CSRF 与权限 | T12 安全验收已验证 demo 候选；生产 HTTPS、证书轮换等仍未验证 |
 
 ### B2. 生产形态
 
@@ -79,9 +74,9 @@
 | B4.7 | 邀请 TTL 到期 | 只验证篡改/未知/错 email/重复接受（T10 §8.6） |
 | B4.8 | 登录节流的分布式形态 | 首版每 `email+IP` 桶、进程内、不跨实例；无 IP 总量上限（T02 §10、T10 §8.7） |
 | B4.9 | Redis 停机期间的在途长流 | 只验证新请求 fail-closed 与收据不丢（T10 §8.9） |
-| B4.10 | 前端数字 | T04/T08 的 `tsc`/vitest/Playwright/构建体积都是**分支自报**，本候选工作树无 `web/node_modules`，未复跑；Key 创建/Playground 流式分支需要 Control/Gateway |
+| B4.10 | 前端数字 | 主线 CI 已通过单元/构建/三角色 E2E；T08 截图与体积是历史测量；补充分支单元 64/64，浏览器结果见补充报告 |
 | B4.11 | 13 项 Web 契约缺口 | 无单次执行结算状态端点、组织不可见价目、无平台用户/组织列表、无 Provider 凭据引用端点、无配置 persisted/applied/stale 读取端点、无平台级异常总表/DLQ、无邀请撤销、审计无服务端过滤、无按模型/成员聚合、无 Key 轮换、无组织级策略读取、无成功/断流分类与结算延迟聚合、探针未接线（`docs/web/README.md` §8） |
-| B4.12 | **人工处置路径没有接线入口** | `billing.RecoveryParams.Manual` + `ActorUserID` 的 store 路径存在且被测试覆盖，但当前**没有任何生产调用方**：唯一的 `RecoverExecution` 调用来自自动 janitor（`ActorUserID: 0`、`Manual=false`，`internal/billing/recovery.go:815`）；Console 的异常决议（`charged/waived/dismissed/reopened`）只写 `billing_exception_events` 决议轨迹，**不移动资金**。因此 `review_required` 24h 人工队列目前只能被查看（`/recovery/review-required`），没有「按不收费政策释放」或「人工结算」的可执行入口 | runbook §4.1（自称 T08 的 seam）、T08 §8 第 13 项与 `internal/console/handlers_billing.go` |
+| B4.12 | 人工处置入口 | 主线已有受保护 Metering release/settle API；本次 Console 分支新增平台队列、会话操作人和资金结果。异常决议仍不移动资金；不能把 charged/waived 标签当作实际分录 |
 
 ### B5. 既有产品缺陷与「未复现」项
 
@@ -97,8 +92,8 @@
 
 | # | 边界 | 证据 |
 |---|---|---|
-| C1 | **长 Redis 停机（>约 127–138s）会把 receipt 打成终态 `exception`**（`attempts=8`，退避 1s..5m 用尽，`dispatch_poisoned`）：钱不动、`posted` 不变、无 debit、预占仍持有、对账仍 consistent，但 Redis 恢复后**不自动重投**，只能走人工队列 | T10 FINDING §5.1（实测 138s 时 poison）；10/30/60s 档最大 claim 7 次、在预算内（T11 recovery §4.1、§5.1）。建议把「重试预算的时间上限」写进告警，或停机期间不消耗预算 |
-| C2 | **usage 缺失/非法/自相矛盾 → `review_required` 人工队列（24h SLA）**，不自动释放；`exception` receipt 的 token 全为 0 是约定，任何 dispatcher 都不得结算它 | T06C §5、T07A §2、T10 F04 |
+| C1 | 传输中断与旧异常 | 主线仍有重试预算耗尽后 exception 的历史行为；恢复分支已改为传输失败持续退避，并提供只接受有效原始收据和传输审计的旧异常重投。未知 usage/编码异常不自动重投。 |
+| C2 | **usage 缺失/非法/自相矛盾 → review_required（24h SLA）**，不自动释放；这类未知 usage 的 exception receipt 用零 token 占位且不能自动结算。传输异常的 exception 可能有有效原始 usage，只有受控重投能恢复它。 | T06C §5；本次补充报告与恢复手册 |
 | C3 | **超预占不截断费用**：上游不遵守 `max_tokens` 时按实际费用入 receipt + 审计 `over_reserved=true`，走显式应收/账户暂停政策 | T06C §2；ADR-0004 §2.3 |
 | C4 | **没有 per-attempt 供应商成本账**：`billing_entries` 只记客户 charge，失败 attempt 的上游成本无处落账（能力缺失，不是回归） | T10 F01-1 |
 | C5 | **被限流/流上限拒绝的请求已经写过资金通路**：链路顺序 billing 在 limiter 之前，每次 429/503 都产生 1 条 execution + 1 条 reservation + 1 条 release（`failed_no_charge`，资金不被占用）；故障期间资金通路的写入量与请求量同阶 | T10 F08-2；T11 容量 §7.1 |
@@ -118,12 +113,12 @@
 | C19 | **finalize 场景的 30 条占款是观察窗（120s）内不收敛**，不是永久：释放需要 owner 被证明死亡（kill9 已验证 `released: 32`）或人工处置 | T11 recovery §4.2、§6 |
 | C20 | **`billing_executions` 没有 append-only 触发器**（status/updated_at 可变，这是状态机行的设计）；历史由审计行与 `billing_entries` 共同证明 | migration 000009 注释 |
 
-## D. 文档漂移（本轮复核发现，未修改非本人负责的文件）
+## D. 文档漂移（历史发现与当前关闭情况）
 
 | # | 漂移 | 事实 |
 |---|---|---|
 | D1 | `docs/verification/2026-10-01/t06c-usage-receipts/README.md` §1 写「准入顺序：auth → access guard → limiter → billing → proxy → upstream」 | 实际代码是 `auth → access guard → billing admission → limiter → 流上限 → proxy → upstream`（`cmd/gateway/main.go:219-228`）；T10 F08-2、T11 容量 §7.1 与代码一致。**以代码为准** |
-| D2 | `migrations/README.md` 写「当前版本为 7」，且未登记 000008–000013 | 实际 `migrations/migrate.go:24` `const Version = 13`；迁移文件到 `000013_gateway_instance_status` |
+| D2 | 迁移说明版本过期 | 已关闭：当前 README 与常量均为 13，迁移清单登记到 000013 |
 | D3 | T03 证据引用的 `request_id=t03-timing-probe` 与观测到的 `t03-check-08-03` 不符；保留的 `gateway.log` 不覆盖那两次 06:42:42 / 06:44:33 的请求 | T09 §7.4 的机制分析第 2 条 |
 | D4 | 旧 README 的多处完成度声明（“Consumer 自愈缺失”“需要新建 CI/三轮 Demo”“无钱包”等）已过期 | T00 已纠正；本轮 T12 重写 README，历史证据保留在 `docs/PROJECT-STATUS.md` 与各证据文件 |
 | D5 | `docs/PROJECT-STATUS.md` §7.1–§7.9 是历史复验记录，写于 T09–T11 之前 | 保留为历史；当前任务状态以 T12 更新后的任务表与 `docs/interview/EVIDENCE-INDEX.md` 为准（不删除历史章节） |

@@ -1,9 +1,11 @@
 # LLM Gateway —— 一页概览（T12 面试材料）
 
-> 基线：`codex/t12-release-candidate`，HEAD `9e8bd64`（T11 证据提交，= 本工作树 base）。
+> 更新基线：主线 `3bc04a7`；新增功能在补充分支，尚未合入 main。
 > 本文所有数字都来自仓库内可读的提交与证据文件（每条都带路径）；无法追溯到证据的标注 **未验证**。
 > 除特别说明外，所有性能数字都是**本机单机测量**（Intel macOS + OrbStack/Docker Desktop Linux VM，
 > 发压器与被测进程同机），**不能外推生产容量**。
+
+> [主线 CI #18](https://github.com/hualinli/llm-gateway/actions/runs/37321863065) 已通过。T12 发布候选证据见[验收报告](../verification/2026-10-01/t12-release-candidate/README.md)；本次人工操作、故障恢复和告警见[补充报告](../verification/2026-10-05/platform-supplements.md)。下方任务逐项性能结果是原测量，不代表新增候选的容量复测。
 
 ## 1. 要解决的问题
 
@@ -72,22 +74,19 @@
 | 有界四层对账（100k 事实） | healthy 只取回 **500 行**、堆增长 **256 KB**；破坏后 10,500 行 / 2.3 MB | `03d019c`（T07C）/ `t07c-reconcile-statements/README.md` §3 | 数据集 executions 20k + receipts 18k + entries 56k + accounts 500 = 114,500 事实 |
 | 10k Key 全量快照成本 | protojson **1,881,188 B**（≈188 B/key）；Control 持久化 + 广播 **41.3 ms**；Gateway 活堆 +≈8 MB/进程 | `0633363`（T09）/ `t09-multi-instance/README.md` §6 | 单次快照观测；未触发「必须改增量快照」的条件 |
 | 热钱包 vs 多钱包（M 闭环 c=128） | 吞吐几乎相同（58.76 vs 59.92–59.99 启动/s）；first_content p95 中位数 **215.9 → 154.8 ms**，行锁等待 3 → 0–1 | `6cd44e8`（T11）/ `t11-capacity/README.md` §5.5 | 单机；差异在尾部延迟与锁等待，不在吞吐 |
-| 前端（三角色 UI） | Playwright **33 passed / 0 failed**；28 张截图；vitest 60 用例；构建 gzip ≈466 kB | `a051fa8`（T08）/ `docs/web/README.md` §7/§9 | **分支自报值**，未在本候选工作树复跑（无 `web/node_modules`） |
+| 前端（三角色 UI） | Playwright **33 passed / 0 failed**；28 张截图；vitest 60 用例；构建 gzip ≈466 kB | `a051fa8`（T08）/ `docs/web/README.md` §7/§9 | T08 历史测量；主线 CI 已复验 UI，补充分支结果见报告 |
 
 ## 5. 诚实的限制（完整清单见 [KNOWN-LIMITS.md](KNOWN-LIMITS.md)）
 
 - **范围外**：真实支付/充值（只有平台额度调整）、HA PostgreSQL（单节点 + 单 Redis，RPO = 备份间隔）、
   多 Control writer、Kubernetes、第二 Provider 协议。
-- **未验证**：远端 CI 结果（仓库未公开）；T12 的发布候选冷启动、5 分钟 Demo、秘密扫描与三角色 E2E
-  —— 本工作树 `docs/verification/2026-10-01/` 下**没有** `t12-*` 证据目录，全部标 **未验证**。
+- **发布候选已验证**：主线 CI、隔离冷启动、资金 Demo、安全扫描与三角色 E2E；生产部署形态仍未验证。
 - **容量类未验证**：60 min soak、durable finalization P99、>200 收据/s 的结算 SLO、
   1000 钱包 / 10k Key 容量、管理 API 容量、大事件形状；本机测量不能外推生产。
-- **语义边界**：Redis 停机超过约 2 分钟会把 receipt 打成终态 `exception`（钱不动，但需人工队列）；
-  usage 缺失/非法/自相矛盾 → `review_required` 人工 24h 队列，不自动释放，而且**该队列当前没有接线的
-  人工释放/结算入口**（store seam 存在，异常决议只写轨迹不动资金）；
+- **语义边界**：补充分支实现传输错误持续退避、旧传输异常受控重投和 Console 人工资金操作；未知 usage 仍进入人工队列，超时不自动移动资金。
   「无 per-attempt 供应商成本账」是能力缺失（T10 F01-1）；被限流拒绝的请求仍会写资金通路行（T10 F08-2）；
   上游必须遵守平台写入的 `max_tokens` 才能保证预占上界，真实模型的 token 上界**未验证**。
 - **文档漂移**：`docs/verification/2026-10-01/t06c-usage-receipts/README.md` §1 写的准入顺序
   （…→ limiter → billing → proxy）与 `cmd/gateway/main.go:219-228` 的实际顺序
   （auth → guard → **billing** → limiter → 流上限 → proxy）不一致，以代码为准；
-  `migrations/README.md` 仍写「当前版本为 7」，实际 `migrations.Version = 13`。
+  迁移当前版本为 13；历史迁移编号不会复用。
