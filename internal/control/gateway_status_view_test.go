@@ -134,7 +134,9 @@ func storeUpsertLiveness(srv *Server, live GatewayInstanceLiveness) error {
 func TestGatewayStatusUpsertIsMonotonic(t *testing.T) {
 	store := NewMemoryGatewayStatusStore()
 	ctx := context.Background()
-	newer := time.Now().UTC()
+	// Include sub-microsecond precision on every platform. Both stores normalize
+	// timestamps to PostgreSQL's microsecond precision before merging reports.
+	newer := time.Date(2026, time.October, 5, 11, 6, 59, 451278501, time.UTC)
 	older := newer.Add(-10 * time.Minute)
 	started := newer.Add(-time.Minute)
 	if _, err := store.UpsertGatewayStatus(ctx, GatewayStatusRecord{
@@ -153,10 +155,10 @@ func TestGatewayStatusUpsertIsMonotonic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !got.ReportedAt.Equal(newer) {
+	if !got.ReportedAt.Equal(newer.Truncate(time.Microsecond)) {
 		t.Fatalf("reported_at moved backwards: %s -> %s", newer, got.ReportedAt)
 	}
-	if got.StartedAt == nil || !got.StartedAt.Equal(started) {
+	if got.StartedAt == nil || !got.StartedAt.Equal(started.Truncate(time.Microsecond)) {
 		t.Fatalf("started_at moved backwards: %v", got.StartedAt)
 	}
 	if got.AppliedVersion != 9 {
