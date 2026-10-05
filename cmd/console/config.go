@@ -20,6 +20,11 @@ const (
 
 	defaultLoginRate  = 5.0
 	defaultLoginBurst = 5
+
+	// DefaultPublicationInterval is how often the policy-publication loop looks
+	// for pending policy_publications rows (ADR-0003 §2.6: a specific loop, not
+	// a general task system).
+	DefaultPublicationInterval = 15 * time.Second
 )
 
 // config is the resolved Console configuration. Nothing else in the process
@@ -32,12 +37,27 @@ type config struct {
 	SecureCookies   bool
 	LoginRate       float64
 	LoginBurst      int
+
+	// ControlAddr is CONTROL_ADDR: the Control gRPC address. Empty disables the
+	// Console → Control channel (key management answers 503 and no publication
+	// loop runs).
+	ControlAddr string
+	// ControlConsoleServiceName is CONTROL_CONSOLE_SERVICE_NAME: the identity
+	// Control checks on the Console client certificate. It must match
+	// CONTROL_TLS_CLIENT_CERT_FILE's CN/SAN.
+	ControlConsoleServiceName string
+	// PublicationInterval is CONSOLE_PUBLICATION_INTERVAL: the publication loop
+	// period.
+	PublicationInterval time.Duration
 }
 
-// loadConfig reads the ADR-0002 §5 variables. An explicitly set but invalid
-// value is an error rather than a silent fallback: silently ignoring a session
-// TTL or a cookie-security switch is exactly the kind of surprise the profile
-// system exists to prevent.
+// loadConfig reads the ADR-0002 §5 variables plus the T03 control-channel
+// variables (CONTROL_ADDR, CONTROL_CONSOLE_SERVICE_NAME,
+// CONSOLE_PUBLICATION_INTERVAL; the CONTROL_TLS_* material is read by
+// internal/controlclient). An explicitly set but invalid value is an error
+// rather than a silent fallback: silently ignoring a session TTL, a publication
+// interval or a cookie-security switch is exactly the kind of surprise the
+// profile system exists to prevent.
 func loadConfig(profile appenv.Profile) (config, error) {
 	cfg := config{
 		Addr:            appenv.StringEnv("CONSOLE_ADDR", defaultConsoleAddr),
@@ -46,9 +66,12 @@ func loadConfig(profile appenv.Profile) (config, error) {
 		SessionTTL:      console.DefaultSessionTTL,
 		// prod forces Secure cookies even if the variable is missing; in demo the
 		// default is off so plain-http local debugging works.
-		SecureCookies: profile.IsProduction() || appenv.BoolEnv("CONSOLE_SECURE_COOKIES"),
-		LoginRate:     defaultLoginRate,
-		LoginBurst:    defaultLoginBurst,
+		SecureCookies:             profile.IsProduction() || appenv.BoolEnv("CONSOLE_SECURE_COOKIES"),
+		LoginRate:                 defaultLoginRate,
+		LoginBurst:                defaultLoginBurst,
+		ControlAddr:               strings.TrimSpace(appenv.EnvLookup("CONTROL_ADDR")),
+		ControlConsoleServiceName: strings.TrimSpace(appenv.EnvLookup("CONTROL_CONSOLE_SERVICE_NAME")),
+		PublicationInterval:       DefaultPublicationInterval,
 	}
 	if cfg.PostgresDSN == "" && !profile.IsProduction() {
 		cfg.PostgresDSN = demoPostgresDSN
@@ -76,18 +99,31 @@ func loadConfig(profile appenv.Profile) (config, error) {
 		}
 		cfg.LoginBurst = burst
 	}
+	if raw := strings.TrimSpace(appenv.EnvLookup("CONSOLE_PUBLICATION_INTERVAL")); raw != "" {
+		interval, err := time.ParseDuration(raw)
+		if err != nil || interval <= 0 {
+			return config{}, fmt.Errorf("CONSOLE_PUBLICATION_INTERVAL=%q must be a positive duration (for example 15s)", raw)
+		}
+		cfg.PublicationInterval = interval
+	}
 	return cfg, nil
 }
 
 // consoleChecks is the pure production preflight list for the Console. It never
 // reads the process environment itself and has no side effects, mirroring
 // gatewayChecks/meteringChecks (ADR-0001 §2.1).
+//
+// The T03 control-channel checks are part of the list because key management has
+// no local fallback: without CONTROL_ADDR every key endpoint answers 503 and no
+// policy is ever published, which is not an acceptable production posture.
 func consoleChecks(lookup appenv.Lookup) []appenv.Check {
 	businessAddr := strings.TrimSpace(lookup("CONSOLE_ADDR"))
 	if businessAddr == "" {
 		businessAddr = defaultConsoleAddr
 	}
 	diagnosticsAddr := strings.TrimSpace(lookup("CONSOLE_DIAGNOSTICS_ADDR"))
+	clientCertFile := strings.TrimSpace(lookup("CONTROL_TLS_CLIENT_CERT_FILE"))
+	clientKeyFile := strings.TrimSpace(lookup("CONTROL_TLS_CLIENT_KEY_FILE"))
 
 	return []appenv.Check{
 		{
@@ -104,6 +140,26 @@ func consoleChecks(lookup appenv.Lookup) []appenv.Check {
 			Name:   "CONSOLE_SECURE_COOKIES",
 			Detail: "must be true so the gw_session cookie is never sent over plaintext HTTP",
 			OK:     truthy(lookup("CONSOLE_SECURE_COOKIES")),
+		},
+		{
+			Name:   "CONTROL_ADDR",
+			Detail: "must be set: API keys are managed only through the Control AdminService, and policy publications converge only while that channel exists",
+			OK:     strings.TrimSpace(lookup("CONTROL_ADDR")) != "",
+		},
+		{
+			Name:   "CONTROL_TLS_CA_FILE",
+			Detail: "must be set so the Console verifies the Control server certificate over TLS",
+			OK:     strings.TrimSpace(lookup("CONTROL_TLS_CA_FILE")) != "",
+		},
+		{
+			Name:   "CONTROL_TLS_CLIENT_CERT_FILE/CONTROL_TLS_CLIENT_KEY_FILE",
+			Detail: "must both be set so the Console authenticates to Control with mTLS",
+			OK:     clientCertFile != "" && clientKeyFile != "",
+		},
+		{
+			Name:   "CONTROL_CONSOLE_SERVICE_NAME",
+			Detail: "must be set to the identity Control trusts for this Console (CONTROL_CONSOLE_SERVICE_NAME on the Control side); it must match the client certificate CN or SAN",
+			OK:     strings.TrimSpace(lookup("CONTROL_CONSOLE_SERVICE_NAME")) != "",
 		},
 	}
 }

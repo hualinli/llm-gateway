@@ -1,0 +1,9 @@
+HTTP 201 (0.003s)
+Server: hertz
+Date: Wed, 30 Sep 2026 22:50:32 GMT
+Content-Type: application/json
+Content-Length: 166
+X-Request-Id: t03-setup-21
+X-Trace-Id: b21dac0cbd8f468650bbe5100ed566cc
+
+{"organization":{"id":"13","type":"enterprise","name":"t03-17c0af-beta","status":"active","legacy_tenant_id":null,"created_at":"2026-09-30T22:50:32Z"},"role":"owner"}

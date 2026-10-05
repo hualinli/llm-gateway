@@ -2,7 +2,47 @@ syntax = "proto3";
 
 package control;
 
+import "google/protobuf/timestamp.proto";
+
 option go_package = "llm-gateway/proto/control;control";
+
+// ModelAllowlist is a tri-state model permission set. Message presence is
+// meaningful and must never be collapsed into an empty list: an absent
+// ModelAllowlist inherits the parent scope (NULL in api_keys.model_allowlist),
+// while a present message with no models is an explicit deny-all (JSONB []).
+message ModelAllowlist {
+  repeated string models = 1;
+}
+
+// OrgPolicy is one organization's data-plane policy inside the versioned
+// snapshot. It is the Control-side desired state published by ApplyOrgPolicy;
+// absent requests_per_minute/burst mean the organization has no limit.
+message OrgPolicy {
+  int64 org_id = 1;
+  ModelAllowlist model_allowlist = 2;
+  optional int32 requests_per_minute = 3;
+  optional int32 burst = 4;
+  int64 policy_version = 5;
+  google.protobuf.Timestamp updated_at = 6;
+  int64 updated_by = 7;
+}
+
+// ApiKeyMetadata is the redacted projection of one api_keys row. It never
+// contains the key hash or the raw secret.
+message ApiKeyMetadata {
+  string key_id = 1;
+  string key_prefix = 2;
+  int64 org_id = 3;
+  optional int64 owner_user_id = 4; // absent = legacy/unknown owner
+  optional int64 created_by = 5;
+  google.protobuf.Timestamp expires_at = 6; // absent = no expiry
+  ModelAllowlist model_allowlist = 7;       // absent = inherit, empty = deny-all
+  string status = 8;                        // active | revoked
+  int64 policy_version = 9;
+  google.protobuf.Timestamp created_at = 10;
+  google.protobuf.Timestamp revoked_at = 11; // absent while active
+  string tenant_id = 12;                     // legacy tenant projection for the Gateway
+}
 
 // ConfigService 控制面配置下发契约，与 internal/control/control.go 的 Go 结构体等价。
 // 本仓库为零依赖演示，手写 JSON+gRPC 实现；生产用 protoc 生成 Go 代码可直接替换。
@@ -20,6 +60,7 @@ message Config {
   map<string, ProviderList> routes = 3;       // model -> providers
   repeated KeyRecord key_records = 4;         // hash-based credentials for new configs
   map<string, ProviderConfig> providers = 5;  // provider id -> immutable provider settings
+  map<int64, OrgPolicy> org_policies = 6;     // org id -> data-plane policy
 }
 
 message ProviderList {
@@ -32,6 +73,13 @@ message KeyRecord {
   string key_prefix = 3;
   string tenant_id = 4;
   string status = 5;
+  // Metadata added by the Control key projection (ADR-0003 §2.9). Legacy
+  // records persist without these fields and must keep resolving; org_id = 0
+  // and absent owner/expiry/allowlist mean "unknown/legacy".
+  int64 org_id = 6;
+  optional int64 owner_user_id = 7;
+  google.protobuf.Timestamp expires_at = 8;
+  ModelAllowlist model_allowlist = 9;
 }
 
 // ProviderConfig contains non-secret provider settings. Secrets are referred
@@ -98,4 +146,137 @@ message ResolveProviderCredentialRequest {
 
 message ResolveProviderCredentialResponse {
   bytes secret = 1;
+}
+
+// AdminService is the internal Console -> Control management API (ADR-0003
+// §2.2). It is not part of ConfigService and never exposes the raw secret
+// outside CreateApiKeyResponse.secret. Listeners must mutually authenticate
+// the configured Console service identity; Control trusts the explicit actor
+// fields in the request and records them in the audit row.
+service AdminService {
+  rpc CreateApiKey(CreateApiKeyRequest) returns (CreateApiKeyResponse);
+  rpc RevokeApiKey(RevokeApiKeyRequest) returns (RevokeApiKeyResponse);
+  rpc ListApiKeys(ListApiKeysRequest) returns (ListApiKeysResponse);
+  rpc GetOperation(GetOperationRequest) returns (GetOperationResponse);
+  rpc ApplyOrgPolicy(ApplyOrgPolicyRequest) returns (ApplyOrgPolicyResponse);
+}
+
+// CreateApiKeyRequest creates one API key for an organization. owner_user_id
+// absent stores NULL (legacy/unknown owner); model_allowlist absent inherits
+// the organization policy while an empty list is deny-all.
+message CreateApiKeyRequest {
+  string operation_id = 1; // idempotency key; required
+  optional int64 expected_version = 2;
+  int64 actor_user_id = 3;
+  int64 actor_org_id = 4;
+  string request_id = 5;
+  int64 org_id = 6;
+  optional int64 owner_user_id = 7;
+  google.protobuf.Timestamp expires_at = 8;
+  ModelAllowlist model_allowlist = 9;
+}
+
+// CreateApiKeyResponse carries the raw key exactly once. An idempotent replay
+// returns the stored metadata with secret unset and replayed = true; the
+// secret cannot be recovered afterwards (use GetOperation for metadata).
+message CreateApiKeyResponse {
+  ApiKeyMetadata key = 1;
+  string secret = 2;
+  int64 resulting_version = 3;
+  bool replayed = 4;
+}
+
+// RevokeApiKeyRequest revokes one key. org_id is an optional scope assertion:
+// a non-zero value that differs from the stored key's organization yields
+// NOT_FOUND, so a Console bug cannot revoke another tenant's key.
+message RevokeApiKeyRequest {
+  string operation_id = 1;
+  optional int64 expected_version = 2;
+  int64 actor_user_id = 3;
+  int64 actor_org_id = 4;
+  string request_id = 5;
+  string key_id = 6;
+  int64 org_id = 7;
+}
+
+message RevokeApiKeyResponse {
+  ApiKeyMetadata key = 1;
+  int64 resulting_version = 2;
+  bool replayed = 3;
+}
+
+// ListApiKeysRequest lists redacted metadata only. org_id = 0 lists every
+// organization; owner_user_id absent lists every owner. page_size defaults to
+// 20 and is capped at 100; page_token is the opaque cursor from the previous
+// response. Results are sorted by key_id ascending.
+message ListApiKeysRequest {
+  string operation_id = 1;
+  optional int64 expected_version = 2;
+  int64 actor_user_id = 3;
+  int64 actor_org_id = 4;
+  string request_id = 5;
+  int64 org_id = 6;
+  optional int64 owner_user_id = 7;
+  int32 page_size = 8;
+  string page_token = 9;
+}
+
+message ListApiKeysResponse {
+  repeated ApiKeyMetadata keys = 1;
+  string next_page_token = 2;
+}
+
+// GetOperationRequest reads back the stored result of one mutation so a
+// Console that lost the response can recover metadata. The secret is never
+// part of the stored result.
+message GetOperationRequest {
+  string operation_id = 1; // the operation being looked up
+  optional int64 expected_version = 2;
+  int64 actor_user_id = 3;
+  int64 actor_org_id = 4;
+  string request_id = 5;
+}
+
+message GetOperationResponse {
+  string operation_id = 1;
+  string kind = 2;
+  string payload_digest = 3;
+  string actor_scope = 4;
+  string request_id = 5;
+  optional int64 expected_version = 6;
+  OperationResult result = 7;
+  google.protobuf.Timestamp created_at = 8;
+}
+
+// OperationResult is the redacted, replayable result stored in
+// control_operations.result.
+message OperationResult {
+  string kind = 1;
+  ApiKeyMetadata key = 2; // set by CreateApiKey and RevokeApiKey
+  int64 resulting_version = 3;
+  int64 policy_version = 4; // set by ApplyOrgPolicy
+  OrgPolicy policy = 5;     // set by ApplyOrgPolicy
+}
+
+// ApplyOrgPolicyRequest replaces the organization's complete data-plane
+// policy (the Console owns the desired state and always submits the full
+// policy). An absent model_allowlist clears the allowlist to NULL (inherit);
+// a present empty models list is deny-all. An absent requests_per_minute or
+// burst clears the corresponding limit.
+message ApplyOrgPolicyRequest {
+  string operation_id = 1;
+  optional int64 expected_version = 2;
+  int64 actor_user_id = 3;
+  int64 actor_org_id = 4;
+  string request_id = 5;
+  int64 org_id = 6;
+  ModelAllowlist model_allowlist = 7;
+  optional int32 requests_per_minute = 8;
+  optional int32 burst = 9;
+}
+
+message ApplyOrgPolicyResponse {
+  OrgPolicy policy = 1;
+  int64 resulting_version = 2;
+  bool replayed = 3;
 }

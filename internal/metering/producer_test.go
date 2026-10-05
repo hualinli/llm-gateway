@@ -133,6 +133,60 @@ func TestSpoolRoundTripAndRewrite(t *testing.T) {
 	}
 }
 
+// TestSpoolRoundTripPreservesAttribution proves the durable spool keeps the
+// T03 attribution and stays readable for events written before the columns
+// existed: missing fields decode to "unknown" (0 / ""), which the ledger stores
+// as SQL NULL.
+func TestSpoolRoundTripPreservesAttribution(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "events.jsonl")
+	p := &Producer{spoolPath: path, maxSpoolSize: 1 << 20}
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	attributed := Event{
+		EventID: "exec_1", TenantID: "org:7", OrgID: 7, UserID: 42,
+		KeyID: "key-1", ExecutionID: "exec_1", CostCents: 3, CreatedAt: now,
+	}
+	ownerless := Event{
+		EventID: "exec_2", TenantID: "tenant-a", OrgID: 7,
+		KeyID: "key-legacy", CostCents: 5, CreatedAt: now,
+	}
+	if err := p.appendSpool([]Event{attributed, ownerless}); err != nil {
+		t.Fatalf("appendSpool: %v", err)
+	}
+	// A pre-000007 line, byte-for-byte as an older gateway would have written it.
+	legacyLine := `{"event_id":"evt-legacy","tenant_id":"tenant-a","model":"m","provider":"p","total_tokens":1,"cost_cents":1,"created_at":"2026-09-11T01:02:03Z"}` + "\n"
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString(legacyLine); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	events, err := readSpool(path)
+	if err != nil {
+		t.Fatalf("readSpool: %v", err)
+	}
+	if len(events) != 3 {
+		t.Fatalf("events=%d, want 3: %+v", len(events), events)
+	}
+	if events[0].OrgID != 7 || events[0].UserID != 42 || events[0].KeyID != "key-1" || events[0].ExecutionID != "exec_1" {
+		t.Fatalf("attribution lost in spool round trip: %+v", events[0])
+	}
+	if events[1].UserID != 0 || events[1].ExecutionID != "" {
+		t.Fatalf("ownerless event invented attribution: %+v", events[1])
+	}
+	if events[2].OrgID != 0 || events[2].UserID != 0 || events[2].KeyID != "" || events[2].ExecutionID != "" {
+		t.Fatalf("legacy spool line gained attribution: %+v", events[2])
+	}
+	if events[2].EventID != "evt-legacy" {
+		t.Fatalf("legacy spool line lost its identity: %+v", events[2])
+	}
+}
+
 func TestProducerOverflowFallsBackToSpool(t *testing.T) {
 	dir := t.TempDir()
 	p := &Producer{

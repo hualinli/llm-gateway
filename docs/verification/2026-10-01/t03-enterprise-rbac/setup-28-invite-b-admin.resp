@@ -1,0 +1,9 @@
+HTTP 201 (0.003s)
+Server: hertz
+Date: Wed, 30 Sep 2026 22:50:32 GMT
+Content-Type: application/json
+Content-Length: 282
+X-Request-Id: t03-setup-28
+X-Trace-Id: 61082869e6bf7197c0e0c70dfd14d3f3
+
+{"invitation":{"id":"4","organization_id":"13","email":"t03-17c0af-b-admin@t03.test","role":"admin","status":"pending","expires_at":"2026-10-03T22:50:32Z","accepted_at":null,"created_by":"6","created_at":"2026-09-30T22:50:32Z"},"token":"SNBY…<redacted:43>"}

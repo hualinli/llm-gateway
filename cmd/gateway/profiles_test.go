@@ -20,6 +20,8 @@ func goodGatewayEnv() map[string]string {
 		"GATEWAY_LIMITER_RATE":         "100",
 		"GATEWAY_LIMITER_BURST":        "200",
 		"GATEWAY_MAX_ACTIVE_STREAMS":   "256",
+		"GATEWAY_ACCESS_GUARD":         "pg",
+		"POSTGRES_DSN":                 "postgres://gateway:gateway@postgres:5432/llm_gateway?sslmode=disable",
 		"CONTROL_TLS_CA_FILE":          "data/dev-certs/ca.crt",
 		"CONTROL_TLS_CLIENT_CERT_FILE": "data/dev-certs/gateway-client.crt",
 		"CONTROL_TLS_CLIENT_KEY_FILE":  "data/dev-certs/gateway-client.key",
@@ -50,6 +52,8 @@ func TestGatewayChecksCoverEveryRequiredItem(t *testing.T) {
 	checks := gatewayChecks(mapLookup(goodGatewayEnv()), true)
 	want := []string{
 		"LLM_GATEWAY_BOOTSTRAP_API_KEY",
+		"GATEWAY_ACCESS_GUARD",
+		"POSTGRES_DSN",
 		"LIMITER_ON_REDIS_ERROR",
 		"GATEWAY_LIMITER_RATE",
 		"GATEWAY_LIMITER_BURST",
@@ -80,6 +84,37 @@ func TestGatewayChecksRejectRelaxedSettings(t *testing.T) {
 			name:    "legacy bootstrap raw key",
 			mutate:  func(env map[string]string) { env["LLM_GATEWAY_BOOTSTRAP_API_KEY"] = "sk-legacy" },
 			failing: "LLM_GATEWAY_BOOTSTRAP_API_KEY",
+		},
+		{
+			name:    "access guard disabled in production",
+			mutate:  func(env map[string]string) { env["GATEWAY_ACCESS_GUARD"] = "off" },
+			failing: "GATEWAY_ACCESS_GUARD",
+		},
+		{
+			name:    "access guard unset",
+			mutate:  func(env map[string]string) { delete(env, "GATEWAY_ACCESS_GUARD") },
+			failing: "GATEWAY_ACCESS_GUARD",
+		},
+		{
+			name:    "access guard typo",
+			mutate:  func(env map[string]string) { env["GATEWAY_ACCESS_GUARD"] = "pgx" },
+			failing: "GATEWAY_ACCESS_GUARD",
+		},
+		{
+			name: "access guard without dsn",
+			mutate: func(env map[string]string) {
+				env["GATEWAY_ACCESS_GUARD"] = "pg"
+				delete(env, "POSTGRES_DSN")
+			},
+			failing: "POSTGRES_DSN",
+		},
+		{
+			name: "dsn not required while the guard is off",
+			mutate: func(env map[string]string) {
+				env["GATEWAY_ACCESS_GUARD"] = "OFF"
+				delete(env, "POSTGRES_DSN")
+			},
+			failing: "GATEWAY_ACCESS_GUARD",
 		},
 		{
 			name:    "limiter fails open",
@@ -200,6 +235,7 @@ func TestGatewayChecksAggregateFailuresInProduction(t *testing.T) {
 		t.Fatalf("validation reported an already satisfied check: %v", err)
 	}
 	for _, name := range []string{
+		"GATEWAY_ACCESS_GUARD",
 		"LIMITER_ON_REDIS_ERROR",
 		"GATEWAY_LIMITER_RATE",
 		"GATEWAY_LIMITER_BURST",

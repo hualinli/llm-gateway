@@ -168,6 +168,11 @@ func main() {
 	// gRPC :50051；配置证书后启用 TLS/mTLS，否则仅用于本地 Demo。
 	providerCredentials := configureProviderCredentials(srv, store, tlsConfig)
 	srv.EnableProviderCredentialResolver(providerCredentials, auditSink, flagEnv("CONTROL_ALLOW_INSECURE_CREDENTIAL_RESOLVE"))
+	// Console → Control 内部管理面：默认完全不注册；启用时要求 PG 事实表 +
+	// mTLS 客户端证书 + 显式配置的 console 服务身份（ADR-0003 §2.2）。
+	if err := configureAdminService(srv, store, auditSink, tlsConfig); err != nil {
+		log.Fatalf("control admin service: %v", err)
+	}
 	go func() {
 		if err := control.RunWithTLS(":50051", srv, tlsConfig); err != nil {
 			log.Fatalf("control grpc: %v", err)
@@ -253,6 +258,45 @@ func main() {
 	}
 	_ = httpSrv.Shutdown(shutdownCtx)
 	log.Println("control exit")
+}
+
+// configureAdminService registers the Console-facing AdminService when
+// CONTROL_ADMIN_SERVICE_ENABLED is set. It fails fast instead of exposing an
+// unauthenticated management surface: the console identity must be explicit and
+// mTLS client certificates must already be required, unless the local demo
+// escape hatch is set on purpose.
+func configureAdminService(srv *control.Server, store control.Store, auditSink control.AuditSink, tlsConfig *control.TLSConfig) error {
+	if !flagEnv("CONTROL_ADMIN_SERVICE_ENABLED") {
+		return nil
+	}
+	consoleIdentity := strings.TrimSpace(os.Getenv("CONTROL_CONSOLE_SERVICE_NAME"))
+	if consoleIdentity == "" {
+		return errors.New("CONTROL_ADMIN_SERVICE_ENABLED requires CONTROL_CONSOLE_SERVICE_NAME")
+	}
+	allowInsecure := flagEnv("CONTROL_ALLOW_INSECURE_ADMIN_SERVICE")
+	if !allowInsecure {
+		if tlsConfig == nil || !tlsConfig.RequireClientCert || strings.TrimSpace(tlsConfig.CAFile) == "" {
+			return errors.New("CONTROL_ADMIN_SERVICE_ENABLED requires mTLS client certificates (CONTROL_TLS_REQUIRE_CLIENT_CERT + CONTROL_TLS_CA_FILE)")
+		}
+	}
+	pgStore, ok := store.(*control.PGStore)
+	if !ok {
+		return errors.New("CONTROL_ADMIN_SERVICE_ENABLED requires the PostgreSQL control store (CONTROL_REQUIRE_POSTGRES)")
+	}
+	keyStore, err := control.NewPGAPIKeyStore(pgStore.DB())
+	if err != nil {
+		return err
+	}
+	service, err := control.NewAPIKeyAdminService(srv, keyStore, auditSink, control.AdminServiceOptions{
+		ConsoleServiceName: consoleIdentity,
+		AllowInsecure:      allowInsecure,
+	})
+	if err != nil {
+		return err
+	}
+	srv.EnableAdminService(service)
+	log.Printf("control admin service enabled for console identity %q", consoleIdentity)
+	return nil
 }
 
 // controlChecks is the pure production preflight list for the control plane. It

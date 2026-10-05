@@ -11,7 +11,7 @@ make migrate-up
 make migrate-version
 ```
 
-当前版本为 4。成功后启动新版服务。服务只读取 schema_migrations 校验版本和 dirty 状态，不会自动改变表结构。数据库已连接但版本不符合时直接失败，不会静默切换内存台账。Control 与 Metering 默认共用数据库；如果使用不同数据库，需要分别运行迁移，当前每个库都会建立完整项目 schema。
+当前版本为 7。成功后启动新版服务。服务只读取 schema_migrations 校验版本和 dirty 状态，不会自动改变表结构。数据库已连接但版本不符合时直接失败，不会静默切换内存台账。Control 与 Metering 默认共用数据库；如果使用不同数据库，需要分别运行迁移，当前每个库都会建立完整项目 schema。
 
 命令入口是 cmd/migrate，内部调用 golang-migrate。up 运行所有尚未执行的迁移；再次运行没有新版本时视为成功。迁移库负责版本记录、dirty 标记和 PostgreSQL 迁移锁。SQL 使用显式事务，失败时不会留下半套业务表结构，但 dirty 状态仍需人工调查。
 
@@ -21,6 +21,9 @@ make migrate-version
 - 000002_event_id：若存在旧 request_id 列，则重命名为 event_id；已经完成改名的开发库跳过这一步。原 ID、金额和约束保留。
 - 000003_provider_credentials：新增 `provider_credentials`，只保存 AES-256-GCM 密文、nonce、key id 和指纹；审计表增加 credential/provider/gateway 元数据列。历史 `env://` 或 `env:` Provider 引用不会被读取或写入数据库。升级前要先把密钥导入凭据仓库，并把配置改成 `control://provider-credentials/<id>`，否则 Control 会拒绝该快照。
 - 000004_iam_organizations：新增 Console 身份与组织四张表 `users` / `sessions` / `organizations` / `memberships`（ADR-0002 §3）。个人组织唯一、`legacy_tenant_id` 唯一都由部分唯一索引保证；**本迁移不写入任何行**，历史 tenant 不伪造用户或成员归属，`legacy_tenant_id` 只提供可空列供后续显式映射。会话只存 token/CSRF 的 SHA-256 摘要。
+- 000005_console_rbac_and_policy：新增 `invitations`、`console_audit_events`、`policy_publications`，并给 `organizations` 增加 `org_revision`（ADR-0003 §2.4–2.6）。成员/邀请变更在组织级短事务内递增 revision 并写入同事务的 pending 发布记录。
+- 000006_control_api_keys：新增 `api_keys`（Key 唯一事实：hash/prefix/org/owner/created_by/status/expires/model_allowlist/policy_version/operation_id，`org_id` 外键指向 `organizations(id)`）与 `control_operations`（幂等命令：operation_id/payload_digest/actor_scope/result/resulting_version）。快照降级为派生投影，同事务写入。
+- 000007_metering_attribution：为 `metering_events` 增加可空的 `org_id`/`user_id`/`key_id`/`execution_id` 归属列与 `(org_id, created_at DESC)`、`(user_id, created_at DESC)` 索引（ADR-0003 §2.8）。不回溯历史数据；旧记录保持未知归属。
 - 每个版本都有 up.sql / down.sql。已有迁移发布后保持不变，后续变更增加新编号。
 - check.sql 仅供服务读取版本，不属于编号迁移。
 

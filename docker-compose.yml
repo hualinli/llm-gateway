@@ -25,6 +25,13 @@ services:
       CONTROL_ADMIN_TOKEN: ${CONTROL_ADMIN_TOKEN:-demo-control-token}
       PROVIDER_CREDENTIAL_MASTER_KEY_FILE: /run/secrets/provider-credential-master-key
       CONTROL_ALLOW_INSECURE_CREDENTIAL_RESOLVE: "true"
+      # T03：Console -> Control 管理面（AdminService）。demo 显式放开 mTLS 并要求
+      # 客户端声称的身份是 console；生产必须改为
+      # CONTROL_TLS_REQUIRE_CLIENT_CERT=true + CONTROL_TLS_CA_FILE，并撤销
+      # CONTROL_ALLOW_INSECURE_ADMIN_SERVICE（见 README「Console -> Control 管理通道」）。
+      CONTROL_ADMIN_SERVICE_ENABLED: "true"
+      CONTROL_CONSOLE_SERVICE_NAME: console
+      CONTROL_ALLOW_INSECURE_ADMIN_SERVICE: "true"
     ports:
       # The insecure credential resolver is reachable from the host only for local demo work.
       - "127.0.0.1:50051:50051"
@@ -78,6 +85,13 @@ services:
       GATEWAY_PROFILE: demo
       POSTGRES_DSN: postgres://gateway:gateway@postgres:5432/llm_gateway?sslmode=disable
       CONSOLE_SECURE_COOKIES: "false"
+      # T03：Key 管理与策略发布都经 Control AdminService；同一 compose 网络内 demo
+      # 使用明文通道（Control 侧已显式 CONTROL_ALLOW_INSECURE_ADMIN_SERVICE）。
+      # 生产：设置 CONTROL_TLS_CA_FILE + CONTROL_TLS_CLIENT_CERT_FILE/KEY
+      # （scripts/dev-certs.sh 生成 console-client.*）与 CONTROL_TLS_SERVER_NAME。
+      CONTROL_ADDR: control:50051
+      CONTROL_CONSOLE_SERVICE_NAME: console
+      CONSOLE_PUBLICATION_INTERVAL: 15s
     ports:
       # Console 业务 listener：/api/v1/* 与 /livez、/readyz；仅本机可达。
       - "127.0.0.1:8092:8092"
@@ -86,6 +100,8 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+      control:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8092/readyz"]
       interval: 2s
@@ -104,6 +120,12 @@ services:
       CONTROL_ADDR: control:50051
       LIMITER_ON_REDIS_ERROR: closed
       GATEWAY_MAX_ACTIVE_STREAMS: "256"
+      # 数据面 PG access guard（ADR-0003 §2.8）：demo 的 key 来自 legacy
+      # bootstrap/raw-key 路径，没有 org 归属，access guard 开启后这些 key 会被
+      # 401 拒绝，所以 demo 显式关闭（进程会打印 WARNING）。要验证企业 RBAC
+      # 数据面时改成 pg 并取消下面 POSTGRES_DSN 的注释；生产 profile 强制 pg。
+      GATEWAY_ACCESS_GUARD: "off"
+      # POSTGRES_DSN: postgres://gateway:gateway@postgres:5432/llm_gateway?sslmode=disable
       METERING_SPOOL_DIR: /var/lib/llm-gateway/metering-spool
     ports:
       - "127.0.0.1:8090:8090"

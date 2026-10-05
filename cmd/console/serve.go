@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"errors"
+	"log"
 	"net/http"
 	"net/http/pprof"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -51,10 +53,25 @@ func serve(opts serveOptions) error {
 		RetryAfter:    time.Minute,
 		Ready:         opts.ready,
 		Logger:        opts.logger,
-		Audit:         console.LogAuditSink{Logger: opts.logger},
+		// T03: key management talks to Control through the AdminService client;
+		// nil means no CONTROL_ADDR and the routes answer 503 unavailable.
+		Keys: opts.keys,
+		// T03: usage reads metering_events; a nil store answers 500.
+		Usage: opts.usage,
+		// T03: mutations are audited into console_audit_events (PG sink) and the
+		// audit endpoint reads the same table. When no sink is wired the trail
+		// falls back to the T02 log sink and the read endpoint answers 500.
+		Audit:      opts.audit,
+		AuditStore: opts.audit,
 	}); err != nil {
 		return err
 	}
+
+	// T03: the policy-publication loop (ADR-0003 §2.6) runs on a root context so
+	// it is independent of any request, and is stopped before serve returns.
+	// Without CONTROL_ADDR there is no runner and this is a no-op.
+	stopPublication := startPublicationLoop(opts.publication, opts.publicationInterval, opts.logger)
+	defer stopPublication()
 
 	// ADR-0002 §5 and ADR-0001 §3: a configured diagnostics address moves
 	// /metrics and /debug/pprof/* to a dedicated listener; with no diagnostics
@@ -120,4 +137,52 @@ func serve(opts serveOptions) error {
 	}
 	opts.logger.Println("console exit")
 	return nil
+}
+
+// startPublicationLoop starts the policy-publication loop on a root context and
+// returns its stop function. A nil runner (no CONTROL_ADDR) returns a no-op stop:
+// the Console must run without a control channel, it just never publishes.
+//
+// Stopping cancels the loop and waits (bounded) for the in-flight round: every
+// gRPC call inside a round has its own deadline, so a hung shutdown is a bug,
+// not a slow publication.
+func startPublicationLoop(runner publicationRunner, interval time.Duration, logger *log.Logger) func() {
+	if runner == nil {
+		return func() {}
+	}
+	if logger == nil {
+		logger = log.Default()
+	}
+	if interval <= 0 {
+		interval = DefaultPublicationInterval
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		logger.Printf("console policy publication loop started (interval=%s)", interval)
+		runner.Run(ctx, interval)
+	}()
+	return func() {
+		cancel()
+		waitForBackground(&wg, publicationStopTimeout, logger)
+		logger.Println("console policy publication loop stopped")
+	}
+}
+
+// waitForBackground waits for a background loop to stop, but never forever: a
+// publication round has its own gRPC deadlines, so exceeding this bound is worth
+// a log line, not a hung shutdown.
+func waitForBackground(wg *sync.WaitGroup, timeout time.Duration, logger *log.Logger) {
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(timeout):
+		logger.Printf("console: background loop did not stop within %s; continuing shutdown", timeout)
+	}
 }

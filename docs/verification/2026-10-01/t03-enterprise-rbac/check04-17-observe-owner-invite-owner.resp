@@ -1,0 +1,9 @@
+HTTP 201 (0.004s)
+Server: hertz
+Date: Wed, 30 Sep 2026 22:50:32 GMT
+Content-Type: application/json
+Content-Length: 281
+X-Request-Id: t03-check04-17
+X-Trace-Id: fc7407ede75e2d760588c23621587b27
+
+{"invitation":{"id":"7","organization_id":"12","email":"t03-17c0af-owner2@t03.test","role":"owner","status":"pending","expires_at":"2026-10-03T22:50:33Z","accepted_at":null,"created_by":"2","created_at":"2026-09-30T22:50:33Z"},"token":"_KxD…<redacted:43>"}

@@ -1,0 +1,8 @@
+POST http://127.0.0.1:18092/api/v1/invitations/t03-not-a-real-token-17c0af/accept
+X-Request-ID: t03-check06-06
+Accept: application/json
+Cookie: gw_session=eQsb…<redacted:18>; gw_csrf=9nGu…<redacted:18>
+X-CSRF-Token: 9nGu…<redacted:18>
+Content-Type: application/json
+
+{}

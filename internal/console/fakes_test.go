@@ -129,8 +129,57 @@ type fakeOrgs struct {
 	getFn       func(ctx context.Context, userID, orgID int64) (organization.MemberOrg, error)
 	addMemberFn func(ctx context.Context, orgID, userID int64, role string) (organization.Membership, error)
 
-	listCalls []listCall
-	addCalls  []addMemberCall
+	// T03 organization surface. A nil hook returns the documented default below
+	// (usually "not configured"), so a test only wires what it exercises.
+	listMembersFn       func(ctx context.Context, actorUserID, orgID int64) ([]organization.Member, error)
+	createInvitationFn  func(ctx context.Context, actorUserID, orgID int64, email, role string, ttl time.Duration) (organization.Invitation, string, error)
+	acceptInvitationFn  func(ctx context.Context, rawToken string, userID int64, userEmail string) (organization.Membership, error)
+	listInvitationsFn   func(ctx context.Context, actorUserID, orgID int64) ([]organization.Invitation, error)
+	changeMemberRoleFn  func(ctx context.Context, actorUserID, orgID, targetUserID int64, role string) error
+	removeMemberFn      func(ctx context.Context, actorUserID, orgID, targetUserID int64) error
+	transferOwnershipFn func(ctx context.Context, actorUserID, orgID, targetUserID int64) error
+	authorizeFn         func(ctx context.Context, actorUserID, orgID int64, action organization.Action) (organization.Membership, error)
+
+	// memberships backs the default AuthorizeOrgAction with the REAL permission
+	// matrix (organization.Allowed), so key/usage tests exercise the frozen
+	// matrix instead of restating it. Nil keeps the "not configured" default.
+	memberships map[int64]map[int64]string
+
+	listCalls    []listCall
+	addCalls     []addMemberCall
+	inviteCalls  []createInvitationCall
+	roleCalls    []memberCall
+	removeCalls  []memberCall
+	transferCall []memberCall
+	acceptCalls  []acceptInvitationCall
+	authzCalls   []authorizeCall
+}
+
+type createInvitationCall struct {
+	ActorUserID int64
+	OrgID       int64
+	Email       string
+	Role        string
+	TTL         time.Duration
+}
+
+type memberCall struct {
+	ActorUserID  int64
+	OrgID        int64
+	TargetUserID int64
+	Role         string
+}
+
+type acceptInvitationCall struct {
+	RawToken  string
+	UserID    int64
+	UserEmail string
+}
+
+type authorizeCall struct {
+	ActorUserID int64
+	OrgID       int64
+	Action      organization.Action
 }
 
 type listCall struct {
@@ -186,6 +235,120 @@ func (f *fakeOrgs) AddMember(ctx context.Context, orgID, userID int64, role stri
 	return organization.Membership{OrgID: orgID, UserID: userID, Role: role, Status: "active"}, nil
 }
 
+// --- T03 organization surface -------------------------------------------------
+
+func (f *fakeOrgs) ListMembers(ctx context.Context, actorUserID, orgID int64) ([]organization.Member, error) {
+	if f.listMembersFn != nil {
+		return f.listMembersFn(ctx, actorUserID, orgID)
+	}
+	return nil, nil
+}
+
+func (f *fakeOrgs) CreateInvitation(ctx context.Context, actorUserID, orgID int64, email, role string, ttl time.Duration) (organization.Invitation, string, error) {
+	f.mu.Lock()
+	f.inviteCalls = append(f.inviteCalls, createInvitationCall{ActorUserID: actorUserID, OrgID: orgID, Email: email, Role: role, TTL: ttl})
+	f.mu.Unlock()
+	if f.createInvitationFn != nil {
+		return f.createInvitationFn(ctx, actorUserID, orgID, email, role, ttl)
+	}
+	return organization.Invitation{}, "", errors.New("createInvitation not configured")
+}
+
+func (f *fakeOrgs) AcceptInvitation(ctx context.Context, rawToken string, userID int64, userEmail string) (organization.Membership, error) {
+	f.mu.Lock()
+	f.acceptCalls = append(f.acceptCalls, acceptInvitationCall{RawToken: rawToken, UserID: userID, UserEmail: userEmail})
+	f.mu.Unlock()
+	if f.acceptInvitationFn != nil {
+		return f.acceptInvitationFn(ctx, rawToken, userID, userEmail)
+	}
+	return organization.Membership{}, organization.ErrInvitationNotFound
+}
+
+func (f *fakeOrgs) ListInvitations(ctx context.Context, actorUserID, orgID int64) ([]organization.Invitation, error) {
+	if f.listInvitationsFn != nil {
+		return f.listInvitationsFn(ctx, actorUserID, orgID)
+	}
+	return nil, nil
+}
+
+func (f *fakeOrgs) ChangeMemberRole(ctx context.Context, actorUserID, orgID, targetUserID int64, role string) error {
+	f.mu.Lock()
+	f.roleCalls = append(f.roleCalls, memberCall{ActorUserID: actorUserID, OrgID: orgID, TargetUserID: targetUserID, Role: role})
+	f.mu.Unlock()
+	if f.changeMemberRoleFn != nil {
+		return f.changeMemberRoleFn(ctx, actorUserID, orgID, targetUserID, role)
+	}
+	return errors.New("changeMemberRole not configured")
+}
+
+func (f *fakeOrgs) RemoveMember(ctx context.Context, actorUserID, orgID, targetUserID int64) error {
+	f.mu.Lock()
+	f.removeCalls = append(f.removeCalls, memberCall{ActorUserID: actorUserID, OrgID: orgID, TargetUserID: targetUserID})
+	f.mu.Unlock()
+	if f.removeMemberFn != nil {
+		return f.removeMemberFn(ctx, actorUserID, orgID, targetUserID)
+	}
+	return errors.New("removeMember not configured")
+}
+
+func (f *fakeOrgs) TransferOwnership(ctx context.Context, actorUserID, orgID, targetUserID int64) error {
+	f.mu.Lock()
+	f.transferCall = append(f.transferCall, memberCall{ActorUserID: actorUserID, OrgID: orgID, TargetUserID: targetUserID})
+	f.mu.Unlock()
+	if f.transferOwnershipFn != nil {
+		return f.transferOwnershipFn(ctx, actorUserID, orgID, targetUserID)
+	}
+	return errors.New("transferOwnership not configured")
+}
+
+func (f *fakeOrgs) AuthorizeOrgAction(ctx context.Context, actorUserID, orgID int64, action organization.Action) (organization.Membership, error) {
+	f.mu.Lock()
+	f.authzCalls = append(f.authzCalls, authorizeCall{ActorUserID: actorUserID, OrgID: orgID, Action: action})
+	memberships := f.memberships
+	f.mu.Unlock()
+	if f.authorizeFn != nil {
+		return f.authorizeFn(ctx, actorUserID, orgID, action)
+	}
+	if memberships != nil {
+		role, ok := memberships[actorUserID][orgID]
+		if !ok {
+			// Non-member and unknown organization are the same answer, exactly
+			// like the real service.
+			return organization.Membership{}, organization.ErrNotFound
+		}
+		if !organization.Allowed(role, action) {
+			return organization.Membership{}, organization.ErrForbidden
+		}
+		return organization.Membership{OrgID: orgID, UserID: actorUserID, Role: role, Status: "active"}, nil
+	}
+	return organization.Membership{}, errors.New("authorizeOrgAction not configured")
+}
+
+// fakeAuditStore records audit events for GET /api/v1/orgs/{org}/audit.
+type fakeAuditStore struct {
+	mu      sync.Mutex
+	records []AuditRecord
+	listFn  func(ctx context.Context, orgID int64, limit int, beforeID int64) ([]AuditRecord, string, error)
+	calls   []auditListCall
+}
+
+type auditListCall struct {
+	OrgID    int64
+	Limit    int
+	BeforeID int64
+}
+
+func (f *fakeAuditStore) List(ctx context.Context, orgID int64, limit int, beforeID int64) ([]AuditRecord, string, error) {
+	f.mu.Lock()
+	f.calls = append(f.calls, auditListCall{OrgID: orgID, Limit: limit, BeforeID: beforeID})
+	records := append([]AuditRecord(nil), f.records...)
+	f.mu.Unlock()
+	if f.listFn != nil {
+		return f.listFn(ctx, orgID, limit, beforeID)
+	}
+	return records, "", nil
+}
+
 // recordingAudit captures audit events for assertions.
 type recordingAudit struct {
 	mu     sync.Mutex
@@ -209,31 +372,42 @@ func (r *recordingAudit) all() []AuditEvent {
 // ---------------------------------------------------------------------------
 
 type harness struct {
-	t      *testing.T
-	engine *route.Engine
-	iam    *fakeIAM
-	orgs   *fakeOrgs
-	audit  *recordingAudit
-	logs   *bytes.Buffer
-	opts   Options
+	t          *testing.T
+	engine     *route.Engine
+	iam        *fakeIAM
+	orgs       *fakeOrgs
+	control    *fakeControl
+	usage      *fakeUsage
+	audit      *recordingAudit
+	auditStore *fakeAuditStore
+	logs       *bytes.Buffer
+	opts       Options
 }
 
 // newHarness builds the Hertz engine with fake services. mutate may adjust the
-// resolved options (cookie security, TTL, retry window) before registration.
+// resolved options (cookie security, TTL, retry window, key/usage services)
+// before registration.
 func newHarness(t *testing.T, mutate func(*Options)) *harness {
 	t.Helper()
 	h := &harness{
-		t:     t,
-		iam:   &fakeIAM{},
-		orgs:  &fakeOrgs{},
-		audit: &recordingAudit{},
-		logs:  &bytes.Buffer{},
+		t:          t,
+		iam:        &fakeIAM{},
+		orgs:       &fakeOrgs{},
+		control:    &fakeControl{},
+		usage:      &fakeUsage{},
+		audit:      &recordingAudit{},
+		auditStore: &fakeAuditStore{},
+		logs:       &bytes.Buffer{},
 	}
 	opts := Options{
 		IAM:           h.iam,
 		Organizations: h.orgs,
+		Keys:          NewControlKeyService(h.orgs, h.control, ControlKeyServiceOptions{}),
+		Usage:         h.usage,
 		Audit:         h.audit,
+		AuditStore:    h.auditStore,
 		Logger:        log.New(h.logs, "", 0),
+		Now:           func() time.Time { return time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC) },
 	}
 	if mutate != nil {
 		mutate(&opts)

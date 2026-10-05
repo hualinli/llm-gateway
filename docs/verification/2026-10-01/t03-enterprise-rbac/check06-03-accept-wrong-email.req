@@ -1,0 +1,8 @@
+POST http://127.0.0.1:18092/api/v1/invitations/1hou…<redacted:43>/accept
+X-Request-ID: t03-check06-03
+Accept: application/json
+Cookie: gw_session=CtXB…<redacted:18>; gw_csrf=9Qzh…<redacted:18>
+X-CSRF-Token: 9Qzh…<redacted:18>
+Content-Type: application/json
+
+{}

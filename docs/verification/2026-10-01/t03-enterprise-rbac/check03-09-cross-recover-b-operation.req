@@ -1,0 +1,6 @@
+GET http://127.0.0.1:18092/api/v1/orgs/13/keys?operation_id=t03-20260930T225028Z-e3c5-b-owner-key
+X-Request-ID: t03-check03-09
+Accept: application/json
+Cookie: gw_session=w8jW…<redacted:18>; gw_csrf=Pr8c…<redacted:18>
+X-CSRF-Token: Pr8c…<redacted:18>
+

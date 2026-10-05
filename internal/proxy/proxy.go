@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"llm-gateway/internal/auth"
+	"llm-gateway/internal/gatewayguard"
 	"llm-gateway/internal/httperr"
 	"llm-gateway/internal/metering"
 	"llm-gateway/internal/metrics"
@@ -99,6 +100,10 @@ func (c *countingWriter) Flush() {
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	tenant := auth.TenantFromContext(r.Context())
+	// Attribution is written by the access guard middleware (ADR-0003 §2.8)
+	// and carried into the metering event. Missing attribution (no guard, or a
+	// legacy key) leaves org/user/key/execution unknown rather than invented.
+	attribution, _ := gatewayguard.AttributionFromContext(r.Context())
 
 	if r.Method != http.MethodPost {
 		metrics.RequestsTotal.WithLabelValues(tenant, "", "405").Inc()
@@ -173,12 +178,18 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// A correlation ID may be supplied or reused by the client. Billing must
 	// identify this execution independently; only redelivery of its event is
 	// deduplicated. Generate the identity before spending upstream resources.
-	eventID, err := observability.ResolveRequestID("")
-	if err != nil {
-		httperr.WriteStatus(w, r, http.StatusInternalServerError, "could not allocate execution identity")
-		return
+	// The access guard already allocated one execution identity per admission;
+	// reuse it so the billed event, the guard decision and the request log all
+	// name the same execution.
+	eventID := attribution.ExecutionID
+	if eventID == "" {
+		generated, err := observability.ResolveRequestID("")
+		if err != nil {
+			httperr.WriteStatus(w, r, http.StatusInternalServerError, "could not allocate execution identity")
+			return
+		}
+		eventID = "evt_" + generated
 	}
-	eventID = "evt_" + eventID
 
 	// SSE 响应头，首字节前不主动 WriteHeader，靠第一次 Write 触发发送
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -202,11 +213,17 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			if h.producer != nil {
 				// Event identity is independent of the client correlation header.
+				// Attribution comes from the verified guard context; without a
+				// guard it stays zero and is stored as SQL NULL.
 				event := metering.Event{
 					EventID:         eventID,
 					ClientRequestID: requestID,
 					TraceID:         traceID,
 					TenantID:        tenant,
+					OrgID:           attribution.OrgID,
+					UserID:          attribution.UserID,
+					KeyID:           attribution.KeyID,
+					ExecutionID:     attribution.ExecutionID,
 					Model:           model,
 					Provider:        p.Name(),
 					CreatedAt:       time.Now().UTC().Truncate(time.Microsecond),

@@ -1,0 +1,6 @@
+GET http://127.0.0.1:18092/api/v1/me
+X-Request-ID: t03-setup-39
+Accept: application/json
+Cookie: gw_session=DMFZ…<redacted:18>; gw_csrf=o5Wv…<redacted:18>
+X-CSRF-Token: o5Wv…<redacted:18>
+

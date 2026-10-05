@@ -1,0 +1,10 @@
+HTTP 409 (0.004s)
+Server: hertz
+Date: Wed, 30 Sep 2026 22:50:33 GMT
+Content-Type: application/json
+Content-Length: 113
+X-Request-Id: t03-check05-09
+X-Trace-Id: a1e4446bf7f64b5696689d47348d4608
+X-Content-Type-Options: nosniff
+
+{"error":{"code":"conflict","message":"organization must keep at least one owner","request_id":"t03-check05-09"}}

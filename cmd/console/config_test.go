@@ -16,12 +16,20 @@ func TestConsoleChecks(t *testing.T) {
 		{
 			name: "prod ready",
 			env: map[string]string{
-				"POSTGRES_DSN":             "postgres://user:pw@db:5432/console",
-				"CONSOLE_DIAGNOSTICS_ADDR": "127.0.0.1:9092",
-				"CONSOLE_SECURE_COOKIES":   "true",
+				"POSTGRES_DSN":                 "postgres://user:pw@db:5432/console",
+				"CONSOLE_DIAGNOSTICS_ADDR":     "127.0.0.1:9092",
+				"CONSOLE_SECURE_COOKIES":       "true",
+				"CONTROL_ADDR":                 "control:50051",
+				"CONTROL_TLS_CA_FILE":          "/etc/control/ca.crt",
+				"CONTROL_TLS_CLIENT_CERT_FILE": "/etc/control/console.crt",
+				"CONTROL_TLS_CLIENT_KEY_FILE":  "/etc/control/console.key",
+				"CONTROL_CONSOLE_SERVICE_NAME": "console",
 			},
 			wantOK: map[string]bool{
 				"POSTGRES_DSN": true, "CONSOLE_DIAGNOSTICS_ADDR": true, "CONSOLE_SECURE_COOKIES": true,
+				"CONTROL_ADDR": true, "CONTROL_TLS_CA_FILE": true,
+				"CONTROL_TLS_CLIENT_CERT_FILE/CONTROL_TLS_CLIENT_KEY_FILE": true,
+				"CONTROL_CONSOLE_SERVICE_NAME":                             true,
 			},
 		},
 		{
@@ -29,18 +37,29 @@ func TestConsoleChecks(t *testing.T) {
 			env:  map[string]string{},
 			wantOK: map[string]bool{
 				"POSTGRES_DSN": false, "CONSOLE_DIAGNOSTICS_ADDR": false, "CONSOLE_SECURE_COOKIES": false,
+				"CONTROL_ADDR": false, "CONTROL_TLS_CA_FILE": false,
+				"CONTROL_TLS_CLIENT_CERT_FILE/CONTROL_TLS_CLIENT_KEY_FILE": false,
+				"CONTROL_CONSOLE_SERVICE_NAME":                             false,
 			},
 		},
 		{
 			name: "diagnostics shares the business listener",
 			env: map[string]string{
-				"POSTGRES_DSN":             "postgres://db",
-				"CONSOLE_ADDR":             ":9000",
-				"CONSOLE_DIAGNOSTICS_ADDR": ":9000",
-				"CONSOLE_SECURE_COOKIES":   "1",
+				"POSTGRES_DSN":                 "postgres://db",
+				"CONSOLE_ADDR":                 ":9000",
+				"CONSOLE_DIAGNOSTICS_ADDR":     ":9000",
+				"CONSOLE_SECURE_COOKIES":       "1",
+				"CONTROL_ADDR":                 "control:50051",
+				"CONTROL_TLS_CA_FILE":          "/etc/control/ca.crt",
+				"CONTROL_TLS_CLIENT_CERT_FILE": "/etc/control/console.crt",
+				"CONTROL_TLS_CLIENT_KEY_FILE":  "/etc/control/console.key",
+				"CONTROL_CONSOLE_SERVICE_NAME": "console",
 			},
 			wantOK: map[string]bool{
 				"POSTGRES_DSN": true, "CONSOLE_DIAGNOSTICS_ADDR": false, "CONSOLE_SECURE_COOKIES": true,
+				"CONTROL_ADDR": true, "CONTROL_TLS_CA_FILE": true,
+				"CONTROL_TLS_CLIENT_CERT_FILE/CONTROL_TLS_CLIENT_KEY_FILE": true,
+				"CONTROL_CONSOLE_SERVICE_NAME":                             true,
 			},
 		},
 		{
@@ -52,6 +71,9 @@ func TestConsoleChecks(t *testing.T) {
 			},
 			wantOK: map[string]bool{
 				"POSTGRES_DSN": false, "CONSOLE_DIAGNOSTICS_ADDR": false, "CONSOLE_SECURE_COOKIES": false,
+				"CONTROL_ADDR": false, "CONTROL_TLS_CA_FILE": false,
+				"CONTROL_TLS_CLIENT_CERT_FILE/CONTROL_TLS_CLIENT_KEY_FILE": false,
+				"CONTROL_CONSOLE_SERVICE_NAME":                             false,
 			},
 		},
 	}
@@ -83,7 +105,11 @@ func TestConsoleChecksProdFailsFastWithAllMissingSettings(t *testing.T) {
 		t.Fatal("prod must refuse to start with an empty environment")
 	} else {
 		message := err.Error()
-		for _, name := range []string{"POSTGRES_DSN", "CONSOLE_DIAGNOSTICS_ADDR", "CONSOLE_SECURE_COOKIES"} {
+		for _, name := range []string{
+			"POSTGRES_DSN", "CONSOLE_DIAGNOSTICS_ADDR", "CONSOLE_SECURE_COOKIES",
+			"CONTROL_ADDR", "CONTROL_TLS_CA_FILE",
+			"CONTROL_TLS_CLIENT_CERT_FILE/CONTROL_TLS_CLIENT_KEY_FILE", "CONTROL_CONSOLE_SERVICE_NAME",
+		} {
 			if !strings.Contains(message, name) {
 				t.Fatalf("preflight error must mention %s, got:\n%s", name, message)
 			}
@@ -100,10 +126,15 @@ func TestConsoleChecksProdFailsFastWithAllMissingSettings(t *testing.T) {
 
 func TestConsoleChecksProdAcceptsCompleteConfig(t *testing.T) {
 	env := map[string]string{
-		"POSTGRES_DSN":             "postgres://gateway:gateway@postgres:5432/llm_gateway?sslmode=disable",
-		"CONSOLE_ADDR":             ":8092",
-		"CONSOLE_DIAGNOSTICS_ADDR": ":9092",
-		"CONSOLE_SECURE_COOKIES":   "true",
+		"POSTGRES_DSN":                 "postgres://gateway:gateway@postgres:5432/llm_gateway?sslmode=disable",
+		"CONSOLE_ADDR":                 ":8092",
+		"CONSOLE_DIAGNOSTICS_ADDR":     ":9092",
+		"CONSOLE_SECURE_COOKIES":       "true",
+		"CONTROL_ADDR":                 "control:50051",
+		"CONTROL_TLS_CA_FILE":          "/etc/control/ca.crt",
+		"CONTROL_TLS_CLIENT_CERT_FILE": "/etc/control/console.crt",
+		"CONTROL_TLS_CLIENT_KEY_FILE":  "/etc/control/console.key",
+		"CONTROL_CONSOLE_SERVICE_NAME": "console",
 	}
 	if err := appenv.Validate(appenv.Prod, consoleChecks(func(name string) string { return env[name] })); err != nil {
 		t.Fatalf("complete prod configuration must pass: %v", err)
