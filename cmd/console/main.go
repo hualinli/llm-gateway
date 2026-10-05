@@ -127,6 +127,7 @@ func runServe(profile appenv.Profile, args []string) error {
 		accounts:            billingStore,
 		statements:          billing.NewPGStatementStore(db),
 		exceptions:          billing.NewPGExceptionStore(db),
+		review:              billingStore,
 		publication:         channel.Publication(),
 		publicationInterval: cfg.PublicationInterval,
 		audit:               audit,
@@ -169,6 +170,7 @@ type serveOptions struct {
 	// backs the durable money-exception queue (T07C). nil answers 503.
 	statements console.StatementService
 	exceptions console.MoneyExceptionService
+	review     console.ReviewService
 	// publication is optional: nil disables the policy-publication loop.
 	publication         publicationRunner
 	publicationInterval time.Duration

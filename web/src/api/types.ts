@@ -622,3 +622,22 @@ export interface ChatCompletionChunk {
     finish_reason?: string | null;
   }>;
 }
+
+// Platform review queue; all identities and money stay decimal strings.
+export interface ReviewExecution {
+ execution_id: string; organization_id: string; model: string;
+ reserved_micro: string; updated_at: string; age_seconds: number;
+ sla_breached: boolean; reason: string | null;
+}
+export interface ReviewCursor { updated_at: string; execution_id: string }
+export interface ReviewQueue {
+ items: ReviewExecution[]; next_cursor: ReviewCursor | null; now: string;
+ totals: { open: string; sla_breaches: string; oldest_age_seconds: number };
+ min_age_seconds: number;
+}
+export type ReviewAction = 'release' | 'settle';
+export interface ReviewDisposition {
+ execution_id: string; organization_id: string; status: string; action: ReviewAction;
+ charge_micro: string; policy: string; account: BillingAccount;
+ debit_entry: BillingEntry | null; release_entry: BillingEntry | null; request_id: string;
+}

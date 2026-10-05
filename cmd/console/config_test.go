@@ -3,6 +3,7 @@ package main
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"llm-gateway/internal/appenv"
 )
@@ -235,5 +236,20 @@ func setenv(t *testing.T, values map[string]string) {
 	t.Helper()
 	for name, value := range values {
 		t.Setenv(name, value)
+	}
+}
+
+func TestReviewWindowUsesMeteringSafetyConfiguration(t *testing.T) {
+	setenv(t, map[string]string{"METERING_RECOVERY_MAX_EXECUTION": "5m", "METERING_RECOVERY_GRACE": "2m", "METERING_RECOVERY_LEASE": "90s"})
+	cfg, err := loadConfig(appenv.Demo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ReviewMinAge != 7*time.Minute || cfg.ReviewLease != 90*time.Second {
+		t.Fatalf("window=%s lease=%s", cfg.ReviewMinAge, cfg.ReviewLease)
+	}
+	t.Setenv("METERING_RECOVERY_MAX_EXECUTION", "-1s")
+	if _, err := loadConfig(appenv.Demo); err == nil {
+		t.Fatal("negative safety window accepted")
 	}
 }

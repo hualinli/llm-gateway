@@ -1692,6 +1692,65 @@ paths:
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
 
+  /api/v1/admin/billing/review-required:
+    get:
+      tags: [billing]
+      operationId: listReviewRequired
+      summary: Global oldest-first human money review queue (platform admin)
+      description: Keyset pagination over review_required executions. IDs and money are strings. Default limit 50, maximum 200. The SLA surfaces overdue work and never moves money automatically.
+      parameters:
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+        - {name: cursor_updated_at, in: query, schema: {type: string, format: date-time}}
+        - {name: cursor_execution_id, in: query, schema: {type: string, maxLength: 200}}
+      responses:
+        '200':
+          description: Queue, global totals, safety window and next cursor
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ReviewQueue'}
+        '400': {$ref: '#/components/responses/InvalidRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {description: Billing store unavailable}
+  /api/v1/admin/billing/review-required/{execution}/{action}:
+    post:
+      tags: [billing]
+      operationId: disposeReviewExecution
+      summary: Audited manual release or pinned-reservation settlement (platform admin)
+      description: |
+        This operation moves money. The actor comes exclusively from the session.
+        release charges zero; settle charges the reservation pinned at admission,
+        not an inferred provider usage amount. The server enforces the recovery
+        age window and rejects chargeable receipts and terminal executions under
+        row locks. Repeated or conflicting operations return 409 without another
+        posting. If the response is lost, refresh the queue and ledger before retry.
+        Exception-resolution records are separate and never substitute for this operation.
+      parameters:
+        - {name: execution, in: path, required: true, schema: {type: string}}
+        - {name: action, in: path, required: true, schema: {type: string, enum: [release, settle]}}
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: {type: string, minLength: 1, maxLength: 512}
+      responses:
+        '200':
+          description: Committed account projection and debit/release ledger entries
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ReviewDisposition'}
+        '400': {$ref: '#/components/responses/InvalidRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: Execution not found}
+        '409': {description: Terminal execution, chargeable receipt, safety window or ledger conflict}
+        '503': {description: Outcome unavailable; refresh queue and ledger before retry}
+
 components:
 
   securitySchemes:
@@ -2146,6 +2205,56 @@ components:
                   message: internal error
                   request_id: 8f1c0b2e4d5a6f708192a3b4c5d6e7f8
   schemas:
+    ReviewQueue:
+      type: object
+      required: [items, next_cursor, totals, now, min_age_seconds]
+      properties:
+        now: {type: string, format: date-time}
+        min_age_seconds: {type: number}
+        next_cursor:
+          type: [object, 'null']
+          properties:
+            updated_at: {type: string, format: date-time}
+            execution_id: {type: string}
+        totals:
+          type: object
+          properties:
+            open: {type: string}
+            sla_breaches: {type: string}
+            oldest_age_seconds: {type: number}
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              execution_id: {type: string}
+              organization_id: {type: string}
+              model: {type: string}
+              reserved_micro: {type: string}
+              updated_at: {type: string, format: date-time}
+              age_seconds: {type: number}
+              sla_breached: {type: boolean}
+              reason: {type: [string, 'null']}
+    ReviewDisposition:
+      type: object
+      properties:
+        execution_id: {type: string}
+        organization_id: {type: string}
+        action: {type: string, enum: [release, settle]}
+        status: {type: string, enum: [released, settled]}
+        charge_micro: {type: string}
+        policy: {type: string}
+        request_id: {type: string}
+        account: {$ref: '#/components/schemas/BillingAccount'}
+        debit_entry:
+          anyOf:
+            - {$ref: '#/components/schemas/BillingEntry'}
+            - {type: 'null'}
+        release_entry:
+          anyOf:
+            - {$ref: '#/components/schemas/BillingEntry'}
+            - {type: 'null'}
+
     ErrorEnvelope:
       type: object
       description: The shared T01A error envelope used by every service in this repository.

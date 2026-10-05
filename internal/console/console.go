@@ -56,6 +56,7 @@ import (
 	"log"
 	"time"
 
+	"llm-gateway/internal/billing"
 	"llm-gateway/internal/iam"
 	"llm-gateway/internal/organization"
 
@@ -210,7 +211,10 @@ type Options struct {
 	Statements StatementService
 	// Exceptions backs the durable money-exception queue (migration 000011) and
 	// the platform resolution write. nil answers 503.
-	Exceptions MoneyExceptionService
+	Exceptions   MoneyExceptionService
+	Review       ReviewService
+	ReviewMinAge time.Duration
+	ReviewLease  time.Duration
 	// Now is the clock used for the usage window and key-expiry validation. nil
 	// means time.Now().UTC().
 	Now func() time.Time
@@ -236,6 +240,9 @@ type server struct {
 	accounts         BillingAccountService
 	statements       StatementService
 	exceptions       MoneyExceptionService
+	review           ReviewService
+	reviewMinAge     time.Duration
+	reviewLease      time.Duration
 	secureCookies    bool
 	sessionTTL       time.Duration
 	retryAfter       time.Duration
@@ -264,6 +271,9 @@ func newServer(opts Options) (*server, error) {
 		accounts:         opts.Accounts,
 		statements:       opts.Statements,
 		exceptions:       opts.Exceptions,
+		review:           opts.Review,
+		reviewMinAge:     opts.ReviewMinAge,
+		reviewLease:      opts.ReviewLease,
 		secureCookies:    opts.SecureCookies,
 		sessionTTL:       opts.SessionTTL,
 		retryAfter:       opts.RetryAfter,
@@ -295,6 +305,12 @@ func newServer(opts Options) (*server, error) {
 	}
 	if s.exceptions == nil {
 		s.exceptions = unavailableMoneyExceptionService{}
+	}
+	if s.reviewMinAge <= 0 {
+		s.reviewMinAge = billing.DefaultRecoveryMaxExecutionDuration + billing.DefaultRecoveryGrace
+	}
+	if s.reviewLease <= 0 {
+		s.reviewLease = billing.DefaultLivenessLease
 	}
 	if s.sessionTTL <= 0 {
 		s.sessionTTL = DefaultSessionTTL
@@ -406,6 +422,8 @@ func Register(engine *route.Engine, opts Options) error {
 	engine.GET(PathOrgBillingExceptions, s.withSession, s.listOrgBillingExceptions)
 	engine.GET(PathOrgBillingException, s.withSession, s.getOrgBillingException)
 	engine.POST(PathAdminBillingExceptionResolution, s.withSession, s.withCSRF, s.withPlatformAdmin, s.resolveBillingException)
+	engine.GET("/api/v1/admin/billing/review-required", s.withSession, s.withPlatformAdmin, s.listReviewQueue)
+	engine.POST("/api/v1/admin/billing/review-required/:execution/:action", s.withSession, s.withCSRF, s.withPlatformAdmin, s.disposeReviewExecution)
 	return nil
 }
 
