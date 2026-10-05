@@ -114,7 +114,7 @@ describe('streaming chat completions', () => {
   it('parses an event split across two reads and tolerates CRLF', async () => {
     const event = `data: ${JSON.stringify({ choices: [{ delta: { content: 'split' } }] })}\r\n\r\n`;
     const half = Math.floor(event.length / 2);
-    mockFetch(() => sseResponse([event.slice(0, half), event.slice(half)]));
+    mockFetch(() => sseResponse([event.slice(0, half), event.slice(half), 'data: [DONE]\n\n']));
 
     const controller = new AbortController();
     const tokens = await collect(
@@ -123,6 +123,24 @@ describe('streaming chat completions', () => {
 
     expect(tokens).toEqual(['split']);
     vi.unstubAllGlobals();
+  });
+
+  it('preserves partial deltas but rejects EOF without [DONE]', async () => {
+    mockFetch(() => sseResponse([delta('partial answer')]));
+    const controller = new AbortController();
+    const iterator = streamChatCompletion(API_KEY, { model: 'default', messages: [] }, controller.signal);
+    expect(await iterator.next()).toEqual({ value: 'partial answer', done: false });
+    await expect(iterator.next()).rejects.toMatchObject({ kind: 'network', message: expect.stringContaining('回答未完整结束') });
+    vi.unstubAllGlobals();
+  });
+
+  it('rejects an empty or truncated stream without [DONE]', async () => {
+    for (const chunks of [[], ['data: {"choices":']]) {
+      mockFetch(() => sseResponse(chunks));
+      await expect(collect(streamChatCompletion(API_KEY, { model: 'default', messages: [] }, new AbortController().signal)))
+        .rejects.toMatchObject({ kind: 'network' });
+      vi.unstubAllGlobals();
+    }
   });
 
   it('sends stream:true with a JSON body and the Bearer header', async () => {

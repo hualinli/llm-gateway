@@ -414,6 +414,7 @@ func TestAcceptInvitationMapping(t *testing.T) {
 	}{
 		{"unknown token", organization.ErrInvitationNotFound, http.StatusNotFound, "not_found"},
 		{"wrong email", organization.ErrInvitationEmailMismatch, http.StatusForbidden, "forbidden"},
+		{"membership conflict", organization.ErrInvitationConflict, http.StatusConflict, "conflict"},
 		{"already accepted", organization.ErrInvitationUsed, http.StatusConflict, "conflict"},
 		{"revoked", organization.ErrInvitationRevoked, http.StatusConflict, "conflict"},
 		{"expired", organization.ErrInvitationExpired, http.StatusConflict, "conflict"},

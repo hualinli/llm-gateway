@@ -100,7 +100,9 @@ export async function* streamChatCompletion(
   try {
     for (;;) {
       const { done, value } = await reader.read();
-      if (done) break;
+      if (done) {
+        throw apiErrorFromNetwork(new Error('回答未完整结束：连接在收到完成标记前关闭，请重试。'));
+      }
       // `TextDecoder` with `stream: true` keeps a multi-byte character that is
       // split across reads. SSE events are separated by a blank line, which may
       // legally be written as LF or CRLF, so normalise complete CRLF pairs: a

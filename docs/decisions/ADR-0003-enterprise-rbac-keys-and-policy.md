@@ -49,6 +49,8 @@ service AdminService {
 ### 2.4 邀请
 `invitations(org_id, email_normalized, role, token_hash, expires_at, accepted_at, created_by, created_at)`：随机 token 只存 SHA-256；固定 email+role，接受时校验 email 匹配、未过期、未接受，且一次事务内 `accepted_at` + 建 membership + 递增 `org_revision`。管理员复制链接，不自动发邮件；邮箱未验证语义在 API 与 UI 文案中写明。
 
+接受邀请时与成员变更共用组织锁，并重新校验邀请者当前的邀请/授予角色权限。邀请只能新增成员或恢复被移除的成员；已有 active membership 返回 409，不覆盖角色。恢复邀请必须在最近一次移除之后创建，旧邀请不能撤销移除决定；重新加入需要管理员发出新邀请。
+
 ### 2.5 组织级短事务与最后 owner 保护
 成员变更（移除/降权/角色变更/owner 转移）在**组织级串行化短事务**内执行：`SELECT ... FROM organizations WHERE id=$1 FOR UPDATE`（或等价的 advisory lock），再校验“至少一个 owner 且不能移除/降级最后一个 owner”、不能授予 `platform_admin`、不能自我提升为 owner（除 owner 转移专用路径）。每个变更递增 `organizations.org_revision`。
 

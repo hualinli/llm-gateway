@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"os"
 	"runtime"
@@ -435,9 +436,10 @@ VALUES ('evt_exec_1_1', 'tenant-1', 1, 1, 'key-1', 'exec_1_1', 'm', 'p', 5, 5, 1
 		base.Add(time.Second)); err != nil {
 		t.Fatal(err)
 	}
-	for _, event := range []Event{orphan, billed, billed} {
+	// Stream IDs use the same fixed clock as the reconciliation window.
+	for i, event := range []Event{orphan, billed, billed} {
 		payload := mustMarshalEvent(t, event)
-		if err := rdb.XAdd(ctx, &redis.XAddArgs{Stream: StreamName, Values: map[string]any{"data": payload}}).Err(); err != nil {
+		if err := rdb.XAdd(ctx, &redis.XAddArgs{Stream: StreamName, ID: fmt.Sprintf("%d-%d", base.Add(time.Second).UnixMilli(), i), Values: map[string]any{"data": payload}}).Err(); err != nil {
 			t.Fatal(err)
 		}
 	}

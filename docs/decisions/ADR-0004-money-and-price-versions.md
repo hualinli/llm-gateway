@@ -102,3 +102,9 @@ UNIQUE (business_id, kind)
 - **用 `UPDATE billing_entries` 做冲正**：审计链路会丢事实；反向流水保留完整历史且可重算。
 - **`ON CONFLICT DO NOTHING` 静默幂等**：同键异 payload 会被吞掉，调用方以为新 payload 生效；必须显式冲突。
 - **用 Redis 作为余额事实源**：Redis 不是持久账本，重启/裁剪会丢资金事实；PG 事务 + 行锁才是首版答案。
+
+## 计费请求的输入/输出边界（review 修复）
+
+PG 计费模式当前只接受单份输出：省略 `n` 或显式传整数 `n=1`；其他值在预占和上游调用前返回 400 `invalid_request`。`max_tokens` 是每份输出的上限，不能用它为多份输出的合计费用预占。
+
+输入只支持文本字符串或纯 `type=text` 内容数组。图片 URL、内联图片、音频、文件、tool/function 内容和未知 message 字段均拒绝；媒体的 token 成本不能由 URL/JSON 字节数推导。纯文本仍按原始 JSON 大小加模板开销保守预占。后续支持多份输出或媒体前，必须实现相应的合计/模型计费上界。
