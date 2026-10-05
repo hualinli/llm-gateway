@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -226,6 +228,129 @@ func TestRedisMeteringPendingIsReclaimed(t *testing.T) {
 		t.Fatalf("pending=%d after reclaim, want 0", pending.Count)
 	}
 }
+
+func TestConsumerRecoversWhenRedisStartsLater(t *testing.T) {
+	rdb := newRedisIntegrationClient(t)
+	defer rdb.Close()
+	resetMeteringStreams(t, rdb)
+	defer resetMeteringStreams(t, rdb)
+	upstream := rdb.Options().Addr
+	probe, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := probe.Addr().String()
+	probe.Close()
+	client := redis.NewClient(&redis.Options{Addr: addr, MaxRetries: 0})
+	defer client.Close()
+	ledger := NewMemoryLedger()
+	consumer := NewConsumerWithOptions(client, ledger, ConsumerOptions{ReadBlock: 20 * time.Millisecond, ReclaimEvery: time.Hour})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := consumer.EnsureGroup(ctx); err == nil {
+		t.Fatal("unavailable Redis was treated as a created group")
+	}
+	go consumer.Run(ctx)
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	go func() {
+		for {
+			in, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				out, err := net.Dial("tcp", upstream)
+				if err != nil {
+					in.Close()
+					return
+				}
+				go func() { _, _ = io.Copy(out, in); out.Close() }()
+				_, _ = io.Copy(in, out)
+				in.Close()
+			}()
+		}
+	}()
+	appendIntegrationEvent(t, rdb, "redis-recovered")
+	waitFor(t, 3*time.Second, func() bool { count, _ := ledger.Count(); return count == 1 })
+}
+
+func TestConsumerRecreatesDeletedGroup(t *testing.T) {
+	rdb := newRedisIntegrationClient(t)
+	defer rdb.Close()
+	resetMeteringStreams(t, rdb)
+	defer resetMeteringStreams(t, rdb)
+	ledger := NewMemoryLedger()
+	consumer := NewConsumerWithOptions(rdb, ledger, ConsumerOptions{ReadBlock: 20 * time.Millisecond, ReclaimEvery: time.Hour})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go consumer.Run(ctx)
+	waitFor(t, time.Second, func() bool { return consumer.EnsureGroup(ctx) == nil })
+	if err := rdb.XGroupDestroy(ctx, StreamName, GroupName).Err(); err != nil {
+		t.Fatal(err)
+	}
+	appendIntegrationEvent(t, rdb, "group-recreated")
+	waitFor(t, 3*time.Second, func() bool { count, _ := ledger.Count(); return count == 1 })
+}
+
+func TestReclaimPaginatesPastPoisonPending(t *testing.T) {
+	rdb := newRedisIntegrationClient(t)
+	defer rdb.Close()
+	resetMeteringStreams(t, rdb)
+	defer resetMeteringStreams(t, rdb)
+	ctx := context.Background()
+	ledger := &poisonLedger{inner: NewMemoryLedger()}
+	consumer := NewConsumerWithOptions(rdb, ledger, ConsumerOptions{ReadCount: 1, PendingMinIdle: time.Millisecond})
+	if err := consumer.EnsureGroup(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"poison", "good-1", "good-2"} {
+		appendIntegrationEvent(t, rdb, id)
+	}
+	_, err := rdb.XReadGroup(ctx, &redis.XReadGroupArgs{Group: GroupName, Consumer: "crashed", Streams: []string{StreamName, ">"}, Count: 3}).Result()
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(10 * time.Millisecond)
+	consumer.reclaimPending(ctx)
+	count, _ := ledger.Count()
+	if count != 2 {
+		t.Fatalf("reclaimed ledger count=%d, want 2", count)
+	}
+	pending, err := rdb.XPending(ctx, StreamName, GroupName).Result()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pending.Count != 1 {
+		t.Fatalf("pending=%d, want poison only", pending.Count)
+	}
+}
+
+func appendIntegrationEvent(t *testing.T, rdb *redis.Client, id string) {
+	t.Helper()
+	payload, err := json.Marshal(integrationEvent(id, "tenant-a", 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := rdb.XAdd(context.Background(), &redis.XAddArgs{Stream: StreamName, Values: map[string]any{"data": string(payload)}}).Err(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+type poisonLedger struct{ inner *MemoryLedger }
+
+func (l *poisonLedger) Add(e Event) (bool, error) {
+	if e.EventID == "poison" {
+		return false, errors.New("poison")
+	}
+	return l.inner.Add(e)
+}
+func (l *poisonLedger) Count() (int, error)                  { return l.inner.Count() }
+func (l *poisonLedger) Balance(tenant string) (int64, error) { return l.inner.Balance(tenant) }
+func (l *poisonLedger) Snapshot() (map[string]Event, error)  { return l.inner.Snapshot() }
 
 func newRedisIntegrationClient(t *testing.T) *redis.Client {
 	t.Helper()

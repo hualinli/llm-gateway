@@ -23,11 +23,11 @@
 
 当前主要矛盾已经不是“业务链路是否成立”，而是如何把已经成立的 Demo v0 固化为持续验证，并补齐生产可靠性边界：
 
-1. **Demo 已可感知但尚未全自动**：核心服务可一次启动，Mock 按设计手工启停；正常、切备、双故障已跑通，但尚未形成一次命令的故障编排和连续证据；
+1. **Demo 已可重复验收**：`make demo-accept` 连续三轮验证正常、切备、双故障、入账和对账；深层故障矩阵仍待覆盖；
 2. **运行语义尚未完全闭环**：控制面只能展示 desired 与实例最近一次报告，不能可靠判断全部目标 Gateway 是否 active；
-3. **计量恢复还有结构性边界**：Consumer 建组自愈、pending 分页、Stream 保留、对账分页和大 spool 恢复尚未完成；
+3. **计量恢复还有结构性边界**：Consumer 建组自愈和 pending 分页已有集成测试；Stream 保留、对账分页和大 spool 恢复尚未完成；
 4. **安全边界仍未生产化**：Compose 已强制 PG、管理认证、限流 fail-closed 和活跃流上限，但 gRPC TLS、诊断与计量查询接口隔离、secret 管理仍未完成；直接运行二进制仍有宽松回退默认值；
-5. **可观测与性能证据不足**：没有 CI、正式容量报告、直连基线和告警；Metering 抓取已经接线，但 Dashboard 尚未完整利用。
+5. **可观测与性能证据不足**：CI workflow 和本机直连基线已有，远端 CI 结果、正式容量边界和告警仍缺；Metering 抓取已经接线，但 Dashboard 尚未完整利用。
 
 因此当前最准确的定位仍是“生产导向的 LLM 流式网关原型”，不是生产级网关。
 
@@ -97,12 +97,12 @@
 | ✅ | 可控进程外 mock | 支持 TTFT、token interval、HTTP 错误、hang、fail-after、并发上限和 echo |
 | ✅ | 测试基础 | 143 个测试；本轮 `go test -race ./...`、`go vet ./...`、`go build ./...` 均通过 |
 | ✅ | Redis/PostgreSQL 集成测试 | 本轮 `make integration-test` 通过，覆盖 Redis limiter/metering、PG ledger/control/audit/migrations |
-| 🟡 | 压测器 | 能统计 TTFT/总耗时/分位数并拒绝无 `[DONE]` 的截断流；没有 JSON 报告、chunk jitter、直连对照和资源采集 |
+| 🟡 | 压测器 | 能统计 TTFT/总耗时/分位数并拒绝无 `[DONE]` 的截断流；已有 JSON 报告、直连对照和 Gateway 资源采集，尚无 chunk jitter 与连接诊断 |
 | ⚠️ | 指标口径 | `gateway_requests_total` 不包含 auth/limiter 提前返回；TTFT 实际是首个 SSE data event；tenant/model 标签仍有高基数风险 |
 | 🟡 | 指标接线 | Prometheus 已抓 Gateway 和 Metering；Dashboard 尚未完整展示计量恢复指标 |
-| ⬜ | CI | 仓库没有 CI workflow，当前验证依赖人工执行 |
-| 🟡 | Demo v0 | 应用镜像、迁移、健康检查、`demo-up/config/smoke/down` 已接线；Mock 刻意手工启停，故障编排和证据保存尚未自动化 |
-| ⬜ | 正式性能证据 | 没有直连基线、容量拐点、慢客户端资源上界或故障恢复报告 |
+| 🟡 | CI | workflow 已提交并在本地通过相应测试；远端运行结果待确认 |
+| 🟡 | Demo v0 | 应用镜像、迁移、健康检查及一键三轮故障编排已接线；深层场景仍待自动化 |
+| 🟡 | 性能证据 | [本机直连/网关基线与切备报告](verification/2026-09-26/performance/README.md)已归档；容量拐点和慢客户端资源上界未验证 |
 
 ## 4. 已关闭的历史问题
 
@@ -172,11 +172,11 @@
 
 | 阶段 | 当前状态 | 判断 |
 |---|---|---|
-| Phase 0：基线与事实源 | 🟡 部分完成 | 依赖版本已固定、测试分层和历史证据已有；CI、当前基线报告和 README 精简未完成 |
-| Phase 1：Demo v0 | 🟡 主链路完成 | 核心服务入口、动态配置、正常流、切备、双故障和入账已验证；统一故障编排、连续 3 次和证据文件未完成 |
-| Phase 2：核心语义与故障闭环 | 🟡 部分完成 | 多项核心不变量已有实现与测试；配置 active 聚合、Consumer 自愈和故障矩阵未完成 |
+| Phase 0：基线与事实源 | 🟡 部分完成 | 依赖版本、CI workflow、本地基线已有；远端 CI 结果和 README 精简未完成 |
+| Phase 1：Demo v0 | 🟡 主链路完成 | 核心服务、动态配置和一键三轮 Demo 已验证并留存证据 |
+| Phase 2：核心语义与故障闭环 | 🟡 部分完成 | Consumer 自愈已有集成测试；配置 active 聚合与完整故障矩阵未完成 |
 | Phase 3：Demo v1 与持续验证 | ⬜ 未完成 | 无端到端 CI，深层故障场景尚未进入统一演示 |
-| Phase 4：性能与容量 | ⬜ 未完成 | 有压测工具，没有可追溯的容量与恢复报告 |
+| Phase 4：性能与容量 | 🟡 部分完成 | 本机正常负载与切备压测已归档；容量边界、慢客户端和深层恢复仍待验证 |
 | Phase 5：面试交付与扩展 | 🟡 部分完成 | 架构叙事和历史复盘已有；一页概览、稳定演示和关键数字未完成 |
 
 ## 7. 本轮验证

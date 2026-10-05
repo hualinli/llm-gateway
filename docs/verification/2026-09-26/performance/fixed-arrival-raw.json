@@ -1,0 +1,1838 @@
+{
+  "environment": {
+    "commit": "4459c83216a880e082b2b8fe8aac73188713189f",
+    "platform": "macOS-27.0-arm64-arm-64bit",
+    "machine": "arm64",
+    "python": "3.9.6",
+    "go": "go version go1.26.3 darwin/arm64",
+    "docker_compose": "Docker Compose version v5.1.2",
+    "started_unix": 1790431235.726016,
+    "scenarios": "fixed arrival 100/300 requests/s at c64",
+    "cpu": "10",
+    "memory_bytes": "34359738368"
+  },
+  "index": {
+    "commit": "4459c83216a880e082b2b8fe8aac73188713189f",
+    "cases": [
+      {
+        "scenario": "direct-rate100",
+        "concurrency": 64,
+        "repeat": 1,
+        "success": 600,
+        "total": 600,
+        "status": {
+          "200": 600
+        }
+      },
+      {
+        "scenario": "direct-rate100",
+        "concurrency": 64,
+        "repeat": 2,
+        "success": 600,
+        "total": 600,
+        "status": {
+          "200": 600
+        }
+      },
+      {
+        "scenario": "direct-rate100",
+        "concurrency": 64,
+        "repeat": 3,
+        "success": 600,
+        "total": 600,
+        "status": {
+          "200": 600
+        }
+      },
+      {
+        "scenario": "direct-rate300",
+        "concurrency": 64,
+        "repeat": 1,
+        "success": 900,
+        "total": 900,
+        "status": {
+          "200": 900
+        }
+      },
+      {
+        "scenario": "direct-rate300",
+        "concurrency": 64,
+        "repeat": 2,
+        "success": 900,
+        "total": 900,
+        "status": {
+          "200": 900
+        }
+      },
+      {
+        "scenario": "direct-rate300",
+        "concurrency": 64,
+        "repeat": 3,
+        "success": 900,
+        "total": 900,
+        "status": {
+          "200": 900
+        }
+      },
+      {
+        "scenario": "gateway-rate100",
+        "concurrency": 64,
+        "repeat": 1,
+        "success": 600,
+        "total": 600,
+        "status": {
+          "200": 600
+        }
+      },
+      {
+        "scenario": "gateway-rate100",
+        "concurrency": 64,
+        "repeat": 2,
+        "success": 600,
+        "total": 600,
+        "status": {
+          "200": 600
+        }
+      },
+      {
+        "scenario": "gateway-rate100",
+        "concurrency": 64,
+        "repeat": 3,
+        "success": 600,
+        "total": 600,
+        "status": {
+          "200": 600
+        }
+      },
+      {
+        "scenario": "gateway-rate300",
+        "concurrency": 64,
+        "repeat": 1,
+        "success": 900,
+        "total": 900,
+        "status": {
+          "200": 900
+        }
+      },
+      {
+        "scenario": "gateway-rate300",
+        "concurrency": 64,
+        "repeat": 2,
+        "success": 900,
+        "total": 900,
+        "status": {
+          "200": 900
+        }
+      },
+      {
+        "scenario": "gateway-rate300",
+        "concurrency": 64,
+        "repeat": 3,
+        "success": 900,
+        "total": 900,
+        "status": {
+          "200": 900
+        }
+      }
+    ],
+    "reconciliation_ok": true
+  },
+  "reconciliation": {
+    "ok": true,
+    "report": {
+      "stream_messages": 9497,
+      "unique_events": 9497,
+      "invalid_events": 0,
+      "duplicate_events": 0,
+      "pending_messages": 0,
+      "dlq_messages": 0,
+      "ledger_rows": 9497,
+      "valid": 9497
+    }
+  },
+  "cases": [
+    {
+      "result": {
+        "target": "http://127.0.0.1:18080/v1/chat/completions",
+        "concurrency": 64,
+        "requests": 600,
+        "rate_limit_qps": 100,
+        "elapsed_seconds": 6.140940208,
+        "success_per_second": 97.70490831654097,
+        "report": {
+          "Total": 600,
+          "Success": 600,
+          "Errors": 0,
+          "Status": {
+            "200": 600
+          },
+          "TTFT": {
+            "P50": 21614291,
+            "P95": 25204792,
+            "P99": 26021125,
+            "Min": 20311208,
+            "Max": 27461000,
+            "Avg": 22131622
+          },
+          "TotalDur": {
+            "P50": 138149750,
+            "P95": 144116417,
+            "P99": 146651042,
+            "Min": 130768750,
+            "Max": 148571917,
+            "Avg": 138366419
+          },
+          "AvgChunks": 9
+        },
+        "scenario": "direct-rate100",
+        "repeat": 1,
+        "exit_code": 0,
+        "wall_started_unix": 1790431241.4548962
+      },
+      "resource_samples": [
+        {
+          "unix_time": 1790431241.4576719,
+          "gateway": {
+            "go_gc_duration_seconds_count": 0.0,
+            "go_memstats_heap_alloc_bytes": 1452976.0,
+            "process_cpu_seconds_total": 0.02,
+            "process_resident_memory_bytes": 20566016.0
+          }
+        },
+        {
+          "unix_time": 1790431241.983232,
+          "gateway": {
+            "go_gc_duration_seconds_count": 1.0,
+            "go_memstats_heap_alloc_bytes": 1792408.0,
+            "process_cpu_seconds_total": 0.03,
+            "process_resident_memory_bytes": 22364160.0
+          }
+        },
+        {
+          "unix_time": 1790431242.5025542,
+          "gateway": {
+            "go_gc_duration_seconds_count": 1.0,
+            "go_memstats_heap_alloc_bytes": 1906408.0,
+            "process_cpu_seconds_total": 0.04,
+            "process_resident_memory_bytes": 22364160.0
+          }
+        },
+        {
+          "unix_time": 1790431243.0154848,
+          "gateway": {
+            "go_gc_duration_seconds_count": 1.0,
+            "go_memstats_heap_alloc_bytes": 1965384.0,
+            "process_cpu_seconds_total": 0.04,
+            "process_resident_memory_bytes": 22495232.0
+          }
+        },
+        {
+          "unix_time": 1790431243.532515,
+          "gateway": {
+            "go_gc_duration_seconds_count": 1.0,
+            "go_memstats_heap_alloc_bytes": 2019784.0,
+            "process_cpu_seconds_total": 0.04,
+            "process_resident_memory_bytes": 22765568.0
+          }
+        },
+        {
+          "unix_time": 1790431244.0472572,
+          "gateway": {
+            "go_gc_duration_seconds_count": 1.0,
+            "go_memstats_heap_alloc_bytes": 2132200.0,
+            "process_cpu_seconds_total": 0.05,
+            "process_resident_memory_bytes": 22765568.0
+          }
+        },
+        {
+          "unix_time": 1790431244.561103,
+          "gateway": {
+            "go_gc_duration_seconds_count": 2.0,
+            "go_memstats_heap_alloc_bytes": 1611488.0,
+            "process_cpu_seconds_total": 0.05,
+            "process_resident_memory_bytes": 23273472.0
+          }
+        },
+        {
+          "unix_time": 1790431245.07449,
+          "gateway": {
+            "go_gc_duration_seconds_count": 2.0,
+            "go_memstats_heap_alloc_bytes": 1686576.0,
+            "process_cpu_seconds_total": 0.05,
+            "process_resident_memory_bytes": 23273472.0
+          }
+        },
+        {
+          "unix_time": 1790431245.589804,
+          "gateway": {
+            "go_gc_duration_seconds_count": 2.0,
+            "go_memstats_heap_alloc_bytes": 1764288.0,
+            "process_cpu_seconds_total": 0.05,
+            "process_resident_memory_bytes": 23408640.0
+          }
+        },
+        {
+          "unix_time": 1790431246.1021912,
+          "gateway": {
+            "go_gc_duration_seconds_count": 2.0,
+            "go_memstats_heap_alloc_bytes": 1849664.0,
+            "process_cpu_seconds_total": 0.06,
+            "process_resident_memory_bytes": 23543808.0
+          }
+        },
+        {
+          "unix_time": 1790431246.6172018,
+          "gateway": {
+            "go_gc_duration_seconds_count": 2.0,
+            "go_memstats_heap_alloc_bytes": 1949504.0,
+            "process_cpu_seconds_total": 0.06,
+            "process_resident_memory_bytes": 23687168.0
+          }
+        },
+        {
+          "unix_time": 1790431247.126467,
+          "gateway": {
+            "go_gc_duration_seconds_count": 2.0,
+            "go_memstats_heap_alloc_bytes": 2055072.0,
+            "process_cpu_seconds_total": 0.06,
+            "process_resident_memory_bytes": 23687168.0
+          }
+        },
+        {
+          "unix_time": 1790431247.641397,
+          "gateway": {
+            "go_gc_duration_seconds_count": 2.0,
+            "go_memstats_heap_alloc_bytes": 2206328.0,
+            "process_cpu_seconds_total": 0.06,
+            "process_resident_memory_bytes": 23965696.0
+          }
+        },
+        {
+          "unix_time": 1790431248.159473,
+          "gateway": {
+            "go_gc_duration_seconds_count": 3.0,
+            "go_memstats_heap_alloc_bytes": 1697728.0,
+            "process_cpu_seconds_total": 0.06,
+            "process_resident_memory_bytes": 24096768.0
+          }
+        },
+        {
+          "unix_time": 1790431248.6695092,
+          "gateway": {
+            "go_gc_duration_seconds_count": 3.0,
+            "go_memstats_heap_alloc_bytes": 1779824.0,
+            "process_cpu_seconds_total": 0.06,
+            "process_resident_memory_bytes": 24096768.0
+          }
+        },
+        {
+          "unix_time": 1790431249.180018,
+          "gateway": {
+            "go_gc_duration_seconds_count": 3.0,
+            "go_memstats_heap_alloc_bytes": 1864192.0,
+            "process_cpu_seconds_total": 0.06,
+            "process_resident_memory_bytes": 24096768.0
+          }
+        }
+      ],
+      "loadtest_log": "2026/09/26 22:00:48 done in 6.140940208s total=600 success=600 errors=0 status=map[200:600]\n2026/09/26 22:00:48 TTFT  P50=21.614291ms P95=25.204792ms P99=26.021125ms min=20.311208ms max=27.461ms avg=22.131622ms\n2026/09/26 22:00:48 Total P50=138.14975ms P95=144.116417ms P99=146.651042ms avgChunks=9.0\n2026/09/26 22:00:48 throughput=97.7 req/s\n"
+    },
+    {
+      "result": {
+        "target": "http://127.0.0.1:18080/v1/chat/completions",
+        "concurrency": 64,
+        "requests": 600,
+        "rate_limit_qps": 100,
+        "elapsed_seconds": 6.138697084,
+        "success_per_second": 97.74061039171484,
+        "report": {
+          "Total": 600,
+          "Success": 600,
+          "Errors": 0,
+          "Status": {
+            "200": 600
+          },
+          "TTFT": {
+            "P50": 21651000,
+            "P95": 25108625,
+            "P99": 26063792,
+            "Min": 20312958,
+            "Max": 26968291,
+            "Avg": 22223388
+          },
+          "TotalDur": {
+            "P50": 138235709,
+            "P95": 144408041,
+            "P99": 146615750,
+            "Min": 127609375,
+            "Max": 151021250,
+            "Avg": 138441953
+          },
+          "AvgChunks": 9
+        },
+        "scenario": "direct-rate100",
+        "repeat": 2,
+        "exit_code": 0,
+        "wall_started_unix": 1790431249.195134
+      },
+      "resource_samples": [
+        {
+          "unix_time": 1790431249.2001762,
+          "gateway": {
+            "go_gc_duration_seconds_count": 3.0,
+            "go_memstats_heap_alloc_bytes": 1956928.0,
+            "process_cpu_seconds_total": 0.06,
+            "process_resident_memory_bytes": 24227840.0
+          }
+        },
+        {
+          "unix_time": 1790431249.71792,
+          "gateway": {
+            "go_gc_duration_seconds_count": 3.0,
+            "go_memstats_heap_alloc_bytes": 2055760.0,
+            "process_cpu_seconds_total": 0.07,
+            "process_resident_memory_bytes": 24227840.0
+          }
+        },
+        {
+          "unix_time": 1790431250.240617,
+          "gateway": {
+            "go_gc_duration_seconds_count": 3.0,
+            "go_memstats_heap_alloc_bytes": 2189536.0,
+            "process_cpu_seconds_total": 0.08,
+            "process_resident_memory_bytes": 24227840.0
+          }
+        },
+        {
+          "unix_time": 1790431250.749383,
+          "gateway": {
+            "go_gc_duration_seconds_count": 4.0,
+            "go_memstats_heap_alloc_bytes": 1461520.0,
+            "process_cpu_seconds_total": 0.08,
+            "process_resident_memory_bytes": 23633920.0
+          }
+        },
+        {
+          "unix_time": 1790431251.261174,
+          "gateway": {
+            "go_gc_duration_seconds_count": 4.0,
+            "go_memstats_heap_alloc_bytes": 1500752.0,
+            "process_cpu_seconds_total": 0.08,
+            "process_resident_memory_bytes": 23633920.0
+          }
+        },
+        {
+          "unix_time": 1790431251.7724302,
+          "gateway": {
+            "go_gc_duration_seconds_count": 4.0,
+            "go_memstats_heap_alloc_bytes": 1591328.0,
+            "process_cpu_seconds_total": 0.08,
+            "process_resident_memory_bytes": 23633920.0
+          }
+        },
+        {
+          "unix_time": 1790431252.2913148,
+          "gateway": {
+            "go_gc_duration_seconds_count": 4.0,
+            "go_memstats_heap_alloc_bytes": 1640352.0,
+            "process_cpu_seconds_total": 0.08,
+            "process_resident_memory_bytes": 23633920.0
+          }
+        },
+        {
+          "unix_time": 1790431252.808641,
+          "gateway": {
+            "go_gc_duration_seconds_count": 4.0,
+            "go_memstats_heap_alloc_bytes": 1747792.0,
+            "process_cpu_seconds_total": 0.08,
+            "process_resident_memory_bytes": 23633920.0
+          }
+        },
+        {
+          "unix_time": 1790431253.3252559,
+          "gateway": {
+            "go_gc_duration_seconds_count": 4.0,
+            "go_memstats_heap_alloc_bytes": 1862384.0,
+            "process_cpu_seconds_total": 0.08,
+            "process_resident_memory_bytes": 23633920.0
+          }
+        },
+        {
+          "unix_time": 1790431253.839951,
+          "gateway": {
+            "go_gc_duration_seconds_count": 4.0,
+            "go_memstats_heap_alloc_bytes": 1938160.0,
+            "process_cpu_seconds_total": 0.08,
+            "process_resident_memory_bytes": 23633920.0
+          }
+        },
+        {
+          "unix_time": 1790431254.3578298,
+          "gateway": {
+            "go_gc_duration_seconds_count": 5.0,
+            "go_memstats_heap_alloc_bytes": 1699952.0,
+            "process_cpu_seconds_total": 0.1,
+            "process_resident_memory_bytes": 23777280.0
+          }
+        },
+        {
+          "unix_time": 1790431254.873384,
+          "gateway": {
+            "go_gc_duration_seconds_count": 5.0,
+            "go_memstats_heap_alloc_bytes": 1782000.0,
+            "process_cpu_seconds_total": 0.11,
+            "process_resident_memory_bytes": 18247680.0
+          }
+        },
+        {
+          "unix_time": 1790431255.388258,
+          "gateway": {
+            "go_gc_duration_seconds_count": 5.0,
+            "go_memstats_heap_alloc_bytes": 1837296.0,
+            "process_cpu_seconds_total": 0.11,
+            "process_resident_memory_bytes": 19243008.0
+          }
+        }
+      ],
+      "loadtest_log": "2026/09/26 22:00:55 done in 6.138697084s total=600 success=600 errors=0 status=map[200:600]\n2026/09/26 22:00:55 TTFT  P50=21.651ms P95=25.108625ms P99=26.063792ms min=20.312958ms max=26.968291ms avg=22.223388ms\n2026/09/26 22:00:55 Total P50=138.235709ms P95=144.408041ms P99=146.61575ms avgChunks=9.0\n2026/09/26 22:00:55 throughput=97.7 req/s\n"
+    },
+    {
+      "result": {
+        "target": "http://127.0.0.1:18080/v1/chat/completions",
+        "concurrency": 64,
+        "requests": 600,
+        "rate_limit_qps": 100,
+        "elapsed_seconds": 6.13853625,
+        "success_per_second": 97.7431712649738,
+        "report": {
+          "Total": 600,
+          "Success": 600,
+          "Errors": 0,
+          "Status": {
+            "200": 600
+          },
+          "TTFT": {
+            "P50": 21770542,
+            "P95": 25331334,
+            "P99": 26298834,
+            "Min": 20366709,
+            "Max": 31030875,
+            "Avg": 22319908
+          },
+          "TotalDur": {
+            "P50": 139260542,
+            "P95": 145423875,
+            "P99": 147170000,
+            "Min": 130289334,
+            "Max": 151501875,
+            "Avg": 139274330
+          },
+          "AvgChunks": 9
+        },
+        "scenario": "direct-rate100",
+        "repeat": 3,
+        "exit_code": 0,
+        "wall_started_unix": 1790431255.395901
+      },
+      "resource_samples": [
+        {
+          "unix_time": 1790431255.399644,
+          "gateway": {
+            "go_gc_duration_seconds_count": 5.0,
+            "go_memstats_heap_alloc_bytes": 1886464.0,
+            "process_cpu_seconds_total": 0.11,
+            "process_resident_memory_bytes": 19243008.0
+          }
+        },
+        {
+          "unix_time": 1790431255.916109,
+          "gateway": {
+            "go_gc_duration_seconds_count": 5.0,
+            "go_memstats_heap_alloc_bytes": 1962144.0,
+            "process_cpu_seconds_total": 0.11,
+            "process_resident_memory_bytes": 19243008.0
+          }
+        },
+        {
+          "unix_time": 1790431256.431833,
+          "gateway": {
+            "go_gc_duration_seconds_count": 6.0,
+            "go_memstats_heap_alloc_bytes": 1565240.0,
+            "process_cpu_seconds_total": 0.11,
+            "process_resident_memory_bytes": 20115456.0
+          }
+        },
+        {
+          "unix_time": 1790431256.94718,
+          "gateway": {
+            "go_gc_duration_seconds_count": 6.0,
+            "go_memstats_heap_alloc_bytes": 1682904.0,
+            "process_cpu_seconds_total": 0.12,
+            "process_resident_memory_bytes": 20115456.0
+          }
+        },
+        {
+          "unix_time": 1790431257.457834,
+          "gateway": {
+            "go_gc_duration_seconds_count": 6.0,
+            "go_memstats_heap_alloc_bytes": 1770248.0,
+            "process_cpu_seconds_total": 0.12,
+            "process_resident_memory_bytes": 20115456.0
+          }
+        },
+        {
+          "unix_time": 1790431257.969022,
+          "gateway": {
+            "go_gc_duration_seconds_count": 6.0,
+            "go_memstats_heap_alloc_bytes": 1820456.0,
+            "process_cpu_seconds_total": 0.12,
+            "process_resident_memory_bytes": 20115456.0
+          }
+        },
+        {
+          "unix_time": 1790431258.482513,
+          "gateway": {
+            "go_gc_duration_seconds_count": 6.0,
+            "go_memstats_heap_alloc_bytes": 1904584.0,
+            "process_cpu_seconds_total": 0.12,
+            "process_resident_memory_bytes": 20115456.0
+          }
+        },
+        {
+          "unix_time": 1790431258.999029,
+          "gateway": {
+            "go_gc_duration_seconds_count": 7.0,
+            "go_memstats_heap_alloc_bytes": 1538416.0,
+            "process_cpu_seconds_total": 0.12,
+            "process_resident_memory_bytes": 20115456.0
+          }
+        },
+        {
+          "unix_time": 1790431259.510219,
+          "gateway": {
+            "go_gc_duration_seconds_count": 7.0,
+            "go_memstats_heap_alloc_bytes": 1632304.0,
+            "process_cpu_seconds_total": 0.13,
+            "process_resident_memory_bytes": 20115456.0
+          }
+        },
+        {
+          "unix_time": 1790431260.024517,
+          "gateway": {
+            "go_gc_duration_seconds_count": 7.0,
+            "go_memstats_heap_alloc_bytes": 1678464.0,
+            "process_cpu_seconds_total": 0.14,
+            "process_resident_memory_bytes": 20115456.0
+          }
+        },
+        {
+          "unix_time": 1790431260.5313752,
+          "gateway": {
+            "go_gc_duration_seconds_count": 7.0,
+            "go_memstats_heap_alloc_bytes": 1778272.0,
+            "process_cpu_seconds_total": 0.14,
+            "process_resident_memory_bytes": 20115456.0
+          }
+        },
+        {
+          "unix_time": 1790431261.0477371,
+          "gateway": {
+            "go_gc_duration_seconds_count": 7.0,
+            "go_memstats_heap_alloc_bytes": 1874752.0,
+            "process_cpu_seconds_total": 0.14,
+            "process_resident_memory_bytes": 20115456.0
+          }
+        },
+        {
+          "unix_time": 1790431261.564998,
+          "gateway": {
+            "go_gc_duration_seconds_count": 8.0,
+            "go_memstats_heap_alloc_bytes": 1683672.0,
+            "process_cpu_seconds_total": 0.14,
+            "process_resident_memory_bytes": 20385792.0
+          }
+        }
+      ],
+      "loadtest_log": "2026/09/26 22:01:01 done in 6.13853625s total=600 success=600 errors=0 status=map[200:600]\n2026/09/26 22:01:01 TTFT  P50=21.770542ms P95=25.331334ms P99=26.298834ms min=20.366709ms max=31.030875ms avg=22.319908ms\n2026/09/26 22:01:01 Total P50=139.260542ms P95=145.423875ms P99=147.17ms avgChunks=9.0\n2026/09/26 22:01:01 throughput=97.7 req/s\n"
+    },
+    {
+      "result": {
+        "target": "http://127.0.0.1:18080/v1/chat/completions",
+        "concurrency": 64,
+        "requests": 900,
+        "rate_limit_qps": 300,
+        "elapsed_seconds": 3.134740959,
+        "success_per_second": 287.1050628333593,
+        "report": {
+          "Total": 900,
+          "Success": 900,
+          "Errors": 0,
+          "Status": {
+            "200": 900
+          },
+          "TTFT": {
+            "P50": 21464084,
+            "P95": 24348042,
+            "P99": 25063250,
+            "Min": 20277250,
+            "Max": 27561459,
+            "Avg": 21867775
+          },
+          "TotalDur": {
+            "P50": 136654541,
+            "P95": 141125708,
+            "P99": 142564834,
+            "Min": 127959542,
+            "Max": 145612792,
+            "Avg": 136323536
+          },
+          "AvgChunks": 9
+        },
+        "scenario": "direct-rate300",
+        "repeat": 1,
+        "exit_code": 0,
+        "wall_started_unix": 1790431261.575249
+      },
+      "resource_samples": [
+        {
+          "unix_time": 1790431261.580374,
+          "gateway": {
+            "go_gc_duration_seconds_count": 8.0,
+            "go_memstats_heap_alloc_bytes": 1715736.0,
+            "process_cpu_seconds_total": 0.14,
+            "process_resident_memory_bytes": 20516864.0
+          }
+        },
+        {
+          "unix_time": 1790431262.095474,
+          "gateway": {
+            "go_gc_duration_seconds_count": 8.0,
+            "go_memstats_heap_alloc_bytes": 1822408.0,
+            "process_cpu_seconds_total": 0.14,
+            "process_resident_memory_bytes": 20647936.0
+          }
+        },
+        {
+          "unix_time": 1790431262.605047,
+          "gateway": {
+            "go_gc_duration_seconds_count": 8.0,
+            "go_memstats_heap_alloc_bytes": 1927640.0,
+            "process_cpu_seconds_total": 0.15,
+            "process_resident_memory_bytes": 20647936.0
+          }
+        },
+        {
+          "unix_time": 1790431263.124219,
+          "gateway": {
+            "go_gc_duration_seconds_count": 8.0,
+            "go_memstats_heap_alloc_bytes": 1990392.0,
+            "process_cpu_seconds_total": 0.15,
+            "process_resident_memory_bytes": 20791296.0
+          }
+        },
+        {
+          "unix_time": 1790431263.63235,
+          "gateway": {
+            "go_gc_duration_seconds_count": 8.0,
+            "go_memstats_heap_alloc_bytes": 2084312.0,
+            "process_cpu_seconds_total": 0.15,
+            "process_resident_memory_bytes": 20791296.0
+          }
+        },
+        {
+          "unix_time": 1790431264.151875,
+          "gateway": {
+            "go_gc_duration_seconds_count": 9.0,
+            "go_memstats_heap_alloc_bytes": 1626616.0,
+            "process_cpu_seconds_total": 0.15,
+            "process_resident_memory_bytes": 20647936.0
+          }
+        },
+        {
+          "unix_time": 1790431264.6662169,
+          "gateway": {
+            "go_gc_duration_seconds_count": 9.0,
+            "go_memstats_heap_alloc_bytes": 1720408.0,
+            "process_cpu_seconds_total": 0.15,
+            "process_resident_memory_bytes": 20647936.0
+          }
+        },
+        {
+          "unix_time": 1790431265.179392,
+          "gateway": {
+            "go_gc_duration_seconds_count": 9.0,
+            "go_memstats_heap_alloc_bytes": 1791976.0,
+            "process_cpu_seconds_total": 0.16,
+            "process_resident_memory_bytes": 20647936.0
+          }
+        }
+      ],
+      "loadtest_log": "2026/09/26 22:01:04 done in 3.134740959s total=900 success=900 errors=0 status=map[200:900]\n2026/09/26 22:01:04 TTFT  P50=21.464084ms P95=24.348042ms P99=25.06325ms min=20.27725ms max=27.561459ms avg=21.867775ms\n2026/09/26 22:01:04 Total P50=136.654541ms P95=141.125708ms P99=142.564834ms avgChunks=9.0\n2026/09/26 22:01:04 throughput=287.1 req/s\n"
+    },
+    {
+      "result": {
+        "target": "http://127.0.0.1:18080/v1/chat/completions",
+        "concurrency": 64,
+        "requests": 900,
+        "rate_limit_qps": 300,
+        "elapsed_seconds": 3.136572416,
+        "success_per_second": 286.9374210552262,
+        "report": {
+          "Total": 900,
+          "Success": 900,
+          "Errors": 0,
+          "Status": {
+            "200": 900
+          },
+          "TTFT": {
+            "P50": 21433333,
+            "P95": 24424917,
+            "P99": 25443375,
+            "Min": 20310125,
+            "Max": 33197500,
+            "Avg": 21936445
+          },
+          "TotalDur": {
+            "P50": 137131625,
+            "P95": 141204875,
+            "P99": 143143125,
+            "Min": 127693791,
+            "Max": 149641666,
+            "Avg": 136734263
+          },
+          "AvgChunks": 9
+        },
+        "scenario": "direct-rate300",
+        "repeat": 2,
+        "exit_code": 0,
+        "wall_started_unix": 1790431265.189065
+      },
+      "resource_samples": [
+        {
+          "unix_time": 1790431265.191691,
+          "gateway": {
+            "go_gc_duration_seconds_count": 9.0,
+            "go_memstats_heap_alloc_bytes": 1843560.0,
+            "process_cpu_seconds_total": 0.16,
+            "process_resident_memory_bytes": 20647936.0
+          }
+        },
+        {
+          "unix_time": 1790431265.7046669,
+          "gateway": {
+            "go_gc_duration_seconds_count": 9.0,
+            "go_memstats_heap_alloc_bytes": 1902616.0,
+            "process_cpu_seconds_total": 0.16,
+            "process_resident_memory_bytes": 20647936.0
+          }
+        },
+        {
+          "unix_time": 1790431266.220481,
+          "gateway": {
+            "go_gc_duration_seconds_count": 9.0,
+            "go_memstats_heap_alloc_bytes": 2001240.0,
+            "process_cpu_seconds_total": 0.16,
+            "process_resident_memory_bytes": 20647936.0
+          }
+        },
+        {
+          "unix_time": 1790431266.73909,
+          "gateway": {
+            "go_gc_duration_seconds_count": 9.0,
+            "go_memstats_heap_alloc_bytes": 2132760.0,
+            "process_cpu_seconds_total": 0.16,
+            "process_resident_memory_bytes": 20647936.0
+          }
+        },
+        {
+          "unix_time": 1790431267.249105,
+          "gateway": {
+            "go_gc_duration_seconds_count": 9.0,
+            "go_memstats_heap_alloc_bytes": 2247112.0,
+            "process_cpu_seconds_total": 0.17,
+            "process_resident_memory_bytes": 20647936.0
+          }
+        },
+        {
+          "unix_time": 1790431267.7658958,
+          "gateway": {
+            "go_gc_duration_seconds_count": 10.0,
+            "go_memstats_heap_alloc_bytes": 1690088.0,
+            "process_cpu_seconds_total": 0.18,
+            "process_resident_memory_bytes": 21049344.0
+          }
+        },
+        {
+          "unix_time": 1790431268.28356,
+          "gateway": {
+            "go_gc_duration_seconds_count": 10.0,
+            "go_memstats_heap_alloc_bytes": 1766008.0,
+            "process_cpu_seconds_total": 0.18,
+            "process_resident_memory_bytes": 21049344.0
+          }
+        },
+        {
+          "unix_time": 1790431268.79134,
+          "gateway": {
+            "go_gc_duration_seconds_count": 10.0,
+            "go_memstats_heap_alloc_bytes": 1930824.0,
+            "process_cpu_seconds_total": 0.18,
+            "process_resident_memory_bytes": 21843968.0
+          }
+        }
+      ],
+      "loadtest_log": "2026/09/26 22:01:08 done in 3.136572416s total=900 success=900 errors=0 status=map[200:900]\n2026/09/26 22:01:08 TTFT  P50=21.433333ms P95=24.424917ms P99=25.443375ms min=20.310125ms max=33.1975ms avg=21.936445ms\n2026/09/26 22:01:08 Total P50=137.131625ms P95=141.204875ms P99=143.143125ms avgChunks=9.0\n2026/09/26 22:01:08 throughput=286.9 req/s\n"
+    },
+    {
+      "result": {
+        "target": "http://127.0.0.1:18080/v1/chat/completions",
+        "concurrency": 64,
+        "requests": 900,
+        "rate_limit_qps": 300,
+        "elapsed_seconds": 3.138613958,
+        "success_per_second": 286.7507798166747,
+        "report": {
+          "Total": 900,
+          "Success": 900,
+          "Errors": 0,
+          "Status": {
+            "200": 900
+          },
+          "TTFT": {
+            "P50": 21396875,
+            "P95": 24229000,
+            "P99": 24817416,
+            "Min": 20291791,
+            "Max": 27646875,
+            "Avg": 21793076
+          },
+          "TotalDur": {
+            "P50": 136699500,
+            "P95": 141065041,
+            "P99": 142739583,
+            "Min": 129117708,
+            "Max": 144538000,
+            "Avg": 136351790
+          },
+          "AvgChunks": 9
+        },
+        "scenario": "direct-rate300",
+        "repeat": 3,
+        "exit_code": 0,
+        "wall_started_unix": 1790431268.8034182
+      },
+      "resource_samples": [
+        {
+          "unix_time": 1790431268.808834,
+          "gateway": {
+            "go_gc_duration_seconds_count": 11.0,
+            "go_memstats_heap_alloc_bytes": 1765560.0,
+            "process_cpu_seconds_total": 0.18,
+            "process_resident_memory_bytes": 21708800.0
+          }
+        },
+        {
+          "unix_time": 1790431269.32709,
+          "gateway": {
+            "go_gc_duration_seconds_count": 11.0,
+            "go_memstats_heap_alloc_bytes": 1830792.0,
+            "process_cpu_seconds_total": 0.18,
+            "process_resident_memory_bytes": 21708800.0
+          }
+        },
+        {
+          "unix_time": 1790431269.842485,
+          "gateway": {
+            "go_gc_duration_seconds_count": 11.0,
+            "go_memstats_heap_alloc_bytes": 1890216.0,
+            "process_cpu_seconds_total": 0.19,
+            "process_resident_memory_bytes": 21708800.0
+          }
+        },
+        {
+          "unix_time": 1790431270.353315,
+          "gateway": {
+            "go_gc_duration_seconds_count": 11.0,
+            "go_memstats_heap_alloc_bytes": 1989432.0,
+            "process_cpu_seconds_total": 0.19,
+            "process_resident_memory_bytes": 21708800.0
+          }
+        },
+        {
+          "unix_time": 1790431270.86852,
+          "gateway": {
+            "go_gc_duration_seconds_count": 11.0,
+            "go_memstats_heap_alloc_bytes": 2047144.0,
+            "process_cpu_seconds_total": 0.19,
+            "process_resident_memory_bytes": 21708800.0
+          }
+        },
+        {
+          "unix_time": 1790431271.38,
+          "gateway": {
+            "go_gc_duration_seconds_count": 11.0,
+            "go_memstats_heap_alloc_bytes": 2214072.0,
+            "process_cpu_seconds_total": 0.19,
+            "process_resident_memory_bytes": 21708800.0
+          }
+        },
+        {
+          "unix_time": 1790431271.897482,
+          "gateway": {
+            "go_gc_duration_seconds_count": 12.0,
+            "go_memstats_heap_alloc_bytes": 1663792.0,
+            "process_cpu_seconds_total": 0.19,
+            "process_resident_memory_bytes": 21708800.0
+          }
+        },
+        {
+          "unix_time": 1790431272.408295,
+          "gateway": {
+            "go_gc_duration_seconds_count": 12.0,
+            "go_memstats_heap_alloc_bytes": 1729392.0,
+            "process_cpu_seconds_total": 0.21,
+            "process_resident_memory_bytes": 21708800.0
+          }
+        }
+      ],
+      "loadtest_log": "2026/09/26 22:01:11 done in 3.138613958s total=900 success=900 errors=0 status=map[200:900]\n2026/09/26 22:01:11 TTFT  P50=21.396875ms P95=24.229ms P99=24.817416ms min=20.291791ms max=27.646875ms avg=21.793076ms\n2026/09/26 22:01:11 Total P50=136.6995ms P95=141.065041ms P99=142.739583ms avgChunks=9.0\n2026/09/26 22:01:11 throughput=286.8 req/s\n"
+    },
+    {
+      "result": {
+        "target": "http://127.0.0.1:8090/v1/chat/completions",
+        "concurrency": 64,
+        "requests": 600,
+        "rate_limit_qps": 100,
+        "elapsed_seconds": 6.138399875,
+        "success_per_second": 97.7453427958699,
+        "report": {
+          "Total": 600,
+          "Success": 600,
+          "Errors": 0,
+          "Status": {
+            "200": 600
+          },
+          "TTFT": {
+            "P50": 22654083,
+            "P95": 26165375,
+            "P99": 27103209,
+            "Min": 20663709,
+            "Max": 28683750,
+            "Avg": 23072457
+          },
+          "TotalDur": {
+            "P50": 138168625,
+            "P95": 143246584,
+            "P99": 146377250,
+            "Min": 130530000,
+            "Max": 149858042,
+            "Avg": 138414936
+          },
+          "AvgChunks": 9
+        },
+        "scenario": "gateway-rate100",
+        "repeat": 1,
+        "exit_code": 0,
+        "wall_started_unix": 1790431272.417932
+      },
+      "resource_samples": [
+        {
+          "unix_time": 1790431272.4210272,
+          "gateway": {
+            "go_gc_duration_seconds_count": 12.0,
+            "go_memstats_heap_alloc_bytes": 1788832.0,
+            "process_cpu_seconds_total": 0.21,
+            "process_resident_memory_bytes": 21708800.0
+          }
+        },
+        {
+          "unix_time": 1790431272.931884,
+          "gateway": {
+            "go_gc_duration_seconds_count": 16.0,
+            "go_memstats_heap_alloc_bytes": 3415232.0,
+            "process_cpu_seconds_total": 0.3,
+            "process_resident_memory_bytes": 24543232.0
+          }
+        },
+        {
+          "unix_time": 1790431273.449662,
+          "gateway": {
+            "go_gc_duration_seconds_count": 19.0,
+            "go_memstats_heap_alloc_bytes": 3393144.0,
+            "process_cpu_seconds_total": 0.35,
+            "process_resident_memory_bytes": 24674304.0
+          }
+        },
+        {
+          "unix_time": 1790431273.963082,
+          "gateway": {
+            "go_gc_duration_seconds_count": 23.0,
+            "go_memstats_heap_alloc_bytes": 2966480.0,
+            "process_cpu_seconds_total": 0.43,
+            "process_resident_memory_bytes": 25026560.0
+          }
+        },
+        {
+          "unix_time": 1790431274.474518,
+          "gateway": {
+            "go_gc_duration_seconds_count": 26.0,
+            "go_memstats_heap_alloc_bytes": 3324600.0,
+            "process_cpu_seconds_total": 0.53,
+            "process_resident_memory_bytes": 25300992.0
+          }
+        },
+        {
+          "unix_time": 1790431274.987602,
+          "gateway": {
+            "go_gc_duration_seconds_count": 29.0,
+            "go_memstats_heap_alloc_bytes": 3212840.0,
+            "process_cpu_seconds_total": 0.63,
+            "process_resident_memory_bytes": 25440256.0
+          }
+        },
+        {
+          "unix_time": 1790431275.498991,
+          "gateway": {
+            "go_gc_duration_seconds_count": 31.0,
+            "go_memstats_heap_alloc_bytes": 3668624.0,
+            "process_cpu_seconds_total": 0.69,
+            "process_resident_memory_bytes": 25440256.0
+          }
+        },
+        {
+          "unix_time": 1790431276.0112681,
+          "gateway": {
+            "go_gc_duration_seconds_count": 34.0,
+            "go_memstats_heap_alloc_bytes": 3416408.0,
+            "process_cpu_seconds_total": 0.78,
+            "process_resident_memory_bytes": 25858048.0
+          }
+        },
+        {
+          "unix_time": 1790431276.525598,
+          "gateway": {
+            "go_gc_duration_seconds_count": 37.0,
+            "go_memstats_heap_alloc_bytes": 3164472.0,
+            "process_cpu_seconds_total": 0.88,
+            "process_resident_memory_bytes": 25858048.0
+          }
+        },
+        {
+          "unix_time": 1790431277.0391371,
+          "gateway": {
+            "go_gc_duration_seconds_count": 39.0,
+            "go_memstats_heap_alloc_bytes": 3728304.0,
+            "process_cpu_seconds_total": 0.98,
+            "process_resident_memory_bytes": 25997312.0
+          }
+        },
+        {
+          "unix_time": 1790431277.5496361,
+          "gateway": {
+            "go_gc_duration_seconds_count": 41.0,
+            "go_memstats_heap_alloc_bytes": 4082008.0,
+            "process_cpu_seconds_total": 1.03,
+            "process_resident_memory_bytes": 26128384.0
+          }
+        },
+        {
+          "unix_time": 1790431278.060333,
+          "gateway": {
+            "go_gc_duration_seconds_count": 44.0,
+            "go_memstats_heap_alloc_bytes": 3342696.0,
+            "process_cpu_seconds_total": 1.12,
+            "process_resident_memory_bytes": 26030080.0
+          }
+        },
+        {
+          "unix_time": 1790431278.5707252,
+          "gateway": {
+            "go_gc_duration_seconds_count": 46.0,
+            "go_memstats_heap_alloc_bytes": 3016544.0,
+            "process_cpu_seconds_total": 1.2,
+            "process_resident_memory_bytes": 26030080.0
+          }
+        }
+      ],
+      "loadtest_log": "2026/09/26 22:01:18 done in 6.138399875s total=600 success=600 errors=0 status=map[200:600]\n2026/09/26 22:01:18 TTFT  P50=22.654083ms P95=26.165375ms P99=27.103209ms min=20.663709ms max=28.68375ms avg=23.072457ms\n2026/09/26 22:01:18 Total P50=138.168625ms P95=143.246584ms P99=146.37725ms avgChunks=9.0\n2026/09/26 22:01:18 throughput=97.7 req/s\n"
+    },
+    {
+      "result": {
+        "target": "http://127.0.0.1:8090/v1/chat/completions",
+        "concurrency": 64,
+        "requests": 600,
+        "rate_limit_qps": 100,
+        "elapsed_seconds": 6.140542542,
+        "success_per_second": 97.71123575744782,
+        "report": {
+          "Total": 600,
+          "Success": 600,
+          "Errors": 0,
+          "Status": {
+            "200": 600
+          },
+          "TTFT": {
+            "P50": 22540042,
+            "P95": 26205209,
+            "P99": 27299708,
+            "Min": 20592333,
+            "Max": 27861792,
+            "Avg": 23037630
+          },
+          "TotalDur": {
+            "P50": 137929875,
+            "P95": 142854250,
+            "P99": 146178500,
+            "Min": 130787375,
+            "Max": 148526125,
+            "Avg": 138216162
+          },
+          "AvgChunks": 9
+        },
+        "scenario": "gateway-rate100",
+        "repeat": 2,
+        "exit_code": 0,
+        "wall_started_unix": 1790431278.581544
+      },
+      "resource_samples": [
+        {
+          "unix_time": 1790431278.584408,
+          "gateway": {
+            "go_gc_duration_seconds_count": 46.0,
+            "go_memstats_heap_alloc_bytes": 3049488.0,
+            "process_cpu_seconds_total": 1.2,
+            "process_resident_memory_bytes": 26030080.0
+          }
+        },
+        {
+          "unix_time": 1790431279.095743,
+          "gateway": {
+            "go_gc_duration_seconds_count": 49.0,
+            "go_memstats_heap_alloc_bytes": 3188464.0,
+            "process_cpu_seconds_total": 1.29,
+            "process_resident_memory_bytes": 25575424.0
+          }
+        },
+        {
+          "unix_time": 1790431279.603498,
+          "gateway": {
+            "go_gc_duration_seconds_count": 51.0,
+            "go_memstats_heap_alloc_bytes": 3403312.0,
+            "process_cpu_seconds_total": 1.33,
+            "process_resident_memory_bytes": 25985024.0
+          }
+        },
+        {
+          "unix_time": 1790431280.116527,
+          "gateway": {
+            "go_gc_duration_seconds_count": 53.0,
+            "go_memstats_heap_alloc_bytes": 3646592.0,
+            "process_cpu_seconds_total": 1.42,
+            "process_resident_memory_bytes": 26259456.0
+          }
+        },
+        {
+          "unix_time": 1790431280.630757,
+          "gateway": {
+            "go_gc_duration_seconds_count": 56.0,
+            "go_memstats_heap_alloc_bytes": 2916584.0,
+            "process_cpu_seconds_total": 1.5,
+            "process_resident_memory_bytes": 26390528.0
+          }
+        },
+        {
+          "unix_time": 1790431281.142076,
+          "gateway": {
+            "go_gc_duration_seconds_count": 58.0,
+            "go_memstats_heap_alloc_bytes": 3110776.0,
+            "process_cpu_seconds_total": 1.59,
+            "process_resident_memory_bytes": 26521600.0
+          }
+        },
+        {
+          "unix_time": 1790431281.650814,
+          "gateway": {
+            "go_gc_duration_seconds_count": 60.0,
+            "go_memstats_heap_alloc_bytes": 2862912.0,
+            "process_cpu_seconds_total": 1.66,
+            "process_resident_memory_bytes": 26521600.0
+          }
+        },
+        {
+          "unix_time": 1790431282.165726,
+          "gateway": {
+            "go_gc_duration_seconds_count": 62.0,
+            "go_memstats_heap_alloc_bytes": 3418792.0,
+            "process_cpu_seconds_total": 1.75,
+            "process_resident_memory_bytes": 26521600.0
+          }
+        },
+        {
+          "unix_time": 1790431282.68081,
+          "gateway": {
+            "go_gc_duration_seconds_count": 64.0,
+            "go_memstats_heap_alloc_bytes": 3594576.0,
+            "process_cpu_seconds_total": 1.84,
+            "process_resident_memory_bytes": 26746880.0
+          }
+        },
+        {
+          "unix_time": 1790431283.193938,
+          "gateway": {
+            "go_gc_duration_seconds_count": 67.0,
+            "go_memstats_heap_alloc_bytes": 2854024.0,
+            "process_cpu_seconds_total": 1.93,
+            "process_resident_memory_bytes": 26746880.0
+          }
+        },
+        {
+          "unix_time": 1790431283.704857,
+          "gateway": {
+            "go_gc_duration_seconds_count": 69.0,
+            "go_memstats_heap_alloc_bytes": 2910208.0,
+            "process_cpu_seconds_total": 1.98,
+            "process_resident_memory_bytes": 26615808.0
+          }
+        },
+        {
+          "unix_time": 1790431284.213956,
+          "gateway": {
+            "go_gc_duration_seconds_count": 71.0,
+            "go_memstats_heap_alloc_bytes": 3511888.0,
+            "process_cpu_seconds_total": 2.07,
+            "process_resident_memory_bytes": 26759168.0
+          }
+        },
+        {
+          "unix_time": 1790431284.7287948,
+          "gateway": {
+            "go_gc_duration_seconds_count": 73.0,
+            "go_memstats_heap_alloc_bytes": 3488600.0,
+            "process_cpu_seconds_total": 2.15,
+            "process_resident_memory_bytes": 26759168.0
+          }
+        },
+        {
+          "unix_time": 1790431285.237961,
+          "gateway": {
+            "go_gc_duration_seconds_count": 73.0,
+            "go_memstats_heap_alloc_bytes": 3535688.0,
+            "process_cpu_seconds_total": 2.15,
+            "process_resident_memory_bytes": 26759168.0
+          }
+        }
+      ],
+      "loadtest_log": "2026/09/26 22:01:24 done in 6.140542542s total=600 success=600 errors=0 status=map[200:600]\n2026/09/26 22:01:24 TTFT  P50=22.540042ms P95=26.205209ms P99=27.299708ms min=20.592333ms max=27.861792ms avg=23.03763ms\n2026/09/26 22:01:24 Total P50=137.929875ms P95=142.85425ms P99=146.1785ms avgChunks=9.0\n2026/09/26 22:01:24 throughput=97.7 req/s\n"
+    },
+    {
+      "result": {
+        "target": "http://127.0.0.1:8090/v1/chat/completions",
+        "concurrency": 64,
+        "requests": 600,
+        "rate_limit_qps": 100,
+        "elapsed_seconds": 6.13964375,
+        "success_per_second": 97.72553985725963,
+        "report": {
+          "Total": 600,
+          "Success": 600,
+          "Errors": 0,
+          "Status": {
+            "200": 600
+          },
+          "TTFT": {
+            "P50": 22778667,
+            "P95": 26355208,
+            "P99": 27610458,
+            "Min": 20498625,
+            "Max": 28807666,
+            "Avg": 23213061
+          },
+          "TotalDur": {
+            "P50": 138396333,
+            "P95": 143164625,
+            "P99": 147357459,
+            "Min": 131124000,
+            "Max": 151831541,
+            "Avg": 138675681
+          },
+          "AvgChunks": 9
+        },
+        "scenario": "gateway-rate100",
+        "repeat": 3,
+        "exit_code": 0,
+        "wall_started_unix": 1790431285.247274
+      },
+      "resource_samples": [
+        {
+          "unix_time": 1790431285.251189,
+          "gateway": {
+            "go_gc_duration_seconds_count": 73.0,
+            "go_memstats_heap_alloc_bytes": 3617768.0,
+            "process_cpu_seconds_total": 2.15,
+            "process_resident_memory_bytes": 26759168.0
+          }
+        },
+        {
+          "unix_time": 1790431285.763902,
+          "gateway": {
+            "go_gc_duration_seconds_count": 76.0,
+            "go_memstats_heap_alloc_bytes": 3150336.0,
+            "process_cpu_seconds_total": 2.23,
+            "process_resident_memory_bytes": 26361856.0
+          }
+        },
+        {
+          "unix_time": 1790431286.272316,
+          "gateway": {
+            "go_gc_duration_seconds_count": 78.0,
+            "go_memstats_heap_alloc_bytes": 3779168.0,
+            "process_cpu_seconds_total": 2.31,
+            "process_resident_memory_bytes": 26640384.0
+          }
+        },
+        {
+          "unix_time": 1790431286.78433,
+          "gateway": {
+            "go_gc_duration_seconds_count": 81.0,
+            "go_memstats_heap_alloc_bytes": 2866720.0,
+            "process_cpu_seconds_total": 2.41,
+            "process_resident_memory_bytes": 26222592.0
+          }
+        },
+        {
+          "unix_time": 1790431287.2927139,
+          "gateway": {
+            "go_gc_duration_seconds_count": 83.0,
+            "go_memstats_heap_alloc_bytes": 3116816.0,
+            "process_cpu_seconds_total": 2.49,
+            "process_resident_memory_bytes": 26218496.0
+          }
+        },
+        {
+          "unix_time": 1790431287.8010392,
+          "gateway": {
+            "go_gc_duration_seconds_count": 86.0,
+            "go_memstats_heap_alloc_bytes": 2890840.0,
+            "process_cpu_seconds_total": 2.53,
+            "process_resident_memory_bytes": 26353664.0
+          }
+        },
+        {
+          "unix_time": 1790431288.3111339,
+          "gateway": {
+            "go_gc_duration_seconds_count": 88.0,
+            "go_memstats_heap_alloc_bytes": 3123888.0,
+            "process_cpu_seconds_total": 2.62,
+            "process_resident_memory_bytes": 26775552.0
+          }
+        },
+        {
+          "unix_time": 1790431288.821808,
+          "gateway": {
+            "go_gc_duration_seconds_count": 90.0,
+            "go_memstats_heap_alloc_bytes": 3831888.0,
+            "process_cpu_seconds_total": 2.71,
+            "process_resident_memory_bytes": 26775552.0
+          }
+        },
+        {
+          "unix_time": 1790431289.335636,
+          "gateway": {
+            "go_gc_duration_seconds_count": 92.0,
+            "go_memstats_heap_alloc_bytes": 4146488.0,
+            "process_cpu_seconds_total": 2.8,
+            "process_resident_memory_bytes": 26906624.0
+          }
+        },
+        {
+          "unix_time": 1790431289.8473458,
+          "gateway": {
+            "go_gc_duration_seconds_count": 94.0,
+            "go_memstats_heap_alloc_bytes": 3829144.0,
+            "process_cpu_seconds_total": 2.84,
+            "process_resident_memory_bytes": 26603520.0
+          }
+        },
+        {
+          "unix_time": 1790431290.358114,
+          "gateway": {
+            "go_gc_duration_seconds_count": 97.0,
+            "go_memstats_heap_alloc_bytes": 3394040.0,
+            "process_cpu_seconds_total": 2.97,
+            "process_resident_memory_bytes": 26603520.0
+          }
+        },
+        {
+          "unix_time": 1790431290.870995,
+          "gateway": {
+            "go_gc_duration_seconds_count": 100.0,
+            "go_memstats_heap_alloc_bytes": 3050672.0,
+            "process_cpu_seconds_total": 3.07,
+            "process_resident_memory_bytes": 26603520.0
+          }
+        },
+        {
+          "unix_time": 1790431291.383529,
+          "gateway": {
+            "go_gc_duration_seconds_count": 102.0,
+            "go_memstats_heap_alloc_bytes": 2898736.0,
+            "process_cpu_seconds_total": 3.16,
+            "process_resident_memory_bytes": 26738688.0
+          }
+        },
+        {
+          "unix_time": 1790431291.8950841,
+          "gateway": {
+            "go_gc_duration_seconds_count": 102.0,
+            "go_memstats_heap_alloc_bytes": 2949168.0,
+            "process_cpu_seconds_total": 3.17,
+            "process_resident_memory_bytes": 26738688.0
+          }
+        }
+      ],
+      "loadtest_log": "2026/09/26 22:01:31 done in 6.13964375s total=600 success=600 errors=0 status=map[200:600]\n2026/09/26 22:01:31 TTFT  P50=22.778667ms P95=26.355208ms P99=27.610458ms min=20.498625ms max=28.807666ms avg=23.213061ms\n2026/09/26 22:01:31 Total P50=138.396333ms P95=143.164625ms P99=147.357459ms avgChunks=9.0\n2026/09/26 22:01:31 throughput=97.7 req/s\n"
+    },
+    {
+      "result": {
+        "target": "http://127.0.0.1:8090/v1/chat/completions",
+        "concurrency": 64,
+        "requests": 900,
+        "rate_limit_qps": 300,
+        "elapsed_seconds": 3.135898333,
+        "success_per_second": 286.9991002351797,
+        "report": {
+          "Total": 900,
+          "Success": 900,
+          "Errors": 0,
+          "Status": {
+            "200": 900
+          },
+          "TTFT": {
+            "P50": 21610625,
+            "P95": 24348042,
+            "P99": 25365500,
+            "Min": 20357834,
+            "Max": 26646209,
+            "Avg": 21989776
+          },
+          "TotalDur": {
+            "P50": 135294208,
+            "P95": 139785125,
+            "P99": 141330250,
+            "Min": 127251125,
+            "Max": 143995041,
+            "Avg": 135475799
+          },
+          "AvgChunks": 9
+        },
+        "scenario": "gateway-rate300",
+        "repeat": 1,
+        "exit_code": 0,
+        "wall_started_unix": 1790431291.909012
+      },
+      "resource_samples": [
+        {
+          "unix_time": 1790431291.913842,
+          "gateway": {
+            "go_gc_duration_seconds_count": 102.0,
+            "go_memstats_heap_alloc_bytes": 3036832.0,
+            "process_cpu_seconds_total": 3.17,
+            "process_resident_memory_bytes": 26738688.0
+          }
+        },
+        {
+          "unix_time": 1790431292.429421,
+          "gateway": {
+            "go_gc_duration_seconds_count": 106.0,
+            "go_memstats_heap_alloc_bytes": 5774520.0,
+            "process_cpu_seconds_total": 3.35,
+            "process_resident_memory_bytes": 30085120.0
+          }
+        },
+        {
+          "unix_time": 1790431292.936203,
+          "gateway": {
+            "go_gc_duration_seconds_count": 109.0,
+            "go_memstats_heap_alloc_bytes": 5145328.0,
+            "process_cpu_seconds_total": 3.45,
+            "process_resident_memory_bytes": 31416320.0
+          }
+        },
+        {
+          "unix_time": 1790431293.445558,
+          "gateway": {
+            "go_gc_duration_seconds_count": 111.0,
+            "go_memstats_heap_alloc_bytes": 7565528.0,
+            "process_cpu_seconds_total": 3.53,
+            "process_resident_memory_bytes": 32079872.0
+          }
+        },
+        {
+          "unix_time": 1790431293.953158,
+          "gateway": {
+            "go_gc_duration_seconds_count": 114.0,
+            "go_memstats_heap_alloc_bytes": 6446400.0,
+            "process_cpu_seconds_total": 3.6,
+            "process_resident_memory_bytes": 32067584.0
+          }
+        },
+        {
+          "unix_time": 1790431294.4672709,
+          "gateway": {
+            "go_gc_duration_seconds_count": 117.0,
+            "go_memstats_heap_alloc_bytes": 5494680.0,
+            "process_cpu_seconds_total": 3.7,
+            "process_resident_memory_bytes": 32518144.0
+          }
+        },
+        {
+          "unix_time": 1790431294.976177,
+          "gateway": {
+            "go_gc_duration_seconds_count": 119.0,
+            "go_memstats_heap_alloc_bytes": 6983464.0,
+            "process_cpu_seconds_total": 3.77,
+            "process_resident_memory_bytes": 32649216.0
+          }
+        },
+        {
+          "unix_time": 1790431295.4886122,
+          "gateway": {
+            "go_gc_duration_seconds_count": 119.0,
+            "go_memstats_heap_alloc_bytes": 7201480.0,
+            "process_cpu_seconds_total": 3.79,
+            "process_resident_memory_bytes": 32780288.0
+          }
+        }
+      ],
+      "loadtest_log": "2026/09/26 22:01:35 done in 3.135898333s total=900 success=900 errors=0 status=map[200:900]\n2026/09/26 22:01:35 TTFT  P50=21.610625ms P95=24.348042ms P99=25.3655ms min=20.357834ms max=26.646209ms avg=21.989776ms\n2026/09/26 22:01:35 Total P50=135.294208ms P95=139.785125ms P99=141.33025ms avgChunks=9.0\n2026/09/26 22:01:35 throughput=287.0 req/s\n"
+    },
+    {
+      "result": {
+        "target": "http://127.0.0.1:8090/v1/chat/completions",
+        "concurrency": 64,
+        "requests": 900,
+        "rate_limit_qps": 300,
+        "elapsed_seconds": 3.156853167,
+        "success_per_second": 285.09403269309547,
+        "report": {
+          "Total": 900,
+          "Success": 900,
+          "Errors": 0,
+          "Status": {
+            "200": 900
+          },
+          "TTFT": {
+            "P50": 21412959,
+            "P95": 24521708,
+            "P99": 39287000,
+            "Min": 20329500,
+            "Max": 48642000,
+            "Avg": 22285286
+          },
+          "TotalDur": {
+            "P50": 136599584,
+            "P95": 141247209,
+            "P99": 153636459,
+            "Min": 129121000,
+            "Max": 160559167,
+            "Avg": 136514999
+          },
+          "AvgChunks": 9
+        },
+        "scenario": "gateway-rate300",
+        "repeat": 2,
+        "exit_code": 0,
+        "wall_started_unix": 1790431295.500563
+      },
+      "resource_samples": [
+        {
+          "unix_time": 1790431295.5032709,
+          "gateway": {
+            "go_gc_duration_seconds_count": 120.0,
+            "go_memstats_heap_alloc_bytes": 2743432.0,
+            "process_cpu_seconds_total": 3.79,
+            "process_resident_memory_bytes": 30715904.0
+          }
+        },
+        {
+          "unix_time": 1790431296.015011,
+          "gateway": {
+            "go_gc_duration_seconds_count": 123.0,
+            "go_memstats_heap_alloc_bytes": 7858896.0,
+            "process_cpu_seconds_total": 3.91,
+            "process_resident_memory_bytes": 31924224.0
+          }
+        },
+        {
+          "unix_time": 1790431296.522241,
+          "gateway": {
+            "go_gc_duration_seconds_count": 126.0,
+            "go_memstats_heap_alloc_bytes": 6031224.0,
+            "process_cpu_seconds_total": 4.01,
+            "process_resident_memory_bytes": 33447936.0
+          }
+        },
+        {
+          "unix_time": 1790431297.0313349,
+          "gateway": {
+            "go_gc_duration_seconds_count": 128.0,
+            "go_memstats_heap_alloc_bytes": 7707952.0,
+            "process_cpu_seconds_total": 4.09,
+            "process_resident_memory_bytes": 33583104.0
+          }
+        },
+        {
+          "unix_time": 1790431297.540376,
+          "gateway": {
+            "go_gc_duration_seconds_count": 131.0,
+            "go_memstats_heap_alloc_bytes": 6327624.0,
+            "process_cpu_seconds_total": 4.16,
+            "process_resident_memory_bytes": 33726464.0
+          }
+        },
+        {
+          "unix_time": 1790431298.050944,
+          "gateway": {
+            "go_gc_duration_seconds_count": 134.0,
+            "go_memstats_heap_alloc_bytes": 5153376.0,
+            "process_cpu_seconds_total": 4.23,
+            "process_resident_memory_bytes": 33853440.0
+          }
+        },
+        {
+          "unix_time": 1790431298.559219,
+          "gateway": {
+            "go_gc_duration_seconds_count": 136.0,
+            "go_memstats_heap_alloc_bytes": 6348352.0,
+            "process_cpu_seconds_total": 4.32,
+            "process_resident_memory_bytes": 33853440.0
+          }
+        },
+        {
+          "unix_time": 1790431299.070847,
+          "gateway": {
+            "go_gc_duration_seconds_count": 136.0,
+            "go_memstats_heap_alloc_bytes": 6514624.0,
+            "process_cpu_seconds_total": 4.33,
+            "process_resident_memory_bytes": 33853440.0
+          }
+        }
+      ],
+      "loadtest_log": "2026/09/26 22:01:38 done in 3.156853167s total=900 success=900 errors=0 status=map[200:900]\n2026/09/26 22:01:38 TTFT  P50=21.412959ms P95=24.521708ms P99=39.287ms min=20.3295ms max=48.642ms avg=22.285286ms\n2026/09/26 22:01:38 Total P50=136.599584ms P95=141.247209ms P99=153.636459ms avgChunks=9.0\n2026/09/26 22:01:38 throughput=285.1 req/s\n"
+    },
+    {
+      "result": {
+        "target": "http://127.0.0.1:8090/v1/chat/completions",
+        "concurrency": 64,
+        "requests": 900,
+        "rate_limit_qps": 300,
+        "elapsed_seconds": 3.132564667,
+        "success_per_second": 287.30452382389717,
+        "report": {
+          "Total": 900,
+          "Success": 900,
+          "Errors": 0,
+          "Status": {
+            "200": 900
+          },
+          "TTFT": {
+            "P50": 21622375,
+            "P95": 24277750,
+            "P99": 24955042,
+            "Min": 20345708,
+            "Max": 28312917,
+            "Avg": 22009072
+          },
+          "TotalDur": {
+            "P50": 136421958,
+            "P95": 140889791,
+            "P99": 141906250,
+            "Min": 128673167,
+            "Max": 146178750,
+            "Avg": 136165692
+          },
+          "AvgChunks": 9
+        },
+        "scenario": "gateway-rate300",
+        "repeat": 3,
+        "exit_code": 0,
+        "wall_started_unix": 1790431299.082098
+      },
+      "resource_samples": [
+        {
+          "unix_time": 1790431299.086582,
+          "gateway": {
+            "go_gc_duration_seconds_count": 136.0,
+            "go_memstats_heap_alloc_bytes": 6663216.0,
+            "process_cpu_seconds_total": 4.33,
+            "process_resident_memory_bytes": 33853440.0
+          }
+        },
+        {
+          "unix_time": 1790431299.59995,
+          "gateway": {
+            "go_gc_duration_seconds_count": 139.0,
+            "go_memstats_heap_alloc_bytes": 7532408.0,
+            "process_cpu_seconds_total": 4.47,
+            "process_resident_memory_bytes": 32841728.0
+          }
+        },
+        {
+          "unix_time": 1790431300.110564,
+          "gateway": {
+            "go_gc_duration_seconds_count": 142.0,
+            "go_memstats_heap_alloc_bytes": 5890952.0,
+            "process_cpu_seconds_total": 4.54,
+            "process_resident_memory_bytes": 31150080.0
+          }
+        },
+        {
+          "unix_time": 1790431300.620634,
+          "gateway": {
+            "go_gc_duration_seconds_count": 144.0,
+            "go_memstats_heap_alloc_bytes": 7548800.0,
+            "process_cpu_seconds_total": 4.62,
+            "process_resident_memory_bytes": 31555584.0
+          }
+        },
+        {
+          "unix_time": 1790431301.1313422,
+          "gateway": {
+            "go_gc_duration_seconds_count": 147.0,
+            "go_memstats_heap_alloc_bytes": 5826168.0,
+            "process_cpu_seconds_total": 4.71,
+            "process_resident_memory_bytes": 31821824.0
+          }
+        },
+        {
+          "unix_time": 1790431301.642187,
+          "gateway": {
+            "go_gc_duration_seconds_count": 149.0,
+            "go_memstats_heap_alloc_bytes": 7674864.0,
+            "process_cpu_seconds_total": 4.79,
+            "process_resident_memory_bytes": 31690752.0
+          }
+        },
+        {
+          "unix_time": 1790431302.154607,
+          "gateway": {
+            "go_gc_duration_seconds_count": 152.0,
+            "go_memstats_heap_alloc_bytes": 5316736.0,
+            "process_cpu_seconds_total": 4.86,
+            "process_resident_memory_bytes": 31862784.0
+          }
+        },
+        {
+          "unix_time": 1790431302.6611252,
+          "gateway": {
+            "go_gc_duration_seconds_count": 152.0,
+            "go_memstats_heap_alloc_bytes": 5439408.0,
+            "process_cpu_seconds_total": 4.88,
+            "process_resident_memory_bytes": 31862784.0
+          }
+        }
+      ],
+      "loadtest_log": "2026/09/26 22:01:42 done in 3.132564667s total=900 success=900 errors=0 status=map[200:900]\n2026/09/26 22:01:42 TTFT  P50=21.622375ms P95=24.27775ms P99=24.955042ms min=20.345708ms max=28.312917ms avg=22.009072ms\n2026/09/26 22:01:42 Total P50=136.421958ms P95=140.889791ms P99=141.90625ms avgChunks=9.0\n2026/09/26 22:01:42 throughput=287.3 req/s\n"
+    }
+  ]
+}

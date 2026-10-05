@@ -29,11 +29,12 @@ type Worker struct {
 }
 
 func NewWorker(target, apiKey string, body []byte) *Worker {
+	return NewWorkerWithClient(&http.Client{Timeout: 0}, target, apiKey, body)
+}
+
+func NewWorkerWithClient(client *http.Client, target, apiKey string, body []byte) *Worker {
 	return &Worker{
-		client: &http.Client{
-			// 必须 0 超时，SSE 长连不能被 client 超时掐断
-			Timeout: 0,
-		},
+		client: client,
 		target: target,
 		apiKey: apiKey,
 		body:   body,

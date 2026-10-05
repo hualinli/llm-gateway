@@ -24,7 +24,7 @@
 | 可观测性 | 🟡 基础实现完成 | Prometheus 已抓 Gateway/Metering，基础 Dashboard 已有；告警和指标口径仍需完善 |
 | 测试 | ✅ 当前回归通过 | 143 个测试；2026-09-22 普通 race、vet、build 和 Redis/PostgreSQL 集成测试通过 |
 | Demo 与 CI | 🟡 Demo v0 可运行 | `demo-up/config/smoke/down` 已接线，Mock 刻意保持手工启停；自动故障编排、连续证据和 CI 尚未完成 |
-| 性能证据 | ⬜ 未完成 | 有 SSE 压测工具，没有直连基线、容量拐点、资源上界和正式报告 |
+| 性能证据 | 🟡 部分完成 | 已有可追溯本机直连/网关基线及故障切换报告；容量拐点、慢客户端和生产环境资源上界未验证 |
 | 生产安全性 | 🟡 Compose 已收紧一部分 | Compose 强制 PG、管理认证、fail-closed 和活跃流上限；gRPC 仍为 insecure，诊断/计量查询端点仍公开，直接运行二进制仍有宽松回退默认值 |
 
 当前更准确的简历定位是：
@@ -905,6 +905,14 @@ git diff --check
 
 ### 5.1 五分钟 Demo
 
+完整验收可直接运行 `make demo-accept`。它在 Compose 内启动两个无对外端口的 Mock，配置路由和租户 Key，然后连续三轮验证主路 SSE、首事件前切换到备用、两个上游都不可用时返回 502、计费增加两条及事件级对账。每轮的请求日志和对账 JSON 保存到 `data/verification/demo-<commit>-<time>/`。结束后 Mock 会停止，核心服务和数据卷保留，便于检查现场。运行前需有 Docker、Go 和 Python 3。
+
+```bash
+make demo-accept
+```
+
+手工演示仍可按以下步骤操作：
+
 ```bash
 # terminal 1-2：Mock 是普通外部 OpenAI-compatible 服务，按需手工启动
 make mock-primary
@@ -940,6 +948,8 @@ make demo-clean  # 显式删除 PostgreSQL、Redis、Grafana 和 spool 卷
 ```
 
 默认 Compose 提供：
+
+所有已发布端口只监听本机 `127.0.0.1`；Compose 内的服务彼此通过内部网络访问。此配置只用于本地 Demo。
 
 - Redis：`localhost:6379`
 - PostgreSQL：`localhost:5433`
@@ -1081,6 +1091,8 @@ curl http://localhost:8090/metrics
 
 ### 5.4 运行测试和压测工具
 
+本机 SSE 基准测试（直连 Mock、经过 Gateway、故障切换；三轮闭环并发和固定到达率）见 [2026-09-26 压测报告](docs/verification/2026-09-26/performance/README.md)。报告包含固定提交、环境、原始 JSON、资源采样和复现命令。结果只适用于报告中的合成流与本机 Compose 环境。
+
 ```bash
 make test
 make vet
@@ -1106,7 +1118,7 @@ GATEWAY_API_KEY="$LLM_GATEWAY_BOOTSTRAP_API_KEY" \
   go run ./cmd/loadtest -c 100 -n 1000 -rate 0
 ```
 
-当前压测结果只用于观察 Demo 行为，不能直接作为生产容量结论。代表性压测应先启动 Redis；Redis 未启动时 limiter 会 fail-open，连接失败延迟会污染结果。正式报告应同时记录测试环境、Provider 行为、并发数、流持续时间、TTFT 分位数、总耗时、内存、CPU、GC、失败率、限流配置和 Redis 状态。
+单次基础命令只适合观察 Demo 行为，不能直接作为生产容量结论。代表性压测应先启动 Redis；Redis 未启动时 limiter 会 fail-open，连接失败延迟会污染结果。上方链接的本机报告记录了环境、Provider 行为、并发数、TTFT/总耗时分位数、CPU、内存、GC、失败率、限流配置和最终对账；仍不能外推生产容量。
 
 ### 5.5 清理本地数据
 

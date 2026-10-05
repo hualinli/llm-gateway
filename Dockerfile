@@ -8,7 +8,8 @@ COPY . .
 RUN CGO_ENABLED=0 go build -trimpath -o /out/gateway ./cmd/gateway \
     && CGO_ENABLED=0 go build -trimpath -o /out/control ./cmd/control \
     && CGO_ENABLED=0 go build -trimpath -o /out/metering ./cmd/metering \
-    && CGO_ENABLED=0 go build -trimpath -o /out/migrate ./cmd/migrate
+    && CGO_ENABLED=0 go build -trimpath -o /out/migrate ./cmd/migrate \
+    && CGO_ENABLED=0 go build -trimpath -o /out/upstream-mock ./cmd/upstream-mock
 
 FROM alpine:3.22.1
 
