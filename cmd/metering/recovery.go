@@ -51,6 +51,8 @@ const (
 // recoveryConfig is the parsed environment of the recovery janitor.
 type recoveryConfig struct {
 	Mode string
+	// PolicyToken is a dedicated read-only credential for /recovery/policy.
+	PolicyToken string
 	// BatchSize bounds one scan.
 	BatchSize int
 	// Interval is the idle wait between ticks.
@@ -85,7 +87,8 @@ type recoveryStore interface {
 
 // recoveryRuntime owns the loop and the operator surface.
 type recoveryRuntime struct {
-	store recoveryStore
+	store       recoveryStore
+	policyToken string
 	// loop is nil when the automatic release loop is disabled: the human queue
 	// surface stays available, the janitor does not run.
 	loop      *billing.ExecutionRecovery
@@ -137,6 +140,7 @@ func (r *recoveryRuntime) sla() time.Duration {
 func recoveryConfigFromEnv(lookup appenv.Lookup) (recoveryConfig, error) {
 	config := recoveryConfig{
 		Mode:                 recoveryModeAuto,
+		PolicyToken:          strings.TrimSpace(lookup("METERING_POLICY_TOKEN")),
 		BatchSize:            billing.DefaultRecoveryBatchSize,
 		Interval:             billing.DefaultRecoveryInterval,
 		MaxExecutionDuration: billing.DefaultRecoveryMaxExecutionDuration,
@@ -210,10 +214,11 @@ func startRecovery(ctx context.Context, ledger metering.Ledger, config recoveryC
 	}
 	store := billing.NewPGAccountStore(db)
 	runtime := &recoveryRuntime{
-		store:     store,
-		reviewSLA: config.ReviewSLA,
-		window:    config.MaxExecutionDuration + config.Grace,
-		lease:     config.LivenessLease,
+		store:       store,
+		policyToken: config.PolicyToken,
+		reviewSLA:   config.ReviewSLA,
+		window:      config.MaxExecutionDuration + config.Grace,
+		lease:       config.LivenessLease,
 	}
 
 	if config.Mode == recoveryModeOff {
@@ -253,6 +258,15 @@ func (r *recoveryRuntime) register(mux *http.ServeMux, adminToken string) {
 		return
 	}
 	mux.Handle("/recovery/status", requireBearer(http.HandlerFunc(r.handleStatus), adminToken))
+	mux.Handle("POST /receipts/{execution}/retry", requireBearer(http.HandlerFunc(r.handleDispatchRetry), adminToken))
+	var policyHandler http.Handler
+	policyToken := strings.TrimSpace(r.policyToken)
+	if policyToken == "" || policyToken == strings.TrimSpace(adminToken) {
+		policyHandler = unavailableRecoveryPolicyHandler()
+	} else {
+		policyHandler = requireBearer(http.HandlerFunc(r.handlePolicy), policyToken)
+	}
+	mux.Handle("GET /recovery/policy", policyHandler)
 	mux.Handle("/recovery/review-required", requireBearer(http.HandlerFunc(r.handleReviewQueue), adminToken))
 	mux.Handle("POST /recovery/review-required/{execution}/release",
 		requireBearer(http.HandlerFunc(r.handleManualRelease), adminToken))
@@ -260,6 +274,43 @@ func (r *recoveryRuntime) register(mux *http.ServeMux, adminToken string) {
 		requireBearer(http.HandlerFunc(r.handleManualSettle), adminToken))
 	log.Printf("metering admin endpoints /recovery/status, /recovery/review-required, " +
 		"POST /recovery/review-required/{execution}/release and POST /recovery/review-required/{execution}/settle registered")
+}
+
+// registerUnavailableRecoveryPolicy keeps the Console's policy lookup
+// fail-closed when the optional recovery runtime cannot start (for example, in
+// the in-memory demo fallback). A configured dedicated token receives 503;
+// admin credentials do not substitute for it.
+func registerUnavailableRecoveryPolicy(mux *http.ServeMux, policyToken, adminToken string) {
+	policyToken = strings.TrimSpace(policyToken)
+	if policyToken != "" && policyToken != strings.TrimSpace(adminToken) {
+		mux.Handle("GET /recovery/policy", requireBearer(unavailableRecoveryPolicyHandler(), policyToken))
+		return
+	}
+	mux.Handle("GET /recovery/policy", unavailableRecoveryPolicyHandler())
+}
+
+func unavailableRecoveryPolicyHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		writeSettlementJSON(w, http.StatusServiceUnavailable, map[string]any{"ok": false, "error": "recovery policy endpoint is unavailable"})
+	})
+}
+
+// handlePolicy returns the effective recovery policy without database reads.
+// The dedicated policy bearer is applied by register; a missing runtime fails
+// closed even when the handler is called directly.
+func (r *recoveryRuntime) handlePolicy(w http.ResponseWriter, _ *http.Request) {
+	if r == nil {
+		writeSettlementJSON(w, http.StatusServiceUnavailable, map[string]any{"ok": false, "error": "recovery policy unavailable"})
+		return
+	}
+	writeSettlementJSON(w, http.StatusOK, map[string]any{
+		"ok": true,
+		"policy": map[string]any{
+			"window_min_age_seconds":   r.windowValue().Seconds(),
+			"liveness_lease_seconds":   r.leaseValue().Seconds(),
+			"human_review_sla_seconds": r.sla().Seconds(),
+		},
+	})
 }
 
 // manualDispositionRequest is the body of both manual actions. Both fields are
@@ -480,14 +531,14 @@ func (r *recoveryRuntime) handleStatus(w http.ResponseWriter, req *http.Request)
 		"never_released_statuses":    []string{billing.StatusReceiptRecorded, billing.StatusSettled},
 		"sla_note":                   "the human SLA is a target: nothing is released because it elapsed",
 		"human_review_sla_seconds":   sla.Seconds(),
+		"window_min_age_seconds":     r.windowValue().Seconds(),
+		"liveness_lease_seconds":     r.leaseValue().Seconds(),
 	}
 	if r.loop != nil {
 		opts := r.loop.Options()
 		health = r.loop.Health()
-		policy["window_min_age_seconds"] = opts.MinAge().Seconds()
 		policy["max_execution_seconds"] = opts.MaxExecutionDuration.Seconds()
 		policy["grace_seconds"] = opts.Grace.Seconds()
-		policy["liveness_lease_seconds"] = opts.LivenessLease.Seconds()
 		policy["heartbeat_interval_seconds"] = billing.DefaultHeartbeatInterval.Seconds()
 		policy["batch"] = opts.BatchSize
 		policy["interval_seconds"] = opts.Interval.Seconds()
@@ -498,10 +549,7 @@ func (r *recoveryRuntime) handleStatus(w http.ResponseWriter, req *http.Request)
 		writeSettlementJSON(w, http.StatusServiceUnavailable, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
-	windowStart := time.Now().UTC().Add(-billing.DefaultRecoveryMaxExecutionDuration - billing.DefaultRecoveryGrace)
-	if r.loop != nil {
-		windowStart = time.Now().UTC().Add(-r.loop.Options().MinAge())
-	}
+	windowStart := time.Now().UTC().Add(-r.windowValue())
 	gap, err := r.store.RecoveryGap(ctx, billing.RecoveryGapParams{Before: windowStart})
 	if err != nil {
 		writeSettlementJSON(w, http.StatusServiceUnavailable, map[string]any{"ok": false, "error": err.Error()})

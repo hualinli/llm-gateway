@@ -1,0 +1,46 @@
+rule_files: [billing.yml]
+evaluation_interval: 1m
+tests:
+  - name: healthy-services-never-fire
+    interval: 1m
+    input_series:
+      - {series: 'metering_receipt_dispatch_total{result="publish_failed"}', values: '0+0x20'}
+      - {series: 'metering_receipt_oldest_unsettled_age_seconds', values: '0+0x20'}
+      - {series: 'metering_billing_review_required_sla_breaches', values: '0+0x20'}
+      - {series: 'metering_receipt_backlog{status="exception"}', values: '0+0x20'}
+      - {series: 'metering_billing_recovery_owner_unknown_open', values: '0+0x20'}
+      - {series: 'up{job="metering"}', values: '1+0x20'}
+    alert_rule_test:
+      - {eval_time: 10m, alertname: ReceiptTransportUnavailable, exp_alerts: []}
+      - {eval_time: 10m, alertname: ReceiptSettlementStalled, exp_alerts: []}
+      - {eval_time: 10m, alertname: BillingReviewOverdue, exp_alerts: []}
+      - {eval_time: 10m, alertname: ReceiptExceptionPending, exp_alerts: []}
+      - {eval_time: 10m, alertname: BillingRecoveryOwnerUnknown, exp_alerts: []}
+      - {eval_time: 10m, alertname: MeteringUnavailable, exp_alerts: []}
+  - name: metering-down-fires-and-recovers
+    interval: 1m
+    input_series:
+      - {series: 'up{job="metering"}', values: '0+0x3 1+0x10'}
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: MeteringUnavailable
+        exp_alerts:
+          - exp_labels: {job: metering, severity: critical}
+            exp_annotations:
+              summary: 计费服务不可观测
+              description: 检查进程、诊断监听与 Prometheus 抓取目标。指标不可用不代表积压已清空。
+      - {eval_time: 6m, alertname: MeteringUnavailable, exp_alerts: []}
+  - name: backlog-must-be-sustained-then-clear
+    interval: 1m
+    input_series:
+      - {series: 'metering_receipt_oldest_unsettled_age_seconds', values: '600+0x7 0+0x10'}
+    alert_rule_test:
+      - {eval_time: 4m, alertname: ReceiptSettlementStalled, exp_alerts: []}
+      - eval_time: 6m
+        alertname: ReceiptSettlementStalled
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations:
+              summary: 未结算收据积压超过五分钟
+              description: 检查 dispatcher、Redis 和 settlement consumer。恢复后确认积压下降及账本一致；不能只看新请求成功。
+      - {eval_time: 10m, alertname: ReceiptSettlementStalled, exp_alerts: []}

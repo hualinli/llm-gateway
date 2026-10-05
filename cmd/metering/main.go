@@ -178,6 +178,8 @@ func main() {
 	}
 	if recovery != nil {
 		recovery.register(mux, adminToken)
+	} else {
+		registerUnavailableRecoveryPolicy(mux, recoveryCfg.PolicyToken, adminToken)
 	}
 
 	// 生产把 pprof/metrics 与业务 listener 分离；demo/test 未设置诊断地址时
@@ -293,6 +295,15 @@ func meteringChecks(lookup appenv.Lookup) []appenv.Check {
 			Name:   "METERING_ADMIN_TOKEN",
 			Detail: "must be at least 16 characters so /ledger/count, /ledger/balance and /reconcile are not anonymous",
 			OK:     len(strings.TrimSpace(lookup("METERING_ADMIN_TOKEN"))) >= 16,
+		},
+		{
+			Name:   "METERING_POLICY_TOKEN",
+			Detail: "when set, must be at least 16 characters and differ from METERING_ADMIN_TOKEN; it is only for the read-only /recovery/policy endpoint",
+			OK: func() bool {
+				policyToken := strings.TrimSpace(lookup("METERING_POLICY_TOKEN"))
+				adminToken := strings.TrimSpace(lookup("METERING_ADMIN_TOKEN"))
+				return policyToken == "" || (len(policyToken) >= 16 && policyToken != adminToken)
+			}(),
 		},
 		{
 			Name:   "METERING_DIAGNOSTICS_ADDR",

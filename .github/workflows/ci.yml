@@ -56,6 +56,9 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      - name: Billing alert rules
+        run: ./scripts/check-billing-alerts.sh
+
       - name: Unit tests
         run: go test ./... -count=1
 

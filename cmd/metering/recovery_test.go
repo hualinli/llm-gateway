@@ -57,13 +57,14 @@ func TestRecoveryConfigFromEnvDefaultsAndRefusals(t *testing.T) {
 		"METERING_RECOVERY_LEASE":         "3m",
 		"METERING_RECOVERY_SLA":           "12h",
 		"METERING_RECOVERY_TIMEOUT":       "20s",
+		"METERING_POLICY_TOKEN":           "  dedicated-read-token  ",
 	}))
 	if err != nil {
 		t.Fatalf("tuned: %v", err)
 	}
 	if tuned.BatchSize != 8 || tuned.Interval != 15*time.Second || tuned.MaxExecutionDuration != 45*time.Minute ||
 		tuned.Grace != 5*time.Minute || tuned.LivenessLease != 3*time.Minute ||
-		tuned.ReviewSLA != 12*time.Hour || tuned.Timeout != 20*time.Second {
+		tuned.ReviewSLA != 12*time.Hour || tuned.Timeout != 20*time.Second || tuned.PolicyToken != "dedicated-read-token" {
 		t.Fatalf("tuned=%+v", tuned)
 	}
 
@@ -110,6 +111,7 @@ type fakeRecoveryStore struct {
 	backlog    billing.ReviewBacklog
 	page       billing.ReviewQueuePage
 	gap        billing.RecoveryGap
+	lastGap    billing.RecoveryGapParams
 	lastQueue  billing.ReviewQueueParams
 	queueErr   error
 	backlogErr error
@@ -131,7 +133,8 @@ func (s *fakeRecoveryStore) RecoverExecution(context.Context, billing.RecoveryPa
 	return billing.RecoveryResult{}, nil
 }
 
-func (s *fakeRecoveryStore) RecoveryGap(context.Context, billing.RecoveryGapParams) (billing.RecoveryGap, error) {
+func (s *fakeRecoveryStore) RecoveryGap(_ context.Context, params billing.RecoveryGapParams) (billing.RecoveryGap, error) {
+	s.lastGap = params
 	return s.gap, s.gapErr
 }
 
@@ -310,6 +313,10 @@ func TestRecoveryStatusReportsPolicyHealthAndGap(t *testing.T) {
 func TestRecoveryStatusWithoutALoopStillReportsTheQueue(t *testing.T) {
 	store := &fakeRecoveryStore{backlog: billing.ReviewBacklog{Open: 1, SLA: billing.DefaultHumanReviewSLA}}
 	runtime := newRecoveryTestRuntime(store, nil)
+	runtime.window = 40 * time.Minute
+	runtime.lease = 3 * time.Minute
+	runtime.reviewSLA = 12 * time.Hour
+	before := time.Now().UTC()
 	recorder := httptest.NewRecorder()
 	runtime.handleStatus(recorder, httptest.NewRequest(http.MethodGet, "/recovery/status", nil))
 	if recorder.Code != http.StatusOK {
@@ -318,6 +325,119 @@ func TestRecoveryStatusWithoutALoopStillReportsTheQueue(t *testing.T) {
 	policy := decodeRecoveryJSON(t, recorder)["policy"].(map[string]any)
 	if policy["automatic_recovery_enabled"] != false {
 		t.Fatalf("policy=%v, want the disabled janitor stated", policy)
+	}
+	if policy["window_min_age_seconds"] != (40*time.Minute).Seconds() || policy["liveness_lease_seconds"] != (3*time.Minute).Seconds() || policy["human_review_sla_seconds"] != (12*time.Hour).Seconds() {
+		t.Fatalf("policy=%v, want the configured bounds with the loop off", policy)
+	}
+	want := before.Add(-40 * time.Minute)
+	if store.lastGap.Before.Before(want.Add(-time.Second)) || store.lastGap.Before.After(want.Add(time.Second)) {
+		t.Fatalf("owner-unknown scan cutoff=%s, want near %s", store.lastGap.Before, want)
+	}
+}
+
+func TestRecoveryPolicyUsesDedicatedReadOnlyBearerAndConfiguredBounds(t *testing.T) {
+	runtime := newRecoveryTestRuntime(&fakeRecoveryStore{}, nil)
+	runtime.window = 75 * time.Minute
+	runtime.lease = 4 * time.Minute
+	runtime.reviewSLA = 9 * time.Hour
+	runtime.policyToken = "policy-read-token"
+	mux := http.NewServeMux()
+	runtime.register(mux, manualTestToken)
+
+	request := func(method, target, token string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, target, nil)
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		recorder := httptest.NewRecorder()
+		mux.ServeHTTP(recorder, req)
+		return recorder
+	}
+	if got := request(http.MethodGet, "/recovery/policy", manualTestToken); got.Code != http.StatusUnauthorized {
+		t.Fatalf("admin bearer substituted for policy bearer: status=%d body=%s", got.Code, got.Body.String())
+	}
+	if got := request(http.MethodGet, "/recovery/policy", ""); got.Code != http.StatusUnauthorized {
+		t.Fatalf("missing policy bearer: status=%d body=%s", got.Code, got.Body.String())
+	}
+	if got := request(http.MethodPost, "/recovery/policy", runtime.policyToken); got.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("POST policy status=%d, want 405", got.Code)
+	}
+	policyResponse := request(http.MethodGet, "/recovery/policy", runtime.policyToken)
+	if policyResponse.Code != http.StatusOK {
+		t.Fatalf("policy status=%d body=%s", policyResponse.Code, policyResponse.Body.String())
+	}
+	payload := decodeRecoveryJSON(t, policyResponse)
+	if len(payload) != 2 || payload["ok"] != true {
+		t.Fatalf("policy response has unexpected shape: %v", payload)
+	}
+	policy, ok := payload["policy"].(map[string]any)
+	if !ok || len(policy) != 3 || policy["window_min_age_seconds"] != (75*time.Minute).Seconds() || policy["liveness_lease_seconds"] != (4*time.Minute).Seconds() || policy["human_review_sla_seconds"] != (9*time.Hour).Seconds() {
+		t.Fatalf("policy=%v, want the configured loop-off bounds", payload["policy"])
+	}
+	for _, path := range []string{
+		"/receipts/exec_1/retry",
+		"/recovery/review-required/exec_1/release",
+		"/recovery/review-required/exec_1/settle",
+	} {
+		if got := postManual(t, mux, path, runtime.policyToken, `{"actor_user_id":42,"reason":"reviewed"}`); got.Code != http.StatusUnauthorized {
+			t.Fatalf("policy bearer reached admin POST %s: status=%d body=%s", path, got.Code, got.Body.String())
+		}
+	}
+	if got := request(http.MethodGet, "/recovery/status", manualTestToken); got.Code != http.StatusOK {
+		t.Fatalf("admin bearer should remain valid for admin status: status=%d body=%s", got.Code, got.Body.String())
+	}
+}
+
+func TestRecoveryPolicyFailsClosedWhenTokenOrRuntimeIsMissing(t *testing.T) {
+	runtime := newRecoveryTestRuntime(&fakeRecoveryStore{}, nil)
+	mux := http.NewServeMux()
+	runtime.register(mux, manualTestToken)
+	request := httptest.NewRequest(http.MethodGet, "/recovery/policy", nil)
+	request.Header.Set("Authorization", "Bearer "+manualTestToken)
+	recorder := httptest.NewRecorder()
+	mux.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("missing policy token status=%d body=%s, want 503", recorder.Code, recorder.Body.String())
+	}
+
+	var missing *recoveryRuntime
+	recorder = httptest.NewRecorder()
+	missing.handlePolicy(recorder, httptest.NewRequest(http.MethodGet, "/recovery/policy", nil))
+	if recorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("nil runtime status=%d body=%s, want 503", recorder.Code, recorder.Body.String())
+	}
+
+	fallbackMux := http.NewServeMux()
+	registerUnavailableRecoveryPolicy(fallbackMux, "policy-read-token", manualTestToken)
+	for name, token := range map[string]string{
+		"no credential":    "",
+		"admin credential": manualTestToken,
+	} {
+		t.Run(name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/recovery/policy", nil)
+			if token != "" {
+				req.Header.Set("Authorization", "Bearer "+token)
+			}
+			fallbackRecorder := httptest.NewRecorder()
+			fallbackMux.ServeHTTP(fallbackRecorder, req)
+			if fallbackRecorder.Code != http.StatusUnauthorized {
+				t.Fatalf("fallback without policy credential status=%d, want 401", fallbackRecorder.Code)
+			}
+		})
+	}
+	req := httptest.NewRequest(http.MethodGet, "/recovery/policy", nil)
+	req.Header.Set("Authorization", "Bearer policy-read-token")
+	fallbackRecorder := httptest.NewRecorder()
+	fallbackMux.ServeHTTP(fallbackRecorder, req)
+	if fallbackRecorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("fallback with policy credential status=%d, want 503", fallbackRecorder.Code)
+	}
+	disabledMux := http.NewServeMux()
+	registerUnavailableRecoveryPolicy(disabledMux, "", manualTestToken)
+	disabledRecorder := httptest.NewRecorder()
+	disabledMux.ServeHTTP(disabledRecorder, httptest.NewRequest(http.MethodGet, "/recovery/policy", nil))
+	if disabledRecorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("fallback without configured policy token status=%d, want 503", disabledRecorder.Code)
 	}
 }
 
