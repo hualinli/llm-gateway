@@ -633,7 +633,7 @@ export interface ReviewCursor { updated_at: string; execution_id: string }
 export interface ReviewQueue {
  items: ReviewExecution[]; next_cursor: ReviewCursor | null; now: string;
  totals: { open: string; sla_breaches: string; oldest_age_seconds: number };
- min_age_seconds: number;
+ min_age_seconds: number; sla_seconds: number;
 }
 export type ReviewAction = 'release' | 'settle';
 export interface ReviewDisposition {

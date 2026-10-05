@@ -83,17 +83,21 @@ WHERE e.status IN ('reserved', 'executing')
 FROM billing_executions
 WHERE status = 'review_required'`
 
-	queryReviewRequiredFirstPage = `SELECT ` + executionColumns + `
-FROM billing_executions
-WHERE status = 'review_required'
-ORDER BY updated_at, execution_id
+	queryReviewRequiredFirstPage = `SELECT ` + executionColumnsAliased + `,
+       COALESCE(e.terminal_reason, r.last_error)
+FROM billing_executions e
+LEFT JOIN usage_receipts r ON r.execution_id = e.execution_id
+WHERE e.status = 'review_required'
+ORDER BY e.updated_at, e.execution_id
 LIMIT $1`
 
-	queryReviewRequiredAfterCursor = `SELECT ` + executionColumns + `
-FROM billing_executions
-WHERE status = 'review_required'
-  AND (updated_at, execution_id) > ($1::timestamptz, $2::text)
-ORDER BY updated_at, execution_id
+	queryReviewRequiredAfterCursor = `SELECT ` + executionColumnsAliased + `,
+       COALESCE(e.terminal_reason, r.last_error)
+FROM billing_executions e
+LEFT JOIN usage_receipts r ON r.execution_id = e.execution_id
+WHERE e.status = 'review_required'
+  AND (e.updated_at, e.execution_id) > ($1::timestamptz, $2::text)
+ORDER BY e.updated_at, e.execution_id
 LIMIT $3`
 )
 
@@ -488,7 +492,7 @@ func (s *PGAccountStore) ListReviewRequiredExecutions(ctx context.Context, param
 
 	page := ReviewQueuePage{Now: params.Now}
 	for rows.Next() {
-		execution, err := scanExecution(rows)
+		execution, reason, err := scanExecutionWithReason(rows)
 		if err != nil {
 			return ReviewQueuePage{}, err
 		}
@@ -498,6 +502,7 @@ func (s *PGAccountStore) ListReviewRequiredExecutions(ctx context.Context, param
 		}
 		page.Items = append(page.Items, ReviewQueueItem{
 			Execution: execution,
+			Reason:    reason,
 			Age:       age,
 			Breached:  age > params.SLA,
 		})

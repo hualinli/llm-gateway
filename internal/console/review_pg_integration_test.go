@@ -15,7 +15,7 @@ func TestHTTPReviewDispositionPostsOnceAndLeavesAuditedMoney(t *testing.T) {
 	org, actor := seedBillingOrg(t, db, "review-http")
 	ctx := context.Background()
 	now := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
-	past := now.Add(-2 * time.Hour)
+	past := now.Add(-4 * time.Hour)
 	params := billing.AdjustParams{OrgID: org, AmountMicro: 10000, Direction: billing.DirectionCredit, Kind: billing.KindAdjustment, Reason: "fund review", IdempotencyKey: "fund-review", Now: past}
 	params.PayloadDigest = billing.AdjustmentDigest(org, params.AmountMicro, params.Direction, params.Kind, params.Reason)
 	if _, err := store.Adjust(ctx, params); err != nil {
@@ -34,7 +34,20 @@ func TestHTTPReviewDispositionPostsOnceAndLeavesAuditedMoney(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	h := newHarness(t, func(o *Options) { o.Review = store })
+	youngAt := now.Add(-time.Hour)
+	if _, err := store.Reserve(ctx, billing.ReserveParams{ExecutionID: "exec_http_too_young", OrgID: org, PriceVersionID: price.ID, Model: price.Model, InputTokensUpper: 100, OutputTokensUpper: 100, Now: youngAt}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.RecordUsageException(ctx, billing.UsageExceptionParams{ExecutionID: "exec_http_too_young", EventID: "evt_exec_http_too_young", Reason: "missing usage", Now: youngAt}); err != nil {
+		t.Fatal(err)
+	}
+	policy := &fakeReviewPolicySource{policy: ReviewPolicy{
+		WindowMinAge: 2 * time.Hour, LivenessLease: 2 * time.Minute, HumanReviewSLA: 2 * time.Hour,
+	}}
+	h := newHarness(t, func(o *Options) {
+		o.Review = store
+		o.ReviewPolicySource = policy
+	})
 	fixture := defaultFixture()
 	fixture.user.ID = actor
 	fixture.session.UserID = actor
@@ -47,11 +60,28 @@ func TestHTTPReviewDispositionPostsOnceAndLeavesAuditedMoney(t *testing.T) {
 	}
 	var page struct {
 		Items      []reviewItemDTO
-		NextCursor any `json:"next_cursor"`
+		NextCursor any     `json:"next_cursor"`
+		SLASeconds float64 `json:"sla_seconds"`
 	}
 	decodeBillingBody(t, r.Body.Bytes(), &page)
-	if len(page.Items) != 1 || page.NextCursor == nil {
+	if len(page.Items) != 1 || page.NextCursor == nil || page.Items[0].Reason == nil || *page.Items[0].Reason != "missing usage" || page.SLASeconds != float64((2*time.Hour).Seconds()) {
 		t.Fatalf("pagination=%+v", page)
+	}
+	tooYoung := h.serve(http.MethodPost, "/api/v1/admin/billing/review-required/exec_http_too_young/release", jsonBody(`{"reason":"reviewed too early"}`), cookies, csrf)
+	if tooYoung.Code != http.StatusConflict {
+		t.Fatalf("two-hour window should refuse one-hour-old execution: %d %s", tooYoung.Code, tooYoung.Body.String())
+	}
+	account, err := store.GetAccount(ctx, org)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if account.ReservedMicro != 600 || account.PostedBalanceMicro != 10000 {
+		t.Fatalf("too-young refusal moved money: account=%+v", account)
+	}
+	policy.policy.WindowMinAge = 30 * time.Minute
+	r = h.serve(http.MethodPost, "/api/v1/admin/billing/review-required/exec_http_too_young/release", jsonBody(`{"reason":"reviewed after wait"}`), cookies, csrf)
+	if r.Code != http.StatusOK {
+		t.Fatalf("updated policy release=%d %s", r.Code, r.Body.String())
 	}
 	for _, action := range []string{"release", "settle"} {
 		path := "/api/v1/admin/billing/review-required/exec_http_" + action + "/" + action
@@ -76,7 +106,7 @@ func TestHTTPReviewDispositionPostsOnceAndLeavesAuditedMoney(t *testing.T) {
 			t.Fatalf("duplicate %s=%d", action, r.Code)
 		}
 	}
-	account, err := store.GetAccount(ctx, org)
+	account, err = store.GetAccount(ctx, org)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +123,7 @@ func TestHTTPReviewDispositionPostsOnceAndLeavesAuditedMoney(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if debits != 1 || releases != 2 || audits != 2 {
+	if debits != 1 || releases != 3 || audits != 3 {
 		t.Fatalf("debits=%d releases=%d audits=%d", debits, releases, audits)
 	}
 	r = h.serve(http.MethodGet, "/api/v1/admin/billing/review-required", nil, cookies)
