@@ -1,0 +1,13 @@
+Aggregate  (cost=3893.18..3893.19 rows=1 width=136) (actual time=5.004..5.005 rows=1 loops=1)
+  Buffers: shared hit=1697
+  ->  Bitmap Heap Scan on billing_entries b  (cost=636.20..3488.98 rows=13473 width=22) (actual time=0.662..2.679 rows=16272 loops=1)
+        Recheck Cond: ((org_id = 1) AND (posted_at >= '2026-09-01 00:00:00+00'::timestamp with time zone) AND (posted_at < '2026-10-02 00:00:00+00'::timestamp with time zone))
+        Heap Blocks: exact=1551
+        Buffers: shared hit=1697
+        ->  Bitmap Index Scan on idx_billing_entries_org_posted  (cost=0.00..632.83 rows=13473 width=0) (actual time=0.557..0.557 rows=16272 loops=1)
+              Index Cond: ((org_id = 1) AND (posted_at >= '2026-09-01 00:00:00+00'::timestamp with time zone) AND (posted_at < '2026-10-02 00:00:00+00'::timestamp with time zone))
+              Buffers: shared hit=146
+Planning:
+  Buffers: shared hit=5
+Planning Time: 0.062 ms
+Execution Time: 5.026 ms

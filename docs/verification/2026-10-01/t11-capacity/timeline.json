@@ -1,0 +1,85 @@
+{
+  "run_id": "20261001T083817Z-6cd44e80",
+  "phases": [
+    {
+      "phase": "compose_up",
+      "at": "2026-10-01T08:38:17Z"
+    },
+    {
+      "phase": "stack_ready",
+      "at": "2026-10-01T08:38:26Z",
+      "containers": [
+        "llm-gw-cap-20261001t083817z-6cd44e80-console-1",
+        "llm-gw-cap-20261001t083817z-6cd44e80-control-1",
+        "llm-gw-cap-20261001t083817z-6cd44e80-gateway-1",
+        "llm-gw-cap-20261001t083817z-6cd44e80-metering-1",
+        "llm-gw-cap-20261001t083817z-6cd44e80-mock-backup-1",
+        "llm-gw-cap-20261001t083817z-6cd44e80-mock-primary-1",
+        "llm-gw-cap-20261001t083817z-6cd44e80-postgres-1",
+        "llm-gw-cap-20261001t083817z-6cd44e80-redis-1"
+      ]
+    },
+    {
+      "phase": "configured",
+      "at": "2026-10-01T08:38:43Z",
+      "desired_version": 1
+    },
+    {
+      "phase": "mode_switch",
+      "at": "2026-10-01T09:34:00Z",
+      "mode": {
+        "streams": 512,
+        "per_org": 0,
+        "two_gateways": false,
+        "gateway_cpus": 8,
+        "gateway_b_cpus": null
+      }
+    },
+    {
+      "phase": "mode_switch",
+      "at": "2026-10-01T09:38:17Z",
+      "mode": {
+        "streams": 512,
+        "per_org": 32,
+        "two_gateways": false,
+        "gateway_cpus": 8,
+        "gateway_b_cpus": null
+      }
+    },
+    {
+      "phase": "mode_switch",
+      "at": "2026-10-01T09:39:23Z",
+      "mode": {
+        "streams": 256,
+        "per_org": 0,
+        "two_gateways": true,
+        "gateway_cpus": 4,
+        "gateway_b_cpus": 4
+      }
+    },
+    {
+      "phase": "mode_switch",
+      "at": "2026-10-01T09:43:41Z",
+      "mode": {
+        "streams": 256,
+        "per_org": 32,
+        "two_gateways": true,
+        "gateway_cpus": 4,
+        "gateway_b_cpus": 4
+      }
+    },
+    {
+      "phase": "settling",
+      "at": "2026-10-01T09:44:43Z"
+    },
+    {
+      "phase": "reconciled",
+      "at": "2026-10-01T09:44:52Z",
+      "ok": true
+    },
+    {
+      "phase": "reported",
+      "at": "2026-10-01T09:44:56Z"
+    }
+  ]
+}

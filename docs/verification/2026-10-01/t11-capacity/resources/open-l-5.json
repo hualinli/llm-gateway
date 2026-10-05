@@ -1,0 +1,264 @@
+{
+  "round": "open-l-5",
+  "experiment": "open-ladder-l",
+  "series_file": "data/benchmarks/t11-capacity/resources/open-l-5.json",
+  "summary": {
+    "series_points": {
+      "gateway_metrics": 67,
+      "metering_metrics": 67,
+      "console_metrics": 35,
+      "docker_stats": 24,
+      "pg": 35,
+      "redis": 35
+    },
+    "full_metrics_snapshots": {
+      "gateway": {
+        "path": "data/benchmarks/t11-capacity/raw/open-l-5/metrics-gateway.txt",
+        "bytes": 22321,
+        "sha256": "ce413ecfb178719a",
+        "histogram_percentiles": {
+          "gateway_first_event_seconds{model=\"default\"}": {
+            "0.5": 0.044504,
+            "0.95": 0.144346,
+            "0.99": 0.149596
+          },
+          "gateway_latency_seconds{model=\"default\",tenant=\"org:1\"}": {
+            "0.5": 0.231454,
+            "0.95": 2.333192,
+            "0.99": 2.491031
+          },
+          "gateway_ttft_seconds{model=\"default\",tenant=\"org:1\"}": {
+            "0.5": 0.044504,
+            "0.95": 0.144346,
+            "0.99": 0.149596
+          },
+          "metering_settlement_lag_seconds": {
+            "0.5": null,
+            "0.95": null,
+            "0.99": null
+          }
+        }
+      },
+      "metering": {
+        "path": "data/benchmarks/t11-capacity/raw/open-l-5/metrics-metering.txt",
+        "bytes": 19545,
+        "sha256": "357cdbb695d8c790",
+        "histogram_percentiles": {
+          "metering_settlement_lag_seconds": {
+            "0.5": 9.907592,
+            "0.95": 267.833719,
+            "0.99": 293.566744
+          }
+        }
+      }
+    },
+    "gateway": {
+      "samples": 67,
+      "sample_errors": 0,
+      "rss_peak_mib": 45.16,
+      "rss_last_mib": 41.4,
+      "heap_inuse_peak_mib": 17.81,
+      "heap_inuse_last_mib": 12.57,
+      "heap_alloc_peak_mib": 12.91,
+      "goroutines_peak": 304.0,
+      "goroutines_last": 90.0,
+      "open_fds_peak": 135.0,
+      "cpu_seconds_delta": 10.65,
+      "gc_cycles_delta": 100.0,
+      "active_streams_peak": 55.0,
+      "active_streams_last": 1.0,
+      "series_first_last_delta": {
+        "gateway_active_streams": 1.0,
+        "gateway_active_streams_rejected_total": 0.0,
+        "go_gc_duration_seconds_count": 100.0,
+        "go_goroutines": 60.0,
+        "go_memstats_heap_alloc_bytes": 2068672.0,
+        "go_memstats_heap_inuse_bytes": 1818624.0,
+        "go_memstats_heap_objects": 8942.0,
+        "go_memstats_heap_released_bytes": -2342912.0,
+        "go_memstats_sys_bytes": 0.0,
+        "go_threads": 0.0,
+        "metering_billing_recovery_owner_unknown_open": 0.0,
+        "metering_billing_review_required_open": 0.0,
+        "metering_receipt_oldest_unsettled_age_seconds": 0.0,
+        "metering_receipt_settled_total": 0.0,
+        "metering_usage_invalid_total": 0.0,
+        "metering_usage_missing_total": 0.0,
+        "process_cpu_seconds_total": 10.65,
+        "process_max_fds": 0.0,
+        "process_open_fds": 57.0,
+        "process_resident_memory_bytes": 2072576.0,
+        "process_virtual_memory_bytes": 0.0,
+        "gateway_access_guard_total{result=\"allowed\"}": 300.0,
+        "gateway_requests_total{model=\"default\",status=\"200\",tenant=\"org:1\"}": 299.0,
+        "gateway_stream_incomplete_total{model=\"default\",tenant=\"org:1\"}": 0.0,
+        "limiter_allowed_total{tenant=\"org:1\"}": 300.0,
+        "t": 70.859
+      }
+    },
+    "containers": {
+      "llm-gw-cap-20261001t083817z-6cd44e80-console-1": {
+        "mem_peak_mib": 12.0,
+        "cpu_peak_percent": 2.2
+      },
+      "llm-gw-cap-20261001t083817z-6cd44e80-control-1": {
+        "mem_peak_mib": 8.0,
+        "cpu_peak_percent": 2.1
+      },
+      "llm-gw-cap-20261001t083817z-6cd44e80-gateway-1": {
+        "mem_peak_mib": 28.9,
+        "cpu_peak_percent": 21.3
+      },
+      "llm-gw-cap-20261001t083817z-6cd44e80-metering-1": {
+        "mem_peak_mib": 15.6,
+        "cpu_peak_percent": 47.0
+      },
+      "llm-gw-cap-20261001t083817z-6cd44e80-mock-backup-1": {
+        "mem_peak_mib": 3.5,
+        "cpu_peak_percent": 2.5
+      },
+      "llm-gw-cap-20261001t083817z-6cd44e80-mock-primary-1": {
+        "mem_peak_mib": 14.9,
+        "cpu_peak_percent": 18.0
+      },
+      "llm-gw-cap-20261001t083817z-6cd44e80-postgres-1": {
+        "mem_peak_mib": 189.4,
+        "cpu_peak_percent": 101.4
+      },
+      "llm-gw-cap-20261001t083817z-6cd44e80-redis-1": {
+        "mem_peak_mib": 107.8,
+        "cpu_peak_percent": 8.2
+      }
+    },
+    "pg": {
+      "samples": 35,
+      "backends": {
+        "first": 15.0,
+        "last": 15.0,
+        "max": 19.0
+      },
+      "active": {
+        "first": 1.0,
+        "last": 1.0,
+        "max": 3.0
+      },
+      "idle_in_tx": {
+        "first": 1.0,
+        "last": 0.0,
+        "max": 3.0
+      },
+      "waiting_locks": {
+        "first": 0.0,
+        "last": 0.0,
+        "max": 0.0
+      },
+      "wait_row": {
+        "first": 0.0,
+        "last": 0.0,
+        "max": 0.0
+      },
+      "open_executions": {
+        "first": 3.0,
+        "last": 4.0,
+        "max": 57.0
+      },
+      "pending_receipts": {
+        "first": 1.0,
+        "last": 0.0,
+        "max": 3.0
+      },
+      "dispatched_receipts": {
+        "first": 12303.0,
+        "last": 403.0,
+        "max": 12303.0
+      },
+      "settled_receipts": {
+        "first": 65434.0,
+        "last": 77633.0,
+        "max": 77633.0
+      },
+      "unsettled_age_s": {
+        "first": 145.563243,
+        "last": 122.846295,
+        "max": 145.563243
+      },
+      "oldest_due_age_s": {
+        "first": 0.218177,
+        "last": 0.0,
+        "max": 0.540242
+      },
+      "review_required": {
+        "first": 0.0,
+        "last": 0.0,
+        "max": 0.0
+      },
+      "xact_commit": {
+        "first": 770366.0,
+        "last": 803229.0,
+        "max": 803229.0
+      },
+      "xact_rollback": {
+        "first": 0.0,
+        "last": 0.0,
+        "max": 0.0
+      },
+      "tup_inserted": {
+        "first": 902854.0,
+        "last": 966455.0,
+        "max": 966455.0
+      },
+      "tup_updated": {
+        "first": 710386.0,
+        "last": 761316.0,
+        "max": 761316.0
+      },
+      "blks_hit": {
+        "first": 98828463.0,
+        "last": 103164243.0,
+        "max": 103164243.0
+      },
+      "blks_read": {
+        "first": 240669.0,
+        "last": 262008.0,
+        "max": 262008.0
+      },
+      "wait_events_observed": [
+        "Client:ClientRead",
+        "Client:ClientRead,IO:WalSync,LWLock:WALWrite",
+        "IO:WalSync",
+        "IO:WalSync,LWLock:WALWrite",
+        "Timeout:VacuumDelay"
+      ],
+      "max_conn": "100"
+    },
+    "redis": {
+      "samples": 35,
+      "instantaneous_ops_per_sec": {
+        "first": 492.0,
+        "last": 782.0,
+        "max": 788.0
+      },
+      "connected_clients": {
+        "first": 16.0,
+        "last": 16.0,
+        "max": 16.0
+      },
+      "blocked_clients": {
+        "first": 1.0,
+        "last": 1.0,
+        "max": 1.0
+      },
+      "used_memory": {
+        "first": 104890416.0,
+        "last": 105289824.0,
+        "max": 105289824.0
+      },
+      "ping_rtt_ms": {
+        "n": 35,
+        "p50": 0.964,
+        "p95": 2.011,
+        "max": 2.401
+      }
+    }
+  }
+}

@@ -1,0 +1,382 @@
+{
+  "round": "slow-p6-100pct-stop",
+  "experiment": "slowclient",
+  "series_file": "data/benchmarks/t11-capacity/resources/slow-p6-100pct-stop.json",
+  "summary": {
+    "series_points": {
+      "gateway_metrics": 109,
+      "metering_metrics": 109,
+      "console_metrics": 57,
+      "docker_stats": 39,
+      "pg": 57,
+      "redis": 57
+    },
+    "full_metrics_snapshots": {
+      "gateway": {
+        "path": "data/benchmarks/t11-capacity/raw/slow-p6-100pct-stop/metrics-gateway.txt",
+        "bytes": 43482,
+        "sha256": "9f739ff0eddcae35",
+        "histogram_percentiles": {
+          "gateway_first_event_seconds{model=\"default\"}": {
+            "0.5": 0.104293,
+            "0.95": 0.148637,
+            "0.99": 0.444698
+          },
+          "gateway_latency_seconds{model=\"default\",tenant=\"org:1\"}": {
+            "0.5": 1.026663,
+            "0.95": 2.466735,
+            "0.99": 10.0
+          },
+          "gateway_latency_seconds{model=\"default\",tenant=\"org:10\"}": {
+            "0.5": 1.75,
+            "0.95": 2.425,
+            "0.99": 2.485
+          },
+          "gateway_latency_seconds{model=\"default\",tenant=\"org:11\"}": {
+            "0.5": 1.75,
+            "0.95": 2.425,
+            "0.99": 2.485
+          },
+          "gateway_latency_seconds{model=\"default\",tenant=\"org:2\"}": {
+            "0.5": 1.75,
+            "0.95": 2.425,
+            "0.99": 2.485
+          },
+          "gateway_latency_seconds{model=\"default\",tenant=\"org:3\"}": {
+            "0.5": 1.75,
+            "0.95": 2.425,
+            "0.99": 2.485
+          },
+          "gateway_latency_seconds{model=\"default\",tenant=\"org:4\"}": {
+            "0.5": 1.75,
+            "0.95": 2.425,
+            "0.99": 2.485
+          },
+          "gateway_latency_seconds{model=\"default\",tenant=\"org:5\"}": {
+            "0.5": 1.75,
+            "0.95": 2.425,
+            "0.99": 2.485
+          },
+          "gateway_latency_seconds{model=\"default\",tenant=\"org:6\"}": {
+            "0.5": 1.75,
+            "0.95": 2.425,
+            "0.99": 2.485
+          },
+          "gateway_latency_seconds{model=\"default\",tenant=\"org:7\"}": {
+            "0.5": 1.75,
+            "0.95": 2.425,
+            "0.99": 2.485
+          },
+          "gateway_latency_seconds{model=\"default\",tenant=\"org:8\"}": {
+            "0.5": 1.75,
+            "0.95": 2.425,
+            "0.99": 2.485
+          },
+          "gateway_latency_seconds{model=\"default\",tenant=\"org:9\"}": {
+            "0.5": 1.75,
+            "0.95": 2.425,
+            "0.99": 2.485
+          },
+          "gateway_ttft_seconds{model=\"default\",tenant=\"org:1\"}": {
+            "0.5": 0.100888,
+            "0.95": 0.148824,
+            "0.99": 0.448661
+          },
+          "gateway_ttft_seconds{model=\"default\",tenant=\"org:10\"}": {
+            "0.5": 0.125,
+            "0.95": 0.1475,
+            "0.99": 0.1495
+          },
+          "gateway_ttft_seconds{model=\"default\",tenant=\"org:11\"}": {
+            "0.5": 0.125,
+            "0.95": 0.1475,
+            "0.99": 0.1495
+          },
+          "gateway_ttft_seconds{model=\"default\",tenant=\"org:2\"}": {
+            "0.5": 0.125,
+            "0.95": 0.1475,
+            "0.99": 0.1495
+          },
+          "gateway_ttft_seconds{model=\"default\",tenant=\"org:3\"}": {
+            "0.5": 0.125,
+            "0.95": 0.1475,
+            "0.99": 0.1495
+          },
+          "gateway_ttft_seconds{model=\"default\",tenant=\"org:4\"}": {
+            "0.5": 0.125,
+            "0.95": 0.1475,
+            "0.99": 0.1495
+          },
+          "gateway_ttft_seconds{model=\"default\",tenant=\"org:5\"}": {
+            "0.5": 0.125,
+            "0.95": 0.1475,
+            "0.99": 0.1495
+          },
+          "gateway_ttft_seconds{model=\"default\",tenant=\"org:6\"}": {
+            "0.5": 0.125,
+            "0.95": 0.1475,
+            "0.99": 0.1495
+          },
+          "gateway_ttft_seconds{model=\"default\",tenant=\"org:7\"}": {
+            "0.5": 0.125,
+            "0.95": 0.1475,
+            "0.99": 0.1495
+          },
+          "gateway_ttft_seconds{model=\"default\",tenant=\"org:8\"}": {
+            "0.5": 0.125,
+            "0.95": 0.1475,
+            "0.99": 0.1495
+          },
+          "gateway_ttft_seconds{model=\"default\",tenant=\"org:9\"}": {
+            "0.5": 0.125,
+            "0.95": 0.1475,
+            "0.99": 0.1495
+          },
+          "metering_settlement_lag_seconds": {
+            "0.5": null,
+            "0.95": null,
+            "0.99": null
+          }
+        }
+      },
+      "metering": {
+        "path": "data/benchmarks/t11-capacity/raw/slow-p6-100pct-stop/metrics-metering.txt",
+        "bytes": 19531,
+        "sha256": "317d6b1e3e8ae1f3",
+        "histogram_percentiles": {
+          "metering_settlement_lag_seconds": {
+            "0.5": 3.241549,
+            "0.95": 256.865366,
+            "0.99": 291.373073
+          }
+        }
+      }
+    },
+    "gateway": {
+      "samples": 109,
+      "sample_errors": 0,
+      "rss_peak_mib": 37.6,
+      "rss_last_mib": 37.21,
+      "heap_inuse_peak_mib": 11.31,
+      "heap_inuse_last_mib": 9.62,
+      "heap_alloc_peak_mib": 7.44,
+      "goroutines_peak": 145.0,
+      "goroutines_last": 121.0,
+      "open_fds_peak": 117.0,
+      "cpu_seconds_delta": 7.18,
+      "gc_cycles_delta": 52.0,
+      "active_streams_peak": 7.0,
+      "active_streams_last": 0.0,
+      "series_first_last_delta": {
+        "gateway_active_streams": 0.0,
+        "gateway_active_streams_rejected_total": 0.0,
+        "go_gc_duration_seconds_count": 52.0,
+        "go_goroutines": 92.0,
+        "go_memstats_heap_alloc_bytes": 1338992.0,
+        "go_memstats_heap_inuse_bytes": 1024000.0,
+        "go_memstats_heap_objects": 12778.0,
+        "go_memstats_heap_released_bytes": -1458176.0,
+        "go_memstats_sys_bytes": 0.0,
+        "go_threads": 0.0,
+        "metering_billing_recovery_owner_unknown_open": 0.0,
+        "metering_billing_review_required_open": 0.0,
+        "metering_receipt_oldest_unsettled_age_seconds": 0.0,
+        "metering_receipt_settled_total": 0.0,
+        "metering_usage_invalid_total": 0.0,
+        "metering_usage_missing_total": 0.0,
+        "process_cpu_seconds_total": 7.18,
+        "process_max_fds": 0.0,
+        "process_open_fds": 90.0,
+        "process_resident_memory_bytes": 1343488.0,
+        "process_virtual_memory_bytes": 0.0,
+        "gateway_access_guard_total{result=\"allowed\"}": 270.0,
+        "gateway_requests_total{model=\"\",status=\"503\",tenant=\"org:1\"}": 0.0,
+        "gateway_requests_total{model=\"default\",status=\"200\",tenant=\"org:1\"}": 270.0,
+        "gateway_requests_total{model=\"default\",status=\"200\",tenant=\"org:10\"}": 0.0,
+        "gateway_requests_total{model=\"default\",status=\"200\",tenant=\"org:11\"}": 0.0,
+        "gateway_requests_total{model=\"default\",status=\"200\",tenant=\"org:2\"}": 0.0,
+        "gateway_requests_total{model=\"default\",status=\"200\",tenant=\"org:3\"}": 0.0,
+        "gateway_requests_total{model=\"default\",status=\"200\",tenant=\"org:4\"}": 0.0,
+        "gateway_requests_total{model=\"default\",status=\"200\",tenant=\"org:5\"}": 0.0,
+        "gateway_requests_total{model=\"default\",status=\"200\",tenant=\"org:6\"}": 0.0,
+        "gateway_requests_total{model=\"default\",status=\"200\",tenant=\"org:7\"}": 0.0,
+        "gateway_requests_total{model=\"default\",status=\"200\",tenant=\"org:8\"}": 0.0,
+        "gateway_requests_total{model=\"default\",status=\"200\",tenant=\"org:9\"}": 0.0,
+        "gateway_stream_incomplete_total{model=\"default\",tenant=\"org:1\"}": 0.0,
+        "limiter_allowed_total{tenant=\"org:1\"}": 270.0,
+        "limiter_allowed_total{tenant=\"org:10\"}": 0.0,
+        "limiter_allowed_total{tenant=\"org:11\"}": 0.0,
+        "limiter_allowed_total{tenant=\"org:2\"}": 0.0,
+        "limiter_allowed_total{tenant=\"org:3\"}": 0.0,
+        "limiter_allowed_total{tenant=\"org:4\"}": 0.0,
+        "limiter_allowed_total{tenant=\"org:5\"}": 0.0,
+        "limiter_allowed_total{tenant=\"org:6\"}": 0.0,
+        "limiter_allowed_total{tenant=\"org:7\"}": 0.0,
+        "limiter_allowed_total{tenant=\"org:8\"}": 0.0,
+        "limiter_allowed_total{tenant=\"org:9\"}": 0.0,
+        "t": 119.432
+      }
+    },
+    "containers": {
+      "llm-gw-cap-20261001t083817z-6cd44e80-console-1": {
+        "mem_peak_mib": 12.5,
+        "cpu_peak_percent": 1.7
+      },
+      "llm-gw-cap-20261001t083817z-6cd44e80-control-1": {
+        "mem_peak_mib": 8.5,
+        "cpu_peak_percent": 1.6
+      },
+      "llm-gw-cap-20261001t083817z-6cd44e80-gateway-1": {
+        "mem_peak_mib": 20.1,
+        "cpu_peak_percent": 11.1
+      },
+      "llm-gw-cap-20261001t083817z-6cd44e80-metering-1": {
+        "mem_peak_mib": 14.7,
+        "cpu_peak_percent": 3.7
+      },
+      "llm-gw-cap-20261001t083817z-6cd44e80-mock-backup-1": {
+        "mem_peak_mib": 4.4,
+        "cpu_peak_percent": 1.9
+      },
+      "llm-gw-cap-20261001t083817z-6cd44e80-mock-primary-1": {
+        "mem_peak_mib": 11.8,
+        "cpu_peak_percent": 7.9
+      },
+      "llm-gw-cap-20261001t083817z-6cd44e80-postgres-1": {
+        "mem_peak_mib": 180.7,
+        "cpu_peak_percent": 16.4
+      },
+      "llm-gw-cap-20261001t083817z-6cd44e80-redis-1": {
+        "mem_peak_mib": 137.4,
+        "cpu_peak_percent": 3.7
+      }
+    },
+    "pg": {
+      "samples": 57,
+      "backends": {
+        "first": 10.0,
+        "last": 9.0,
+        "max": 10.0
+      },
+      "active": {
+        "first": 1.0,
+        "last": 2.0,
+        "max": 2.0
+      },
+      "idle_in_tx": {
+        "first": 0.0,
+        "last": 0.0,
+        "max": 1.0
+      },
+      "waiting_locks": {
+        "first": 0.0,
+        "last": 0.0,
+        "max": 1.0
+      },
+      "wait_row": {
+        "first": 0.0,
+        "last": 0.0,
+        "max": 1.0
+      },
+      "open_executions": {
+        "first": 3.0,
+        "last": 2.0,
+        "max": 9.0
+      },
+      "pending_receipts": {
+        "first": 0.0,
+        "last": 0.0,
+        "max": 2.0
+      },
+      "dispatched_receipts": {
+        "first": 0.0,
+        "last": 0.0,
+        "max": 1.0
+      },
+      "settled_receipts": {
+        "first": 104389.0,
+        "last": 104659.0,
+        "max": 104659.0
+      },
+      "unsettled_age_s": {
+        "first": 0.0,
+        "last": 0.0,
+        "max": 0.457978
+      },
+      "oldest_due_age_s": {
+        "first": 0.0,
+        "last": 0.0,
+        "max": 0.457975
+      },
+      "review_required": {
+        "first": 0.0,
+        "last": 0.0,
+        "max": 0.0
+      },
+      "xact_commit": {
+        "first": 1061389.0,
+        "last": 1064621.0,
+        "max": 1064621.0
+      },
+      "xact_rollback": {
+        "first": 0.0,
+        "last": 0.0,
+        "max": 0.0
+      },
+      "tup_inserted": {
+        "first": 1286152.0,
+        "last": 1289313.0,
+        "max": 1289313.0
+      },
+      "tup_updated": {
+        "first": 1002453.0,
+        "last": 1004894.0,
+        "max": 1004894.0
+      },
+      "blks_hit": {
+        "first": 150784343.0,
+        "last": 151915174.0,
+        "max": 151915174.0
+      },
+      "blks_read": {
+        "first": 756671.0,
+        "last": 757703.0,
+        "max": 757703.0
+      },
+      "wait_events_observed": [
+        "IO:WalSync",
+        "Lock:transactionid"
+      ],
+      "max_conn": "100"
+    },
+    "redis": {
+      "samples": 57,
+      "instantaneous_ops_per_sec": {
+        "first": 6.0,
+        "last": 2.0,
+        "max": 40.0
+      },
+      "connected_clients": {
+        "first": 17.0,
+        "last": 17.0,
+        "max": 17.0
+      },
+      "blocked_clients": {
+        "first": 2.0,
+        "last": 2.0,
+        "max": 2.0
+      },
+      "used_memory": {
+        "first": 134446200.0,
+        "last": 134720272.0,
+        "max": 134720272.0
+      },
+      "ping_rtt_ms": {
+        "n": 57,
+        "p50": 0.71,
+        "p95": 0.952,
+        "max": 3.166
+      }
+    }
+  }
+}

@@ -1,0 +1,14 @@
+Aggregate  (cost=45.81..45.82 rows=1 width=160) (actual time=0.090..0.090 rows=1 loops=1)
+  Buffers: shared hit=37
+  ->  Bitmap Heap Scan on usage_daily_rollup  (cost=5.92..44.18 rows=129 width=40) (actual time=0.020..0.075 rows=129 loops=1)
+        Recheck Cond: ((org_id = 1) AND (day >= '2026-08-31 00:00:00+00'::timestamp with time zone) AND (day <= '2026-10-01 00:00:00+00'::timestamp with time zone))
+        Heap Blocks: exact=35
+        Buffers: shared hit=37
+        ->  Bitmap Index Scan on idx_usage_daily_rollup_org_day  (cost=0.00..5.89 rows=129 width=0) (actual time=0.013..0.013 rows=129 loops=1)
+              Index Cond: ((org_id = 1) AND (day >= '2026-08-31 00:00:00+00'::timestamp with time zone) AND (day <= '2026-10-01 00:00:00+00'::timestamp with time zone))
+              Buffers: shared hit=2
+Planning:
+  Buffers: shared hit=24 read=7
+  I/O Timings: shared read=0.020
+Planning Time: 0.234 ms
+Execution Time: 0.118 ms

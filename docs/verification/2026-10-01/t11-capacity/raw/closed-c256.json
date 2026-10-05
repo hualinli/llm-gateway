@@ -1,0 +1,442 @@
+{
+  "id": "closed-c256",
+  "experiment": "closed-ladder",
+  "label": "closed-loop ladder M c=256",
+  "warmup": false,
+  "side": "gateway",
+  "shape": "m",
+  "mode": "closed",
+  "org_group": "hot",
+  "pprof": false,
+  "generator_count": 1,
+  "two_gateways": false,
+  "mode_config": {
+    "streams": 256,
+    "per_org": 0,
+    "two_gateways": false,
+    "gateway_cpus": 4.0,
+    "gateway_b_cpus": null
+  },
+  "target": "http://127.0.0.1:56278/v1/chat/completions",
+  "hold_seconds": 60,
+  "planned_rate": 123.07692307692307,
+  "started_unix": 1790845006.5388532,
+  "wall_seconds": 65.725,
+  "finished_unix": 1790845072.275991,
+  "aggregate": {
+    "scheduled": 7385,
+    "started": 7385,
+    "completed": 7385,
+    "rejected": 0,
+    "transport_error": 0,
+    "incomplete": 0,
+    "cancelled": 0,
+    "parse_error": 0,
+    "not_scheduled": 0,
+    "abandoned": 0,
+    "loadgen_dropped": 0,
+    "dropped_no_free_slot": 0,
+    "dropped_queue_full": 0,
+    "loadgen_dropped_percent": 0.0,
+    "peak_active_sum": 256,
+    "peak_active_max": 256,
+    "peak_active_per_generator": [
+      256
+    ],
+    "planned_start_rate": 123.0769,
+    "achieved_arrival_rate": 116.3466,
+    "arrival_ratio": null,
+    "arrival_ratio_enforced": false,
+    "achieved_start_rate": 116.3624,
+    "window_seconds": 63.466,
+    "capacity_round_valid": true,
+    "capacity_invalid_reasons": [],
+    "note": "single generator: percentiles are exact for the round"
+  },
+  "generators": [
+    {
+      "generator": "gen0",
+      "exit_code": 0,
+      "wall_seconds": 65.706,
+      "target": "http://127.0.0.1:56278/v1/chat/completions",
+      "mode": "closed",
+      "load_profile": {
+        "mode": "closed",
+        "concurrency": 256,
+        "total_arrivals": 7385,
+        "planned_rate_per_second": 0,
+        "admission_queue": 0,
+        "shape": "m",
+        "role_only_first": false,
+        "slow_client": "normal",
+        "slow_client_duration_seconds": 0,
+        "cancel_after_seconds": 0,
+        "max_event_bytes": 4194304,
+        "timeout_seconds": 61,
+        "expected_stream_seconds": 2.08
+      },
+      "elapsed_seconds": 65.685273738,
+      "accounting": {
+        "Scheduled": 7385,
+        "Started": 7385,
+        "Completed": 7385,
+        "Rejected": 0,
+        "TransportError": 0,
+        "Incomplete": 0,
+        "Cancelled": 0,
+        "ParseError": 0,
+        "NotScheduled": 0,
+        "Abandoned": 0,
+        "LoadgenDropped": 0,
+        "DroppedNoFreeSlot": 0,
+        "DroppedQueueFull": 0,
+        "CancelExplicit": 0,
+        "CancelTimeout": 0,
+        "PeakActive": 256,
+        "ActiveAtEnd": 0,
+        "GoroutinesPeak": 780
+      },
+      "rates": {
+        "PlannedStartRatePerSecond": 0,
+        "ArrivalRatePerSecond": 116.34663609065515,
+        "AchievedStartRatePerSecond": 116.36239267734132,
+        "SuccessPerSecond": 112.43392775570165,
+        "ArrivalWindowSeconds": 63.465522065,
+        "StartWindowSeconds": 63.465495277,
+        "RunSeconds": 65.683020663
+      },
+      "latency": {
+        "first_event": {
+          "Count": 7385,
+          "P50": 120597934,
+          "P95": 334318610,
+          "P99": 590369240,
+          "Min": 104307492,
+          "Max": 880178080,
+          "Avg": 147825349
+        },
+        "first_content": {
+          "Count": 7385,
+          "P50": 120605813,
+          "P95": 334324739,
+          "P99": 590372885,
+          "Min": 104318033,
+          "Max": 880182011,
+          "Avg": 147835059
+        },
+        "stream_duration": {
+          "Count": 7385,
+          "P50": 2212732204,
+          "P95": 2435164029,
+          "P99": 2813092585,
+          "Min": 2172833955,
+          "Max": 3427626403,
+          "Avg": 2242775258
+        },
+        "total_duration": {
+          "Count": 7385,
+          "P50": 2212732204,
+          "P95": 2435164029,
+          "P99": 2813092585,
+          "Min": 2172833955,
+          "Max": 3427626403,
+          "Avg": 2242775258
+        },
+        "dispatch_lag": {
+          "Count": 7385,
+          "P50": 76,
+          "P95": 127,
+          "P99": 175,
+          "Min": 43,
+          "Max": 46019,
+          "Avg": 91
+        },
+        "scheduled_to_terminal": {
+          "Count": 7385,
+          "P50": 2212750144,
+          "P95": 2443605266,
+          "P99": 2817413477,
+          "Min": 2172840804,
+          "Max": 3433483781,
+          "Avg": 2243350588
+        }
+      },
+      "status": {
+        "200": 7385
+      },
+      "avg_events": 101,
+      "avg_bytes_per_stream": 51515,
+      "loadgen_dropped_percent": 0,
+      "capacity_round_valid": true,
+      "capacity_invalid_reasons": [],
+      "capacity_rule": "generator-side drops above 0.1% of scheduled arrivals, and arrivals delivered below 99% of the planned rate, invalidate that round for capacity conclusions; re-run with more generator resources or a separate load host (BENCHMARK-AND-ACCEPTANCE-2026-10-01 \u00a72.1)"
+    }
+  ],
+  "resources_file": "data/benchmarks/t11-capacity/resources/closed-c256.json",
+  "resources_summary": {
+    "series_points": {
+      "gateway_metrics": 58,
+      "metering_metrics": 58,
+      "console_metrics": 31,
+      "docker_stats": 21,
+      "pg": 31,
+      "redis": 31
+    },
+    "full_metrics_snapshots": {
+      "gateway": {
+        "path": "data/benchmarks/t11-capacity/raw/closed-c256/metrics-gateway.txt",
+        "bytes": 22087,
+        "sha256": "17bee1e8731a7d19",
+        "histogram_percentiles": {
+          "gateway_first_event_seconds{model=\"default\"}": {
+            "0.5": 0.11768,
+            "0.95": 0.147129,
+            "0.99": 0.149747
+          },
+          "gateway_latency_seconds{model=\"default\",tenant=\"org:1\"}": {
+            "0.5": 1.530953,
+            "0.95": 2.415383,
+            "0.99": 2.493999
+          },
+          "gateway_ttft_seconds{model=\"default\",tenant=\"org:1\"}": {
+            "0.5": 0.11768,
+            "0.95": 0.147129,
+            "0.99": 0.149747
+          },
+          "metering_settlement_lag_seconds": {
+            "0.5": null,
+            "0.95": null,
+            "0.99": null
+          }
+        }
+      },
+      "metering": {
+        "path": "data/benchmarks/t11-capacity/raw/closed-c256/metrics-metering.txt",
+        "bytes": 19478,
+        "sha256": "879a57b80b21ad30",
+        "histogram_percentiles": {
+          "metering_settlement_lag_seconds": {
+            "0.5": 0.660645,
+            "0.95": 7.896804,
+            "0.99": 9.579361
+          }
+        }
+      }
+    },
+    "gateway": {
+      "samples": 58,
+      "sample_errors": 0,
+      "rss_peak_mib": 82.41,
+      "rss_last_mib": 70.84,
+      "heap_inuse_peak_mib": 46.0,
+      "heap_inuse_last_mib": 21.16,
+      "heap_alloc_peak_mib": 39.86,
+      "goroutines_peak": 1311.0,
+      "goroutines_last": 646.0,
+      "open_fds_peak": 545.0,
+      "cpu_seconds_delta": 69.02,
+      "gc_cycles_delta": 186.0,
+      "active_streams_peak": 256.0,
+      "active_streams_last": 89.0,
+      "series_first_last_delta": {
+        "gateway_active_streams": 89.0,
+        "gateway_active_streams_rejected_total": 0.0,
+        "go_gc_duration_seconds_count": 186.0,
+        "go_goroutines": 616.0,
+        "go_memstats_heap_alloc_bytes": -5780384.0,
+        "go_memstats_heap_inuse_bytes": -614400.0,
+        "go_memstats_heap_objects": -58412.0,
+        "go_memstats_heap_released_bytes": 8708096.0,
+        "go_memstats_sys_bytes": 26214400.0,
+        "go_threads": 0.0,
+        "metering_billing_recovery_owner_unknown_open": 0.0,
+        "metering_billing_review_required_open": 0.0,
+        "metering_receipt_oldest_unsettled_age_seconds": 0.0,
+        "metering_receipt_settled_total": 0.0,
+        "metering_usage_invalid_total": 0.0,
+        "metering_usage_missing_total": 0.0,
+        "process_cpu_seconds_total": 69.02,
+        "process_max_fds": 0.0,
+        "process_open_fds": 348.0,
+        "process_resident_memory_bytes": 17637376.0,
+        "process_virtual_memory_bytes": 1048576.0,
+        "gateway_access_guard_total{result=\"allowed\"}": 7385.0,
+        "gateway_requests_total{model=\"default\",status=\"200\",tenant=\"org:1\"}": 7296.0,
+        "limiter_allowed_total{tenant=\"org:1\"}": 7385.0,
+        "t": 65.24
+      }
+    },
+    "containers": {
+      "llm-gw-cap-20261001t083817z-6cd44e80-console-1": {
+        "mem_peak_mib": 11.6,
+        "cpu_peak_percent": 3.5
+      },
+      "llm-gw-cap-20261001t083817z-6cd44e80-control-1": {
+        "mem_peak_mib": 7.9,
+        "cpu_peak_percent": 2.6
+      },
+      "llm-gw-cap-20261001t083817z-6cd44e80-gateway-1": {
+        "mem_peak_mib": 65.1,
+        "cpu_peak_percent": 142.0
+      },
+      "llm-gw-cap-20261001t083817z-6cd44e80-metering-1": {
+        "mem_peak_mib": 15.1,
+        "cpu_peak_percent": 92.4
+      },
+      "llm-gw-cap-20261001t083817z-6cd44e80-mock-backup-1": {
+        "mem_peak_mib": 5.3,
+        "cpu_peak_percent": 2.8
+      },
+      "llm-gw-cap-20261001t083817z-6cd44e80-mock-primary-1": {
+        "mem_peak_mib": 23.4,
+        "cpu_peak_percent": 74.9
+      },
+      "llm-gw-cap-20261001t083817z-6cd44e80-postgres-1": {
+        "mem_peak_mib": 212.8,
+        "cpu_peak_percent": 274.5
+      },
+      "llm-gw-cap-20261001t083817z-6cd44e80-redis-1": {
+        "mem_peak_mib": 26.8,
+        "cpu_peak_percent": 12.9
+      }
+    },
+    "pg": {
+      "samples": 31,
+      "backends": {
+        "first": 22.0,
+        "last": 21.0,
+        "max": 30.0
+      },
+      "active": {
+        "first": 8.0,
+        "last": 3.0,
+        "max": 15.0
+      },
+      "idle_in_tx": {
+        "first": 1.0,
+        "last": 0.0,
+        "max": 5.0
+      },
+      "waiting_locks": {
+        "first": 6.0,
+        "last": 0.0,
+        "max": 7.0
+      },
+      "wait_row": {
+        "first": 1.0,
+        "last": 0.0,
+        "max": 2.0
+      },
+      "open_executions": {
+        "first": 65.0,
+        "last": 126.0,
+        "max": 256.0
+      },
+      "pending_receipts": {
+        "first": 0.0,
+        "last": 55.0,
+        "max": 73.0
+      },
+      "dispatched_receipts": {
+        "first": 0.0,
+        "last": 656.0,
+        "max": 696.0
+      },
+      "settled_receipts": {
+        "first": 12193.0,
+        "last": 18741.0,
+        "max": 18741.0
+      },
+      "unsettled_age_s": {
+        "first": 0.0,
+        "last": 6.097539,
+        "max": 6.449147
+      },
+      "oldest_due_age_s": {
+        "first": 0.0,
+        "last": 0.446121,
+        "max": 0.6699
+      },
+      "review_required": {
+        "first": 0.0,
+        "last": 0.0,
+        "max": 0.0
+      },
+      "xact_commit": {
+        "first": 119388.0,
+        "last": 185242.0,
+        "max": 185242.0
+      },
+      "xact_rollback": {
+        "first": 0.0,
+        "last": 0.0,
+        "max": 0.0
+      },
+      "tup_inserted": {
+        "first": 148603.0,
+        "last": 232311.0,
+        "max": 232311.0
+      },
+      "tup_updated": {
+        "first": 110766.0,
+        "last": 173516.0,
+        "max": 173516.0
+      },
+      "blks_hit": {
+        "first": 12994457.0,
+        "last": 19981744.0,
+        "max": 19981744.0
+      },
+      "blks_read": {
+        "first": 494.0,
+        "last": 1740.0,
+        "max": 1740.0
+      },
+      "wait_events_observed": [
+        "Client:ClientRead",
+        "Client:ClientRead,IO:WalSync,Lock:transactionid",
+        "Client:ClientRead,IO:WalSync,Lock:transactionid,LWLock:WALWrite",
+        "Client:ClientRead,IO:WalSync,Lock:transactionid,Lock:tuple",
+        "Client:ClientRead,IO:WalSync,Lock:transactionid,Lock:tuple,LWLock:WALWrite",
+        "Client:ClientRead,IO:WalWrite,Lock:transactionid,LWLock:WALWrite",
+        "Client:ClientRead,LWLock:WALWrite",
+        "Client:ClientRead,Lock:transactionid",
+        "Client:ClientRead,Lock:transactionid,LWLock:LockManager",
+        "Client:ClientRead,Lock:transactionid,Lock:tuple,LWLock:WALWrite",
+        "Client:ClientRead,Lock:tuple",
+        "Client:ClientRead,Timeout:VacuumDelay"
+      ],
+      "max_conn": "100"
+    },
+    "redis": {
+      "samples": 31,
+      "instantaneous_ops_per_sec": {
+        "first": 330.0,
+        "last": 864.0,
+        "max": 1431.0
+      },
+      "connected_clients": {
+        "first": 14.0,
+        "last": 14.0,
+        "max": 14.0
+      },
+      "blocked_clients": {
+        "first": 2.0,
+        "last": 1.0,
+        "max": 2.0
+      },
+      "used_memory": {
+        "first": 15366536.0,
+        "last": 23375576.0,
+        "max": 23375576.0
+      },
+      "ping_rtt_ms": {
+        "n": 31,
+        "p50": 1.155,
+        "p95": 3.641,
+        "max": 3.648
+      }
+    }
+  },
+  "error": null
+}

@@ -1,0 +1,11 @@
+Aggregate  (cost=3707.90..3707.91 rows=1 width=64) (actual time=4.521..4.522 rows=1 loops=1)
+  Buffers: shared hit=1749
+  ->  Bitmap Heap Scan on metering_events  (cost=1097.45..3373.54 rows=26748 width=20) (actual time=0.794..3.250 rows=19998 loops=1)
+        Recheck Cond: ((org_id = 1) AND (created_at >= '2026-08-31 08:43:29+00'::timestamp with time zone) AND (created_at <= '2026-10-01 08:38:29+00'::timestamp with time zone))
+        Heap Blocks: exact=1625
+        Buffers: shared hit=1749
+        ->  Bitmap Index Scan on idx_metering_events_org_time  (cost=0.00..1090.77 rows=26748 width=0) (actual time=0.686..0.687 rows=19998 loops=1)
+              Index Cond: ((org_id = 1) AND (created_at >= '2026-08-31 08:43:29+00'::timestamp with time zone) AND (created_at <= '2026-10-01 08:38:29+00'::timestamp with time zone))
+              Buffers: shared hit=124
+Planning Time: 0.079 ms
+Execution Time: 4.555 ms

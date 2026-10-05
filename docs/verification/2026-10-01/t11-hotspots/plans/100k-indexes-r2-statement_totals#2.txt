@@ -1,0 +1,23 @@
+Aggregate  (cost=4042.13..4042.14 rows=1 width=40) (actual time=0.665..0.667 rows=1 loops=1)
+  Buffers: shared hit=227
+  ->  Hash Join  (cost=1270.53..4042.13 rows=1 width=8) (actual time=0.662..0.664 rows=0 loops=1)
+        Hash Cond: (SUBSTRING(b.business_id FROM 23) = r.execution_id)
+        Buffers: shared hit=227
+        ->  Bitmap Heap Scan on billing_entries b  (cost=126.17..2895.74 rows=737 width=31) (actual time=0.330..0.331 rows=1 loops=1)
+              Recheck Cond: ((org_id = 1) AND (kind = 'debit'::text) AND (posted_at >= '2026-09-01 00:00:00+00'::timestamp with time zone) AND (posted_at < '2026-10-02 00:00:00+00'::timestamp with time zone))
+              Filter: (business_id ~~ 'billing_receipt:debit:%'::text)
+              Heap Blocks: exact=1
+              Buffers: shared hit=21
+              ->  Bitmap Index Scan on idx_billing_entries_org_kind_posted  (cost=0.00..125.99 rows=3038 width=0) (actual time=0.231..0.232 rows=2866 loops=1)
+                    Index Cond: ((org_id = 1) AND (kind = 'debit'::text) AND (posted_at >= '2026-09-01 00:00:00+00'::timestamp with time zone) AND (posted_at < '2026-10-02 00:00:00+00'::timestamp with time zone))
+                    Buffers: shared hit=20
+        ->  Hash  (cost=1144.31..1144.31 rows=4 width=16) (actual time=0.330..0.330 rows=0 loops=1)
+              Buckets: 1024  Batches: 1  Memory Usage: 8kB
+              Buffers: shared hit=206
+              ->  Index Scan using idx_usage_receipts_org_occurred on usage_receipts r  (cost=0.29..1144.31 rows=4 width=16) (actual time=0.329..0.329 rows=0 loops=1)
+                    Index Cond: (occurred_at < '2026-09-01 00:00:00+00'::timestamp with time zone)
+                    Buffers: shared hit=206
+Planning:
+  Buffers: shared hit=7
+Planning Time: 0.146 ms
+Execution Time: 0.686 ms

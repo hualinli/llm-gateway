@@ -1,0 +1,18 @@
+Finalize Aggregate  (cost=25788.73..25788.74 rows=1 width=64) (actual time=41.138..45.446 rows=1 loops=1)
+  Buffers: shared hit=15351 read=1076
+  I/O Timings: shared read=2.019
+  ->  Gather  (cost=25788.49..25788.70 rows=2 width=64) (actual time=41.043..45.437 rows=3 loops=1)
+        Workers Planned: 2
+        Workers Launched: 2
+        Buffers: shared hit=15351 read=1076
+        I/O Timings: shared read=2.019
+        ->  Partial Aggregate  (cost=24788.49..24788.50 rows=1 width=64) (actual time=32.792..32.793 rows=1 loops=3)
+              Buffers: shared hit=15351 read=1076
+              I/O Timings: shared read=2.019
+              ->  Parallel Seq Scan on metering_events  (cost=0.00..23731.76 rows=84538 width=20) (actual time=0.056..29.351 rows=66659 loops=3)
+                    Filter: ((created_at >= '2026-08-31 08:44:27+00'::timestamp with time zone) AND (created_at <= '2026-10-01 08:39:27+00'::timestamp with time zone) AND (org_id = 1))
+                    Rows Removed by Filter: 267135
+                    Buffers: shared hit=15351 read=1076
+                    I/O Timings: shared read=2.019
+Planning Time: 0.078 ms
+Execution Time: 45.477 ms

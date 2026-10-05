@@ -1,0 +1,324 @@
+{
+  "cells": {
+    "driver_accounts1_c1": {
+      "accounts": 1,
+      "concurrency": 1,
+      "op": "driver",
+      "run": {
+        "concurrency": 1,
+        "failed": 0.0,
+        "latency_average_ms": 0.108,
+        "log_lines": 27751,
+        "per_script_count": {
+          "0": 27751
+        },
+        "per_script_latency_ms": {
+          "0": {
+            "count": 27751,
+            "max": 3.899,
+            "mean": 0.096,
+            "min": 0.0,
+            "p50": 0.09,
+            "p95": 0.193,
+            "p99": 0.284
+          }
+        },
+        "pg": {
+          "active_max": 1,
+          "active_mean": 0.09,
+          "cpu_usec_delta": 2422918,
+          "errors": 0,
+          "idle_in_tx_max": 0,
+          "lock_waiters_max": 0,
+          "lock_waiters_mean": 0.0,
+          "lwlock_waiters_max": 0,
+          "samples": 11
+        },
+        "seconds": 3.0,
+        "statement_latencies_ms": {},
+        "statement_latencies_per_script": {},
+        "stdout_tail": "pgbench (16.15 (Debian 16.15-1.pgdg13+2))\ntransaction type: /tmp/t11-hotspot/driver.sql\nscaling factor: 1\nquery mode: prepared\nnumber of clients: 1\nnumber of threads: 1\nmaximum number of tries: 1\nduration: 3 s\nnumber of transactions actually processed: 27751\nnumber of failed transactions: 0 (0.000%)\nlatency average = 0.108 ms\ninitial connection time = 1.890 ms\ntps = 9253.510372 (without initial connection time)\nstatement latencies in milliseconds and failures:\n         0.096           0  SELECT 1;\n",
+        "tps": 9253.510372,
+        "transactions": 27751.0
+      }
+    },
+    "driver_accounts1_c128": {
+      "accounts": 1,
+      "concurrency": 128,
+      "op": "driver",
+      "run": {
+        "concurrency": 128,
+        "failed": 0.0,
+        "latency_average_ms": 3.58,
+        "log_lines": 106507,
+        "per_script_count": {
+          "0": 106507
+        },
+        "per_script_latency_ms": {
+          "0": {
+            "count": 106507,
+            "max": 17.45,
+            "mean": 1.982,
+            "min": 0.0,
+            "p50": 1.536,
+            "p95": 5.874,
+            "p99": 8.307
+          }
+        },
+        "pg": {
+          "active_max": 2,
+          "active_mean": 0.64,
+          "cpu_usec_delta": 11999427,
+          "errors": 0,
+          "idle_in_tx_max": 0,
+          "lock_waiters_max": 0,
+          "lock_waiters_mean": 0.0,
+          "lwlock_waiters_max": 0,
+          "samples": 11
+        },
+        "seconds": 3.0,
+        "statement_latencies_ms": {},
+        "statement_latencies_per_script": {},
+        "stdout_tail": "pgbench (16.15 (Debian 16.15-1.pgdg13+2))\ntransaction type: /tmp/t11-hotspot/driver.sql\nscaling factor: 1\nquery mode: prepared\nnumber of clients: 128\nnumber of threads: 8\nmaximum number of tries: 1\nduration: 3 s\nnumber of transactions actually processed: 106507\nnumber of failed transactions: 0 (0.000%)\nlatency average = 3.580 ms\ninitial connection time = 39.263 ms\ntps = 35756.394435 (without initial connection time)\nstatement latencies in milliseconds and failures:\n         1.983           0  SELECT 1;\n",
+        "tps": 35756.394435,
+        "transactions": 106507.0
+      }
+    },
+    "driver_accounts1_c32": {
+      "accounts": 1,
+      "concurrency": 32,
+      "op": "driver",
+      "run": {
+        "concurrency": 32,
+        "failed": 0.0,
+        "latency_average_ms": 0.928,
+        "log_lines": 103250,
+        "per_script_count": {
+          "0": 103250
+        },
+        "per_script_latency_ms": {
+          "0": {
+            "count": 103250,
+            "max": 9.474,
+            "mean": 0.584,
+            "min": 0.0,
+            "p50": 0.29,
+            "p95": 2.191,
+            "p99": 3.56
+          }
+        },
+        "pg": {
+          "active_max": 2,
+          "active_mean": 0.36,
+          "cpu_usec_delta": 9406869,
+          "errors": 0,
+          "idle_in_tx_max": 0,
+          "lock_waiters_max": 0,
+          "lock_waiters_mean": 0.0,
+          "lwlock_waiters_max": 0,
+          "samples": 11
+        },
+        "seconds": 3.0,
+        "statement_latencies_ms": {},
+        "statement_latencies_per_script": {},
+        "stdout_tail": "pgbench (16.15 (Debian 16.15-1.pgdg13+2))\ntransaction type: /tmp/t11-hotspot/driver.sql\nscaling factor: 1\nquery mode: prepared\nnumber of clients: 32\nnumber of threads: 8\nmaximum number of tries: 1\nduration: 3 s\nnumber of transactions actually processed: 103250\nnumber of failed transactions: 0 (0.000%)\nlatency average = 0.928 ms\ninitial connection time = 10.988 ms\ntps = 34487.158418 (without initial connection time)\nstatement latencies in milliseconds and failures:\n         0.585           0  SELECT 1;\n",
+        "tps": 34487.158418,
+        "transactions": 103250.0
+      }
+    },
+    "driver_accounts1_c8": {
+      "accounts": 1,
+      "concurrency": 8,
+      "op": "driver",
+      "run": {
+        "concurrency": 8,
+        "failed": 0.0,
+        "latency_average_ms": 0.305,
+        "log_lines": 78571,
+        "per_script_count": {
+          "0": 78571
+        },
+        "per_script_latency_ms": {
+          "0": {
+            "count": 78571,
+            "max": 7.013,
+            "mean": 0.204,
+            "min": 0.0,
+            "p50": 0.145,
+            "p95": 0.64,
+            "p99": 1.017
+          }
+        },
+        "pg": {
+          "active_max": 1,
+          "active_mean": 0.27,
+          "cpu_usec_delta": 7576771,
+          "errors": 0,
+          "idle_in_tx_max": 0,
+          "lock_waiters_max": 0,
+          "lock_waiters_mean": 0.0,
+          "lwlock_waiters_max": 0,
+          "samples": 11
+        },
+        "seconds": 3.0,
+        "statement_latencies_ms": {},
+        "statement_latencies_per_script": {},
+        "stdout_tail": "pgbench (16.15 (Debian 16.15-1.pgdg13+2))\ntransaction type: /tmp/t11-hotspot/driver.sql\nscaling factor: 1\nquery mode: prepared\nnumber of clients: 8\nnumber of threads: 8\nmaximum number of tries: 1\nduration: 3 s\nnumber of transactions actually processed: 78571\nnumber of failed transactions: 0 (0.000%)\nlatency average = 0.305 ms\ninitial connection time = 4.230 ms\ntps = 26210.821459 (without initial connection time)\nstatement latencies in milliseconds and failures:\n         0.204           0  SELECT 1;\n",
+        "tps": 26210.821459,
+        "transactions": 78571.0
+      }
+    }
+  },
+  "commit": "6cd44e80fca930417a8c239a541c9153539e7c70",
+  "correctness": [
+    {
+      "account": {
+        "posted": 2225,
+        "reserved": 2225,
+        "version": 26
+      },
+      "admit_latency_ms": {
+        "count": 25,
+        "max": 147.106,
+        "mean": 89.182,
+        "min": 23.261,
+        "p50": 92.154,
+        "p95": 139.602,
+        "p99": 145.337
+      },
+      "audits": 25,
+      "demand": 100,
+      "executions": 25,
+      "funded_reservations": 25,
+      "ledger_entries": 25,
+      "ledger_matches_executions": true,
+      "ledger_reserved": "2225",
+      "no_overdraft": true,
+      "outcomes": {
+        "insufficient_funds": 75,
+        "ok": 25,
+        "other": 0
+      },
+      "projection_matches_ledger": true,
+      "refuse_latency_ms": {
+        "count": 75,
+        "max": 270.906,
+        "mean": 207.03,
+        "min": 145.981,
+        "p50": 205.893,
+        "p95": 264.295,
+        "p99": 267.601
+      },
+      "variant": "for_update",
+      "version_matches": true
+    },
+    {
+      "account": {
+        "posted": 2225,
+        "reserved": 2225,
+        "version": 26
+      },
+      "admit_latency_ms": {
+        "count": 25,
+        "max": 144.058,
+        "mean": 98.976,
+        "min": 49.096,
+        "p50": 100.713,
+        "p95": 138.839,
+        "p99": 142.872
+      },
+      "audits": 25,
+      "demand": 100,
+      "executions": 25,
+      "funded_reservations": 25,
+      "ledger_entries": 25,
+      "ledger_matches_executions": true,
+      "ledger_reserved": "2225",
+      "no_overdraft": true,
+      "outcomes": {
+        "insufficient_funds": 75,
+        "ok": 25,
+        "other": 0
+      },
+      "projection_matches_ledger": true,
+      "refuse_latency_ms": {
+        "count": 75,
+        "max": 209.81,
+        "mean": 175.775,
+        "min": 105.05,
+        "p50": 176.667,
+        "p95": 207.145,
+        "p99": 208.833
+      },
+      "variant": "cond_update",
+      "version_matches": true
+    }
+  ],
+  "dirty": 5,
+  "environment": {
+    "pg_image": "postgres:16.15",
+    "pgbench": "pgbench (PostgreSQL) 16.15 (Debian 16.15-1.pgdg13+2)",
+    "server_flags": [
+      "-c",
+      "max_connections=400",
+      "-c",
+      "shared_preload_libraries=pg_stat_statements",
+      "-c",
+      "pg_stat_statements.max=5000",
+      "-c",
+      "pg_stat_statements.track=all",
+      "-c",
+      "track_io_timing=on",
+      "-c",
+      "log_min_duration_statement=1000"
+    ],
+    "settings": {
+      "fsync": "on",
+      "full_page_writes": "on",
+      "max_connections": "400",
+      "server_version": "16.15 (Debian 16.15-1.pgdg13+2)",
+      "shared_buffers": "16384",
+      "synchronous_commit": "on",
+      "track_io_timing": "on",
+      "wal_level": "replica",
+      "work_mem": "4096"
+    }
+  },
+  "finished_at": "2026-10-01T08:29:36Z",
+  "host": {
+    "cpus": 20,
+    "platform": "macOS-14.8-x86_64-i386-64bit-Mach-O",
+    "python": "3.14.7"
+  },
+  "parameters": {
+    "accounts": [
+      1
+    ],
+    "client": "pgbench -M simple (one statement per round trip), interleaved scripts",
+    "concurrency": [
+      1,
+      8,
+      32,
+      128
+    ],
+    "ops": "driver",
+    "reserve_amount_micro": 89,
+    "round_seconds": 3.0,
+    "settle_charge_micro": 89,
+    "variant_a": "SELECT ... FOR UPDATE + read-modify-write UPDATE (shipped statement order)",
+    "variant_b": "conditional UPDATE ... WHERE available >= amount (experiment only)"
+  },
+  "projection": {
+    "accounts": 0,
+    "mismatches": []
+  },
+  "run_id": "l15vidr9",
+  "sqlcheck": "passed",
+  "started_at": "2026-10-01T08:29:19Z",
+  "task": "T11 B03 hotspot A/B",
+  "teardown": {
+    "container": "llm-gw-t11-ab-l15vidr9-pg",
+    "kept": false,
+    "removed_build_dir": "/var/folders/06/6pp62dv93lq23br_tqkd3_f00000gn/T/llm-gw-t11-ab-l15vidr9-build-830m75zt"
+  }
+}

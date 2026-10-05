@@ -1,0 +1,36 @@
+# source profile: data/benchmarks/t11-capacity/profiles/overload-120pct.heap.pb.gz
+# binary: data/benchmarks/t11-capacity/bin/gateway
+
+File: gateway
+Build ID: 862b42a65ca9d214c88f42acb5ffcbd59e8f1bf7
+Type: inuse_space
+Time: 2026-10-01 17:28:32 CST
+Showing nodes accounting for 22049.85kB, 100% of 22049.85kB total
+Showing top 25 nodes out of 110
+      flat  flat%   sum%        cum   cum%
+ 9978.51kB 45.25% 45.25%  9978.51kB 45.25%  bufio.NewReaderSize (inline)
+ 3598.02kB 16.32% 61.57%  3598.02kB 16.32%  bufio.NewWriterSize (inline)
+ 1184.27kB  5.37% 66.94%  1184.27kB  5.37%  runtime/pprof.StartCPUProfile
+ 1025.23kB  4.65% 71.59%  1025.23kB  4.65%  runtime.mallocgc
+ 1024.04kB  4.64% 76.24%  1024.04kB  4.64%  internal/bytealg.MakeNoZero
+  623.02kB  2.83% 79.06%   623.02kB  2.83%  llm-gateway/internal/metering.NewProducerWithOptions
+  518.65kB  2.35% 81.41%   518.65kB  2.35%  context.(*cancelCtx).propagateCancel
+  513.12kB  2.33% 83.74%   513.12kB  2.33%  golang.org/x/net/http2/hpack.newInternalNode
+  512.44kB  2.32% 86.07%   512.44kB  2.32%  github.com/jackc/pgx/v5/pgconn.(*PgConn).Prepare
+  512.17kB  2.32% 88.39%   512.17kB  2.32%  net/http.Header.Clone
+  512.16kB  2.32% 90.71%   512.16kB  2.32%  net/http.readRequest
+  512.07kB  2.32% 93.03%   512.07kB  2.32%  net/http.(*Server).newConn
+  512.05kB  2.32% 95.36%  2054.06kB  9.32%  net/http.(*Transport).dialConn
+  512.05kB  2.32% 97.68%   512.05kB  2.32%  net/http.(*persistConn).roundTrip
+  512.04kB  2.32%   100%  1024.09kB  4.64%  net/http.(*Transport).roundTrip
+         0     0%   100%     1028kB  4.66%  bufio.NewReader
+         0     0%   100%   518.65kB  2.35%  context.WithCancel
+         0     0%   100%   518.65kB  2.35%  context.withCancel (inline)
+         0     0%   100%   512.44kB  2.32%  database/sql.(*DB).queryDC
+         0     0%   100%   512.44kB  2.32%  database/sql.(*DB).queryDC.func1
+         0     0%   100%   512.44kB  2.32%  database/sql.(*Tx).QueryContext
+         0     0%   100%   512.44kB  2.32%  database/sql.(*Tx).QueryRowContext
+         0     0%   100%   512.44kB  2.32%  database/sql.ctxDriverQuery
+         0     0%   100%   512.44kB  2.32%  database/sql.withLock
+         0     0%   100%   512.44kB  2.32%  github.com/jackc/pgx/v5.(*Conn).Prepare
+

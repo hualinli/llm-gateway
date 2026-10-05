@@ -1,0 +1,10 @@
+# source profile: data/benchmarks/t11-capacity/profiles/slow-p0-normal.mutex.pb.gz
+# binary: data/benchmarks/t11-capacity/bin/gateway
+
+File: gateway
+Build ID: 862b42a65ca9d214c88f42acb5ffcbd59e8f1bf7
+Type: delay
+Time: 2026-10-01 17:16:04 CST
+Showing nodes accounting for 0, 0% of 0 total
+      flat  flat%   sum%        cum   cum%
+

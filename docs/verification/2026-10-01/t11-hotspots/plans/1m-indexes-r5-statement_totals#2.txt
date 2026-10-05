@@ -1,0 +1,38 @@
+Finalize Aggregate  (cost=25313.49..25313.50 rows=1 width=40) (actual time=35.192..39.660 rows=1 loops=1)
+  Buffers: shared hit=11314 read=2957
+  I/O Timings: shared read=4.414
+  ->  Gather  (cost=25313.26..25313.47 rows=2 width=40) (actual time=34.953..39.654 rows=3 loops=1)
+        Workers Planned: 2
+        Workers Launched: 2
+        Buffers: shared hit=11314 read=2957
+        I/O Timings: shared read=4.414
+        ->  Partial Aggregate  (cost=24313.26..24313.27 rows=1 width=40) (actual time=25.143..25.146 rows=1 loops=3)
+              Buffers: shared hit=11314 read=2957
+              I/O Timings: shared read=4.414
+              ->  Parallel Hash Join  (cost=8570.26..24309.91 rows=670 width=8) (actual time=25.140..25.142 rows=0 loops=3)
+                    Hash Cond: (SUBSTRING(b.business_id FROM 23) = r.execution_id)
+                    Buffers: shared hit=11314 read=2957
+                    I/O Timings: shared read=4.414
+                    ->  Parallel Bitmap Heap Scan on billing_entries b  (cost=628.12..16363.49 rows=1554 width=32) (actual time=3.979..8.769 rows=5100 loops=3)
+                          Recheck Cond: ((org_id = 1) AND (kind = 'debit'::text) AND (posted_at >= '2026-09-01 00:00:00+00'::timestamp with time zone) AND (posted_at < '2026-10-02 00:00:00+00'::timestamp with time zone))
+                          Filter: (business_id ~~ 'billing_receipt:debit:%'::text)
+                          Heap Blocks: exact=2251
+                          Buffers: shared hit=7655 read=95
+                          I/O Timings: shared read=0.273
+                          ->  Bitmap Index Scan on idx_billing_entries_org_kind_posted  (cost=0.00..627.18 rows=15384 width=0) (actual time=2.004..2.004 rows=15301 loops=1)
+                                Index Cond: ((org_id = 1) AND (kind = 'debit'::text) AND (posted_at >= '2026-09-01 00:00:00+00'::timestamp with time zone) AND (posted_at < '2026-10-02 00:00:00+00'::timestamp with time zone))
+                                Buffers: shared hit=4 read=95
+                                I/O Timings: shared read=0.273
+                    ->  Parallel Hash  (cost=7492.67..7492.67 rows=35958 width=17) (actual time=14.307..14.308 rows=28453 loops=3)
+                          Buckets: 131072  Batches: 1  Memory Usage: 5760kB
+                          Buffers: shared hit=3598 read=2853
+                          I/O Timings: shared read=4.091
+                          ->  Parallel Seq Scan on usage_receipts r  (cost=0.00..7492.67 rows=35958 width=17) (actual time=0.322..9.369 rows=28453 loops=3)
+                                Filter: (occurred_at < '2026-09-01 00:00:00+00'::timestamp with time zone)
+                                Rows Removed by Filter: 38213
+                                Buffers: shared hit=3598 read=2853
+                                I/O Timings: shared read=4.091
+Planning:
+  Buffers: shared hit=8
+Planning Time: 0.193 ms
+Execution Time: 39.695 ms

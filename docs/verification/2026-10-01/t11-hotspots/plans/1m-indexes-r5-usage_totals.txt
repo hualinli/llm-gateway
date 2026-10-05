@@ -1,0 +1,14 @@
+Finalize Aggregate  (cost=18615.07..18615.08 rows=1 width=64) (actual time=27.509..30.405 rows=1 loops=1)
+  Buffers: shared hit=3208
+  ->  Gather  (cost=18614.83..18615.04 rows=2 width=64) (actual time=26.862..30.387 rows=3 loops=1)
+        Workers Planned: 2
+        Workers Launched: 2
+        Buffers: shared hit=3208
+        ->  Partial Aggregate  (cost=17614.83..17614.84 rows=1 width=64) (actual time=19.060..19.061 rows=1 loops=3)
+              Buffers: shared hit=3208
+              ->  Parallel Index Only Scan using idx_metering_events_org_window_cover on metering_events  (cost=0.42..16560.82 rows=84320 width=20) (actual time=0.020..15.914 rows=66659 loops=3)
+                    Index Cond: ((org_id = 1) AND (created_at >= '2026-08-31 08:44:27+00'::timestamp with time zone) AND (created_at <= '2026-10-01 08:39:27+00'::timestamp with time zone))
+                    Heap Fetches: 187
+                    Buffers: shared hit=3208
+Planning Time: 0.118 ms
+Execution Time: 30.454 ms

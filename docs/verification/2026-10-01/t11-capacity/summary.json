@@ -1,0 +1,919 @@
+{
+  "run_id": "20261001T083817Z-6cd44e80",
+  "generated_at": "2026-10-01T09:44:58Z",
+  "rounds": 54,
+  "invalid_rounds": [
+    "open-s-200",
+    "open-s-300",
+    "open-s-500"
+  ],
+  "failed_rounds": [],
+  "experiments": {
+    "b01": {
+      "rounds": [
+        "b01-direct-s-r1",
+        "b01-direct-s-r2",
+        "b01-direct-s-r3",
+        "b01-direct-m-r1",
+        "b01-direct-m-r2",
+        "b01-direct-l-r1",
+        "b01-gateway-s-r1",
+        "b01-gateway-s-r2",
+        "b01-gateway-s-r3",
+        "b01-gateway-m-r1",
+        "b01-gateway-m-r2",
+        "b01-gateway-l-r1"
+      ],
+      "valid_rounds": [
+        "b01-direct-s-r1",
+        "b01-direct-s-r2",
+        "b01-direct-s-r3",
+        "b01-direct-m-r1",
+        "b01-direct-m-r2",
+        "b01-direct-l-r1",
+        "b01-gateway-s-r1",
+        "b01-gateway-s-r2",
+        "b01-gateway-s-r3",
+        "b01-gateway-m-r1",
+        "b01-gateway-m-r2",
+        "b01-gateway-l-r1"
+      ],
+      "invalid_rounds": [],
+      "two_gateways": [
+        false
+      ],
+      "metrics": {
+        "achieved_start_rate": {
+          "n": 12,
+          "median": 14.5166,
+          "range": [
+            2.0167,
+            25.0166
+          ]
+        },
+        "achieved_arrival_rate": {
+          "n": 12,
+          "median": 14.4999,
+          "range": [
+            1.9999,
+            25.0
+          ]
+        },
+        "completed": {
+          "n": 12,
+          "median": 870.0,
+          "range": [
+            120,
+            1500
+          ]
+        },
+        "peak_active_sum": {
+          "n": 12,
+          "median": 7.0,
+          "range": [
+            4,
+            23
+          ]
+        },
+        "first_event_p50_ms": {
+          "n": 12,
+          "median": 63.834,
+          "range": [
+            21.55,
+            306.331
+          ]
+        },
+        "first_event_p95_ms": {
+          "n": 12,
+          "median": 67.592,
+          "range": [
+            23.117,
+            310.432
+          ]
+        },
+        "first_content_p50_ms": {
+          "n": 12,
+          "median": 63.84,
+          "range": [
+            21.559,
+            306.361
+          ]
+        },
+        "first_content_p95_ms": {
+          "n": 12,
+          "median": 67.6045,
+          "range": [
+            23.13,
+            310.439
+          ]
+        },
+        "dispatch_lag_p95_ms": {
+          "n": 12,
+          "median": 1.69,
+          "range": [
+            0.733,
+            2.106
+          ]
+        },
+        "scheduled_to_terminal_p95_ms": {
+          "n": 12,
+          "median": 1188.8745,
+          "range": [
+            138.868,
+            11345.425
+          ]
+        },
+        "wall_seconds": {
+          "n": 12,
+          "median": 61.101,
+          "range": [
+            60.124,
+            70.887
+          ]
+        }
+      }
+    },
+    "closed-ladder": {
+      "rounds": [
+        "closed-c1",
+        "closed-c16",
+        "closed-c64",
+        "closed-c128",
+        "closed-c256",
+        "closed-c256-r2",
+        "closed-c256-r3"
+      ],
+      "valid_rounds": [
+        "closed-c1",
+        "closed-c16",
+        "closed-c64",
+        "closed-c128",
+        "closed-c256",
+        "closed-c256-r2",
+        "closed-c256-r3"
+      ],
+      "invalid_rounds": [],
+      "two_gateways": [
+        false
+      ],
+      "metrics": {
+        "achieved_start_rate": {
+          "n": 7,
+          "median": 58.9895,
+          "range": [
+            0.4493,
+            116.3624
+          ]
+        },
+        "achieved_arrival_rate": {
+          "n": 7,
+          "median": 58.9735,
+          "range": [
+            0.4338,
+            116.3466
+          ]
+        },
+        "completed": {
+          "n": 7,
+          "median": 3693,
+          "range": [
+            29,
+            7385
+          ]
+        },
+        "peak_active_sum": {
+          "n": 7,
+          "median": 128,
+          "range": [
+            1,
+            256
+          ]
+        },
+        "first_event_p50_ms": {
+          "n": 7,
+          "median": 110.771,
+          "range": [
+            106.471,
+            122.445
+          ]
+        },
+        "first_event_p95_ms": {
+          "n": 7,
+          "median": 198.491,
+          "range": [
+            113.333,
+            417.89
+          ]
+        },
+        "first_content_p50_ms": {
+          "n": 7,
+          "median": 110.78,
+          "range": [
+            106.483,
+            122.455
+          ]
+        },
+        "first_content_p95_ms": {
+          "n": 7,
+          "median": 198.504,
+          "range": [
+            113.348,
+            417.897
+          ]
+        },
+        "dispatch_lag_p95_ms": {
+          "n": 7,
+          "median": 0.0,
+          "range": [
+            0.0,
+            0.0
+          ]
+        },
+        "scheduled_to_terminal_p95_ms": {
+          "n": 7,
+          "median": 2338.548,
+          "range": [
+            2267.911,
+            2560.661
+          ]
+        },
+        "wall_seconds": {
+          "n": 7,
+          "median": 65.725,
+          "range": [
+            64.851,
+            66.869
+          ]
+        }
+      }
+    },
+    "open-ladder-s": {
+      "rounds": [
+        "open-s-50",
+        "open-s-100",
+        "open-s-200",
+        "open-s-300",
+        "open-s-500"
+      ],
+      "valid_rounds": [
+        "open-s-50",
+        "open-s-100"
+      ],
+      "invalid_rounds": [
+        "open-s-200",
+        "open-s-300",
+        "open-s-500"
+      ],
+      "two_gateways": [
+        false
+      ],
+      "metrics": {
+        "achieved_start_rate": {
+          "n": 2,
+          "median": 75.0165,
+          "range": [
+            50.0166,
+            100.0165
+          ]
+        },
+        "achieved_arrival_rate": {
+          "n": 2,
+          "median": 74.9998,
+          "range": [
+            49.9999,
+            99.9998
+          ]
+        },
+        "completed": {
+          "n": 2,
+          "median": 4500.0,
+          "range": [
+            3000,
+            6000
+          ]
+        },
+        "peak_active_sum": {
+          "n": 2,
+          "median": 13.5,
+          "range": [
+            9,
+            18
+          ]
+        },
+        "first_event_p50_ms": {
+          "n": 2,
+          "median": 26.1855,
+          "range": [
+            25.75,
+            26.621
+          ]
+        },
+        "first_event_p95_ms": {
+          "n": 2,
+          "median": 36.015,
+          "range": [
+            32.318,
+            39.712
+          ]
+        },
+        "first_content_p50_ms": {
+          "n": 2,
+          "median": 26.195,
+          "range": [
+            25.761,
+            26.629
+          ]
+        },
+        "first_content_p95_ms": {
+          "n": 2,
+          "median": 36.026,
+          "range": [
+            32.328,
+            39.724
+          ]
+        },
+        "dispatch_lag_p95_ms": {
+          "n": 2,
+          "median": 0.5335,
+          "range": [
+            0.478,
+            0.589
+          ]
+        },
+        "scheduled_to_terminal_p95_ms": {
+          "n": 2,
+          "median": 153.2575,
+          "range": [
+            148.801,
+            157.714
+          ]
+        },
+        "wall_seconds": {
+          "n": 2,
+          "median": 60.1545,
+          "range": [
+            60.148,
+            60.161
+          ]
+        }
+      }
+    },
+    "open-ladder-l": {
+      "rounds": [
+        "open-l-2",
+        "open-l-5",
+        "open-l-10",
+        "open-l-20",
+        "open-l-30"
+      ],
+      "valid_rounds": [
+        "open-l-2",
+        "open-l-5",
+        "open-l-10",
+        "open-l-20",
+        "open-l-30"
+      ],
+      "invalid_rounds": [],
+      "two_gateways": [
+        false
+      ],
+      "metrics": {
+        "achieved_start_rate": {
+          "n": 5,
+          "median": 10.0167,
+          "range": [
+            2.0168,
+            30.0166
+          ]
+        },
+        "achieved_arrival_rate": {
+          "n": 5,
+          "median": 10.0,
+          "range": [
+            2.0,
+            29.9999
+          ]
+        },
+        "completed": {
+          "n": 5,
+          "median": 600,
+          "range": [
+            120,
+            1445
+          ]
+        },
+        "peak_active_sum": {
+          "n": 5,
+          "median": 110,
+          "range": [
+            22,
+            258
+          ]
+        },
+        "first_event_p50_ms": {
+          "n": 5,
+          "median": 309.086,
+          "range": [
+            307.92,
+            309.711
+          ]
+        },
+        "first_event_p95_ms": {
+          "n": 5,
+          "median": 316.297,
+          "range": [
+            313.86,
+            321.93
+          ]
+        },
+        "first_content_p50_ms": {
+          "n": 5,
+          "median": 309.097,
+          "range": [
+            307.928,
+            309.722
+          ]
+        },
+        "first_content_p95_ms": {
+          "n": 5,
+          "median": 316.301,
+          "range": [
+            313.869,
+            321.943
+          ]
+        },
+        "dispatch_lag_p95_ms": {
+          "n": 5,
+          "median": 0.817,
+          "range": [
+            0.678,
+            1.045
+          ]
+        },
+        "scheduled_to_terminal_p95_ms": {
+          "n": 5,
+          "median": 10950.139,
+          "range": [
+            10908.653,
+            11025.662
+          ]
+        },
+        "wall_seconds": {
+          "n": 5,
+          "median": 70.9,
+          "range": [
+            70.575,
+            70.916
+          ]
+        }
+      }
+    },
+    "wallets": {
+      "rounds": [
+        "wallets-hot-r1",
+        "wallets-hot-r2",
+        "wallets-multi-r1",
+        "wallets-multi-r2"
+      ],
+      "valid_rounds": [
+        "wallets-hot-r1",
+        "wallets-hot-r2",
+        "wallets-multi-r1",
+        "wallets-multi-r2"
+      ],
+      "invalid_rounds": [],
+      "two_gateways": [
+        false
+      ],
+      "metrics": {
+        "achieved_start_rate": {
+          "n": 4,
+          "median": 59.3393,
+          "range": [
+            58.7618,
+            59.9858
+          ]
+        },
+        "achieved_arrival_rate": {
+          "n": 4,
+          "median": 59.3287,
+          "range": [
+            58.7459,
+            59.9267
+          ]
+        },
+        "completed": {
+          "n": 4,
+          "median": 3721.5,
+          "range": [
+            3693,
+            3750
+          ]
+        },
+        "peak_active_sum": {
+          "n": 4,
+          "median": 129.0,
+          "range": [
+            128,
+            130
+          ]
+        },
+        "first_event_p50_ms": {
+          "n": 4,
+          "median": 112.5395,
+          "range": [
+            112.061,
+            112.93
+          ]
+        },
+        "first_event_p95_ms": {
+          "n": 4,
+          "median": 182.803,
+          "range": [
+            150.309,
+            225.048
+          ]
+        },
+        "first_content_p50_ms": {
+          "n": 4,
+          "median": 112.5515,
+          "range": [
+            112.07,
+            112.939
+          ]
+        },
+        "first_content_p95_ms": {
+          "n": 4,
+          "median": 183.0245,
+          "range": [
+            150.321,
+            225.058
+          ]
+        },
+        "dispatch_lag_p95_ms": {
+          "n": 4,
+          "median": 0.0,
+          "range": [
+            0.0,
+            0.0
+          ]
+        },
+        "scheduled_to_terminal_p95_ms": {
+          "n": 4,
+          "median": 2299.3935,
+          "range": [
+            2262.818,
+            2332.316
+          ]
+        },
+        "wall_seconds": {
+          "n": 4,
+          "median": 65.0425,
+          "range": [
+            64.837,
+            65.095
+          ]
+        }
+      }
+    },
+    "slowclient": {
+      "rounds": [
+        "slow-p0-normal",
+        "slow-p1-1pct-1k",
+        "slow-p2-10pct-1k",
+        "slow-p3-50pct-1k",
+        "slow-p4-100pct-10k",
+        "slow-p5-100pct-1k",
+        "slow-p6-100pct-stop"
+      ],
+      "valid_rounds": [
+        "slow-p0-normal",
+        "slow-p1-1pct-1k",
+        "slow-p2-10pct-1k",
+        "slow-p3-50pct-1k",
+        "slow-p4-100pct-10k",
+        "slow-p5-100pct-1k",
+        "slow-p6-100pct-stop"
+      ],
+      "invalid_rounds": [],
+      "two_gateways": [
+        false
+      ],
+      "metrics": {
+        "achieved_start_rate": {
+          "n": 7,
+          "median": 10.0167,
+          "range": [
+            3.0111,
+            50.0168
+          ]
+        },
+        "achieved_arrival_rate": {
+          "n": 7,
+          "median": 10.0,
+          "range": [
+            2.9999,
+            50.0
+          ]
+        },
+        "completed": {
+          "n": 7,
+          "median": 600,
+          "range": [
+            180,
+            3000
+          ]
+        },
+        "peak_active_sum": {
+          "n": 7,
+          "median": 124,
+          "range": [
+            54,
+            178
+          ]
+        },
+        "first_event_p50_ms": {
+          "n": 7,
+          "median": 107.019,
+          "range": [
+            105.597,
+            30108.055
+          ]
+        },
+        "first_event_p95_ms": {
+          "n": 7,
+          "median": 111.775,
+          "range": [
+            108.559,
+            30113.176
+          ]
+        },
+        "first_content_p50_ms": {
+          "n": 7,
+          "median": 107.036,
+          "range": [
+            105.601,
+            30108.104
+          ]
+        },
+        "first_content_p95_ms": {
+          "n": 7,
+          "median": 111.802,
+          "range": [
+            108.565,
+            30113.213
+          ]
+        },
+        "dispatch_lag_p95_ms": {
+          "n": 7,
+          "median": 0.761,
+          "range": [
+            0.078,
+            1.934
+          ]
+        },
+        "scheduled_to_terminal_p95_ms": {
+          "n": 7,
+          "median": 8009.576,
+          "range": [
+            2209.444,
+            59560.302
+          ]
+        },
+        "wall_seconds": {
+          "n": 7,
+          "median": 119.066,
+          "range": [
+            62.202,
+            119.927
+          ]
+        }
+      }
+    },
+    "overload": {
+      "rounds": [
+        "overload-120pct",
+        "overload-fallback"
+      ],
+      "valid_rounds": [
+        "overload-120pct",
+        "overload-fallback"
+      ],
+      "invalid_rounds": [],
+      "two_gateways": [
+        false
+      ],
+      "metrics": {
+        "achieved_start_rate": {
+          "n": 2,
+          "median": 98.9055,
+          "range": [
+            58.2055,
+            139.6054
+          ]
+        },
+        "achieved_arrival_rate": {
+          "n": 2,
+          "median": 98.8999,
+          "range": [
+            58.2,
+            139.5999
+          ]
+        },
+        "completed": {
+          "n": 2,
+          "median": 15664.5,
+          "range": [
+            10476,
+            20853
+          ]
+        },
+        "peak_active_sum": {
+          "n": 2,
+          "median": 209.0,
+          "range": [
+            141,
+            277
+          ]
+        },
+        "first_event_p50_ms": {
+          "n": 2,
+          "median": 110.8395,
+          "range": [
+            107.513,
+            114.166
+          ]
+        },
+        "first_event_p95_ms": {
+          "n": 2,
+          "median": 143.602,
+          "range": [
+            118.118,
+            169.086
+          ]
+        },
+        "first_content_p50_ms": {
+          "n": 2,
+          "median": 110.8485,
+          "range": [
+            107.523,
+            114.174
+          ]
+        },
+        "first_content_p95_ms": {
+          "n": 2,
+          "median": 143.608,
+          "range": [
+            118.123,
+            169.093
+          ]
+        },
+        "dispatch_lag_p95_ms": {
+          "n": 2,
+          "median": 0.572,
+          "range": [
+            0.524,
+            0.62
+          ]
+        },
+        "scheduled_to_terminal_p95_ms": {
+          "n": 2,
+          "median": 2235.348,
+          "range": [
+            2210.971,
+            2259.725
+          ]
+        },
+        "wall_seconds": {
+          "n": 2,
+          "median": 182.277,
+          "range": [
+            182.241,
+            182.313
+          ]
+        }
+      }
+    },
+    "gw1v2": {
+      "rounds": [
+        "gw1v2-gw1-m-open-60",
+        "gw1v2-gw1-m-open-120",
+        "gw1v2-gw1-m-closed-256",
+        "gw1v2-gw1-multi-org",
+        "gw1v2-perorg-gw1",
+        "gw1v2-gw2-m-open-60",
+        "gw1v2-gw2-m-open-120",
+        "gw1v2-gw2-m-closed-256",
+        "gw1v2-gw2-multi-org",
+        "gw1v2-perorg-gw2"
+      ],
+      "valid_rounds": [
+        "gw1v2-gw1-m-open-60",
+        "gw1v2-gw1-m-open-120",
+        "gw1v2-gw1-m-closed-256",
+        "gw1v2-gw1-multi-org",
+        "gw1v2-perorg-gw1",
+        "gw1v2-gw2-m-open-60",
+        "gw1v2-gw2-m-open-120",
+        "gw1v2-gw2-m-closed-256",
+        "gw1v2-gw2-multi-org",
+        "gw1v2-perorg-gw2"
+      ],
+      "invalid_rounds": [],
+      "two_gateways": [
+        false,
+        true
+      ],
+      "metrics": {
+        "achieved_start_rate": {
+          "n": 10,
+          "median": 60.0246,
+          "range": [
+            40.0166,
+            120.032
+          ]
+        },
+        "achieved_arrival_rate": {
+          "n": 10,
+          "median": 59.9997,
+          "range": [
+            39.9997,
+            119.9996
+          ]
+        },
+        "completed": {
+          "n": 10,
+          "median": 3600.0,
+          "range": [
+            881,
+            7386
+          ]
+        },
+        "peak_active_sum": {
+          "n": 10,
+          "median": 137.0,
+          "range": [
+            39,
+            287
+          ]
+        },
+        "first_event_p50_ms": {
+          "n": 10,
+          "median": 107.2255,
+          "range": [
+            106.094,
+            115.863
+          ]
+        },
+        "first_event_p95_ms": {
+          "n": 10,
+          "median": 117.355,
+          "range": [
+            111.795,
+            354.122
+          ]
+        },
+        "first_content_p50_ms": {
+          "n": 10,
+          "median": 107.2365,
+          "range": [
+            106.107,
+            115.872
+          ]
+        },
+        "first_content_p95_ms": {
+          "n": 10,
+          "median": 117.3645,
+          "range": [
+            111.803,
+            354.13
+          ]
+        },
+        "dispatch_lag_p95_ms": {
+          "n": 10,
+          "median": 0.6795,
+          "range": [
+            0.0,
+            1.579
+          ]
+        },
+        "scheduled_to_terminal_p95_ms": {
+          "n": 10,
+          "median": 2213.304,
+          "range": [
+            2201.783,
+            2456.442
+          ]
+        },
+        "wall_seconds": {
+          "n": 10,
+          "median": 62.2185,
+          "range": [
+            61.898,
+            65.552
+          ]
+        }
+      }
+    }
+  }
+}

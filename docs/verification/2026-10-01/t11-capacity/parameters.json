@@ -1,0 +1,61 @@
+{
+  "run_id": "20261001T083817Z-6cd44e80",
+  "commit": "6cd44e80fca930417a8c239a541c9153539e7c70",
+  "experiments": [
+    "b01",
+    "closed-ladder",
+    "gw1v2",
+    "open-ladder-l",
+    "open-ladder-s",
+    "overload",
+    "slowclient",
+    "wallets"
+  ],
+  "shortened_for_single_host": {
+    "step_seconds": 60,
+    "warmup_seconds": 30,
+    "rounds_cap": 3,
+    "note": "the acceptance spec asks for a 60s warm-up, 5min per ladder step, >=3 rounds per step and a 60min soak; this run uses the values above on a single Docker Desktop host"
+  },
+  "slow_stop_seconds": 30,
+  "overload": {
+    "rate": 0.0,
+    "seconds": 180,
+    "fallback_seconds": 180,
+    "knee_start_rate_per_second": 116.362,
+    "overload_rate": 139.6,
+    "fallback_rate": 58.2,
+    "why": "the knee is the best sustained M-shape start rate of the closed-loop M ladder (and the warm-up closed rounds) observed earlier in this run"
+  },
+  "gateway": {
+    "max_active_streams": 256,
+    "cpus": 4.0,
+    "limiter": {
+      "rate": 100000,
+      "burst": 100000,
+      "why": "the Demo default of 20 rps would make every ladder a limiter measurement"
+    }
+  },
+  "generator": {
+    "binary": "data/benchmarks/t11-capacity/loadtest",
+    "max_slots": 512,
+    "validity_rule": "drops > 0.1% of scheduled arrivals or arrivals < 99% of the plan (open-loop rounds) invalidate the round for capacity conclusions"
+  },
+  "seed": {
+    "hot_orgs": 1,
+    "multi_orgs": 10,
+    "balance_micro_per_org": 1000000000000,
+    "price_micro_per_million_token": 1000000,
+    "model": "default"
+  },
+  "rounds_planned": 54,
+  "master_key": {
+    "state": "present",
+    "path": "data/provider-credential-master-key"
+  },
+  "container_platform": {
+    "docker_architecture": "x86_64",
+    "goarch": "amd64",
+    "host_machine": "x86_64"
+  }
+}

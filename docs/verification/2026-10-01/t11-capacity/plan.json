@@ -1,0 +1,1830 @@
+[
+  {
+    "id": "warmup-open-m-20",
+    "experiment": "warmup",
+    "label": "warm-up M 20/s for 30s (discarded)",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 20.0,
+    "hold_seconds": 30,
+    "generators": [
+      {
+        "mode": "open",
+        "c": 59,
+        "n": 600,
+        "rate": 20.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": true
+  },
+  {
+    "id": "warmup-closed-c64",
+    "experiment": "warmup",
+    "label": "warm-up M closed c=64 for 15s (discarded)",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 30.769230769230766,
+    "hold_seconds": 15,
+    "generators": [
+      {
+        "mode": "closed",
+        "c": 64,
+        "shape": "m",
+        "n": 462,
+        "timeout": 61,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": true
+  },
+  {
+    "id": "b01-direct-s-r1",
+    "experiment": "b01",
+    "label": "B01 direct S 25/s r1",
+    "target": "http://127.0.0.1:56286/v1/chat/completions",
+    "planned_rate": 25.0,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 1500,
+        "rate": 25.0,
+        "shape": "s",
+        "timeout": 60
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "b01-direct-s-r2",
+    "experiment": "b01",
+    "label": "B01 direct S 25/s r2",
+    "target": "http://127.0.0.1:56286/v1/chat/completions",
+    "planned_rate": 25.0,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 1500,
+        "rate": 25.0,
+        "shape": "s",
+        "timeout": 60
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "b01-direct-s-r3",
+    "experiment": "b01",
+    "label": "B01 direct S 25/s r3",
+    "target": "http://127.0.0.1:56286/v1/chat/completions",
+    "planned_rate": 25.0,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 1500,
+        "rate": 25.0,
+        "shape": "s",
+        "timeout": 60
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "b01-direct-m-r1",
+    "experiment": "b01",
+    "label": "B01 direct M 4/s r1",
+    "target": "http://127.0.0.1:56286/v1/chat/completions",
+    "planned_rate": 4.0,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 240,
+        "rate": 4.0,
+        "shape": "m",
+        "timeout": 61
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "b01-direct-m-r2",
+    "experiment": "b01",
+    "label": "B01 direct M 4/s r2",
+    "target": "http://127.0.0.1:56286/v1/chat/completions",
+    "planned_rate": 4.0,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 240,
+        "rate": 4.0,
+        "shape": "m",
+        "timeout": 61
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "b01-direct-l-r1",
+    "experiment": "b01",
+    "label": "B01 direct L 2/s r1",
+    "target": "http://127.0.0.1:56286/v1/chat/completions",
+    "planned_rate": 2.0,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "open",
+        "c": 29,
+        "n": 120,
+        "rate": 2.0,
+        "shape": "l",
+        "timeout": 70
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "b01-gateway-s-r1",
+    "experiment": "b01",
+    "label": "B01 gateway S 25/s r1",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 25.0,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 1500,
+        "rate": 25.0,
+        "shape": "s",
+        "timeout": 60,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "b01-gateway-s-r2",
+    "experiment": "b01",
+    "label": "B01 gateway S 25/s r2",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 25.0,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 1500,
+        "rate": 25.0,
+        "shape": "s",
+        "timeout": 60,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "b01-gateway-s-r3",
+    "experiment": "b01",
+    "label": "B01 gateway S 25/s r3",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 25.0,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 1500,
+        "rate": 25.0,
+        "shape": "s",
+        "timeout": 60,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "b01-gateway-m-r1",
+    "experiment": "b01",
+    "label": "B01 gateway M 4/s r1",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 4.0,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 240,
+        "rate": 4.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "b01-gateway-m-r2",
+    "experiment": "b01",
+    "label": "B01 gateway M 4/s r2",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 4.0,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 240,
+        "rate": 4.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "b01-gateway-l-r1",
+    "experiment": "b01",
+    "label": "B01 gateway L 2/s r1",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 2.0,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "open",
+        "c": 29,
+        "n": 120,
+        "rate": 2.0,
+        "shape": "l",
+        "timeout": 70,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "closed-c1",
+    "experiment": "closed-ladder",
+    "label": "closed-loop ladder M c=1",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 0.4807692307692307,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "closed",
+        "c": 1,
+        "shape": "m",
+        "n": 29,
+        "timeout": 61,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "closed-c16",
+    "experiment": "closed-ladder",
+    "label": "closed-loop ladder M c=16",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 7.692307692307692,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "closed",
+        "c": 16,
+        "shape": "m",
+        "n": 462,
+        "timeout": 61,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "closed-c64",
+    "experiment": "closed-ladder",
+    "label": "closed-loop ladder M c=64",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 30.769230769230766,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "closed",
+        "c": 64,
+        "shape": "m",
+        "n": 1847,
+        "timeout": 61,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "closed-c128",
+    "experiment": "closed-ladder",
+    "label": "closed-loop ladder M c=128",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 61.53846153846153,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "closed",
+        "c": 128,
+        "shape": "m",
+        "n": 3693,
+        "timeout": 61,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "closed-c256",
+    "experiment": "closed-ladder",
+    "label": "closed-loop ladder M c=256",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 123.07692307692307,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "closed",
+        "c": 256,
+        "shape": "m",
+        "n": 7385,
+        "timeout": 61,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "closed-c256-r2",
+    "experiment": "closed-ladder",
+    "label": "closed-loop ladder M c=256 r2",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 123.07692307692307,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "closed",
+        "c": 256,
+        "shape": "m",
+        "n": 7385,
+        "timeout": 61,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "closed-c256-r3",
+    "experiment": "closed-ladder",
+    "label": "closed-loop ladder M c=256 r3",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 123.07692307692307,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "closed",
+        "c": 256,
+        "shape": "m",
+        "n": 7385,
+        "timeout": 61,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "open-s-50",
+    "experiment": "open-ladder-s",
+    "label": "open-loop S ladder 50/s",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 50.0,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 3000,
+        "rate": 50.0,
+        "shape": "s",
+        "timeout": 60,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "open-s-100",
+    "experiment": "open-ladder-s",
+    "label": "open-loop S ladder 100/s",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 100.0,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "open",
+        "c": 18,
+        "n": 6000,
+        "rate": 100.0,
+        "shape": "s",
+        "timeout": 60,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "open-s-200",
+    "experiment": "open-ladder-s",
+    "label": "open-loop S ladder 200/s",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 200.0,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "open",
+        "c": 35,
+        "n": 12000,
+        "rate": 200.0,
+        "shape": "s",
+        "timeout": 60,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "open-s-300",
+    "experiment": "open-ladder-s",
+    "label": "open-loop S ladder 300/s",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 300.0,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "open",
+        "c": 53,
+        "n": 18000,
+        "rate": 300.0,
+        "shape": "s",
+        "timeout": 60,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "open-s-500",
+    "experiment": "open-ladder-s",
+    "label": "open-loop S ladder 500/s",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 500.0,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "open",
+        "c": 88,
+        "n": 30000,
+        "rate": 500.0,
+        "shape": "s",
+        "timeout": 60,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "open-l-2",
+    "experiment": "open-ladder-l",
+    "label": "open-loop L ladder 2/s",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 2.0,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "open",
+        "c": 29,
+        "n": 120,
+        "rate": 2.0,
+        "shape": "l",
+        "timeout": 70,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "open-l-5",
+    "experiment": "open-ladder-l",
+    "label": "open-loop L ladder 5/s",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 5.0,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "open",
+        "c": 72,
+        "n": 300,
+        "rate": 5.0,
+        "shape": "l",
+        "timeout": 70,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "open-l-10",
+    "experiment": "open-ladder-l",
+    "label": "open-loop L ladder 10/s",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 10.0,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "open",
+        "c": 144,
+        "n": 600,
+        "rate": 10.0,
+        "shape": "l",
+        "timeout": 70,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "open-l-20",
+    "experiment": "open-ladder-l",
+    "label": "open-loop L ladder 20/s",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 20.0,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "open",
+        "c": 288,
+        "n": 1200,
+        "rate": 20.0,
+        "shape": "l",
+        "timeout": 70,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "open-l-30",
+    "experiment": "open-ladder-l",
+    "label": "open-loop L ladder 30/s",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 30.0,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "open",
+        "c": 432,
+        "n": 1800,
+        "rate": 30.0,
+        "shape": "l",
+        "timeout": 70,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "wallets-hot-r1",
+    "experiment": "wallets",
+    "label": "one hot wallet, closed M c=128 r1",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 61.53846153846153,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "closed",
+        "c": 128,
+        "shape": "m",
+        "n": 3693,
+        "timeout": 61,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "wallets-hot-r2",
+    "experiment": "wallets",
+    "label": "one hot wallet, closed M c=128 r2",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 61.53846153846153,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "closed",
+        "c": 128,
+        "shape": "m",
+        "n": 3693,
+        "timeout": 61,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "wallets-multi-r1",
+    "experiment": "wallets",
+    "label": "ten wallets, closed M c=13x10=130 r1",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 62.5,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "closed",
+        "c": 13,
+        "shape": "m",
+        "n": 375,
+        "timeout": 61,
+        "key": "sk-t11-7lip3f5ym1tnzobkqmnasgxyn95n",
+        "org": 2
+      },
+      {
+        "mode": "closed",
+        "c": 13,
+        "shape": "m",
+        "n": 375,
+        "timeout": 61,
+        "key": "sk-t11-qmsse482af2t54j2k02tjkuw7gwd",
+        "org": 3
+      },
+      {
+        "mode": "closed",
+        "c": 13,
+        "shape": "m",
+        "n": 375,
+        "timeout": 61,
+        "key": "sk-t11-qp5k4c8avue5plmm6k7dami1ikha",
+        "org": 4
+      },
+      {
+        "mode": "closed",
+        "c": 13,
+        "shape": "m",
+        "n": 375,
+        "timeout": 61,
+        "key": "sk-t11-zbvuolgo4fgi6fqes15m6sd45iwr",
+        "org": 5
+      },
+      {
+        "mode": "closed",
+        "c": 13,
+        "shape": "m",
+        "n": 375,
+        "timeout": 61,
+        "key": "sk-t11-gexs9zxdgidldanw9nut0tujt1ej",
+        "org": 6
+      },
+      {
+        "mode": "closed",
+        "c": 13,
+        "shape": "m",
+        "n": 375,
+        "timeout": 61,
+        "key": "sk-t11-gb3a4iqd3ieydxuhjwuo59vvkb9a",
+        "org": 7
+      },
+      {
+        "mode": "closed",
+        "c": 13,
+        "shape": "m",
+        "n": 375,
+        "timeout": 61,
+        "key": "sk-t11-m6jy89hh4ttam525pth8v2gkflzy",
+        "org": 8
+      },
+      {
+        "mode": "closed",
+        "c": 13,
+        "shape": "m",
+        "n": 375,
+        "timeout": 61,
+        "key": "sk-t11-egyz7mzgo9vekxne2b5zsqz0a5xg",
+        "org": 9
+      },
+      {
+        "mode": "closed",
+        "c": 13,
+        "shape": "m",
+        "n": 375,
+        "timeout": 61,
+        "key": "sk-t11-rbu2jq0306upucjcv5x8roowdyzb",
+        "org": 10
+      },
+      {
+        "mode": "closed",
+        "c": 13,
+        "shape": "m",
+        "n": 375,
+        "timeout": 61,
+        "key": "sk-t11-dnm8kxw4d140jwhgdjjobxt86frs",
+        "org": 11
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "wallets-multi-r2",
+    "experiment": "wallets",
+    "label": "ten wallets, closed M c=13x10=130 r2",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 62.5,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "closed",
+        "c": 13,
+        "shape": "m",
+        "n": 375,
+        "timeout": 61,
+        "key": "sk-t11-7lip3f5ym1tnzobkqmnasgxyn95n",
+        "org": 2
+      },
+      {
+        "mode": "closed",
+        "c": 13,
+        "shape": "m",
+        "n": 375,
+        "timeout": 61,
+        "key": "sk-t11-qmsse482af2t54j2k02tjkuw7gwd",
+        "org": 3
+      },
+      {
+        "mode": "closed",
+        "c": 13,
+        "shape": "m",
+        "n": 375,
+        "timeout": 61,
+        "key": "sk-t11-qp5k4c8avue5plmm6k7dami1ikha",
+        "org": 4
+      },
+      {
+        "mode": "closed",
+        "c": 13,
+        "shape": "m",
+        "n": 375,
+        "timeout": 61,
+        "key": "sk-t11-zbvuolgo4fgi6fqes15m6sd45iwr",
+        "org": 5
+      },
+      {
+        "mode": "closed",
+        "c": 13,
+        "shape": "m",
+        "n": 375,
+        "timeout": 61,
+        "key": "sk-t11-gexs9zxdgidldanw9nut0tujt1ej",
+        "org": 6
+      },
+      {
+        "mode": "closed",
+        "c": 13,
+        "shape": "m",
+        "n": 375,
+        "timeout": 61,
+        "key": "sk-t11-gb3a4iqd3ieydxuhjwuo59vvkb9a",
+        "org": 7
+      },
+      {
+        "mode": "closed",
+        "c": 13,
+        "shape": "m",
+        "n": 375,
+        "timeout": 61,
+        "key": "sk-t11-m6jy89hh4ttam525pth8v2gkflzy",
+        "org": 8
+      },
+      {
+        "mode": "closed",
+        "c": 13,
+        "shape": "m",
+        "n": 375,
+        "timeout": 61,
+        "key": "sk-t11-egyz7mzgo9vekxne2b5zsqz0a5xg",
+        "org": 9
+      },
+      {
+        "mode": "closed",
+        "c": 13,
+        "shape": "m",
+        "n": 375,
+        "timeout": 61,
+        "key": "sk-t11-rbu2jq0306upucjcv5x8roowdyzb",
+        "org": 10
+      },
+      {
+        "mode": "closed",
+        "c": 13,
+        "shape": "m",
+        "n": 375,
+        "timeout": 61,
+        "key": "sk-t11-dnm8kxw4d140jwhgdjjobxt86frs",
+        "org": 11
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "slow-p0-normal",
+    "experiment": "slowclient",
+    "label": "B06 p0-normal: 50.0/s total, 0.0/s None",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 50.0,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "open",
+        "c": 146,
+        "n": 3000,
+        "rate": 50.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "slow-p1-1pct-1k",
+    "experiment": "slowclient",
+    "label": "B06 p1-1pct-1k: 50.0/s total, 0.5/s 1k",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 50.0,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "open",
+        "c": 145,
+        "n": 2970,
+        "rate": 49.5,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1
+      },
+      {
+        "mode": "open",
+        "c": 36,
+        "n": 30,
+        "rate": 0.5,
+        "shape": "m",
+        "timeout": 110,
+        "slow_client": "1k",
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "slow-p2-10pct-1k",
+    "experiment": "slowclient",
+    "label": "B06 p2-10pct-1k: 20.0/s total, 2.0/s 1k",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 20.0,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "open",
+        "c": 53,
+        "n": 1080,
+        "rate": 18.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1
+      },
+      {
+        "mode": "open",
+        "c": 143,
+        "n": 120,
+        "rate": 2.0,
+        "shape": "m",
+        "timeout": 110,
+        "slow_client": "1k",
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "slow-p3-50pct-1k",
+    "experiment": "slowclient",
+    "label": "B06 p3-50pct-1k: 4.0/s total, 2.0/s 1k",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 4.0,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 120,
+        "rate": 2.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1
+      },
+      {
+        "mode": "open",
+        "c": 143,
+        "n": 120,
+        "rate": 2.0,
+        "shape": "m",
+        "timeout": 110,
+        "slow_client": "1k",
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "slow-p4-100pct-10k",
+    "experiment": "slowclient",
+    "label": "B06 p4-100pct-10k: 10.0/s total, 10.0/s 10k",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 10.0,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "open",
+        "c": 77,
+        "n": 600,
+        "rate": 10.0,
+        "shape": "m",
+        "timeout": 65,
+        "slow_client": "10k",
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "slow-p5-100pct-1k",
+    "experiment": "slowclient",
+    "label": "B06 p5-100pct-1k: 3.0/s total, 3.0/s 1k",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 3.0,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "open",
+        "c": 215,
+        "n": 180,
+        "rate": 3.0,
+        "shape": "m",
+        "timeout": 110,
+        "slow_client": "1k",
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "slow-p6-100pct-stop",
+    "experiment": "slowclient",
+    "label": "B06 p6-100pct-stop: 3.0/s total, 3.0/s stop",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 3.0,
+    "hold_seconds": 90,
+    "generators": [
+      {
+        "mode": "open",
+        "c": 135,
+        "n": 270,
+        "rate": 3.0,
+        "shape": "m",
+        "timeout": 150,
+        "slow_client": "stop",
+        "slow_duration": 30,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "overload-120pct",
+    "experiment": "overload",
+    "label": "B09 overload (rate resolved from the knee)",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 60.0,
+    "hold_seconds": 180,
+    "generators": [
+      {
+        "mode": "open",
+        "c": 407,
+        "n": 25128,
+        "rate": 139.6,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "overload-fallback",
+    "experiment": "overload",
+    "label": "B09 fallback (rate resolved from the knee)",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 25.0,
+    "hold_seconds": 180,
+    "generators": [
+      {
+        "mode": "open",
+        "c": 170,
+        "n": 10476,
+        "rate": 58.2,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1
+      }
+    ],
+    "two_gateways": null,
+    "mode_config": null,
+    "warmup": false
+  },
+  {
+    "id": "gw1v2-gw1-m-open-60",
+    "experiment": "gw1v2",
+    "label": "gw1 matched-resources m-open-60",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 60.0,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "open",
+        "c": 175,
+        "n": 3600,
+        "rate": 60.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1,
+        "target": "http://127.0.0.1:56278/v1/chat/completions"
+      }
+    ],
+    "two_gateways": false,
+    "mode_config": {
+      "streams": 512,
+      "gateway_cpus": 8,
+      "gateway_b_cpus": null,
+      "two_gateways": false
+    },
+    "warmup": false
+  },
+  {
+    "id": "gw1v2-gw1-m-open-120",
+    "experiment": "gw1v2",
+    "label": "gw1 matched-resources m-open-120",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 120.0,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "open",
+        "c": 350,
+        "n": 7200,
+        "rate": 120.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1,
+        "target": "http://127.0.0.1:56278/v1/chat/completions"
+      }
+    ],
+    "two_gateways": false,
+    "mode_config": {
+      "streams": 512,
+      "gateway_cpus": 8,
+      "gateway_b_cpus": null,
+      "two_gateways": false
+    },
+    "warmup": false
+  },
+  {
+    "id": "gw1v2-gw1-m-closed-256",
+    "experiment": "gw1v2",
+    "label": "gw1 matched-resources m-closed-256",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 123.07692307692307,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "closed",
+        "c": 256,
+        "shape": "m",
+        "n": 7385,
+        "timeout": 61,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1,
+        "target": "http://127.0.0.1:56278/v1/chat/completions"
+      }
+    ],
+    "two_gateways": false,
+    "mode_config": {
+      "streams": 512,
+      "gateway_cpus": 8,
+      "gateway_b_cpus": null,
+      "two_gateways": false
+    },
+    "warmup": false
+  },
+  {
+    "id": "gw1v2-gw1-multi-org",
+    "experiment": "gw1v2",
+    "label": "gw1 ten orgs, M 4/s each (40/s total)",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 40.0,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 240,
+        "rate": 4.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-7lip3f5ym1tnzobkqmnasgxyn95n",
+        "org": 2,
+        "target": "http://127.0.0.1:56278/v1/chat/completions"
+      },
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 240,
+        "rate": 4.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-qmsse482af2t54j2k02tjkuw7gwd",
+        "org": 3,
+        "target": "http://127.0.0.1:56278/v1/chat/completions"
+      },
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 240,
+        "rate": 4.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-qp5k4c8avue5plmm6k7dami1ikha",
+        "org": 4,
+        "target": "http://127.0.0.1:56278/v1/chat/completions"
+      },
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 240,
+        "rate": 4.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-zbvuolgo4fgi6fqes15m6sd45iwr",
+        "org": 5,
+        "target": "http://127.0.0.1:56278/v1/chat/completions"
+      },
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 240,
+        "rate": 4.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-gexs9zxdgidldanw9nut0tujt1ej",
+        "org": 6,
+        "target": "http://127.0.0.1:56278/v1/chat/completions"
+      },
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 240,
+        "rate": 4.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-gb3a4iqd3ieydxuhjwuo59vvkb9a",
+        "org": 7,
+        "target": "http://127.0.0.1:56278/v1/chat/completions"
+      },
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 240,
+        "rate": 4.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-m6jy89hh4ttam525pth8v2gkflzy",
+        "org": 8,
+        "target": "http://127.0.0.1:56278/v1/chat/completions"
+      },
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 240,
+        "rate": 4.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-egyz7mzgo9vekxne2b5zsqz0a5xg",
+        "org": 9,
+        "target": "http://127.0.0.1:56278/v1/chat/completions"
+      },
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 240,
+        "rate": 4.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-rbu2jq0306upucjcv5x8roowdyzb",
+        "org": 10,
+        "target": "http://127.0.0.1:56278/v1/chat/completions"
+      },
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 240,
+        "rate": 4.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-dnm8kxw4d140jwhgdjjobxt86frs",
+        "org": 11,
+        "target": "http://127.0.0.1:56278/v1/chat/completions"
+      }
+    ],
+    "two_gateways": false,
+    "mode_config": {
+      "streams": 512,
+      "gateway_cpus": 8,
+      "gateway_b_cpus": null,
+      "two_gateways": false
+    },
+    "warmup": false
+  },
+  {
+    "id": "gw1v2-perorg-gw1",
+    "experiment": "gw1v2",
+    "label": "gw1 per-org cap 32, one hot org, M 40/s",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 40.0,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "open",
+        "c": 117,
+        "n": 2400,
+        "rate": 40.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1,
+        "target": "http://127.0.0.1:56278/v1/chat/completions"
+      }
+    ],
+    "two_gateways": false,
+    "mode_config": {
+      "streams": 512,
+      "gateway_cpus": 8,
+      "gateway_b_cpus": null,
+      "two_gateways": false,
+      "per_org": 32
+    },
+    "warmup": false
+  },
+  {
+    "id": "gw1v2-gw2-m-open-60",
+    "experiment": "gw1v2",
+    "label": "gw2 matched-resources m-open-60",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 60.0,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "open",
+        "c": 175,
+        "n": 1800,
+        "rate": 30.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1,
+        "target": "http://127.0.0.1:56278/v1/chat/completions"
+      },
+      {
+        "mode": "open",
+        "c": 175,
+        "n": 1800,
+        "rate": 30.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1,
+        "target": "http://127.0.0.1:56282/v1/chat/completions"
+      }
+    ],
+    "two_gateways": true,
+    "mode_config": {
+      "streams": 256,
+      "gateway_cpus": 4,
+      "gateway_b_cpus": 4,
+      "two_gateways": true
+    },
+    "warmup": false
+  },
+  {
+    "id": "gw1v2-gw2-m-open-120",
+    "experiment": "gw1v2",
+    "label": "gw2 matched-resources m-open-120",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 120.0,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "open",
+        "c": 350,
+        "n": 3600,
+        "rate": 60.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1,
+        "target": "http://127.0.0.1:56278/v1/chat/completions"
+      },
+      {
+        "mode": "open",
+        "c": 350,
+        "n": 3600,
+        "rate": 60.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1,
+        "target": "http://127.0.0.1:56282/v1/chat/completions"
+      }
+    ],
+    "two_gateways": true,
+    "mode_config": {
+      "streams": 256,
+      "gateway_cpus": 4,
+      "gateway_b_cpus": 4,
+      "two_gateways": true
+    },
+    "warmup": false
+  },
+  {
+    "id": "gw1v2-gw2-m-closed-256",
+    "experiment": "gw1v2",
+    "label": "gw2 matched-resources m-closed-256",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 123.07692307692307,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "closed",
+        "c": 128,
+        "shape": "m",
+        "n": 3693,
+        "timeout": 61,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1,
+        "target": "http://127.0.0.1:56278/v1/chat/completions"
+      },
+      {
+        "mode": "closed",
+        "c": 128,
+        "shape": "m",
+        "n": 3693,
+        "timeout": 61,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1,
+        "target": "http://127.0.0.1:56282/v1/chat/completions"
+      }
+    ],
+    "two_gateways": true,
+    "mode_config": {
+      "streams": 256,
+      "gateway_cpus": 4,
+      "gateway_b_cpus": 4,
+      "two_gateways": true
+    },
+    "warmup": false
+  },
+  {
+    "id": "gw1v2-gw2-multi-org",
+    "experiment": "gw1v2",
+    "label": "gw2 ten orgs, M 4/s each (40/s total)",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 40.0,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 120,
+        "rate": 2.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-7lip3f5ym1tnzobkqmnasgxyn95n",
+        "org": 2,
+        "target": "http://127.0.0.1:56278/v1/chat/completions"
+      },
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 120,
+        "rate": 2.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-7lip3f5ym1tnzobkqmnasgxyn95n",
+        "org": 2,
+        "target": "http://127.0.0.1:56282/v1/chat/completions"
+      },
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 120,
+        "rate": 2.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-qmsse482af2t54j2k02tjkuw7gwd",
+        "org": 3,
+        "target": "http://127.0.0.1:56278/v1/chat/completions"
+      },
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 120,
+        "rate": 2.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-qmsse482af2t54j2k02tjkuw7gwd",
+        "org": 3,
+        "target": "http://127.0.0.1:56282/v1/chat/completions"
+      },
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 120,
+        "rate": 2.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-qp5k4c8avue5plmm6k7dami1ikha",
+        "org": 4,
+        "target": "http://127.0.0.1:56278/v1/chat/completions"
+      },
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 120,
+        "rate": 2.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-qp5k4c8avue5plmm6k7dami1ikha",
+        "org": 4,
+        "target": "http://127.0.0.1:56282/v1/chat/completions"
+      },
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 120,
+        "rate": 2.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-zbvuolgo4fgi6fqes15m6sd45iwr",
+        "org": 5,
+        "target": "http://127.0.0.1:56278/v1/chat/completions"
+      },
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 120,
+        "rate": 2.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-zbvuolgo4fgi6fqes15m6sd45iwr",
+        "org": 5,
+        "target": "http://127.0.0.1:56282/v1/chat/completions"
+      },
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 120,
+        "rate": 2.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-gexs9zxdgidldanw9nut0tujt1ej",
+        "org": 6,
+        "target": "http://127.0.0.1:56278/v1/chat/completions"
+      },
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 120,
+        "rate": 2.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-gexs9zxdgidldanw9nut0tujt1ej",
+        "org": 6,
+        "target": "http://127.0.0.1:56282/v1/chat/completions"
+      },
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 120,
+        "rate": 2.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-gb3a4iqd3ieydxuhjwuo59vvkb9a",
+        "org": 7,
+        "target": "http://127.0.0.1:56278/v1/chat/completions"
+      },
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 120,
+        "rate": 2.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-gb3a4iqd3ieydxuhjwuo59vvkb9a",
+        "org": 7,
+        "target": "http://127.0.0.1:56282/v1/chat/completions"
+      },
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 120,
+        "rate": 2.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-m6jy89hh4ttam525pth8v2gkflzy",
+        "org": 8,
+        "target": "http://127.0.0.1:56278/v1/chat/completions"
+      },
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 120,
+        "rate": 2.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-m6jy89hh4ttam525pth8v2gkflzy",
+        "org": 8,
+        "target": "http://127.0.0.1:56282/v1/chat/completions"
+      },
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 120,
+        "rate": 2.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-egyz7mzgo9vekxne2b5zsqz0a5xg",
+        "org": 9,
+        "target": "http://127.0.0.1:56278/v1/chat/completions"
+      },
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 120,
+        "rate": 2.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-egyz7mzgo9vekxne2b5zsqz0a5xg",
+        "org": 9,
+        "target": "http://127.0.0.1:56282/v1/chat/completions"
+      },
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 120,
+        "rate": 2.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-rbu2jq0306upucjcv5x8roowdyzb",
+        "org": 10,
+        "target": "http://127.0.0.1:56278/v1/chat/completions"
+      },
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 120,
+        "rate": 2.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-rbu2jq0306upucjcv5x8roowdyzb",
+        "org": 10,
+        "target": "http://127.0.0.1:56282/v1/chat/completions"
+      },
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 120,
+        "rate": 2.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-dnm8kxw4d140jwhgdjjobxt86frs",
+        "org": 11,
+        "target": "http://127.0.0.1:56278/v1/chat/completions"
+      },
+      {
+        "mode": "open",
+        "c": 16,
+        "n": 120,
+        "rate": 2.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-dnm8kxw4d140jwhgdjjobxt86frs",
+        "org": 11,
+        "target": "http://127.0.0.1:56282/v1/chat/completions"
+      }
+    ],
+    "two_gateways": true,
+    "mode_config": {
+      "streams": 256,
+      "gateway_cpus": 4,
+      "gateway_b_cpus": 4,
+      "two_gateways": true
+    },
+    "warmup": false
+  },
+  {
+    "id": "gw1v2-perorg-gw2",
+    "experiment": "gw1v2",
+    "label": "gw2 per-org cap 32, one hot org, M 40/s",
+    "target": "http://127.0.0.1:56278/v1/chat/completions",
+    "planned_rate": 40.0,
+    "hold_seconds": 60,
+    "generators": [
+      {
+        "mode": "open",
+        "c": 117,
+        "n": 1200,
+        "rate": 20.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1,
+        "target": "http://127.0.0.1:56278/v1/chat/completions"
+      },
+      {
+        "mode": "open",
+        "c": 117,
+        "n": 1200,
+        "rate": 20.0,
+        "shape": "m",
+        "timeout": 61,
+        "key": "sk-t11-0f4l016o57adsmcjqh3a6vxak1he",
+        "org": 1,
+        "target": "http://127.0.0.1:56282/v1/chat/completions"
+      }
+    ],
+    "two_gateways": true,
+    "mode_config": {
+      "streams": 256,
+      "gateway_cpus": 4,
+      "gateway_b_cpus": 4,
+      "two_gateways": true,
+      "per_org": 32
+    },
+    "warmup": false
+  }
+]
