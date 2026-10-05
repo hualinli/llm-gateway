@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -349,102 +348,63 @@ func TestDispatcherPublishesOutsideTheTransactionAndMarksDispatched(t *testing.T
 	}
 }
 
-// TestDispatchFailureBacksOffThenPoisonsWithAnAuditRow drives the bounded retry
-// policy with a failing publisher and an injected clock.
-func TestDispatchFailureBacksOffThenPoisonsWithAnAuditRow(t *testing.T) {
-	env := newSettlementEnv(t, "dispatch-poison")
+// An outage longer than the former poison budget remains bounded and recovers
+// without changing the customer's immutable receipt or posting money twice.
+func TestDispatchTransportOutageRetriesBeyondBudgetAndSettlesOnce(t *testing.T) {
+	env := newSettlementEnv(t, "transport-outage")
 	ctx := context.Background()
-	env.admitAndFinalize(t, "exec_poison", 10, 5, 100, 100, "evt_poison")
+	receipt := env.admitAndFinalize(t, "exec_outage", 10, 5, 100, 100, "evt_outage")
 	clock := newStepClock(time.Now().UTC().Truncate(time.Microsecond).Add(time.Second + 989*time.Nanosecond))
 	publisher := &fakePublisher{err: errors.New("redis: connection refused")}
-	dispatcher, err := NewReceiptDispatcher(env.accounts, publisher, DispatcherOptions{
-		BatchSize: 10, Concurrency: 2, PollInterval: time.Hour, Lease: 30 * time.Second,
-		MaxAttempts: 3, BackoffBase: time.Second, BackoffMax: 4 * time.Second,
-		Now: clock.Now, Logger: discardLogger,
-	})
+	dispatcher, err := NewReceiptDispatcher(env.accounts, publisher, DispatcherOptions{BatchSize: 10, Concurrency: 2, Lease: 30 * time.Second, MaxAttempts: 3, BackoffBase: time.Second, BackoffMax: 4 * time.Second, Now: clock.Now, Logger: discardLogger})
 	if err != nil {
-		t.Fatalf("dispatcher: %v", err)
+		t.Fatal(err)
 	}
-
-	type attempt struct {
-		wantAttempts int
-		wantBackoff  time.Duration
-	}
-	for i, want := range []attempt{{1, time.Second}, {2, 2 * time.Second}} {
+	for i := 1; i <= 40; i++ {
 		result, err := dispatcher.DispatchOnce(ctx)
-		if err != nil {
-			t.Fatalf("tick %d: %v", i, err)
+		if err != nil || result.Failed != 1 || result.Poisoned != 0 {
+			t.Fatalf("tick %d=%+v err=%v", i, result, err)
 		}
-		if result.Failed != 1 || result.Poisoned != 0 {
-			t.Fatalf("tick %d result=%+v, want one failed delivery", i, result)
+		stored := env.receipt(t, "exec_outage")
+		delay := time.Second
+		if i == 2 {
+			delay = 2 * time.Second
 		}
-		stored := env.receipt(t, "exec_poison")
-		if stored.Attempts != want.wantAttempts {
-			t.Fatalf("tick %d attempts=%d, want %d", i, stored.Attempts, want.wantAttempts)
+		if i >= 3 {
+			delay = 4 * time.Second
 		}
-		if stored.Status != ReceiptStatusPendingDispatch {
-			t.Fatalf("tick %d status=%s, want %s (a retry is not a terminal state)", i, stored.Status, ReceiptStatusPendingDispatch)
+		want := clock.Now().Add(delay).Truncate(time.Microsecond)
+		if stored.Status != ReceiptStatusPendingDispatch || stored.Attempts != i || stored.Digest != receipt.Digest || stored.DispatchAfter == nil || !stored.DispatchAfter.Equal(want) {
+			t.Fatalf("tick %d receipt=%+v", i, stored)
 		}
-		if stored.LastError == nil || !strings.Contains(*stored.LastError, "redis: connection refused") {
-			t.Fatalf("tick %d last_error=%v", i, stored.LastError)
-		}
-		wantDispatchAfter := clock.Now().Add(want.wantBackoff).Truncate(time.Microsecond)
-		if stored.DispatchAfter == nil || !stored.DispatchAfter.Equal(wantDispatchAfter) {
-			t.Fatalf("tick %d dispatch_after=%v, want %s", i, stored.DispatchAfter, wantDispatchAfter)
-		}
-		// While the backoff is running, nothing is due: the retry rate is
-		// bounded, not a hot loop.
 		early, err := dispatcher.DispatchOnce(ctx)
-		if err != nil {
-			t.Fatalf("tick %d backoff probe: %v", i, err)
+		if err != nil || early.Claimed != 0 {
+			t.Fatalf("hot retry at tick %d: %+v %v", i, early, err)
 		}
-		if early.Claimed != 0 {
-			t.Fatalf("tick %d claimed during backoff: %+v", i, early)
-		}
-		clock.Advance(want.wantBackoff)
+		clock.Advance(delay)
 	}
-
-	// The third failed delivery exhausts the bound and poisons the receipt.
+	publisher.err = nil
 	result, err := dispatcher.DispatchOnce(ctx)
+	if err != nil || result.Published != 1 {
+		t.Fatalf("recovery=%+v %v", result, err)
+	}
+	events := publisher.published()
+	if len(events) != 1 {
+		t.Fatalf("events=%+v", events)
+	}
+	first, err := env.accounts.SettleReceipt(ctx, SettleReceiptParams{Identity: events[0].Identity(), Digest: events[0].Digest, Now: clock.Now()})
 	if err != nil {
-		t.Fatalf("poisoning tick: %v", err)
+		t.Fatal(err)
 	}
-	if result.Poisoned != 1 || result.Failed != 0 {
-		t.Fatalf("poisoning tick=%+v", result)
+	replay, err := env.accounts.SettleReceipt(ctx, SettleReceiptParams{Identity: events[0].Identity(), Digest: events[0].Digest, Now: clock.Now()})
+	if err != nil || !replay.Replayed {
+		t.Fatalf("replay=%+v %v", replay, err)
 	}
-	stored := env.receipt(t, "exec_poison")
-	if stored.Status != ReceiptStatusException || stored.Attempts != 3 {
-		t.Fatalf("poisoned receipt=%+v", stored)
+	if first.Receipt.ChargeMicro != receipt.ChargeMicro {
+		t.Fatalf("charge=%+v", first)
 	}
-	if stored.DispatchAfter != nil || stored.ClaimUntil != nil {
-		t.Fatalf("a poisoned receipt must not stay dispatchable: %+v", stored)
-	}
-	if stored.LastError == nil || !strings.Contains(*stored.LastError, "redis: connection refused") {
-		t.Fatalf("poisoned last_error=%v", stored.LastError)
-	}
-
-	// It stays queryable: the exception is a PostgreSQL row, not a lost log line.
-	exceptions, err := env.accounts.ListReceiptExceptions(ctx, ReceiptExceptionQuery{Limit: 10})
-	if err != nil {
-		t.Fatalf("list exceptions: %v", err)
-	}
-	if len(exceptions) != 1 || exceptions[0].ExecutionID != "exec_poison" {
-		t.Fatalf("exceptions=%+v", exceptions)
-	}
-	anomalies, err := env.accounts.ListSettlementAnomalies(ctx, 10)
-	if err != nil {
-		t.Fatalf("list anomalies: %v", err)
-	}
-	if len(anomalies) != 1 || anomalies[0].Action != ActionReceiptDispatchException || anomalies[0].ExecutionID != "exec_poison" {
-		t.Fatalf("anomalies=%+v", anomalies)
-	}
-	// And it is never dispatched again.
-	final, err := dispatcher.DispatchOnce(ctx)
-	if err != nil {
-		t.Fatalf("final tick: %v", err)
-	}
-	if final.Claimed != 0 {
-		t.Fatalf("a poisoned receipt must not be claimed again: %+v", final)
+	if got := countRows(t, env.db, `SELECT count(*) FROM billing_entries WHERE business_id=$1 AND kind='debit'`, ReceiptBusinessID("exec_outage", KindDebit)); got != 1 {
+		t.Fatalf("debits=%d", got)
 	}
 }
 
