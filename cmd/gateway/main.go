@@ -122,6 +122,24 @@ func main() {
 	}
 	log.Printf("access guard mode=%s", guardConfig.Mode)
 
+	// 计费准入与 durable receipt（T06C）：独立的、有界的 PG 池；准入位于 access
+	// guard 之后、上游之前，finalizer 决定 [DONE] 能否释放。GATEWAY_BILLING=off
+	// 时不建立连接并打印 WARNING（demo profile 只在没有 DSN 的语义下使用）。
+	billingSettings, err := billingConfigFromEnv(appenv.EnvLookup)
+	if err != nil {
+		log.Fatalf("billing: %v", err)
+	}
+	billingAdmission, closeBilling, err := openBilling(billingSettings, instanceID, registry.HasModel)
+	if err != nil {
+		log.Fatalf("billing: %v", err)
+	}
+	if billingAdmission != nil {
+		// 只有安装 finalizer 才会在完整 SSE 终态事件边界阻塞 [DONE]；没有它
+		// 就是 T06A 之前的透传语义（demo 显式选择）。
+		proxyHandler.SetFinalizer(billingAdmission)
+		proxyHandler.SetFinalizeTimeout(billingSettings.FinalizeTimeout)
+	}
+
 	// 控制面同步：GetConfig 补拉、Watch 低延迟推送、周期校验和可选租约。
 	// 版本跳跃由同步器接受，Gateway 只拒绝旧版本；租约到期时撤销本地 key。
 	controlAddr := os.Getenv("CONTROL_ADDR")
@@ -168,10 +186,15 @@ func main() {
 	// 租户默认桶（单层令牌桶，不叠加）。
 	lim.SetOrgRates(orgPolicies)
 
-	// 链路顺序：auth(提租户) → guard(权威校验+归属) → limiter(按 org/租户限) → proxy(透传+计量)
+	// 链路顺序：auth(提租户) → guard(权威校验+归属) → limiter(按 org/租户限) →
+	// billing(资金预占+fault-closed) → proxy(透传+计量)。计费必须在 guard 之后
+	// （需要已验证的 org/user/key/execution 归属）且在任何上游之前。
 	guarded := gatewayguard.Middleware(accessGuard, gatewayguard.Options{KnownModel: registry.HasModel})
-	limitedProxy := limiter.Middleware(lim)(proxyHandler)
-	authedLimitedProxy := auth.Middleware(authStore)(guarded(limitedProxy))
+	admittedProxy := limiter.Middleware(lim)(proxyHandler)
+	if billingAdmission != nil {
+		admittedProxy = billingAdmission.Middleware(admittedProxy)
+	}
+	authedLimitedProxy := auth.Middleware(authStore)(guarded(admittedProxy))
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", ready.Live)
@@ -260,6 +283,9 @@ func main() {
 	if err := closeAccessGuard(); err != nil {
 		log.Printf("access guard shutdown: %v", err)
 	}
+	if err := closeBilling(); err != nil {
+		log.Printf("billing shutdown: %v", err)
+	}
 	_ = rdb.Close()
 	log.Println("exit")
 }
@@ -300,9 +326,15 @@ func gatewayChecks(lookup appenv.Lookup, controlTLSConfigured bool) []appenv.Che
 			OK:     accessGuardModeOf(lookup) == accessGuardPG,
 		},
 		{
+			Name:   "GATEWAY_BILLING",
+			Detail: `must be "pg": production must reserve funds in PostgreSQL before every upstream call and commit a durable usage receipt before "[DONE]" (demo/test may set "off", which logs a WARNING)`,
+			OK:     billingModeOf(lookup) == billingPG,
+		},
+		{
 			Name:   "POSTGRES_DSN",
-			Detail: `must be set when GATEWAY_ACCESS_GUARD=pg: the access guard reads authoritative organization/user/membership state from PostgreSQL`,
-			OK:     accessGuardModeOf(lookup) != accessGuardPG || strings.TrimSpace(lookup("POSTGRES_DSN")) != "",
+			Detail: `must be set when GATEWAY_ACCESS_GUARD=pg or GATEWAY_BILLING=pg: the access guard and the billing admission read authoritative PostgreSQL state`,
+			OK: (accessGuardModeOf(lookup) != accessGuardPG && billingModeOf(lookup) != billingPG) ||
+				strings.TrimSpace(lookup("POSTGRES_DSN")) != "",
 		},
 		{
 			Name:   "LIMITER_ON_REDIS_ERROR",
@@ -350,6 +382,16 @@ func warnFailedChecks(checks []appenv.Check) {
 			log.Printf("WARNING: production check failed: %s: %s", check.Name, check.Detail)
 		}
 	}
+}
+
+// billingModeOf mirrors the runtime parser for the preflight: an invalid value
+// fails the check instead of silently disabling fund reservation.
+func billingModeOf(lookup appenv.Lookup) billingMode {
+	mode, err := parseBillingMode(lookup("GATEWAY_BILLING"))
+	if err != nil {
+		return ""
+	}
+	return mode
 }
 
 // accessGuardModeOf mirrors the runtime parser for the preflight: an invalid

@@ -259,13 +259,13 @@
 
 当前限制：
 
-- `cmd/loadtest` 当前每个请求创建一个 Worker/client；底层仍使用共享 DefaultTransport，但工具本身缺少显式连接池参数、连接统计和分阶段诊断；
+- `cmd/loadtest` 复用单个无状态 Worker 与显式连接池的 client；仍缺少连接级统计和分阶段诊断；
 - 没有统计 chunk 间隔抖动；
-- EOF 但没有 `[DONE]` 时已判为失败；仍缺少按断流原因分类和结构化错误明细；
+- EOF 但没有 `[DONE]` 单列为 `incomplete`，主动取消单列为 `cancelled`，另有 `rejected`/`transport_error`/`parse_error` 与取消原因（explicit/timeout）分类；`durable_finalization`/`settlement_lag` 仍由 Billing 侧证据回答；
 - 已能输出结构化 JSON 报告（`cmd/loadtest -json`、`scripts/benchmark-local.py` 的 `raw/*.json`、`resource-samples.json`、`index.json`）；
 - 已有直连 vs Gateway 对照（[2026-09-26 压测记录](docs/verification/2026-09-26/performance/README.md)），但那是**闭环/固定到达但未饱和**的历史本机数据；真正的开环调度、慢客户端与长流参数属于新路线 T01B；
-- 固定到达模式在并发槽满时会阻塞调度（`sem <- struct{}{}`），会降低实际发压且没有 scheduled/dropped 计数；TTFT 是首个非空 `data:` 行（可能是 role-only），逐行解析不是完整 SSE event 解析；
-- 每条流硬编码 10s `context.WithTimeout`（没有 `-timeout` flag），超过 10s 的正常长流会被判为错误；
+- 开环模式（`-mode open`）在并发槽满时不再阻塞调度：到达按单调时钟保留 scheduled timestamp，超出有界 admission queue 的部分计入 `loadgen_dropped`，并报告 planned/actual 到达与启动速率、dispatch lag、scheduled-to-terminal；`-mode fixed` 保留旧的阻塞行为只用于 B00 对照。客户端复用 `internal/provider/sse` 的完整 event 解析（多行 data、comment、event name、空帧、CRLF），first_event 与 first_content 分开统计；
+- 每条流的超时可配（`-timeout`，默认 60s，超过 L 流约 10.3s）；慢客户端（`-slow-client normal|10k|1k|stop` + `-slow-client-duration`）与大事件（`-large-event 1k|64k|1m|over`）已可测；生成器自身 dropped 超过 0.1% 时该轮不得用于容量结论；
 - `scripts/benchmark-local.py` 使用**日常 Compose project** 与端口，会改写 demo 配置并创建 demo Key（`data/demo-api-key`），结束后只恢复 limiter，不恢复控制面配置；正式实验需要 T01A 的隔离 runner；
 - tenant/model 直接作为 Prometheus label，需限制高基数；
 - Prometheus 已抓取 Metering；Dashboard 仍未完整展示 spool、DLQ、pending 和 ledger failure；
@@ -1045,6 +1045,8 @@ curl -X POST http://localhost:50052/config \
 
 `cmd/upstream-mock` 支持 `-ttft`、`-token-interval`、`-tokens`、`-status`、`-hang`、`-fail-after`、`-max-inflight`、`-echo`。默认丢弃请求正文，按 `-name` 循环吐假 token。`-echo` 则先写 `{name} sha256=<raw body>`，再把 `messages` 文本按 `-tokens` 切开回放，用来核对网关有没有把请求完整转到上游。Gateway 只把它当成普通 HTTP Provider；Mock 不在 Compose 中，也不会由 Control/Gateway 自动创建。
 
+`cmd/upstream-mock` 另外支持 `-event-line-bytes N`（把每个 content event 的 `data:` 行补齐到 N 字节；SSE reader 按“含换行”计行，1 MiB 正好落在共享解析器的行上限，超过即被有界拒绝）和 `-role-only-first`（先发一个只带 role 的 event，用来区分 first_event 与 first_content）。这两项也可以按请求覆盖：请求体里的 mock-only 字段 `x_mock_ttft_ms`、`x_mock_token_interval_ms`、`x_mock_tokens`、`x_mock_event_line_bytes`、`x_mock_role_only_first`。OpenAI adapter 会原样保留未知请求字段，因此这些形状可以穿过 Gateway；真实 Provider 会拒绝它们，只能对 Mock 使用。超限值（tokens/行大小/总流大小）返回 400，不会让 Mock 无界分配。
+
 进程内 `MockProvider` 只用于包内测试；业务配置明确拒绝 `protocol: mock`。
 
 注意：`cmd/control` 的 `/config` 默认仍是本地 Demo 模式；生产必须设置 `CONTROL_ADMIN_TOKEN` 并开启 `CONTROL_REQUIRE_ADMIN_AUTH=true`，同时配置 gRPC TLS/mTLS。管理接口返回的是 key hash prefix，不返回 raw API key；正式模式会拒绝请求体中的 legacy `keys`，应使用 `key_records` 或 CredentialService。
@@ -1127,6 +1129,8 @@ go test ./internal/provider -run TestLiveOpenAI -v -count=1
 GATEWAY_API_KEY="$LLM_GATEWAY_BOOTSTRAP_API_KEY" \
   go run ./cmd/loadtest -c 100 -n 1000 -rate 0
 ```
+
+`cmd/loadtest` 现在有真正的开环调度：`-mode open`（`-rate > 0` 时的默认值）按单调时钟保留每个到达的 scheduled timestamp，并发槽满时不再阻塞调度，而是进入有界 admission queue（`-admission-queue`，默认 `4*c`）或记为 `loadgen_dropped`；报告给出 scheduled/started/completed/rejected/transport_error/incomplete/cancelled/loadgen_dropped/peak_active、计划与实际到达/启动速率、dispatch lag 与 scheduled-to-terminal，并把 first_event 与 first_content 分开统计（复用 `internal/provider/sse` 的完整 event 解析）。`-mode closed` 保留固定活跃流，`-mode fixed` 保留旧的阻塞式固定到达（仅作 B00 对照）。`-shape s|m|l`、`-large-event 1k|64k|1m|over`、`-slow-client normal|10k|1k|stop`（配 `-slow-client-duration`）和 `-timeout`（默认 60s，超过 L 流约 10.3s，不再是写死的 10s）覆盖 §3.1 的形状。生成器自身 dropped 超过 **0.1%**（或实际到达速率低于计划的 99%）时，报告会把该轮标为 `capacity_round_valid: false`，不得据此宣布被测服务容量。完整 flag、报告字段与 B00 复现命令见 [cmd/loadtest/README.md](cmd/loadtest/README.md)。
 
 单次基础命令只适合观察 Demo 行为，不能直接作为生产容量结论。代表性压测应先启动 Redis；Redis 未启动时 limiter 会 fail-open，连接失败延迟会污染结果。上方链接的本机报告记录了环境、Provider 行为、并发数、TTFT/总耗时分位数、CPU、内存、GC、失败率、限流配置和最终对账；仍不能外推生产容量。
 

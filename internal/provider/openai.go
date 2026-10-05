@@ -135,7 +135,19 @@ func (p *OpenAIProvider) CloseIdleConnections() {
 	}
 }
 
+// ChatStream streams the upstream response to w without a terminal gate. It is
+// the compatibility wrapper around ChatStreamGated for callers that do not
+// persist a finalization decision at the terminal event boundary.
 func (p *OpenAIProvider) ChatStream(ctx context.Context, reqBody []byte, w io.Writer) (*Usage, error) {
+	return p.ChatStreamGated(ctx, reqBody, w, nil)
+}
+
+// ChatStreamGated streams the upstream response to w and consults gate at
+// every terminal event boundary (the final usage-bearing data event and the
+// "[DONE]" end marker), always before the corresponding bytes are written.
+// A gate error stops the stream without writing the vetoed event, so the end
+// marker is not forwarded and the caller observes a TerminalGateError.
+func (p *OpenAIProvider) ChatStreamGated(ctx context.Context, reqBody []byte, w io.Writer, gate TerminalGate) (*Usage, error) {
 	modelOverride := p.model
 	if modelOverride == "" && len(p.cfg.ModelMapping) > 0 {
 		var request struct {
@@ -201,7 +213,7 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, reqBody []byte, w io.Wr
 	}
 
 	var usage *Usage
-	done, usage, err := p.forwardEvent(first, w, usage)
+	done, usage, err := p.forwardEvent(attemptCtx, first, w, gate, usage)
 	if err != nil {
 		return nil, err
 	}
@@ -223,7 +235,7 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, reqBody []byte, w io.Wr
 				}
 				return usage, result.err
 			}
-			done, usage, err = p.forwardEvent(result.event, w, usage)
+			done, usage, err = p.forwardEvent(attemptCtx, result.event, w, gate, usage)
 			if err != nil {
 				return usage, err
 			}
@@ -288,9 +300,18 @@ func receiveEvent(results <-chan sseResult, timer *time.Timer) (sse.Event, error
 	}
 }
 
-func (p *OpenAIProvider) forwardEvent(event sse.Event, w io.Writer, usage *Usage) (bool, *Usage, error) {
+// forwardEvent parses one complete SSE event, consults the terminal gate at
+// terminal boundaries, and only then writes the event's original bytes to w.
+//
+// The end marker is recognized by exact equality of the event's data text with
+// "[DONE]" (never by searching or replacing bytes inside a payload), so a
+// content event that legitimately contains the text "[DONE]" is just another
+// data event.
+func (p *OpenAIProvider) forwardEvent(ctx context.Context, event sse.Event, w io.Writer, gate TerminalGate, usage *Usage) (bool, *Usage, error) {
 	data := strings.TrimSpace(event.DataText())
-	if data != "" && data != "[DONE]" {
+	endMarker := data == "[DONE]"
+	carriesUsage := false
+	if data != "" && !endMarker {
 		var payload struct {
 			Usage *Usage `json:"usage"`
 			Error *struct {
@@ -309,6 +330,21 @@ func (p *OpenAIProvider) forwardEvent(event sse.Event, w io.Writer, usage *Usage
 				normalized.TotalTokens = normalized.PromptTokens + normalized.CompletionTokens
 			}
 			usage = &normalized
+			carriesUsage = true
+		}
+	}
+
+	// Terminal boundaries: the event that completes the generation with usage,
+	// and the protocol end marker. The gate runs before any byte of the event
+	// reaches w, so a veto leaves a stream that is visibly incomplete instead
+	// of one that ends cleanly without a persisted decision.
+	if gate != nil && (endMarker || carriesUsage) {
+		// The gate gets its own copy of the bytes: what the client receives is
+		// always the event this adapter parsed, so "the provider never rewrites
+		// an event" is structural rather than a convention a gate could break.
+		terminal := TerminalEvent{Raw: append([]byte(nil), event.Raw...), Usage: usage, EndMarker: endMarker}
+		if gateErr := gate.OnTerminalEvent(ctx, terminal); gateErr != nil {
+			return false, usage, &TerminalGateError{Cause: gateErr, EndMarker: endMarker}
 		}
 	}
 
@@ -320,7 +356,7 @@ func (p *OpenAIProvider) forwardEvent(event sse.Event, w io.Writer, usage *Usage
 	if flusher, ok := w.(interface{ Flush() }); ok {
 		flusher.Flush()
 	}
-	return data == "[DONE]", usage, nil
+	return endMarker, usage, nil
 }
 
 func rewriteOpenAIRequest(body []byte, modelOverride string) ([]byte, error) {

@@ -335,10 +335,15 @@ func (s *server) writeBillingError(c *app.RequestContext, operation string, err 
 		s.writeError(c, http.StatusNotFound, "", "organization not found")
 	case errors.Is(err, billing.ErrAccountNotFound):
 		s.writeError(c, http.StatusNotFound, "", "this organization has no billing account yet")
-	case errors.Is(err, billing.ErrEntryNotFound), errors.Is(err, billing.ErrPriceNotFound):
+	case errors.Is(err, billing.ErrEntryNotFound), errors.Is(err, billing.ErrPriceNotFound),
+		errors.Is(err, billing.ErrExceptionNotFound):
 		s.writeError(c, http.StatusNotFound, "", "not found")
 	case errors.Is(err, billing.ErrPriceVersionExists), errors.Is(err, billing.ErrIdempotencyConflict):
 		s.writeError(c, http.StatusConflict, "", sanitizeConflictMessage(err))
+	case errors.Is(err, billing.ErrExceptionResolved):
+		// A closed money exception is not silently reclassified: reopen it first,
+		// which writes its own audit row (T07C).
+		s.writeError(c, http.StatusConflict, "", "this money exception is already closed with a different resolution; reopen it first")
 	case errors.Is(err, billing.ErrAmountInvalid), errors.Is(err, billing.ErrPriceInvalid),
 		errors.Is(err, billing.ErrUsageInvalid), errors.Is(err, billing.ErrAmountOverflow),
 		errors.Is(err, billing.ErrInvalidArgument):

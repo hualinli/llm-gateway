@@ -16,25 +16,29 @@ import (
 // a raw path carries unbounded user input and would explode Prometheus
 // cardinality. Unknown or unmatched paths collapse into RouteOther.
 const (
-	RouteAuthLogin           = "auth_login"
-	RouteAuthLogout          = "auth_logout"
-	RouteMe                  = "me"
-	RouteOrganizationsList   = "organizations_list"
-	RouteOrganizationsGet    = "organizations_get"
-	RouteOrganizationsCreate = "organizations_create"
-	RouteAdminUsersCreate    = "admin_users_create"
-	RouteAdminUsersSetStatus = "admin_users_status"
-	RouteOrgMembersList      = "org_members_list"
-	RouteOrgMemberUpdate     = "org_member_update"
-	RouteOrgMemberDelete     = "org_member_delete"
-	RouteOrgInvitationsList  = "org_invitations_list"
-	RouteOrgInvitationsNew   = "org_invitations_create"
-	RouteInvitationsAccept   = "invitations_accept"
-	RouteOrgOwnerTransfer    = "org_owner_transfer"
-	RouteOrgAuditList        = "org_audit_list"
-	RouteHealth              = "health"
-	RouteMetrics             = "metrics"
-	RouteOther               = "other"
+	RouteAuthLogin             = "auth_login"
+	RouteAuthLogout            = "auth_logout"
+	RouteMe                    = "me"
+	RouteOrganizationsList     = "organizations_list"
+	RouteOrganizationsGet      = "organizations_get"
+	RouteOrganizationsCreate   = "organizations_create"
+	RouteAdminUsersCreate      = "admin_users_create"
+	RouteAdminUsersSetStatus   = "admin_users_status"
+	RouteOrgMembersList        = "org_members_list"
+	RouteOrgMemberUpdate       = "org_member_update"
+	RouteOrgMemberDelete       = "org_member_delete"
+	RouteOrgInvitationsList    = "org_invitations_list"
+	RouteOrgInvitationsNew     = "org_invitations_create"
+	RouteInvitationsAccept     = "invitations_accept"
+	RouteOrgOwnerTransfer      = "org_owner_transfer"
+	RouteOrgAuditList          = "org_audit_list"
+	RouteOrgBillingStatement   = "org_billing_statement"
+	RouteOrgBillingExceptions  = "org_billing_exceptions"
+	RouteOrgBillingException   = "org_billing_exception"
+	RouteAdminExceptionResolve = "admin_billing_exception_resolution"
+	RouteHealth                = "health"
+	RouteMetrics               = "metrics"
+	RouteOther                 = "other"
 )
 
 // RouteClass maps a matched Hertz route pattern plus the request method to the
@@ -81,6 +85,14 @@ func RouteClass(method, fullPath string) string {
 		return RouteOrgOwnerTransfer
 	case PathOrgAudit:
 		return RouteOrgAuditList
+	case PathOrgBillingStatements:
+		return RouteOrgBillingStatement
+	case PathOrgBillingExceptions:
+		return RouteOrgBillingExceptions
+	case PathOrgBillingException:
+		return RouteOrgBillingException
+	case PathAdminBillingExceptionResolution:
+		return RouteAdminExceptionResolve
 	case PathLivez, PathReadyz:
 		return RouteHealth
 	case PathMetrics:

@@ -1261,6 +1261,222 @@ paths:
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
 
+  /api/v1/orgs/{org}/billing/statements:
+    get:
+      tags: [billing]
+      operationId: getOrgBillingStatement
+      summary: Monthly consumption statement (UTC month)
+      description: |
+        The same `view_org_usage` scope as the account read (`403` for a plain
+        member, `404` for a non-member).
+
+        **What this is.** An *internal consumption report*, not a legal invoice
+        and not a closed billing period. It is computed live from
+        `billing_entries`, and `cutoff_at` is the exclusive end of the requested
+        UTC month — the period boundary, not a "frozen at" instant. Reading the
+        same month again after new postings legitimately returns more entries,
+        because a late settlement lands in the month it was **actually posted**.
+
+        **Two time axes, never mixed.** `occurred_at` (on a receipt) is when the
+        usage happened: the axis of usage analysis. `posted_at` (on a ledger
+        entry) is when the money moved: the only axis this statement totals.
+        Each line carries both when it settles usage, plus `late_posted` and
+        `late_days`, and the month totals carry `late_entries`/`late_micro`, so a
+        reader can see the difference instead of having it averaged away.
+
+        **Paging and totals.** `items` is one page ordered by
+        `(posted_at, id) DESC`; `next_cursor` is the opaque token of that pair.
+        `totals` always describes the whole month and ignores `limit`/`cursor`,
+        so a page and its totals can never disagree. Every amount is a decimal
+        string of micro-yuan, including negative net movements.
+
+        `month` defaults to the UTC month containing the current instant. A
+        malformed month (`2026-9`, `2026-13`, `2026-09-01`) is `400`, never
+        silently reinterpreted.
+      parameters:
+        - $ref: '#/components/parameters/OrgID'
+        - $ref: '#/components/parameters/StatementMonth'
+        - $ref: '#/components/parameters/BillingLimit'
+        - $ref: '#/components/parameters/BillingEntriesCursor'
+      responses:
+        '200':
+          description: One page of the month plus the month's totals.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BillingStatement' }
+              examples:
+                default:
+                  value:
+                    organization_id: "2"
+                    month: "2026-09"
+                    currency: CNY
+                    timezone: UTC
+                    basis: posted_at
+                    cutoff_at: 2026-10-01T00:00:00Z
+                    generated_at: 2026-10-08T09:15:00Z
+                    window:
+                      from: 2026-09-01T00:00:00Z
+                      to: 2026-10-01T00:00:00Z
+                    totals:
+                      entries: "4"
+                      credit_micro: "1000"
+                      debit_micro: "5000"
+                      net_micro: "-4000"
+                      reserved_micro: "100"
+                      released_micro: "100"
+                      reserved_net_micro: "0"
+                      late_entries: "1"
+                      late_micro: "5000"
+                    items:
+                      - id: "91"
+                        organization_id: "2"
+                        kind: debit
+                        direction: debit
+                        amount_micro: "5000"
+                        business_id: "billing_receipt:debit:exec_7f3c"
+                        reason: settlement debit
+                        operator_user_id: null
+                        request_id: null
+                        posted_at: 2026-09-02T00:00:00Z
+                        created_at: 2026-09-02T00:00:00Z
+                        occurred_at: 2026-08-15T10:00:00Z
+                        late_posted: true
+                        late_days: 17
+                    next_cursor: null
+                    disclaimer: >-
+                      internal consumption report over billing_entries.posted_at
+                      (UTC month). It is not a legal invoice and not a closed
+                      billing period.
+                    axis_note: >-
+                      occurred_at is when the usage happened (usage analysis);
+                      posted_at is when the money moved (money).
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/v1/orgs/{org}/billing/exceptions:
+    get:
+      tags: [billing]
+      operationId: listOrgBillingExceptions
+      summary: Paged durable money exceptions
+      description: |
+        The same `view_org_usage` scope as the account read.
+
+        **Durable, not a log line.** A money exception is a PostgreSQL row
+        (`billing_exceptions`): usage that could not be billed, a charge above
+        its reservation, a repeated business key with a different payload, or a
+        divergence one of the four reconciliation layers found. The Redis DLQ
+        stays a bounded diagnostic cache — it is trimmed, it dies with the Redis
+        process, and it cannot be queried per organization; this queue survives
+        all three, which is the point.
+
+        Filters are the frozen vocabularies (`status`, `kind`) plus one
+        `execution`; an unknown value is `400`, never an empty page that hides a
+        typo. `totals` describes the whole filtered set (including
+        `oldest_open_at` / `oldest_open_age_seconds`, the backlog age the
+        alerting metrics use) and ignores `limit`/`cursor`.
+
+        An organization with no exceptions answers an empty page, not a 404.
+      parameters:
+        - $ref: '#/components/parameters/OrgID'
+        - $ref: '#/components/parameters/BillingLimit'
+        - $ref: '#/components/parameters/BillingExceptionsCursor'
+        - $ref: '#/components/parameters/BillingExceptionStatus'
+        - $ref: '#/components/parameters/BillingExceptionKind'
+        - $ref: '#/components/parameters/BillingExceptionExecution'
+      responses:
+        '200':
+          description: One page of the queue plus the totals of the filtered set.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BillingExceptionPage' }
+              examples:
+                default:
+                  value:
+                    items:
+                      - id: "5"
+                        kind: account_projection_mismatch
+                        organization_id: "2"
+                        execution_id: null
+                        amount_micro: "500"
+                        currency: CNY
+                        reason: >-
+                          account_projection_mismatch: expected projection
+                          posted=-4000 reserved=0
+                        status: open
+                        detected_at: 2026-10-01T09:00:00Z
+                        last_seen_at: 2026-10-08T09:00:00Z
+                        occurrences: "8"
+                        resolved_at: null
+                        resolved_by: null
+                        resolution: null
+                        resolution_note: null
+                        version: "1"
+                        created_at: 2026-10-01T09:00:00Z
+                        updated_at: 2026-10-08T09:00:00Z
+                    next_cursor: null
+                    totals:
+                      open: "1"
+                      resolved: "0"
+                      dismissed: "0"
+                      oldest_open_at: 2026-10-01T09:00:00Z
+                      oldest_open_age_seconds: "604800"
+                    note: >-
+                      A money exception is a durable PostgreSQL fact, not a log
+                      line.
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/v1/orgs/{org}/billing/exceptions/{exception}:
+    get:
+      tags: [billing]
+      operationId: getOrgBillingException
+      summary: One money exception and its audit trail
+      description: |
+        Same scope as the list. `events` is the append-only audit trail of the
+        exception, oldest first: `detected`, `recurred`, `resolved`, `dismissed`
+        and `reopened`, each with the actor, the instant, the previous and new
+        status and the note. `billing_exception_events` rejects `UPDATE` and
+        `DELETE` at the database level, so a written decision cannot be rewritten
+        in place — that is what "no silent reclassification" means here.
+
+        An id that exists in another organization is `404`, exactly like an
+        unknown one: the organization scope is part of the lookup.
+      parameters:
+        - $ref: '#/components/parameters/OrgID'
+        - $ref: '#/components/parameters/BillingExceptionID'
+      responses:
+        '200':
+          description: The exception plus its audit trail.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BillingExceptionDetail' }
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
   /api/v1/admin/billing/accounts/{org}/adjustments:
     post:
       tags: [billing]
@@ -1402,8 +1618,82 @@ paths:
           content:
             text/plain:
               schema: { type: string }
+  /api/v1/admin/billing/exceptions/{exception}/resolution:
+    post:
+      tags: [billing]
+      operationId: resolveBillingException
+      summary: Resolve, dismiss or reopen a money exception (platform admin)
+      description: |
+        Platform administrators only, and the session-bound `X-CSRF-Token`
+        header is required as well: deciding whether the platform absorbs a cost
+        or charges for it is not an organization-scoped action, and no
+        organization role — not even `owner` — holds `platform_admin_ops`.
+
+        **An audited decision, not an edit.** `resolution` and `status` must tell
+        the same story:
+
+        | resolution | status | meaning |
+        |---|---|---|
+        | `charged` | `resolved` | the customer is billed (or already was) and the amount is accepted |
+        | `waived` | `resolved` | the platform absorbs it and does not bill the customer |
+        | `dismissed` | `dismissed` | there was nothing to decide (for example a false positive) |
+        | `reopened` | `open` | the exception goes back into the queue |
+
+        `note` is mandatory: the audit row's whole value is *who decided what,
+        when, and why*. Repeating the identical decision is `200` with
+        `replayed: true` and writes no second audit row; deciding something
+        **different** on an already-closed exception is `409 conflict` —
+        reclassifying it silently is impossible, so reopen it first (which writes
+        its own `reopened` audit row).
+
+        **Resolution never moves money by itself.** A money correction is a new
+        reversing `billing_entries` row, posted through the platform adjustment
+        endpoint; the resolution records the decision, not the posting.
+      parameters:
+        - $ref: '#/components/parameters/BillingExceptionID'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResolveExceptionRequest' }
+            examples:
+              waived:
+                value:
+                  resolution: waived
+                  status: resolved
+                  note: "waived: the drift was a bug in the old projection job"
+              reopened:
+                value:
+                  resolution: reopened
+                  status: open
+                  note: "the drift is back after the fix"
+      responses:
+        '201':
+          description: The decision was applied. `replayed` is `false`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ResolveExceptionResponse' }
+        '200':
+          description: The identical decision had already been applied. `replayed` is `true`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ResolveExceptionResponse' }
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
 
 components:
+
   securitySchemes:
     sessionCookie:
       type: apiKey
@@ -1613,6 +1903,67 @@ components:
         different payload under the same key is `409 conflict` and moves no
         money. A missing or over-long value is `400 invalid_request`.
       schema: { type: string, minLength: 1, maxLength: 200 }
+    StatementMonth:
+      name: month
+      in: query
+      required: false
+      description: |
+        UTC calendar month as `YYYY-MM`. Defaults to the UTC month containing
+        the current instant. Any other shape (including a day component, a
+        single-digit month, or month 13) is `400 invalid_request`: two spellings
+        must never name the same month.
+      schema: { type: string, pattern: '^[0-9]{4}-(0[1-9]|1[0-2])$' }
+      examples:
+        default: { value: "2026-09" }
+    BillingExceptionsCursor:
+      name: cursor
+      in: query
+      required: false
+      description: |
+        Opaque cursor from the previous response's `next_cursor`, carrying the
+        last row's `(detected_at, id)` pair. Pass it back verbatim; a malformed
+        or non-canonical token is `400 invalid_request`.
+      schema: { type: string }
+    BillingExceptionID:
+      name: exception
+      in: path
+      required: true
+      description: Money exception id as a decimal string.
+      schema: { type: string, pattern: '^[1-9][0-9]*$' }
+      examples:
+        default: { value: "5" }
+    BillingExceptionStatus:
+      name: status
+      in: query
+      required: false
+      description: Restrict the page to one lifecycle state.
+      schema:
+        type: string
+        enum: [open, resolved, dismissed]
+    BillingExceptionKind:
+      name: kind
+      in: query
+      required: false
+      description: Restrict the page to one exception kind.
+      schema:
+        type: string
+        enum:
+          - usage_missing
+          - usage_invalid
+          - over_reserved
+          - payload_conflict
+          - unknown_upstream_cost
+          - execution_ledger_mismatch
+          - receipt_state_mismatch
+          - entry_state_mismatch
+          - account_projection_mismatch
+    BillingExceptionExecution:
+      name: execution
+      in: query
+      required: false
+      description: Restrict the page to the exceptions of one execution id.
+      schema: { type: string, minLength: 1, maxLength: 128 }
+
   responses:
     InvalidRequest:
       description: Malformed body, invalid parameter or invalid enum value.
@@ -2679,5 +3030,305 @@ components:
             `false` when this call applied the posting (`201 Created`), `true`
             when the same `Idempotency-Key` and payload had already been applied
             (`200 OK`).
+
+    BillingStatement:
+      type: object
+      description: |
+        One UTC month of an organization's ledger, totalled by `posted_at`.
+        This is an internal consumption report: not a legal invoice, and not a
+        closed period (`cutoff_at` is a period boundary, not a snapshot instant).
+      additionalProperties: false
+      required:
+        - organization_id
+        - month
+        - currency
+        - timezone
+        - basis
+        - cutoff_at
+        - generated_at
+        - window
+        - totals
+        - items
+        - next_cursor
+        - disclaimer
+        - axis_note
+      properties:
+        organization_id: { type: string }
+        month:
+          type: string
+          pattern: '^[0-9]{4}-(0[1-9]|1[0-2])$'
+          description: The UTC calendar month the totals describe.
+        currency: { type: string, enum: [CNY] }
+        timezone:
+          type: string
+          enum: [UTC]
+          description: Frozen. The month boundary is a UTC boundary; another timezone would move money between months.
+        basis:
+          type: string
+          enum: [posted_at]
+          description: |
+            The time axis the totals use. Frozen to `posted_at`: a statement
+            totals when money moved, never when usage happened. `occurred_at`
+            belongs to usage analysis and is reported per line without being
+            totalled here.
+        cutoff_at:
+          type: string
+          format: date-time
+          description: |
+            Exclusive end of the month (UTC): the first instant of the next
+            month. It is the statement cutoff — a period boundary, not a
+            "frozen at" instant. A later read of the same month may contain more
+            entries, because a late settlement lands in the month it was posted.
+        generated_at: { type: string, format: date-time }
+        window:
+          type: object
+          additionalProperties: false
+          required: [from, to]
+          properties:
+            from: { type: string, format: date-time, description: "Inclusive start of the month (UTC)." }
+            to: { type: string, format: date-time, description: "Exclusive end of the month (UTC); equal to `cutoff_at`." }
+        totals: { $ref: '#/components/schemas/BillingStatementTotals' }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/BillingStatementLine' }
+        next_cursor:
+          type: [string, "null"]
+          description: Opaque `(posted_at, id)` cursor, or `null` on the last page.
+        disclaimer:
+          type: string
+          description: Frozen wording stating that this report is not a legal invoice and not a closed period.
+        axis_note:
+          type: string
+          description: Frozen wording distinguishing `occurred_at` (usage analysis) from `posted_at` (money).
+
+    BillingStatementTotals:
+      type: object
+      description: |
+        The whole month, independent of the page. A page and its totals can never
+        disagree because the totals ignore `limit` and `cursor`.
+      additionalProperties: false
+      required:
+        - entries
+        - credit_micro
+        - debit_micro
+        - net_micro
+        - reserved_micro
+        - released_micro
+        - reserved_net_micro
+        - late_entries
+        - late_micro
+      properties:
+        entries: { type: string, description: Number of ledger rows in the month. }
+        credit_micro: { type: string, description: Posted-balance increases (`credit`/`debit`/`adjustment` with direction `credit`). }
+        debit_micro: { type: string, description: Posted-balance decreases (`credit`/`debit`/`adjustment` with direction `debit`). }
+        net_micro: { type: string, description: "`credit_micro - debit_micro`. Negative is a real net spend, never clamped." }
+        reserved_micro: { type: string, description: Reserved-bucket increases (`reservation`). }
+        released_micro: { type: string, description: Reserved-bucket decreases (`release`). }
+        reserved_net_micro: { type: string, description: "`reserved_micro - released_micro`." }
+        late_entries:
+          type: string
+          description: |
+            The subset of the month's entries that settle usage from an earlier
+            UTC month. Already included in the totals above; reported separately
+            so the two time axes stay visible.
+        late_micro: { type: string, description: The amount of those late entries. }
+
+    BillingStatementLine:
+      type: object
+      description: |
+        One ledger entry as it appears on a statement. `occurred_at` is present
+        only when the entry settles a usage receipt (settlement debits), so a
+        credit, an adjustment or a reservation/release carries `null`.
+      additionalProperties: false
+      required:
+        - id
+        - organization_id
+        - kind
+        - direction
+        - amount_micro
+        - business_id
+        - reason
+        - operator_user_id
+        - request_id
+        - posted_at
+        - created_at
+        - occurred_at
+        - late_posted
+        - late_days
+      properties:
+        id: { type: string }
+        organization_id: { type: string }
+        kind: { type: string, enum: [credit, debit, adjustment, reservation, release] }
+        direction: { type: string, enum: [credit, debit] }
+        amount_micro: { type: string, description: Strictly positive decimal string of micro-yuan. }
+        business_id: { type: string }
+        reason: { type: [string, "null"] }
+        operator_user_id: { type: [string, "null"] }
+        request_id: { type: [string, "null"] }
+        posted_at: { type: string, format: date-time, description: When the money moved. The statement's only total axis. }
+        created_at: { type: string, format: date-time }
+        occurred_at:
+          type: [string, "null"]
+          format: date-time
+          description: When the settled usage happened, when this entry settles one.
+        late_posted:
+          type: boolean
+          description: "`true` when the usage belongs to an earlier UTC month than the posting: a late settlement."
+        late_days: { type: integer, minimum: 0, description: Whole days between the usage and the posting; meaningful only when `late_posted` is true. }
+
+    BillingException:
+      type: object
+      description: |
+        One durable money exception. `amount_micro` is the amount the exception
+        is *about* — it is not a posting; money only moves through the ledger.
+      additionalProperties: false
+      required:
+        - id
+        - kind
+        - organization_id
+        - execution_id
+        - amount_micro
+        - currency
+        - reason
+        - status
+        - detected_at
+        - last_seen_at
+        - occurrences
+        - resolved_at
+        - resolved_by
+        - resolution
+        - resolution_note
+        - version
+        - created_at
+        - updated_at
+      properties:
+        id: { type: string }
+        kind:
+          type: string
+          enum:
+            - usage_missing
+            - usage_invalid
+            - over_reserved
+            - payload_conflict
+            - unknown_upstream_cost
+            - execution_ledger_mismatch
+            - receipt_state_mismatch
+            - entry_state_mismatch
+            - account_projection_mismatch
+          description: |
+            Why the fact needs a human: un-billable usage, a charge above its
+            reservation, a conflicting payload, or a difference one of the four
+            reconciliation layers found.
+        organization_id: { type: string }
+        execution_id:
+          type: [string, "null"]
+          description: "`null` when the exception is not about one execution (an account projection difference is per organization)."
+        amount_micro: { type: string, description: The amount the exception is about; `0` when no amount is involved. }
+        currency: { type: string, enum: [CNY] }
+        reason: { type: string, maxLength: 512 }
+        status: { type: string, enum: [open, resolved, dismissed] }
+        detected_at: { type: string, format: date-time, description: When the difference was first observed. }
+        last_seen_at: { type: string, format: date-time, description: When it was last observed; a periodic scan advances this instead of creating a second row. }
+        occurrences: { type: string, description: How many times the same difference has been observed. }
+        resolved_at: { type: [string, "null"], format: date-time }
+        resolved_by: { type: [string, "null"], description: The operator who decided; `null` while open, and preserved (as `null`) if the user is later deleted. }
+        resolution: { type: [string, "null"], enum: [charged, waived, dismissed, reopened, null] }
+        resolution_note: { type: [string, "null"], description: The mandatory human explanation of the decision. }
+        version: { type: string, description: Monotonic workflow version, incremented on every decision. }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    BillingExceptionEvent:
+      type: object
+      description: One append-only audit row of an exception's lifecycle. The table rejects `UPDATE` and `DELETE`.
+      additionalProperties: false
+      required: [id, action, from_status, to_status, actor_user_id, note, created_at]
+      properties:
+        id: { type: string }
+        action: { type: string, enum: [detected, recurred, resolved, dismissed, reopened] }
+        from_status: { type: [string, "null"], enum: [open, resolved, dismissed, null] }
+        to_status: { type: [string, "null"], enum: [open, resolved, dismissed, null] }
+        actor_user_id:
+          type: [string, "null"]
+          description: "`null` for `detected`/`recurred`, which the platform observed rather than a person decided."
+        note: { type: [string, "null"] }
+        created_at: { type: string, format: date-time }
+
+    BillingExceptionPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor, totals, note]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/BillingException' }
+        next_cursor:
+          type: [string, "null"]
+          description: Opaque `(detected_at, id)` cursor, or `null` on the last page.
+        totals: { $ref: '#/components/schemas/BillingExceptionBacklog' }
+        note: { type: string, description: Frozen wording stating that the queue is durable PostgreSQL state and that the Redis DLQ is only a diagnostic cache. }
+
+    BillingExceptionBacklog:
+      type: object
+      additionalProperties: false
+      required: [open, resolved, dismissed, oldest_open_at, oldest_open_age_seconds]
+      properties:
+        open: { type: string }
+        resolved: { type: string }
+        dismissed: { type: string }
+        oldest_open_at:
+          type: [string, "null"]
+          format: date-time
+          description: When the oldest still-open exception was detected; `null` when nothing is open.
+        oldest_open_age_seconds:
+          type: [string, "null"]
+          description: "How long the oldest open exception has waited, in seconds. It is the human-handling SLA input and the alerting metric; `null` when nothing is open."
+
+    BillingExceptionDetail:
+      type: object
+      additionalProperties: false
+      required: [exception, events, note]
+      properties:
+        exception: { $ref: '#/components/schemas/BillingException' }
+        events:
+          type: array
+          description: The append-only audit trail, oldest first.
+          items: { $ref: '#/components/schemas/BillingExceptionEvent' }
+        note: { type: string }
+
+    ResolveExceptionRequest:
+      type: object
+      additionalProperties: false
+      required: [resolution, status, note]
+      properties:
+        resolution: { type: string, enum: [charged, waived, dismissed, reopened] }
+        status:
+          type: string
+          enum: [open, resolved, dismissed]
+          description: |
+            Must match `resolution`: `charged`/`waived` -> `resolved`,
+            `dismissed` -> `dismissed`, `reopened` -> `open`. A mismatch is
+            `400 invalid_request` before any row is written.
+        note:
+          type: string
+          minLength: 1
+          maxLength: 512
+          description: Mandatory human explanation; it is stored on the audit row, which is why the decision can be reviewed later.
+
+    ResolveExceptionResponse:
+      type: object
+      additionalProperties: false
+      required: [exception, event, replayed]
+      properties:
+        exception: { $ref: '#/components/schemas/BillingException' }
+        event:
+          allOf:
+            - $ref: '#/components/schemas/BillingExceptionEvent'
+          description: The audit row this decision wrote (or the existing one when `replayed` is true).
+        replayed:
+          type: boolean
+          description: |
+            `false` when this call decided the exception (`201 Created`), `true`
+            when the identical decision had already been applied (`200 OK`).
 
 security:

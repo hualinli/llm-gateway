@@ -2,9 +2,11 @@ package proxy
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -30,6 +32,13 @@ type Handler struct {
 	registry     *provider.Registry
 	producer     eventProducer
 	writeTimeout time.Duration
+	// finalizer, when set, makes finalization a precondition of a clean
+	// stream end: the terminal event is persisted before "[DONE]" is
+	// forwarded, and a failure (or unknown usage) terminates the stream
+	// without it. Nil keeps the pre-T06A behaviour for providers that cannot
+	// gate; see SetFinalizer.
+	finalizer       Finalizer
+	finalizeTimeout time.Duration
 	// maxActive is the concurrent chat-stream cap. Zero means unlimited.
 	maxActive atomic.Int32
 	inflight  atomic.Int32
@@ -39,10 +48,35 @@ const defaultDownstreamWriteTimeout = 30 * time.Second
 
 func NewHandler(r *provider.Registry, p eventProducer) *Handler {
 	return &Handler{
-		registry:     r,
-		producer:     p,
-		writeTimeout: defaultDownstreamWriteTimeout,
+		registry:        r,
+		producer:        p,
+		writeTimeout:    defaultDownstreamWriteTimeout,
+		finalizeTimeout: defaultFinalizeTimeout,
 	}
+}
+
+// SetFinalizer installs the finalization writer consulted at the terminal SSE
+// event boundary, immediately before "[DONE]" would be forwarded (T06A). The
+// handler does not own the finalizer's lifetime and must be configured before
+// it serves traffic.
+//
+// With a finalizer installed, only providers that implement
+// provider.GatedProvider are admitted: a provider that cannot report a
+// finalization decision at the event boundary is refused before the first byte
+// (503 billing_unavailable), because it would otherwise emit a clean [DONE]
+// that no durable decision backs. A nil finalizer keeps the legacy behaviour
+// and is what the experiment's tests deliberately cover.
+func (h *Handler) SetFinalizer(f Finalizer) {
+	h.finalizer = f
+}
+
+// SetFinalizeTimeout overrides the bound on the finalization write. Zero or
+// negative restores the default.
+func (h *Handler) SetFinalizeTimeout(d time.Duration) {
+	if d <= 0 {
+		d = defaultFinalizeTimeout
+	}
+	h.finalizeTimeout = d
 }
 
 // SetMaxActiveStreams caps concurrent chat streams. Zero disables the cap.
@@ -175,6 +209,28 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		httperr.WriteStatus(w, r, http.StatusBadGateway, "no provider available")
 		return
 	}
+	if h.finalizer != nil {
+		// Finalization is a precondition, not a best-effort step: the decision
+		// can only be persisted inside the provider's event loop. Drop
+		// providers that cannot gate *now*, while the status code is still
+		// ours to choose, instead of discovering it after an unfinalizable
+		// [DONE] has already been committed.
+		gated := make([]provider.Provider, 0, len(providers))
+		for _, p := range providers {
+			if _, ok := p.(provider.GatedProvider); ok {
+				gated = append(gated, p)
+				continue
+			}
+			log.Printf("request_id=%s model=%s provider=%s does not implement the terminal event gate; skipped because finalization is enabled", requestID, model, p.Name())
+		}
+		if len(gated) == 0 {
+			metrics.RequestsTotal.WithLabelValues(tenant, model, "503").Inc()
+			httperr.Write(w, r, http.StatusServiceUnavailable, httperr.CodeBillingUnavailable,
+				"finalization is enabled but no provider can persist the decision at the stream's terminal event")
+			return
+		}
+		providers = gated
+	}
 	// A correlation ID may be supplied or reused by the client. Billing must
 	// identify this execution independently; only redelivery of its event is
 	// deduplicated. Generate the identity before spending upstream resources.
@@ -205,7 +261,25 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var lastErr error
 	for i, p := range providers {
 		// 每个 Provider 的重试是独立的 ctx 取消只影响当前尝试
-		usage, err := p.ChatStream(r.Context(), body, cw)
+		var gate provider.TerminalGate
+		if h.finalizer != nil {
+			// One gate per attempt: the decision belongs to this execution and
+			// this provider, and an attempt that fails before its terminal
+			// event never consults it at all.
+			gate = newFinalizationGate(h.finalizer, h.finalizeTimeout, FinalizeRequest{
+				ExecutionID:     attribution.ExecutionID,
+				EventID:         eventID,
+				ClientRequestID: requestID,
+				TraceID:         traceID,
+				TenantID:        tenant,
+				OrgID:           attribution.OrgID,
+				UserID:          attribution.UserID,
+				KeyID:           attribution.KeyID,
+				Model:           model,
+				Provider:        p.Name(),
+			})
+		}
+		usage, err := chatStream(r.Context(), p, body, cw, gate)
 		if err == nil {
 			// 成功：usage 异步落计量（不阻塞返回）
 			if usage != nil {
@@ -235,7 +309,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					event.UsageMissing = true
 					metrics.MeteringUsageMissingTotal.Inc()
 					log.Printf("request_id=%s trace_id=%s provider=%s model=%s completed without usage", requestID, traceID, p.Name(), model)
-				} else if usage.PromptTokens < 0 || usage.CompletionTokens < 0 || usage.TotalTokens < 0 {
+				} else if !usageValid(usage) {
 					// Never let malformed provider usage create a negative charge.
 					event.UsageInvalid = true
 					metrics.MeteringUsageInvalidTotal.Inc()
@@ -293,6 +367,15 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			// a separate signal for availability and billing analysis.
 			// 这里刻意不补写统一错误信封：响应已提交，补写只会污染 SSE 流，
 			// 客户端字节数与 T01A 之前完全一致（断流即是信号）。
+			var vetoed *provider.TerminalGateError
+			if errors.As(err, &vetoed) {
+				// A finalization veto is an operational event, not an upstream
+				// fault: the generation succeeded, but no durable decision
+				// backs a clean end, so the client must not receive [DONE].
+				// T06C turns this into a PG state on the same execution.
+				log.Printf("request_id=%s trace_id=%s provider=%s model=%s finalization withheld the end marker (end_marker_veto=%v): %v",
+					requestID, traceID, p.Name(), model, vetoed.EndMarker, err)
+			}
 			metrics.GatewayStreamIncompleteTotal.WithLabelValues(tenant, model).Inc()
 			metrics.RequestsTotal.WithLabelValues(tenant, model, "200").Inc()
 			return
@@ -316,6 +399,17 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // --- helpers ---
+
+// chatStream selects the gated streaming entry point when the provider
+// supports one. The fallback is only reachable when no finalizer is
+// configured: a handler with a finalizer filters such providers out before the
+// first byte, because an ungated provider cannot withhold a clean [DONE].
+func chatStream(ctx context.Context, p provider.Provider, body []byte, w io.Writer, gate provider.TerminalGate) (*provider.Usage, error) {
+	if gated, ok := p.(provider.GatedProvider); ok {
+		return gated.ChatStreamGated(ctx, body, w, gate)
+	}
+	return p.ChatStream(ctx, body, w)
+}
 
 func resolveRequestID(raw string) (string, error) {
 	return observability.ResolveRequestID(raw)

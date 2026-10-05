@@ -37,6 +37,14 @@ type Config struct {
 	// Echo streams a checksum of the raw body plus message text.
 	// Default is a name-prefixed synthetic loop; use Echo only to verify forwarding.
 	Echo bool
+	// EventLineBytes, when > 0, pads every content event so its emitted
+	// "data: <json>\n" line reaches this many bytes (the line the SSE readers
+	// bound at 1 MiB). It is a floor: a chunk whose text alone is longer is
+	// sent unchanged. Zero keeps the historical small events.
+	EventLineBytes int
+	// RoleOnlyFirst emits a role-only first event before the content events,
+	// matching real providers and separating first_event from first_content.
+	RoleOnlyFirst bool
 	// ExpectedAuthorization, when set, requires Authorization: Bearer <value>.
 	// An empty value keeps the historical unauthenticated behavior.
 	ExpectedAuthorization string
@@ -107,8 +115,14 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.cfg.Status < 200 || h.cfg.Status >= 300 {
-		writeJSONError(w, h.cfg.Status, "injected upstream failure")
+	cfg, err := h.effectiveConfig(req)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if cfg.Status < 200 || cfg.Status >= 300 {
+		writeJSONError(w, cfg.Status, "injected upstream failure")
 		return
 	}
 
@@ -124,47 +138,58 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 	flush()
 
 	ctx := r.Context()
-	if h.cfg.Hang {
+	if cfg.Hang {
 		<-ctx.Done()
 		return
 	}
-	if err := wait(ctx, h.cfg.TTFT); err != nil {
+	if err := wait(ctx, cfg.TTFT); err != nil {
 		return
 	}
 
-	id := fmt.Sprintf("chatcmpl-mock-%s", h.cfg.Name)
-	chunks := h.contentChunks(raw, req)
-	limit := len(chunks)
-	if h.cfg.FailAfter > 0 && h.cfg.FailAfter < limit {
-		limit = h.cfg.FailAfter
-	}
-	for i := 0; i < limit; i++ {
+	id := fmt.Sprintf("chatcmpl-mock-%s", cfg.Name)
+	if cfg.RoleOnlyFirst {
 		if err := writeSSE(w, map[string]any{
 			"id":     id,
 			"object": "chat.completion.chunk",
 			"choices": []map[string]any{{
-				"index": 0,
-				"delta": map[string]any{
-					"role":    "assistant",
-					"content": chunks[i],
-				},
+				"index":         0,
+				"delta":         map[string]any{"role": "assistant"},
 				"finish_reason": nil,
 			}},
 		}); err != nil {
 			return
 		}
 		flush()
+		if err := wait(ctx, cfg.TokenInterval); err != nil {
+			return
+		}
+	}
+
+	chunks := h.contentChunks(raw, req, cfg)
+	limit := len(chunks)
+	if cfg.FailAfter > 0 && cfg.FailAfter < limit {
+		limit = cfg.FailAfter
+	}
+	for i := 0; i < limit; i++ {
+		event, err := contentEvent(id, chunks[i], cfg.EventLineBytes)
+		if err != nil {
+			return
+		}
+		if err := writeSSE(w, event); err != nil {
+			return
+		}
+		flush()
 		if i+1 < limit {
-			if err := wait(ctx, h.cfg.TokenInterval); err != nil {
+			if err := wait(ctx, cfg.TokenInterval); err != nil {
 				return
 			}
 		}
 	}
-	if h.cfg.FailAfter > 0 {
+	if cfg.FailAfter > 0 {
 		return
 	}
 
-	total := h.cfg.PromptTokens + h.cfg.CompletionTokens
+	total := cfg.PromptTokens + cfg.CompletionTokens
 	if err := writeSSE(w, map[string]any{
 		"id":     id,
 		"object": "chat.completion.chunk",
@@ -174,8 +199,8 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 			"finish_reason": "stop",
 		}},
 		"usage": map[string]int{
-			"prompt_tokens":     h.cfg.PromptTokens,
-			"completion_tokens": h.cfg.CompletionTokens,
+			"prompt_tokens":     cfg.PromptTokens,
+			"completion_tokens": cfg.CompletionTokens,
 			"total_tokens":      total,
 		},
 	}); err != nil {
@@ -191,7 +216,25 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 type chatRequest struct {
 	Stream   *bool         `json:"stream"`
 	Messages []chatMessage `json:"messages"`
+
+	// Mock-only per-request shape overrides. They are deliberately not part of
+	// the OpenAI protocol: a real provider rejects or ignores them, while the
+	// Gateway adapter keeps unknown request fields verbatim, so the load
+	// generator can drive one mock process per shape without restarting it.
+	MockTTFTMillis      *int  `json:"x_mock_ttft_ms"`
+	MockTokenIntervalMS *int  `json:"x_mock_token_interval_ms"`
+	MockTokens          *int  `json:"x_mock_tokens"`
+	MockEventLineBytes  *int  `json:"x_mock_event_line_bytes"`
+	MockRoleOnlyFirst   *bool `json:"x_mock_role_only_first"`
 }
+
+// Bounds for the mock-only overrides: a request must not be able to make the
+// mock allocate or stream an unbounded response.
+const (
+	maxMockTokens         = 100_000
+	maxMockEventLineBytes = 32 << 20
+	maxMockStreamBytes    = 256 << 20
+)
 
 type chatMessage struct {
 	Role    string          `json:"role"`
@@ -229,19 +272,87 @@ func readChatRequest(w http.ResponseWriter, r *http.Request) ([]byte, chatReques
 	return raw, req, true
 }
 
-func (h *Handler) contentChunks(raw []byte, req chatRequest) []string {
-	if h.cfg.Echo {
-		return splitRunes(echoText(h.cfg.Name, raw, req.Messages), h.cfg.CompletionTokens)
+func (h *Handler) contentChunks(raw []byte, req chatRequest, cfg Config) []string {
+	if cfg.Echo {
+		return splitRunes(echoText(cfg.Name, raw, req.Messages), cfg.CompletionTokens)
 	}
-	chunks := make([]string, h.cfg.CompletionTokens)
+	chunks := make([]string, cfg.CompletionTokens)
 	for i := range chunks {
 		if i == 0 {
-			chunks[i] = h.cfg.Name + " "
+			chunks[i] = cfg.Name + " "
 			continue
 		}
-		chunks[i] = fmt.Sprintf("%s-%d ", h.cfg.Name, i)
+		chunks[i] = fmt.Sprintf("%s-%d ", cfg.Name, i)
 	}
 	return chunks
+}
+
+// effectiveConfig applies the mock-only per-request overrides on top of the
+// process configuration. Every override is bounded so one request cannot make
+// the mock allocate an unbounded response.
+func (h *Handler) effectiveConfig(req chatRequest) (Config, error) {
+	cfg := h.cfg
+	if req.MockTTFTMillis != nil {
+		if *req.MockTTFTMillis < 0 || *req.MockTTFTMillis > 600_000 {
+			return cfg, fmt.Errorf("x_mock_ttft_ms out of range")
+		}
+		cfg.TTFT = time.Duration(*req.MockTTFTMillis) * time.Millisecond
+	}
+	if req.MockTokenIntervalMS != nil {
+		if *req.MockTokenIntervalMS < 0 || *req.MockTokenIntervalMS > 600_000 {
+			return cfg, fmt.Errorf("x_mock_token_interval_ms out of range")
+		}
+		cfg.TokenInterval = time.Duration(*req.MockTokenIntervalMS) * time.Millisecond
+	}
+	if req.MockTokens != nil {
+		if *req.MockTokens < 0 || *req.MockTokens > maxMockTokens {
+			return cfg, fmt.Errorf("x_mock_tokens out of range")
+		}
+		cfg.CompletionTokens = *req.MockTokens
+	}
+	if req.MockEventLineBytes != nil {
+		if *req.MockEventLineBytes < 0 || *req.MockEventLineBytes > maxMockEventLineBytes {
+			return cfg, fmt.Errorf("x_mock_event_line_bytes out of range")
+		}
+		cfg.EventLineBytes = *req.MockEventLineBytes
+	}
+	if req.MockRoleOnlyFirst != nil {
+		cfg.RoleOnlyFirst = *req.MockRoleOnlyFirst
+	}
+	if cfg.EventLineBytes > 0 && cfg.CompletionTokens > 0 {
+		if int64(cfg.EventLineBytes)*int64(cfg.CompletionTokens) > maxMockStreamBytes {
+			return cfg, fmt.Errorf("requested stream size exceeds %d bytes", maxMockStreamBytes)
+		}
+	}
+	return cfg, nil
+}
+
+// contentEvent builds one content chunk. When target > 0 the content string is
+// extended so the emitted "data: <json>\n" line is exactly target bytes: the
+// filler is plain ASCII, so the marshalled JSON grows byte for byte with it.
+// The target is a floor, never a truncation.
+func contentEvent(id, text string, target int) (map[string]any, error) {
+	delta := map[string]any{"role": "assistant", "content": text}
+	event := map[string]any{
+		"id":     id,
+		"object": "chat.completion.chunk",
+		"choices": []map[string]any{{
+			"index":         0,
+			"delta":         delta,
+			"finish_reason": nil,
+		}},
+	}
+	if target <= 0 {
+		return event, nil
+	}
+	probe, err := json.Marshal(event)
+	if err != nil {
+		return nil, err
+	}
+	if need := (target - len("data: ") - 1) - len(probe); need > 0 {
+		delta["content"] = text + strings.Repeat("a", need)
+	}
+	return event, nil
 }
 
 func echoText(name string, raw []byte, messages []chatMessage) string {

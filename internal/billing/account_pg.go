@@ -24,6 +24,50 @@ type PGAccountStore struct {
 	// Timeout bounds one statement or one adjustment transaction. <= 0 means
 	// DefaultQueryTimeout.
 	Timeout time.Duration
+	// AdmissionTimeout bounds one admission transaction (Reserve/MarkExecuting/
+	// Release/RecordFailure). The data plane must fail closed rather than wait:
+	// an admission that cannot finish inside this bound is a refused request
+	// (503), not a slow one. <= 0 means DefaultAdmissionTimeout.
+	AdmissionTimeout time.Duration
+	// FinalizeTimeout bounds one durable-receipt transaction (T06C's
+	// FinalizeReceipt/RecordUsageException). That write sits between the
+	// upstream's terminal event and the client's "[DONE]", so it has its own,
+	// shorter bound. <= 0 means DefaultFinalizeTimeout.
+	FinalizeTimeout time.Duration
+	// ReceiptVerifyTimeout bounds the detached re-query that resolves a COMMIT
+	// whose outcome is unknown. <= 0 means DefaultReceiptVerifyTimeout.
+	ReceiptVerifyTimeout time.Duration
+	// DispatchTimeout bounds one short dispatcher bookkeeping transaction (a
+	// claim, a mark-dispatched, a retry record). It never covers a publish:
+	// Redis is called outside any transaction. <= 0 means
+	// DefaultDispatchMarkTimeout.
+	DispatchTimeout time.Duration
+	// SettlementTimeout bounds one settlement transaction (digest check, debit,
+	// release, execution transition, receipt state and audit). <= 0 means
+	// DefaultSettlementTimeout.
+	SettlementTimeout time.Duration
+	// SettlementVerifyTimeout bounds the detached re-query that resolves a
+	// settlement COMMIT whose outcome is unknown. <= 0 means
+	// DefaultSettlementVerifyTimeout.
+	SettlementVerifyTimeout time.Duration
+}
+
+// DefaultAdmissionTimeout bounds one reservation-state transaction. It is
+// shorter than DefaultQueryTimeout on purpose: the gateway holds a client
+// request open while this runs, and a hot account row must degrade into a
+// refusal rather than into a stalled stream. It is longer than the 300ms
+// read-only access-guard bound because admission also takes the account row
+// lock, which serializes concurrent requests for the same wallet.
+const DefaultAdmissionTimeout = 2 * time.Second
+
+// txExecutor is the subset of *sql.DB and *sql.Tx the tx-scoped helpers need.
+// Taking the interface (rather than *sql.Tx) is what lets the same posting code
+// run either in a transaction this store owns (Adjust) or in one the caller
+// owns (AdjustTx), which is how T06C commits a receipt and its money movement
+// together.
+type txExecutor interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
 // Adjustment audit vocabulary. These strings are the stable contract of the
@@ -268,59 +312,91 @@ func (s *PGAccountStore) Adjust(ctx context.Context, params AdjustParams) (Adjus
 
 	var result AdjustmentResult
 	err := s.withTx(ctx, func(tx *sql.Tx) error {
-		if _, err := tx.ExecContext(ctx, queryEnsureAccount, params.OrgID, params.Now); err != nil {
-			return mapAccountWriteError(err)
-		}
-		account, err := lockAccountTx(ctx, tx, params.OrgID)
-		if err != nil {
-			return err
-		}
-
-		existing, err := getEntryByBusinessTx(ctx, tx, params.BusinessID, params.Kind)
-		switch {
-		case err == nil:
-			if existing.OrgID != params.OrgID {
-				// The business key is global. Another organization owns it; the
-				// caller must never see that row, so this is a conflict.
-				return fmt.Errorf("%w: business_id=%q is already used by another organization", ErrIdempotencyConflict, params.BusinessID)
-			}
-			if existing.PayloadDigest != params.PayloadDigest {
-				return fmt.Errorf("%w: business_id=%q kind=%q", ErrIdempotencyConflict, params.BusinessID, params.Kind)
-			}
-			result = AdjustmentResult{Entry: *existing, Account: account, Replayed: true}
-			return nil
-		case errors.Is(err, ErrEntryNotFound):
-		default:
-			return err
-		}
-
-		signed := params.AmountMicro
-		if params.Direction == DirectionDebit {
-			signed = -signed
-		}
-		posted, reserved, err := projectEntry(account, params.Kind, signed)
-		if err != nil {
-			return err
-		}
-
-		entry, err := insertEntryTx(ctx, tx, params)
-		if err != nil {
-			return err
-		}
-		account, err = updateAccountTx(ctx, tx, params.OrgID, posted, reserved, params.Now)
-		if err != nil {
-			return err
-		}
-		if err := insertAdjustmentAuditTx(ctx, tx, params, entry, account); err != nil {
-			return err
-		}
-		result = AdjustmentResult{Entry: *entry, Account: account}
-		return nil
+		var err error
+		result, err = s.adjustTx(ctx, tx, params)
+		return err
 	})
 	if err != nil {
 		return AdjustmentResult{}, err
 	}
 	return result, nil
+}
+
+// AdjustTx applies one posting inside a transaction the caller owns. It exists
+// for T06C/T07, which must commit a receipt, an execution transition and the
+// money movement as one fact: a crash may leave none of them, never some of
+// them. The caller commits or rolls back; this method never commits.
+//
+// It applies the same validation as Adjust, so a bad posting is refused before
+// it touches the caller's transaction.
+func (s *PGAccountStore) AdjustTx(ctx context.Context, tx *sql.Tx, params AdjustParams) (AdjustmentResult, error) {
+	if s == nil || s.DB == nil {
+		return AdjustmentResult{}, errors.New("billing: account store is not configured")
+	}
+	if tx == nil {
+		return AdjustmentResult{}, errors.New("billing: AdjustTx requires a transaction")
+	}
+	params = NormalizeAdjustment(params)
+	if err := ValidateAdjustment(params); err != nil {
+		return AdjustmentResult{}, err
+	}
+	// The caller owns the transaction's lifetime, so only the statements are
+	// bounded here.
+	ctx, cancel := s.withTimeout(ctx)
+	defer cancel()
+	return s.adjustTx(ctx, tx, params)
+}
+
+// adjustTx is the one implementation of the five-step posting order documented
+// on Adjust; both entry points share it so there is no second, subtly different
+// money path.
+func (s *PGAccountStore) adjustTx(ctx context.Context, tx txExecutor, params AdjustParams) (AdjustmentResult, error) {
+	if _, err := tx.ExecContext(ctx, queryEnsureAccount, params.OrgID, params.Now); err != nil {
+		return AdjustmentResult{}, mapAccountWriteError(err)
+	}
+	account, err := lockAccountTx(ctx, tx, params.OrgID)
+	if err != nil {
+		return AdjustmentResult{}, err
+	}
+
+	existing, err := getEntryByBusinessTx(ctx, tx, params.BusinessID, params.Kind)
+	switch {
+	case err == nil:
+		if existing.OrgID != params.OrgID {
+			// The business key is global. Another organization owns it; the
+			// caller must never see that row, so this is a conflict.
+			return AdjustmentResult{}, fmt.Errorf("%w: business_id=%q is already used by another organization", ErrIdempotencyConflict, params.BusinessID)
+		}
+		if existing.PayloadDigest != params.PayloadDigest {
+			return AdjustmentResult{}, fmt.Errorf("%w: business_id=%q kind=%q", ErrIdempotencyConflict, params.BusinessID, params.Kind)
+		}
+		return AdjustmentResult{Entry: *existing, Account: account, Replayed: true}, nil
+	case errors.Is(err, ErrEntryNotFound):
+	default:
+		return AdjustmentResult{}, err
+	}
+
+	signed := params.AmountMicro
+	if params.Direction == DirectionDebit {
+		signed = -signed
+	}
+	posted, reserved, err := projectEntry(account, params.Kind, signed)
+	if err != nil {
+		return AdjustmentResult{}, err
+	}
+
+	entry, err := insertEntryTx(ctx, tx, params)
+	if err != nil {
+		return AdjustmentResult{}, err
+	}
+	account, err = updateAccountTx(ctx, tx, params.OrgID, posted, reserved, params.Now)
+	if err != nil {
+		return AdjustmentResult{}, err
+	}
+	if err := insertAdjustmentAuditTx(ctx, tx, params, entry, account); err != nil {
+		return AdjustmentResult{}, err
+	}
+	return AdjustmentResult{Entry: *entry, Account: account}, nil
 }
 
 // RecalculateProjection recomputes the account from the ledger and compares.
@@ -392,7 +468,18 @@ func (s *PGAccountStore) withTimeout(ctx context.Context) (context.Context, cont
 	return context.WithTimeout(ctx, timeout)
 }
 
-func lockAccountTx(ctx context.Context, tx *sql.Tx, orgID int64) (Account, error) {
+// withAdmissionTimeout bounds one admission-state transaction. An admission is
+// on the request's critical path, so it fails closed on its own (shorter) bound
+// instead of the read-oriented DefaultQueryTimeout.
+func (s *PGAccountStore) withAdmissionTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+	timeout := s.AdmissionTimeout
+	if timeout <= 0 {
+		timeout = DefaultAdmissionTimeout
+	}
+	return context.WithTimeout(ctx, timeout)
+}
+
+func lockAccountTx(ctx context.Context, tx txExecutor, orgID int64) (Account, error) {
 	account, err := scanAccount(tx.QueryRowContext(ctx, queryLockAccount, orgID))
 	if errors.Is(err, sql.ErrNoRows) {
 		// EnsureAccount ran first in this transaction, so this can only happen
@@ -405,7 +492,7 @@ func lockAccountTx(ctx context.Context, tx *sql.Tx, orgID int64) (Account, error
 	return account, nil
 }
 
-func getEntryByBusinessTx(ctx context.Context, tx *sql.Tx, businessID, kind string) (*Entry, error) {
+func getEntryByBusinessTx(ctx context.Context, tx txExecutor, businessID, kind string) (*Entry, error) {
 	entry, err := scanEntry(tx.QueryRowContext(ctx, queryGetEntryByBusiness, businessID, kind))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w: business_id=%q kind=%q", ErrEntryNotFound, businessID, kind)
@@ -416,7 +503,7 @@ func getEntryByBusinessTx(ctx context.Context, tx *sql.Tx, businessID, kind stri
 	return &entry, nil
 }
 
-func insertEntryTx(ctx context.Context, tx *sql.Tx, params AdjustParams) (*Entry, error) {
+func insertEntryTx(ctx context.Context, tx txExecutor, params AdjustParams) (*Entry, error) {
 	entry, err := scanEntry(tx.QueryRowContext(ctx, queryInsertEntry,
 		params.OrgID, params.Kind, params.AmountMicro, params.Direction, params.BusinessID,
 		params.PayloadDigest, nullableString(params.Reason), nullableID(params.ActorUserID),
@@ -427,7 +514,7 @@ func insertEntryTx(ctx context.Context, tx *sql.Tx, params AdjustParams) (*Entry
 	return &entry, nil
 }
 
-func updateAccountTx(ctx context.Context, tx *sql.Tx, orgID, posted, reserved int64, now time.Time) (Account, error) {
+func updateAccountTx(ctx context.Context, tx txExecutor, orgID, posted, reserved int64, now time.Time) (Account, error) {
 	account, err := scanAccount(tx.QueryRowContext(ctx, queryUpdateAccount, orgID, posted, reserved, now))
 	if err != nil {
 		return Account{}, mapAccountWriteError(err)
@@ -438,7 +525,7 @@ func updateAccountTx(ctx context.Context, tx *sql.Tx, orgID, posted, reserved in
 // insertAdjustmentAuditTx writes the audit row of one money movement *inside*
 // the money transaction. The detail carries micro amounts as decimal strings,
 // exactly like the API, so a JSONB reader cannot round them through a float.
-func insertAdjustmentAuditTx(ctx context.Context, tx *sql.Tx, params AdjustParams, entry *Entry, account Account) error {
+func insertAdjustmentAuditTx(ctx context.Context, tx txExecutor, params AdjustParams, entry *Entry, account Account) error {
 	detail := map[string]any{
 		"entry_id":             strconv.FormatInt(entry.ID, 10),
 		"kind":                 entry.Kind,

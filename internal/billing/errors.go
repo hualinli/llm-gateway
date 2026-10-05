@@ -18,6 +18,12 @@
 //   - the legacy metering_events.cost_cents column is untouched: it stays the
 //     historical demo price, and is never recomputed from a price version.
 //
+// T06B adds the execution/reservation state machine on top of that: one
+// billing_executions row per admission pins the price version and the trusted
+// token upper bounds, and the reservation itself is an ordinary append-only
+// ledger entry (kind=reservation, direction=credit) written in the same
+// transaction as the account projection.
+//
 // This package deliberately knows nothing about HTTP: internal/console declares
 // the interfaces it needs and cmd/console wires the PostgreSQL stores in. The
 // only shared-surface coupling is the console_audit_events table, which a
@@ -73,4 +79,75 @@ var (
 	// ErrInvalidArgument marks a caller-fixable request that is not covered by a
 	// more specific sentinel above.
 	ErrInvalidArgument = errors.New("billing: invalid argument")
+
+	// ErrInsufficientFunds marks an admission that the account cannot afford:
+	// available = posted_balance - reserved is smaller than the pinned upper
+	// bound. The gateway must refuse the request without calling upstream. A
+	// reservation is never taken partially and the execution row is never
+	// written.
+	ErrInsufficientFunds = errors.New("billing: insufficient available funds for this execution")
+
+	// ErrAccountSuspended marks an admission for an organization whose billing
+	// account is suspended (ADR-0004 §2.4). Suspension is an operational state:
+	// it does not stop platform adjustments, but it does stop new requests.
+	ErrAccountSuspended = errors.New("billing: the billing account is suspended")
+
+	// ErrExecutionNotFound marks an unknown execution id. Reads are not
+	// organization scoped: execution ids are unguessable admission identities,
+	// and the caller that holds one already passed admission.
+	ErrExecutionNotFound = errors.New("billing: billing execution not found")
+
+	// ErrExecutionState marks a transition the state machine refuses: a
+	// terminal execution cannot be reserved, released or failed again, and a
+	// settled execution is T07's business, not the release path's.
+	ErrExecutionState = errors.New("billing: the execution is not in a state that allows this transition")
+
+	// ErrExecutionHasReceipt marks a release (or a failure-without-charge) that
+	// would return the reservation of an execution whose durable receipt proves
+	// consumption and therefore must be settled: the receipt wins, the
+	// reservation is not returned. An *exception* receipt is the opposite fact
+	// (usage unknown, nothing chargeable) and does not block an audited release.
+	// T07B added this guard; before it, `receipt_recorded -> released` was
+	// reachable and silently dropped a chargeable consumption fact.
+	ErrExecutionHasReceipt = errors.New("billing: the execution has a chargeable usage receipt and must be settled, not released")
+
+	// ErrReceiptNotFound marks an unknown usage receipt, including an execution
+	// that has an execution row but no durable receipt yet.
+	ErrReceiptNotFound = errors.New("billing: usage receipt not found")
+
+	// ErrReceiptConflict marks a repeated execution whose receipt payload
+	// digest differs from the stored one, or an event identity already billed
+	// under another execution. The stored receipt is left untouched and no
+	// second charge is possible.
+	ErrReceiptConflict = errors.New("billing: this execution already has a usage receipt with a different payload")
+
+	// ErrReceiptCommitUnknown marks a receipt transaction whose COMMIT outcome
+	// could not be determined *and* whose re-query by execution id proved the
+	// receipt was not written. The caller must refuse a clean stream end; T07B
+	// re-drives the same execution anchor.
+	ErrReceiptCommitUnknown = errors.New("billing: the usage receipt transaction ended with an unknown outcome")
+
+	// ErrReceiptClaimLost marks a dispatch bookkeeping write whose claim lease is
+	// no longer the stored one: another dispatcher reclaimed the receipt after
+	// this worker's lease expired. The worker must not overwrite the newer
+	// claim's state; the receipt itself is untouched and stays dispatchable.
+	ErrReceiptClaimLost = errors.New("billing: the dispatch claim lease is no longer held")
+
+	// ErrReceiptPayloadConflict marks a delivered settlement event whose payload
+	// digest does not match the stored receipt. The stored receipt is left
+	// untouched, no money moves, and the delivery must be recorded as a visible
+	// anomaly: a conflict is never silently ignored.
+	ErrReceiptPayloadConflict = errors.New("billing: the settlement payload does not match the stored usage receipt")
+
+	// ErrSettlementState marks a settlement the state machine refuses: the
+	// receipt is already an exception, or its execution ended in a state that
+	// must never be charged (released / failed_no_charge). No money moves and no
+	// state is rewritten.
+	ErrSettlementState = errors.New("billing: the receipt or its execution is not in a settleable state")
+
+	// ErrSettlementCommitUnknown marks a settlement transaction whose COMMIT
+	// outcome could not be determined *and* whose re-query by execution id did
+	// not prove a settled receipt. The caller must not acknowledge the transport
+	// message: the redelivery is what converges the state.
+	ErrSettlementCommitUnknown = errors.New("billing: the settlement transaction ended with an unknown outcome")
 )

@@ -1,0 +1,31 @@
+# go test -overlay=(migrations.Version=10) -race ./... -count=1
+ok  	llm-gateway/cmd/console	3.762s
+ok  	llm-gateway/cmd/control	1.755s
+?   	llm-gateway/cmd/democtl	[no test files]
+ok  	llm-gateway/cmd/gateway	8.579s
+ok  	llm-gateway/cmd/loadtest	2.215s
+ok  	llm-gateway/cmd/metering	1.524s
+?   	llm-gateway/cmd/migrate	[no test files]
+?   	llm-gateway/cmd/upstream-mock	[no test files]
+ok  	llm-gateway/internal/appenv	2.450s
+ok  	llm-gateway/internal/auth	3.065s
+ok  	llm-gateway/internal/billing	9.483s
+ok  	llm-gateway/internal/console	4.184s
+ok  	llm-gateway/internal/control	6.551s
+ok  	llm-gateway/internal/controlclient	4.203s
+ok  	llm-gateway/internal/gatewayguard	6.711s
+ok  	llm-gateway/internal/httperr	4.106s
+ok  	llm-gateway/internal/iam	7.477s
+ok  	llm-gateway/internal/limiter	4.813s
+ok  	llm-gateway/internal/loadtest	5.679s
+ok  	llm-gateway/internal/metering	9.975s
+ok  	llm-gateway/internal/metrics	5.138s
+ok  	llm-gateway/internal/observability	6.021s
+ok  	llm-gateway/internal/organization	10.236s
+ok  	llm-gateway/internal/provider	7.358s
+ok  	llm-gateway/internal/provider/sse	6.360s
+ok  	llm-gateway/internal/proxy	7.129s
+ok  	llm-gateway/internal/ready	6.097s
+ok  	llm-gateway/internal/upstreammock	6.477s
+ok  	llm-gateway/migrations	6.902s
+?   	llm-gateway/proto/control	[no test files]

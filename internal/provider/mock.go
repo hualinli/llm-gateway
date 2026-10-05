@@ -25,7 +25,17 @@ func (m *MockProvider) Name() string { return m.name }
 // release.
 func (m *MockProvider) CloseIdleConnections() {}
 
+// ChatStream streams the mock response without a terminal gate; it is the
+// compatibility wrapper around ChatStreamGated.
 func (m *MockProvider) ChatStream(ctx context.Context, reqBody []byte, w io.Writer) (*Usage, error) {
+	return m.ChatStreamGated(ctx, reqBody, w, nil)
+}
+
+// ChatStreamGated streams the mock response and consults gate before writing
+// the "[DONE]" end marker. The mock has no usage-bearing chunk in its wire
+// format, so its only terminal boundary is the end marker: the gate receives
+// the final usage there. A gate error stops the stream before [DONE].
+func (m *MockProvider) ChatStreamGated(ctx context.Context, reqBody []byte, w io.Writer, gate TerminalGate) (*Usage, error) {
 	// 模拟上游 SSE：先等一小段再发首块（放大“首字节”便于观察重试边界）
 	select {
 	case <-ctx.Done():
@@ -64,14 +74,22 @@ func (m *MockProvider) ChatStream(ctx context.Context, reqBody []byte, w io.Writ
 		}
 	}
 
-	// 结束标记，网关透传时原样转发即可
-	if _, err := io.WriteString(w, "data: [DONE]\n\n"); err != nil {
+	// 归一化后的用量，真实 Provider 会从流末尾解析，这里直接给固定值
+	usage := &Usage{PromptTokens: 10, CompletionTokens: 6, TotalTokens: 16}
+
+	// 结束标记，网关透传时原样转发即可；有 gate 时先让 gate 决策再写字节。
+	endMarker := []byte("data: [DONE]\n\n")
+	if gate != nil {
+		if gateErr := gate.OnTerminalEvent(ctx, TerminalEvent{Raw: endMarker, Usage: usage, EndMarker: true}); gateErr != nil {
+			return nil, &TerminalGateError{Cause: gateErr, EndMarker: true}
+		}
+	}
+	if _, err := w.Write(endMarker); err != nil {
 		return nil, err
 	}
 	if flusher != nil {
 		flusher.Flush()
 	}
 
-	// 归一化后的用量，真实 Provider 会从流末尾解析，这里直接给固定值
-	return &Usage{PromptTokens: 10, CompletionTokens: 6, TotalTokens: 16}, nil
+	return usage, nil
 }

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"llm-gateway/internal/appenv"
+	"llm-gateway/internal/billing"
 	"llm-gateway/internal/metering"
 	"llm-gateway/internal/observability"
 	"llm-gateway/internal/ready"
@@ -62,6 +63,29 @@ func main() {
 	defer cancel()
 	go consumer.Run(ctx)
 
+	// T07C 对账：四层事实（execution / receipt / entry / account）在 PG 里分页比较，
+	// 只有“差异行”会被取回内存；Redis 仅做传输检查，归档导致的 ledger-only 不是差异。
+	// 对账需要一条到计费 schema 的直连：复用账本已经建好的连接池，不新开一个。
+	reconcile := reconcileDeps{
+		Ledger:   ledger,
+		Redis:    rdb,
+		Window:   reconcileEnvDuration(appenv.EnvLookup, "METERING_RECONCILE_WINDOW", defaultReconcileWindow),
+		PageSize: reconcileEnvInt(appenv.EnvLookup, "METERING_RECONCILE_PAGE_SIZE", metering.DefaultReconcilePageSize),
+	}
+	if pg, ok := ledger.(*metering.PGLedger); ok {
+		reconcile.DB = pg.DB()
+		reconcile.Exceptions = billing.NewPGExceptionStore(pg.DB())
+	} else {
+		// 内存账本（demo 回退）没有计费事实层可读：报告会显式标记 degraded，
+		// 而不是给一个看起来正常的绿色结果。
+		log.Printf("WARNING: the ledger is in-memory; /reconcile will report the four durable layers as degraded")
+	}
+	if interval := reconcileEnvDuration(appenv.EnvLookup, "METERING_RECONCILE_INTERVAL", defaultReconcileInterval); interval > 0 {
+		go runReconcileLoop(ctx, reconcile, interval)
+	} else {
+		log.Printf("metering reconciliation background loop disabled (METERING_RECONCILE_INTERVAL=0)")
+	}
+
 	// 对账/查询接口，演示 W3 验收；生产由 METERING_ADMIN_TOKEN 保护。
 	adminToken := strings.TrimSpace(os.Getenv("METERING_ADMIN_TOKEN"))
 	if adminToken == "" {
@@ -83,7 +107,7 @@ func main() {
 		if _, err := ledger.Count(); err != nil {
 			ledgerErr = fmt.Errorf("ledger: %w", err)
 		}
-		ready.Write(w, ready.Dependencies(redisErr, ledgerErr))
+		ready.Write(w, ready.Dependencies(redisErr, ledgerErr, settlementReadiness()))
 	})
 	mux.Handle("/ledger/count", requireBearer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		count, err := ledger.Count()
@@ -108,27 +132,41 @@ func main() {
 			"balance_cents": balance,
 		})
 	}), adminToken))
-	// 事件级对账：区分重复、pending、DLQ，以及 Stream/Ledger 两侧的具体差异。
-	mux.Handle("/reconcile", requireBearer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		report, err := metering.ReconcileStream(r.Context(), rdb, ledger)
-		if err != nil {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusServiceUnavailable)
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"ok":    false,
-				"error": err.Error(),
-			})
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		if !report.Consistent() {
-			w.WriteHeader(http.StatusConflict)
-		}
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"ok":     report.Consistent(),
-			"report": report,
-		})
-	}), adminToken))
+	// 有界对账（T07C，报告 schema v2）：四层 PG 事实分页比较 + Redis 传输检查。
+	// 保留 `ok` 与 `pending_messages`/`dlq_messages` 字段名以兼容 demo-accept.sh；
+	// 旧的 stream_only/ledger_only/payload_mismatch 三个列表被层次化差异取代，
+	// 其中 ledger_only 变成 report.transport.ledger_only_informational（永不是差异）。
+	mux.Handle("/reconcile", requireBearer(newReconcileHandler(reconcile), adminToken))
+
+	// T07A：receipt dispatcher（逻辑 outbox）与 settlement 消费者随进程启动。
+	// 两者复用账本已经建好的计费 schema 连接池：dispatcher 的 claim/retry 都是
+	// 短事务，投递本身在事务外做，Redis 只是传输，PG receipt 才是事实。
+	settlementCfg, err := settlementConfigFromEnv(appenv.EnvLookup)
+	if err != nil {
+		log.Fatalf("settlement config: %v", err)
+	}
+	settlement, err := startSettlement(ctx, rdb, ledger, settlementCfg)
+	if err != nil {
+		log.Fatalf("settlement wiring: %v", err)
+	}
+	if settlement != nil {
+		settlement.register(mux, adminToken)
+	}
+
+	// T07B：有界执行恢复（僵尸 reserved/executing 的审计释放）+ 24h 人工队列。
+	// 恢复判断的是**别的进程**是否还活着，所以它跑在 metering（billing worker）
+	// 而不是数据面：Gateway 只负责写心跳，metering 只负责读事实。
+	recoveryCfg, err := recoveryConfigFromEnv(appenv.EnvLookup)
+	if err != nil {
+		log.Fatalf("recovery config: %v", err)
+	}
+	recovery, err := startRecovery(ctx, ledger, recoveryCfg)
+	if err != nil {
+		log.Fatalf("recovery wiring: %v", err)
+	}
+	if recovery != nil {
+		recovery.register(mux, adminToken)
+	}
 
 	// 生产把 pprof/metrics 与业务 listener 分离；demo/test 未设置诊断地址时
 	// 保持原行为（仅 /metrics 挂在业务端口上，不额外暴露 pprof）。

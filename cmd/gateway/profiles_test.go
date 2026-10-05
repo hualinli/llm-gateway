@@ -21,6 +21,7 @@ func goodGatewayEnv() map[string]string {
 		"GATEWAY_LIMITER_BURST":        "200",
 		"GATEWAY_MAX_ACTIVE_STREAMS":   "256",
 		"GATEWAY_ACCESS_GUARD":         "pg",
+		"GATEWAY_BILLING":              "pg",
 		"POSTGRES_DSN":                 "postgres://gateway:gateway@postgres:5432/llm_gateway?sslmode=disable",
 		"CONTROL_TLS_CA_FILE":          "data/dev-certs/ca.crt",
 		"CONTROL_TLS_CLIENT_CERT_FILE": "data/dev-certs/gateway-client.crt",
@@ -53,6 +54,7 @@ func TestGatewayChecksCoverEveryRequiredItem(t *testing.T) {
 	want := []string{
 		"LLM_GATEWAY_BOOTSTRAP_API_KEY",
 		"GATEWAY_ACCESS_GUARD",
+		"GATEWAY_BILLING",
 		"POSTGRES_DSN",
 		"LIMITER_ON_REDIS_ERROR",
 		"GATEWAY_LIMITER_RATE",
@@ -104,6 +106,29 @@ func TestGatewayChecksRejectRelaxedSettings(t *testing.T) {
 			name: "access guard without dsn",
 			mutate: func(env map[string]string) {
 				env["GATEWAY_ACCESS_GUARD"] = "pg"
+				delete(env, "POSTGRES_DSN")
+			},
+			failing: "POSTGRES_DSN",
+		},
+		{
+			name:    "billing disabled in production",
+			mutate:  func(env map[string]string) { env["GATEWAY_BILLING"] = "off" },
+			failing: "GATEWAY_BILLING",
+		},
+		{
+			name:    "billing unset in production",
+			mutate:  func(env map[string]string) { delete(env, "GATEWAY_BILLING") },
+			failing: "GATEWAY_BILLING",
+		},
+		{
+			name:    "billing typo",
+			mutate:  func(env map[string]string) { env["GATEWAY_BILLING"] = "postgres-x" },
+			failing: "GATEWAY_BILLING",
+		},
+		{
+			name: "billing without dsn",
+			mutate: func(env map[string]string) {
+				env["GATEWAY_BILLING"] = "pg"
 				delete(env, "POSTGRES_DSN")
 			},
 			failing: "POSTGRES_DSN",
@@ -236,6 +261,7 @@ func TestGatewayChecksAggregateFailuresInProduction(t *testing.T) {
 	}
 	for _, name := range []string{
 		"GATEWAY_ACCESS_GUARD",
+		"GATEWAY_BILLING",
 		"LIMITER_ON_REDIS_ERROR",
 		"GATEWAY_LIMITER_RATE",
 		"GATEWAY_LIMITER_BURST",
