@@ -1220,3 +1220,33 @@ func TestBillingHTTPSequentialRequestsProduceOneReceiptEach(t *testing.T) {
 		t.Fatalf("projection mismatch: %+v", check)
 	}
 }
+
+// Unsupported request shapes must fail before funds are reserved or upstream
+// work is performed, even when their misleading byte/choice bound would fit.
+func TestBillingHTTPRejectsUnboundedChoicesAndImages(t *testing.T) {
+	for name, body := range map[string]string{
+		"multiple choices": `{"model":"gpt-billing","stream":true,"n":8,"max_tokens":100,"messages":[{"role":"user","content":"hi"}]}`,
+		"remote image":     `{"model":"gpt-billing","stream":true,"max_tokens":1,"messages":[{"role":"user","content":[{"type":"image_url","image_url":{"url":"https://x.co/i","detail":"high"}}]}]}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := newBillingHarness(t, withCredit(300))
+			resp, cancel := h.post(billingTestModel, body)
+			defer cancel()
+			defer resp.Body.Close()
+			var envelope struct {
+				Error struct {
+					Code string `json:"code"`
+				} `json:"error"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+				t.Fatal(err)
+			}
+			if resp.StatusCode != http.StatusBadRequest || envelope.Error.Code != httperr.CodeInvalidRequest {
+				t.Fatalf("status=%d envelope=%+v", resp.StatusCode, envelope)
+			}
+			if h.upstreamCalls.Load() != 0 || len(h.executionIDs()) != 0 || h.account().ReservedMicro != 0 {
+				t.Fatal("unsupported request reached upstream or reserved funds")
+			}
+		})
+	}
+}

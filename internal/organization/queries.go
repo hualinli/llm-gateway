@@ -102,3 +102,6 @@ var queryMarkPublicationFailed string
 
 //go:embed queries/delete_publication.sql
 var queryDeletePublication string
+
+//go:embed queries/accept_membership.sql
+var queryAcceptMembership string

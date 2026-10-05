@@ -152,6 +152,8 @@ func (s *server) writeOrganizationRBACError(c *app.RequestContext, operation str
 		s.writeError(c, http.StatusConflict, "", "organization must keep at least one owner")
 	case errors.Is(err, organization.ErrTargetAlreadyOwner):
 		s.writeError(c, http.StatusConflict, "", "ownership transfer target is already an owner")
+	case errors.Is(err, organization.ErrInvitationConflict):
+		s.writeError(c, http.StatusConflict, "", "invitation cannot change an active membership or undo a later removal; ask an administrator for a new invitation")
 	case errors.Is(err, organization.ErrInvitationUsed):
 		s.writeError(c, http.StatusConflict, "", "invitation was already accepted")
 	case errors.Is(err, organization.ErrInvitationRevoked):

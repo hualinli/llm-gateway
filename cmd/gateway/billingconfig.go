@@ -48,13 +48,16 @@ func parseBillingMode(raw string) (billingMode, error) {
 //   - input: every element of `messages` is counted as its raw JSON size. A
 //     byte-level tokenizer produces at most one token per byte (each token
 //     covers at least one byte), so the raw size plus a per-message template
-//     overhead is a conservative upper bound. Requests carrying tool/function
+//     overhead is a conservative upper bound. Only text content is supported;
+//     image/audio/file parts and unknown message fields are refused. Requests
+//     carrying tool/function
 //     definitions are refused outright: their input tokens are not bounded by
 //     the message size;
 //   - output: `max_tokens`/`max_completion_tokens` when present (the largest of
 //     the two), otherwise the platform default, which is *pinned into the
 //     forwarded body* so the bound is real rather than assumed. A declared
-//     limit above the platform cap is refused;
+//     limit above the platform cap is refused. Only a single output choice
+//     (omitted n or n=1) is supported;
 //   - size: message count, per-message size and total message size are capped,
 //     so a request cannot make the platform hold an unbounded reservation.
 //
@@ -170,6 +173,18 @@ func (p admissionPolicy) Bounds(body []byte) (RequestBounds, *boundFailure) {
 		return RequestBounds{}, &boundFailure{PassThrough: true}
 	}
 
+	// max_tokens limits each choice, while usage aggregates every choice.
+	// Until aggregate reservation is supported, only a single choice is billable.
+	if raw, ok := fields["n"]; ok {
+		var n int64
+		if json.Unmarshal(raw, &n) != nil || n != 1 {
+			return RequestBounds{}, &boundFailure{
+				Status: http.StatusBadRequest, Code: httperr.CodeInvalidRequest,
+				Message: `the billing policy requires "n" to be the integer 1; multiple output choices cannot be bounded by this version`,
+			}
+		}
+	}
+
 	for _, unsupported := range unsupportedBillingFields {
 		raw, ok := fields[unsupported]
 		if !ok || isJSONNull(raw) {
@@ -207,6 +222,12 @@ func (p admissionPolicy) Bounds(body []byte) (RequestBounds, *boundFailure) {
 				Status:  http.StatusBadRequest,
 				Code:    httperr.CodeInvalidRequest,
 				Message: fmt.Sprintf("messages[%d] is %d bytes, above the %d byte billing limit", i, size, p.MaxMessageBytes),
+			}
+		}
+		if !isTextBillingMessage(raw) {
+			return RequestBounds{}, &boundFailure{
+				Status: http.StatusBadRequest, Code: httperr.CodeInvalidRequest,
+				Message: fmt.Sprintf("messages[%d] must contain only text; image, audio, file and tool content cannot be bounded by this billing policy", i),
 			}
 		}
 		messageBytes += size
@@ -277,6 +298,50 @@ func (p admissionPolicy) Bounds(body []byte) (RequestBounds, *boundFailure) {
 		bounds.OutputTokensUpper = declaredOutput
 	}
 	return bounds, nil
+}
+
+// isTextBillingMessage rejects external/multimodal inputs whose token cost
+// cannot be bounded by their JSON byte length. Text content-part arrays remain
+// supported, but unknown message/part fields fail closed.
+func isTextBillingMessage(raw json.RawMessage) bool {
+	var message map[string]json.RawMessage
+	if json.Unmarshal(raw, &message) != nil || message == nil {
+		return false
+	}
+	for field := range message {
+		if field != "role" && field != "content" && field != "name" {
+			return false
+		}
+	}
+	var role string
+	if json.Unmarshal(message["role"], &role) != nil {
+		return false
+	}
+	switch role {
+	case "system", "developer", "user", "assistant":
+	default:
+		return false
+	}
+	content, ok := message["content"]
+	if !ok || isJSONNull(content) {
+		return false
+	}
+	var text string
+	if json.Unmarshal(content, &text) == nil {
+		return true
+	}
+	var parts []map[string]json.RawMessage
+	if json.Unmarshal(content, &parts) != nil || len(parts) == 0 {
+		return false
+	}
+	for _, part := range parts {
+		var kind string
+		if len(part) != 2 || json.Unmarshal(part["type"], &kind) != nil || kind != "text" ||
+			isJSONNull(part["text"]) || json.Unmarshal(part["text"], &text) != nil {
+			return false
+		}
+	}
+	return true
 }
 
 // pinMaxTokens rewrites the body so the upstream cannot exceed the platform

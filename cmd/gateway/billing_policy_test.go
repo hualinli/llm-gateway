@@ -263,14 +263,46 @@ func TestAdmissionPolicyBounds(t *testing.T) {
 		}
 	})
 
-	t.Run("non-text message parts are bounded by their JSON size", func(t *testing.T) {
-		parts := `{"role":"user","content":[{"type":"text","text":"hi"},{"type":"image_url","image_url":{"url":"data:image/png;base64,AAAA"}}]}`
-		bounds, failure := policy.Bounds(body(parts, ""))
-		if failure != nil {
-			t.Fatalf("failure=%+v", failure)
+	t.Run("only one output choice is billable", func(t *testing.T) {
+		for _, n := range []string{"8", "0", "-1", "1.5", "null", `"1"`, "9223372036854775808"} {
+			_, failure := policy.Bounds(body(message("hi"), `,"n":`+n+`,"max_tokens":100`))
+			if failure == nil || failure.PassThrough || failure.Status != http.StatusBadRequest || !strings.Contains(failure.Message, `"n"`) {
+				t.Fatalf("n=%s: failure=%+v", n, failure)
+			}
 		}
-		if bounds.InputTokensUpper < int64(len(parts)) {
-			t.Fatalf("input bound=%d must cover the raw message size %d", bounds.InputTokensUpper, len(parts))
+		bounds, failure := policy.Bounds(body(message("hi"), `,"n":1,"max_tokens":100`))
+		if failure != nil || bounds.OutputTokensUpper != 100 {
+			t.Fatalf("single choice bounds=%+v failure=%+v", bounds, failure)
+		}
+	})
+
+	t.Run("unbounded multimodal and malformed messages are refused", func(t *testing.T) {
+		for _, msg := range []string{
+			`{"role":"user","content":[{"type":"image_url","image_url":{"url":"https://x.co/i","detail":"high"}}]}`,
+			`{"role":"user","content":[{"type":"text","text":"hi"},{"type":"image_url","image_url":{"url":"data:image/png;base64,AAAA"}}]}`,
+			`{"role":"user","content":[{"type":"input_audio","input_audio":{"data":"AAAA","format":"wav"}}]}`,
+			`{"role":"user","content":[{"type":"file","file":{"file_id":"file-1"}}]}`,
+			`{"role":"assistant","content":"hi","audio":{"id":"audio-1"}}`,
+			`{"role":"assistant","content":null,"tool_calls":[]}`,
+			`{"role":"user","content":[{"type":"text","text":"hi","image_url":"hidden"}]}`,
+			`{"role":"user","content":null}`, `{"role":"user","content":123}`,
+			`{"role":"user","content":[{"type":"text","text":null}]}`,
+			`{"role":"user","content":[]}`, `{"role":"user","content":[null]}`,
+			`"hi"`, `null`, `{"role":"user"}`,
+		} {
+			_, failure := policy.Bounds(body(msg, ""))
+			if failure == nil || failure.PassThrough || failure.Status != http.StatusBadRequest {
+				t.Fatalf("%s: failure=%+v", msg, failure)
+			}
+		}
+	})
+
+	t.Run("text content arrays retain conservative bounds and forwarding", func(t *testing.T) {
+		parts := `{"role":"user","content":[{"type":"text","text":"hi"},{"type":"text","text":"你好"}]}`
+		payload := body(parts, `,"max_tokens":100`)
+		bounds, failure := policy.Bounds(payload)
+		if failure != nil || bounds.InputTokensUpper < int64(len(parts)) || string(bounds.Body) != string(payload) {
+			t.Fatalf("bounds=%+v failure=%+v", bounds, failure)
 		}
 	})
 }

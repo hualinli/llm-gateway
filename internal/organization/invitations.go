@@ -54,6 +54,8 @@ var (
 	ErrInvitationExpired = errors.New("organization: invitation has expired")
 	// ErrInvitationEmailMismatch：接受者的登录 email 与邀请固定 email 不一致。
 	ErrInvitationEmailMismatch = errors.New("organization: invitation was issued for a different email")
+	// ErrInvitationConflict：已有活跃成员，或邀请早于最近一次成员移除。
+	ErrInvitationConflict = errors.New("organization: invitation conflicts with membership state")
 	// ErrInvitationEmailInvalid：邀请 email 形状非法。
 	ErrInvitationEmailInvalid = errors.New("organization: invitation email is invalid")
 )
@@ -125,7 +127,7 @@ func (s *Service) CreateInvitation(ctx context.Context, actorUserID, orgID int64
 }
 
 // AcceptInvitation 在**一个事务**里完成：锁定邀请行 → 校验状态/有效期/email
-// → 以邀请固定的角色创建或恢复成员关系 → 标记 accepted → 递增 org_revision
+// → 锁定组织并校验邀请者权限 → 以邀请固定的角色创建或恢复成员关系 → 标记 accepted → 递增 org_revision
 // → 插入 policy_publications(scope=org, status=pending)。返回值是新建/恢复的
 // 成员关系；rawToken 是唯一凭据，username/email/role 都不可由请求覆盖。
 //
@@ -159,10 +161,40 @@ func (s *Service) AcceptInvitation(ctx context.Context, rawToken string, userID 
 		return Membership{}, err
 	}
 
-	// 角色来自邀请行，与请求无关；upsert 同时负责“重新加入”的恢复语义。
+	// Serialize with role changes/removals and other invitation acceptances.
+	// An invitation grants membership, never a role change for an active member.
+	var lockedID int64
+	if err := tx.QueryRowContext(ctx, queryLockOrganization, invitation.OrgID).Scan(&lockedID); err != nil {
+		return Membership{}, err
+	}
+	// Lock waits may cross the expiry boundary; validate against the write time.
+	now = time.Now().UTC()
+	if err := checkInvitationUsable(invitation, userEmail, now); err != nil {
+		return Membership{}, err
+	}
+	if invitation.CreatedBy == nil {
+		return Membership{}, ErrInvitationRevoked
+	}
+	actor, err := actorMembershipInTx(ctx, tx, invitation.OrgID, *invitation.CreatedBy)
+	if errors.Is(err, ErrNotFound) {
+		return Membership{}, ErrInvitationRevoked
+	}
+	if err != nil {
+		return Membership{}, err
+	}
+	if !Allowed(actor.Role, ActionManageMembers) || checkInvitationGrant(actor.Role, invitation.Role) != nil {
+		return Membership{}, ErrInvitationRevoked
+	}
+
+	// Restore a removed member only with an invitation issued after removal.
+	// The conditional upsert also prevents older, unconsumed grants from
+	// overwriting a membership established by a newer invitation.
 	var m Membership
-	err = tx.QueryRowContext(ctx, queryUpsertMembership, invitation.OrgID, userID, invitation.Role, now).
+	err = tx.QueryRowContext(ctx, queryAcceptMembership, invitation.OrgID, userID, invitation.Role, now, invitation.CreatedAt).
 		Scan(&m.OrgID, &m.UserID, &m.Role, &m.Status, &m.CreatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Membership{}, ErrInvitationConflict
+	}
 	if isForeignKeyViolation(err) {
 		return Membership{}, ErrNotFound
 	}
