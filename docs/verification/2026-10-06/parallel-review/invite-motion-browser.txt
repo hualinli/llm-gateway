@@ -1,0 +1,161 @@
+
+added 122 packages, and audited 123 packages in 2s
+
+16 packages are looking for funding
+  run `npm fund` for details
+
+found 0 vulnerabilities
+
+> llm-gateway-web@0.1.0 e2e
+> playwright test --config e2e/playwright.config.ts --reporter=list --grep-invert screenshots
+
+(node:13493) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+[WebServer]
+[WebServer] > llm-gateway-web@0.1.0 dev
+[WebServer] > vite --port 5199 --strictPort
+[WebServer]
+[WebServer] (node:13532) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer]
+[WebServer]   VITE v8.3.1  ready in 1467 ms
+[WebServer]
+[WebServer]   ➜  Local:   http://127.0.0.1:5199/
+
+Running 28 tests using 1 worker
+
+(node:13536) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:13536) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(node:13536) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] 12:40:00 AM [vite] (client) [console.error] Warning: [antd: Space] `direction` is deprecated. Please use `orientation` instead.
+[WebServer] 12:40:00 AM [vite] (client) [console.error] Warning: [antd: Drawer] `width` is deprecated. Please use `size` instead.
+[WebServer] 12:40:00 AM [vite] (client) [console.error] Warning: [antd: Alert] `message` is deprecated. Please use `title` instead.
+[WebServer] 12:40:01 AM [vite] (client) [console.error] Warning: [antd: Space] `direction` is deprecated. Please use `orientation` instead.
+[WebServer] 12:40:01 AM [vite] (client) [console.error] Warning: [antd: Drawer] `width` is deprecated. Please use `size` instead.
+[WebServer] 12:40:01 AM [vite] (client) [console.error] Warning: [antd: Alert] `message` is deprecated. Please use `title` instead.
+  ✓   1 [desktop-1440] › e2e/member.spec.ts:23:3 › login form (fresh browser, no stored session) › a real login through the form lands on the member overview (1.9s)
+[WebServer] 12:40:01 AM [vite] (client) [console.error] Warning: [antd: Space] `direction` is deprecated. Please use `orientation` instead.
+[WebServer] 12:40:02 AM [vite] (client) [console.error] Warning: [antd: Alert] `message` is deprecated. Please use `title` instead.
+  ✓   2 [desktop-1440] › e2e/member.spec.ts:41:3 › login form (fresh browser, no stored session) › a wrong password is refused without leaking whether the email exists (1.1s)
+[WebServer] 12:40:02 AM [vite] (client) [console.error] Warning: [antd: Space] `direction` is deprecated. Please use `orientation` instead.
+[WebServer] 12:40:02 AM [vite] (client) [console.error] Warning: [antd: Drawer] `width` is deprecated. Please use `size` instead.
+[WebServer] 12:40:02 AM [vite] (client) [console.error] Warning: [antd: Alert] `message` is deprecated. Please use `title` instead.
+[WebServer] 12:40:02 AM [vite] (client) [console.error] Warning: [antd: InputNumber] `addonBefore` is deprecated. Please use `Space.Compact` instead.
+  ✓   3 [desktop-1440] › e2e/member.spec.ts:59:3 › member perspective › usage page is scope=self and explains the personal-bill boundary (812ms)
+[WebServer] 12:40:03 AM [vite] (client) [console.error] Warning: [antd: Space] `direction` is deprecated. Please use `orientation` instead.
+[WebServer] 12:40:03 AM [vite] (client) [console.error] Warning: [antd: Drawer] `width` is deprecated. Please use `size` instead.
+[WebServer] 12:40:03 AM [vite] (client) [console.error] Warning: [antd: Alert] `message` is deprecated. Please use `title` instead.
+  ✓   4 [desktop-1440] › e2e/member.spec.ts:88:3 › member perspective › billing page renders the real 403 instead of hiding the tabs (813ms)
+[WebServer] 12:40:04 AM [vite] (client) [console.error] Warning: [antd: Space] `direction` is deprecated. Please use `orientation` instead.
+[WebServer] 12:40:04 AM [vite] (client) [console.error] Warning: [antd: Drawer] `width` is deprecated. Please use `size` instead.
+[WebServer] 12:40:04 AM [vite] (client) [console.error] Warning: [antd: Alert] `message` is deprecated. Please use `title` instead.
+[WebServer] 12:40:04 AM [vite] (client) [console.error] Warning: [antd: Modal] `maskClosable` is deprecated. Please use `mask.closable` instead.
+  ✓   5 [desktop-1440] › e2e/member.spec.ts:101:3 › member perspective › keys page never shows a fake empty list when the control channel is down (772ms)
+[WebServer] 12:40:05 AM [vite] (client) [console.error] Warning: [antd: Space] `direction` is deprecated. Please use `orientation` instead.
+[WebServer] 12:40:05 AM [vite] (client) [console.error] Warning: [antd: Drawer] `width` is deprecated. Please use `size` instead.
+[WebServer] 12:40:05 AM [vite] (client) [console.error] Warning: [antd: Alert] `message` is deprecated. Please use `title` instead.
+  ✓   6 [desktop-1440] › e2e/member.spec.ts:115:3 › member perspective › the organization switcher only offers organizations the member belongs to (969ms)
+  ✓   7 [desktop-1440] › e2e/negative.spec.ts:28:3 › negative cases: member › cannot read another user usage, but may read their own (122ms)
+[WebServer] 12:40:06 AM [vite] (client) [console.error] Warning: [antd: Space] `direction` is deprecated. Please use `orientation` instead.
+[WebServer] 12:40:06 AM [vite] (client) [console.error] Warning: [antd: Drawer] `width` is deprecated. Please use `size` instead.
+  ✓   8 [desktop-1440] › e2e/negative.spec.ts:41:3 › negative cases: member › gets 404 (not 403) on a foreign organization, in the API and in the UI (678ms)
+  ✓   9 [desktop-1440] › e2e/negative.spec.ts:51:3 › negative cases: member › cannot read organization money (account / entries / statement / exceptions) (131ms)
+[WebServer] 12:40:07 AM [vite] (client) [console.error] Warning: [antd: Space] `direction` is deprecated. Please use `orientation` instead.
+[WebServer] 12:40:07 AM [vite] (client) [console.error] Warning: [antd: Drawer] `width` is deprecated. Please use `size` instead.
+  ✓  10 [desktop-1440] › e2e/negative.spec.ts:60:3 › negative cases: member › cannot reach the platform surfaces at all (783ms)
+[WebServer] 12:40:07 AM [vite] (client) [console.error] Warning: [antd: Space] `direction` is deprecated. Please use `orientation` instead.
+[WebServer] 12:40:08 AM [vite] (client) [console.error] Warning: [antd: Drawer] `width` is deprecated. Please use `size` instead.
+  ✓  11 [desktop-1440] › e2e/negative.spec.ts:76:3 › negative cases: billing_viewer › cannot edit members (403 even when forced outside the UI) (763ms)
+[WebServer] 12:40:08 AM [vite] (client) [console.error] Warning: [antd: Space] `direction` is deprecated. Please use `orientation` instead.
+[WebServer] 12:40:08 AM [vite] (client) [console.error] Warning: [antd: Drawer] `width` is deprecated. Please use `size` instead.
+  ✓  12 [desktop-1440] › e2e/negative.spec.ts:104:3 › negative cases: billing_viewer › cannot write money and cannot open the platform surfaces (679ms)
+[WebServer] 12:40:09 AM [vite] (client) [console.error] Warning: [antd: Space] `direction` is deprecated. Please use `orientation` instead.
+[WebServer] 12:40:09 AM [vite] (client) [console.error] Warning: [antd: Drawer] `width` is deprecated. Please use `size` instead.
+[WebServer] 12:40:09 AM [vite] (client) [console.error] Warning: [antd: Alert] `message` is deprecated. Please use `title` instead.
+  ✓  13 [desktop-1440] › e2e/negative.spec.ts:129:3 › negative cases: session and CSRF › a write without X-CSRF-Token is refused with 403 forbidden (1.3s)
+[WebServer] 12:40:10 AM [vite] (client) [console.error] Warning: [antd: Space] `direction` is deprecated. Please use `orientation` instead.
+[WebServer] 12:40:11 AM [vite] (client) [console.error] Warning: [antd: Space] `direction` is deprecated. Please use `orientation` instead.
+  ✓  14 [desktop-1440] › e2e/negative.spec.ts:159:3 › negative cases: anonymous › an anonymous browser is always redirected to the login route (1.3s)
+[WebServer] 12:40:11 AM [vite] (client) [console.error] Warning: [antd: Space] `direction` is deprecated. Please use `orientation` instead.
+[WebServer] 12:40:12 AM [vite] (client) [console.error] Warning: [antd: Drawer] `width` is deprecated. Please use `size` instead.
+[WebServer] 12:40:12 AM [vite] (client) [console.error] Warning: Instance created by `useForm` is not connected to any Form element. Forget to pass `form` prop?
+[WebServer] 12:40:12 AM [vite] (client) [console.error] Warning: [antd: Alert] `message` is deprecated. Please use `title` instead.
+  ✓  15 [desktop-1440] › e2e/org-admin.spec.ts:23:3 › enterprise administrator perspective › members page: roles, invite link shown once, member usage breakdown (2.1s)
+[WebServer] 12:40:14 AM [vite] (client) [console.error] Warning: [antd: Space] `direction` is deprecated. Please use `orientation` instead.
+[WebServer] 12:40:14 AM [vite] (client) [console.error] Warning: [antd: Drawer] `width` is deprecated. Please use `size` instead.
+[WebServer] 12:40:14 AM [vite] (client) [console.error] Warning: [antd: Alert] `message` is deprecated. Please use `title` instead.
+  ✓  16 [desktop-1440] › e2e/org-admin.spec.ts:64:3 › enterprise administrator perspective › billing: account projection, statement month, ledger entries, exception queue (1.8s)
+[WebServer] 12:40:15 AM [vite] (client) [console.error] Warning: [antd: Space] `direction` is deprecated. Please use `orientation` instead.
+[WebServer] 12:40:16 AM [vite] (client) [console.error] Warning: [antd: Drawer] `width` is deprecated. Please use `size` instead.
+  ✓  17 [desktop-1440] › e2e/org-admin.spec.ts:114:3 › enterprise administrator perspective › audit page shows the organization audit trail (852ms)
+[WebServer] 12:40:16 AM [vite] (client) [console.error] Warning: [antd: Space] `direction` is deprecated. Please use `orientation` instead.
+[WebServer] 12:40:16 AM [vite] (client) [console.error] Warning: [antd: Drawer] `width` is deprecated. Please use `size` instead.
+[WebServer] 12:40:16 AM [vite] (client) [console.error] Warning: [antd: Alert] `message` is deprecated. Please use `title` instead.
+  ✓  18 [desktop-1440] › e2e/org-admin.spec.ts:125:3 › enterprise administrator perspective › keys and model catalog are real, not placeholders (712ms)
+[WebServer] 12:40:17 AM [vite] (client) [console.error] Warning: [antd: Space] `direction` is deprecated. Please use `orientation` instead.
+[WebServer] 12:40:17 AM [vite] (client) [console.error] Warning: [antd: Drawer] `width` is deprecated. Please use `size` instead.
+[WebServer] 12:40:18 AM [vite] (client) [console.error] Warning: [antd: Space] `direction` is deprecated. Please use `orientation` instead.
+[WebServer] 12:40:18 AM [vite] (client) [console.error] Warning: [antd: Drawer] `width` is deprecated. Please use `size` instead.
+[WebServer] 12:40:18 AM [vite] (client) [console.error] Warning: [antd: Alert] `message` is deprecated. Please use `title` instead.
+[WebServer] 12:40:18 AM [vite] (client) [console.error] Warning: [antd: Space] `direction` is deprecated. Please use `orientation` instead.
+[WebServer] 12:40:18 AM [vite] (client) [console.error] Warning: [antd: Drawer] `width` is deprecated. Please use `size` instead.
+[WebServer] 12:40:18 AM [vite] (client) [console.error] Warning: [antd: Alert] `message` is deprecated. Please use `title` instead.
+[WebServer] 12:40:18 AM [vite] (client) [console.error] Warning: [antd: Modal] `maskClosable` is deprecated. Please use `mask.closable` instead.
+  ✓  19 [desktop-1440] › e2e/org-admin.spec.ts:140:3 › billing_viewer is read-only › members visible, no invite/remove, keys refused, billing readable (2.0s)
+[WebServer] 12:40:19 AM [vite] (client) [console.error] Warning: [antd: Space] `direction` is deprecated. Please use `orientation` instead.
+[WebServer] 12:40:19 AM [vite] (client) [console.error] Warning: [antd: Drawer] `width` is deprecated. Please use `size` instead.
+[WebServer] 12:40:19 AM [vite] (client) [console.error] Warning: [antd: Alert] `message` is deprecated. Please use `title` instead.
+  ✓  20 [desktop-1440] › e2e/platform-admin.spec.ts:18:3 › platform administrator perspective › users page states the missing endpoints instead of inventing a list (704ms)
+[WebServer] 12:40:20 AM [vite] (client) [console.error] Warning: [antd: Space] `direction` is deprecated. Please use `orientation` instead.
+[WebServer] 12:40:20 AM [vite] (client) [console.error] Warning: [antd: Drawer] `width` is deprecated. Please use `size` instead.
+[WebServer] 12:40:20 AM [vite] (client) [console.error] Warning: [antd: Alert] `message` is deprecated. Please use `title` instead.
+  ✓  21 [desktop-1440] › e2e/platform-admin.spec.ts:35:3 › platform administrator perspective › price versions: publish, conflict on the same (model, effective_at), history (1.7s)
+[WebServer] 12:40:21 AM [vite] (client) [console.error] Warning: [antd: Space] `direction` is deprecated. Please use `orientation` instead.
+[WebServer] 12:40:21 AM [vite] (client) [console.error] Warning: [antd: Drawer] `width` is deprecated. Please use `size` instead.
+[WebServer] 12:40:22 AM [vite] (client) [console.error] Warning: [antd: Alert] `message` is deprecated. Please use `title` instead.
+[WebServer] 12:40:22 AM [vite] (client) [console.error] Warning: [antd: Modal] `maskClosable` is deprecated. Please use `mask.closable` instead.
+[WebServer] 12:40:22 AM [vite] (client) [console.error] Warning: [antd: Input] `addonAfter` is deprecated. Please use `Space.Compact` instead.
+  ✓  22 [desktop-1440] › e2e/platform-admin.spec.ts:83:3 › platform administrator perspective › credit adjustment: before/after, replay with the same key, 409 on a changed payload (1.5s)
+[WebServer] 12:40:23 AM [vite] (client) [console.error] Warning: [antd: Space] `direction` is deprecated. Please use `orientation` instead.
+[WebServer] 12:40:23 AM [vite] (client) [console.error] Warning: [antd: Drawer] `width` is deprecated. Please use `size` instead.
+[WebServer] 12:40:23 AM [vite] (client) [console.error] Warning: [antd: Alert] `message` is deprecated. Please use `title` instead.
+[WebServer] 12:40:23 AM [vite] (client) [console.error] Warning: [antd: Modal] `maskClosable` is deprecated. Please use `mask.closable` instead.
+[WebServer] 12:40:23 AM [vite] (client) [console.error] Warning: [antd: Input] `addonAfter` is deprecated. Please use `Space.Compact` instead.
+  ✓  23 [desktop-1440] › e2e/platform-admin.spec.ts:124:3 › platform administrator perspective › billing exceptions for one organization, with a timeline when data exists (1.0s)
+[WebServer] 12:40:24 AM [vite] (client) [console.error] Warning: [antd: Space] `direction` is deprecated. Please use `orientation` instead.
+[WebServer] 12:40:24 AM [vite] (client) [console.error] Warning: [antd: Drawer] `width` is deprecated. Please use `size` instead.
+[WebServer] 12:40:24 AM [vite] (client) [console.error] Warning: [antd: Alert] `message` is deprecated. Please use `title` instead.
+[WebServer] 12:40:25 AM [vite] (client) [console.error] Warning: [antd: Space] `direction` is deprecated. Please use `orientation` instead.
+[WebServer] 12:40:25 AM [vite] (client) [console.error] Warning: [antd: Drawer] `width` is deprecated. Please use `size` instead.
+[WebServer] 12:40:25 AM [vite] (client) [console.error] Warning: [antd: Alert] `message` is deprecated. Please use `title` instead.
+[WebServer] 12:40:25 AM [vite] (client) [console.error] Warning: [antd: Modal] `maskClosable` is deprecated. Please use `mask.closable` instead.
+[WebServer] 12:40:25 AM [vite] (client) [console.error] Warning: [antd: Input] `addonAfter` is deprecated. Please use `Space.Compact` instead.
+  ✓  24 [desktop-1440] › e2e/platform-admin.spec.ts:153:3 › platform administrator perspective › platform write visibility: every write path needs platform admin + CSRF (1.5s)
+[WebServer] 12:40:25 AM [vite] (client) [console.error] Warning: [antd: Space] `direction` is deprecated. Please use `orientation` instead.
+[WebServer] 12:40:26 AM [vite] (client) [console.error] Warning: [antd: Drawer] `width` is deprecated. Please use `size` instead.
+[WebServer] 12:40:26 AM [vite] (client) [console.error] Warning: [antd: Alert] `message` is deprecated. Please use `title` instead.
+[WebServer] 12:40:26 AM [vite] (client) [console.error] Warning: [antd: Modal] `maskClosable` is deprecated. Please use `mask.closable` instead.
+[WebServer] 12:40:26 AM [vite] (client) [console.error] Warning: [antd: Input] `addonAfter` is deprecated. Please use `Space.Compact` instead.
+  ✓  25 [desktop-1440] › e2e/review-queue.spec.ts:10:3 › manual review operator UI › requires a reason and an explicit charge confirmation, then shows committed money (1.8s)
+[WebServer] 12:40:27 AM [vite] (client) [console.error] Warning: [antd: Space] `direction` is deprecated. Please use `orientation` instead.
+[WebServer] 12:40:27 AM [vite] (client) [console.error] Warning: [antd: Drawer] `width` is deprecated. Please use `size` instead.
+[WebServer] 12:40:27 AM [vite] (client) [console.error] Warning: [antd: Alert] `message` is deprecated. Please use `title` instead.
+[WebServer] 12:40:28 AM [vite] (client) [console.error] Warning: [antd: Space] `direction` is deprecated. Please use `orientation` instead.
+  ✓  26 [desktop-1440] › e2e/zz-session.spec.ts:22:3 › session teardown: member › logout revokes the member session for the browser and for replays (1.9s)
+[WebServer] 12:40:29 AM [vite] (client) [console.error] Warning: [antd: Space] `direction` is deprecated. Please use `orientation` instead.
+[WebServer] 12:40:29 AM [vite] (client) [console.error] Warning: [antd: Drawer] `width` is deprecated. Please use `size` instead.
+[WebServer] 12:40:29 AM [vite] (client) [console.error] Warning: [antd: Alert] `message` is deprecated. Please use `title` instead.
+[WebServer] 12:40:30 AM [vite] (client) [console.error] Warning: [antd: Space] `direction` is deprecated. Please use `orientation` instead.
+  ✓  27 [desktop-1440] › e2e/zz-session.spec.ts:50:3 › session teardown: platform admin › logout closes the platform endpoints too (1.5s)
+[WebServer] 12:40:31 AM [vite] (client) [console.error] Warning: [antd: Space] `direction` is deprecated. Please use `orientation` instead.
+[WebServer] 12:40:31 AM [vite] (client) [console.error] Warning: [antd: Drawer] `width` is deprecated. Please use `size` instead.
+[WebServer] 12:40:31 AM [vite] (client) [console.error] Warning: [antd: Alert] `message` is deprecated. Please use `title` instead.
+[WebServer] 12:40:32 AM [vite] (client) [console.error] Warning: [antd: Space] `direction` is deprecated. Please use `orientation` instead.
+[WebServer] 12:40:32 AM [vite] (client) [console.error] Warning: [antd: Space] `direction` is deprecated. Please use `orientation` instead.
+[WebServer] 12:40:32 AM [vite] (client) [console.error] Warning: [antd: Drawer] `width` is deprecated. Please use `size` instead.
+[WebServer] 12:40:32 AM [vite] (client) [console.error] Warning: [antd: Alert] `message` is deprecated. Please use `title` instead.
+  ✓  28 [desktop-1440] › e2e/zz-session.spec.ts:77:3 › session teardown: expired session in a second context › an expired session still renders a usable login form (2.3s)
+
+  28 passed (39.0s)

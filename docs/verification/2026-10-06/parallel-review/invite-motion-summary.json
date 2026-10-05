@@ -1,0 +1,11 @@
+{
+  "run_id": "invite-motion-20261006",
+  "phase": "accept",
+  "ok": true,
+  "steps_total": 9,
+  "steps_passed": 9,
+  "hard_failures": [],
+  "soft_findings": [],
+  "duration_s": 10.618,
+  "generated_at": "2026-10-05T16:39:47Z"
+}

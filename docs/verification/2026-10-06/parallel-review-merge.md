@@ -38,3 +38,10 @@
 历史 main `3bc04a7` 的 [CI #18](https://github.com/hualinli/llm-gateway/actions/runs/37321863065) 成功；补丁前 recovery、funds、组合候选的 CI #20、#21、#22 也已确认成功。资金修复 `3ef1f4a` 的 [CI #25](https://github.com/hualinli/llm-gateway/actions/runs/37338471204) 与恢复修复 `980b9d0` 的 [CI #23](https://github.com/hualinli/llm-gateway/actions/runs/37338470581) 已确认成功；组合候选 #24 被后续溢出修复 #26 按同分支并发规则取代（cancelled，非测试失败）。main 合并后的最终远端结论以[GitHub Actions](https://github.com/hualinli/llm-gateway/actions)对应 main 提交为准；本文提交时正在确认，不能借用旧提交绿灯。
 
 告警仍先在 Prometheus `/alerts` 查看，不接外部通知。生产 HA、真实支付、真实付费 Provider、60 分钟 soak、生产 mTLS/密钥轮换未验证；本次没有扩充这些承诺。
+
+
+## 合并后浏览器动效竞态修复
+
+main `cc91234` 的 [CI #29](https://github.com/hualinli/llm-gateway/actions/runs/37340369035) 后端与前端检查、9 步平台验收、安全和秘密扫描全部通过，但浏览器为 27 PASS / 1 FAIL：企业管理员创建邀请后未出现链接弹窗。失败 trace 中没有创建邀请 POST，点击坐标为 (1262,171.59)，最终截图的提交按钮中心约 (898,474)。这与 Ant Design Modal 从触发按钮位置开始 zoom 动效时的坐标移动一致。
+
+审核 agent 复核了组件和依赖实现，确认 dialog 面板正是 transform 动画元素。测试现在等待邀请 dialog 的 `transform` 恢复为 `none` 再点击，使用断言轮询，不增加固定 sleep 或请求重试。本地复验 28/28 浏览器通过、9 步验收通过、0 secret leaks；[浏览器证据](parallel-review/invite-motion-browser.txt)、[summary](parallel-review/invite-motion-summary.json)。本轮使用前一次已验证的隔离后端镜像（`--skip-build`），只复验测试动效修复；临时本机浏览器路径已还原。最终 main CI 将重新构建后端并使用锁定浏览器验收。

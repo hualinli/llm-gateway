@@ -32,6 +32,13 @@ test.describe('enterprise administrator perspective', () => {
     // Invite flow: create → the raw token is displayed exactly once.
     await button(page, '邀请成员').click();
     await page.getByLabel('被邀请人邮箱').fill(`e2e-invitee-${state.runId}@example.com`);
+    // Ant Design zooms the dialog from the opener's position. Wait for the
+    // actual transform to finish before clicking; stable button bounds alone
+    // can be sampled just before the parent animation starts on a busy runner.
+    await expect(page.getByRole('dialog', { name: '邀请成员', exact: true })).toHaveCSS(
+      'transform',
+      'none',
+    );
     await button(page, '生成邀请链接').click();
     const linkDialog = page.getByText('邀请链接（只显示这一次）');
     await expect(linkDialog).toBeVisible();
