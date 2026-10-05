@@ -59,6 +59,8 @@ services:
       REDIS_ADDR: redis:6379
       POSTGRES_DSN: postgres://gateway:gateway@postgres:5432/llm_gateway?sslmode=disable
       METERING_REQUIRE_POSTGRES: "true"
+      # Read-only policy credential; it grants no recovery or money-operation permission.
+      METERING_POLICY_TOKEN: ${METERING_POLICY_TOKEN:-demo-policy-read-token}
     ports:
       - "127.0.0.1:8091:8091"
     volumes:
@@ -92,6 +94,8 @@ services:
       CONTROL_ADDR: control:50051
       CONTROL_CONSOLE_SERVICE_NAME: console
       CONSOLE_PUBLICATION_INTERVAL: 15s
+      CONSOLE_METERING_URL: http://metering:8091
+      CONSOLE_METERING_POLICY_TOKEN: ${METERING_POLICY_TOKEN:-demo-policy-read-token}
     ports:
       # Console 业务 listener：/api/v1/* 与 /livez、/readyz；仅本机可达。
       - "127.0.0.1:8092:8092"

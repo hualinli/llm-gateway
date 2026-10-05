@@ -213,8 +213,9 @@ rc_compose_command_string() {
 }
 
 rc_compose_run() {
-  # 在服务容器里跑一次性命令：把随机 CONTROL_ADMIN_TOKEN 与宿主 uid 一起传进去。
+  # 在服务容器里跑一次性命令：注入各自独立的 Control 管理令牌、只读策略令牌与宿主 uid。
   CONTROL_ADMIN_TOKEN="$(cat "$RC_WORK_DIR/secrets/control-admin-token")" \
+  METERING_POLICY_TOKEN="$(cat "$RC_WORK_DIR/secrets/metering-policy-token")" \
   HOST_UID="$(id -u)" HOST_GID="$(id -g)" rc_compose "$@"
 }
 
@@ -869,13 +870,18 @@ def do_accept(args, rec):
     status, _, exceptions = admin.request("GET", "/api/v1/orgs/%s/billing/exceptions" % org_a)
     status2, _, audit = admin.request("GET", "/api/v1/orgs/%s/audit?limit=50" % org_a)
     status3, _, statement = admin.request("GET", "/api/v1/orgs/%s/billing/statements" % org_a)
+    review_status, _, review = admin.request("GET", "/api/v1/admin/billing/review-required")
+    review_data = review if isinstance(review, dict) else {}
     rec.capture("platform-surfaces", {"org": org_a, "actor": "platform_admin"},
-                {"exceptions": exceptions, "audit": audit, "statement": statement})
+                {"exceptions": exceptions, "audit": audit, "statement": statement, "review": review})
     totals = (exceptions or {}).get("totals", {}) if isinstance(exceptions, dict) else {}
     actions = sorted({item.get("action") for item in (audit or {}).get("items", [])})
     has_settle = any(a and a.startswith("billing.settlement") for a in actions)
     surfaces_ok = (status == 200 and status2 == 200 and status3 == 200
-                   and "open" in totals and has_settle and len(actions) >= 3)
+                   and "open" in totals and has_settle and len(actions) >= 3
+                   and review_status == 200 and isinstance(review, dict)
+                   and review.get("min_age_seconds") == 7800
+                   and review.get("sla_seconds") == 7200)
     rec.step("S7", "平台管理员的资金异常 / 审计 / 月度账单面", surfaces_ok, [
         "GET /billing/exceptions -> %s totals=%s（%s）" % (
             status, totals, "空队列也是真实事实" if not (exceptions or {}).get("items") else "有异常行"),
@@ -884,7 +890,10 @@ def do_accept(args, rec):
         "GET /billing/statements -> %s month=%s debit_micro=%s" % (
             status3, (statement or {}).get("month"),
             ((statement or {}).get("totals") or {}).get("debit_micro")),
-    ], observations={"exception_open": totals.get("open"), "audit_actions": actions[:12]})
+        "GET /admin/billing/review-required -> %s window=%s SLA=%s (Metering authoritative policy)" % (review_status, review_data.get("min_age_seconds"), review_data.get("sla_seconds")),
+    ], observations={"exception_open": totals.get("open"), "audit_actions": actions[:12],
+                     "review_window_seconds": review_data.get("min_age_seconds"),
+                     "review_sla_seconds": review_data.get("sla_seconds")})
 
     # ---------------- S8 Redis 故障：fail-closed 与恢复 ----------------
     if args.with_failure and args.compose_cmd:
@@ -1475,6 +1484,7 @@ rc_secrets_init() {
   local sd="$RC_WORK_DIR/secrets"
   [[ -r "$sd/admin-password" ]] || rc_random_secret > "$sd/admin-password"
   [[ -r "$sd/control-admin-token" ]] || rc_random_secret > "$sd/control-admin-token"
+  [[ -r "$sd/metering-policy-token" ]] || rc_random_secret > "$sd/metering-policy-token"
   [[ -r "$sd/provider-credential-master-key" ]] || rc_random_master_key > "$sd/provider-credential-master-key"
   chmod 700 "$sd"
   chmod 600 "$sd"/*
@@ -1523,6 +1533,11 @@ services:
   metering:
     ports: !override
       - "127.0.0.1:{mport}:8091"
+    environment:
+      # Only Metering configures these bounds; Console must read its effective policy.
+      METERING_RECOVERY_MAX_EXECUTION: 2h
+      METERING_RECOVERY_GRACE: 10m
+      METERING_RECOVERY_SLA: 2h
   console:
     ports: !override
       - "127.0.0.1:{cport}:8092"
@@ -1912,7 +1927,7 @@ root, evidence, work = sys.argv[1:4]
 
 secret_values = []
 sd = pathlib.Path(work) / "secrets"
-for name in ("admin-password", "control-admin-token", "provider-credential-master-key"):
+for name in ("admin-password", "control-admin-token", "metering-policy-token", "provider-credential-master-key"):
     p = sd / name
     if p.is_file():
         v = p.read_text().strip()
