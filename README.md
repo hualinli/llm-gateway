@@ -2,7 +2,7 @@
 
 统一接入 OpenAI-compatible 模型服务的网关与管理平台，提供调用鉴权、流式转发、组织隔离、价格管理和持久计费。
 
-当前仍处于开发阶段。现有实现已有网关、控制面、Console/Web、组织钱包和计费恢复；个人/企业账户、成员月度额度及新的管理权限待按 [业务方案](docs/BUSINESS.md) 重构，文档中的目标能力不代表已经上线。
+当前仍处于开发阶段，已包含个人与企业账户、成员月度额度、按角色管理、模型接入和持久计费。实现状态与尚未验证的边界见[当前状态](docs/PROJECT-STATUS.md)；目标规则见[业务方案](docs/BUSINESS.md)。
 
 ## 从哪里看
 
@@ -29,13 +29,13 @@ npm --prefix web ci
 npm --prefix web run build
 ```
 
-启动带演示数据的完整后端：
+启动用于完整业务预览的隔离环境（启用 PostgreSQL 访问检查与正式计费，使用 mock Provider）：
 
 ```sh
 bash scripts/release-candidate.sh up --project-name gateway-dev --run-id local-dev
 ```
 
-端口、管理员凭据文件与后续操作由脚本输出，前端代理配置见 [开发指南](docs/DEVELOPMENT.md)。本地上游为模拟服务。完整验收使用 `make release-candidate RC_RUN_FLAGS=--with-e2e`，日志与截图写入被 Git 忽略的 `data/verification/`，CI 通过 artifacts 保存。
+端口、管理员凭据文件与后续操作由脚本输出，前端代理配置见 [开发指南](docs/DEVELOPMENT.md)。完整业务预览使用该发布候选环境；基础 Compose 的 `make demo-up` 仅用于早期 mock/传输调试，不验证新账户、模型授权或正式计费。完整验收使用 `make release-candidate RC_RUN_FLAGS=--with-e2e`，日志与截图写入被 Git 忽略的 `data/verification/`，CI 通过 artifacts 保存。
 
 ## 目录
 

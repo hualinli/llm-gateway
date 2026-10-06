@@ -2,7 +2,7 @@
 
 ## 启动全栈 Demo
 
-要快速得到含 mock Provider 的完整隔离环境，推荐在仓库根目录运行：
+要预览完整业务并验证账户、模型授权和正式计费，使用含 PostgreSQL 访问检查与计费的隔离发布候选环境；它通过 mock Provider 避免依赖真实上游：
 
 ```bash
 bash scripts/release-candidate.sh up --project-name gateway-dev --run-id local-dev
@@ -10,13 +10,13 @@ bash scripts/release-candidate.sh up --project-name gateway-dev --run-id local-d
 
 脚本会启动本次专属的 PostgreSQL、Redis、Control、Metering、Console、Gateway 和 mock Provider，运行迁移并准备演示账户。它会打印 Console、Gateway、Metering 地址和运行目录；若默认端口冲突，以打印的地址为准。之后可在 `web/` 启动前端。
 
-也可使用基础 Compose 开发栈：
+如只调试早期的 HTTP 代理和 mock Provider，可使用基础 Compose：
 
 ```bash
 make demo-up
 ```
 
-它会运行数据库迁移并启动本地服务，但不会配置 Provider。要完成一条 mock 调用，在两个终端分别运行 `make mock-primary` 和 `make mock-backup`，等它们启动后再运行 `make demo-config`。后者会配置路由并将一次性 Gateway Key 写入 `data/demo-api-key`。
+它会运行数据库迁移并启动本地服务，但不会配置 Provider；该基础栈默认关闭 Gateway 访问检查和正式计费，不适合验证新账户、模型授权、额度或账单，也不能作为完整业务预览。生产 preflight 要求 PostgreSQL 检查和正式计费，不接受关闭状态。要完成一条 mock 代理调用，在两个终端分别运行 `make mock-primary` 和 `make mock-backup`，等它们启动后再运行 `make demo-config`。后者会配置路由并将一次性 Gateway Key 写入 `data/demo-api-key`。
 
 首次单独运行 Console 时，先在 `data/console-admin-password` 写入本地管理员密码并将权限设为 `0600`，再运行 `make console-bootstrap`。需要两家演示企业和演示成员时用 `make console-bootstrap-demo`；生成的演示凭据写入被忽略的 `data/console-demo-credentials.txt`，不要提交。
 
