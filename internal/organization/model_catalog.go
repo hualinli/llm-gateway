@@ -12,6 +12,11 @@ import (
 
 const maxCatalogModelName = 128
 
+const (
+	platformModelCatalogLockClass  = 1668506979
+	platformModelCatalogLockObject = 16
+)
+
 var ErrModelCatalogInvalid = errors.New("organization: model catalog contains an invalid or duplicate model")
 
 // PlatformModel is one globally known model and its platform-wide admission
@@ -57,7 +62,7 @@ func (s *Service) ReplacePlatformModelCatalog(ctx context.Context, actorUserID i
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(1668506979, 16)`); err != nil {
+	if err := lockPlatformModelCatalogTx(ctx, tx); err != nil {
 		return nil, err
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM platform_model_catalog`); err != nil {
@@ -100,16 +105,13 @@ func (s *Service) GetOrganizationModelAllowlist(ctx context.Context, orgID int64
 // policy mutations serialized with other organization state changes.
 func (s *Service) SetOrganizationModelAllowlist(ctx context.Context, orgID int64, requested *[]string) (*[]string, error) {
 	var value any
+	var canonical []string
 	if requested != nil {
-		canonical, err := canonicalModelNames(*requested)
+		var err error
+		canonical, err = canonicalModelNames(*requested)
 		if err != nil {
 			return nil, err
 		}
-		encoded, err := json.Marshal(canonical)
-		if err != nil {
-			return nil, ErrModelCatalogInvalid
-		}
-		value = encoded
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -123,6 +125,30 @@ func (s *Service) SetOrganizationModelAllowlist(ctx context.Context, orgID int64
 	}
 	if err != nil {
 		return nil, err
+	}
+	if requested != nil {
+		// Serialize a non-empty scope write with full global-catalog replacement.
+		// The lock order is organization row -> catalog advisory lock; catalog
+		// replacement never takes an organization row lock, so it cannot form a
+		// lock cycle. Empty deny-all and NULL inherit do not depend on catalog rows.
+		if len(canonical) > 0 {
+			if err := lockPlatformModelCatalogTx(ctx, tx); err != nil {
+				return nil, err
+			}
+			var enabledMatches int
+			if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM platform_model_catalog
+				WHERE enabled AND model = ANY($1::text[])`, canonical).Scan(&enabledMatches); err != nil {
+				return nil, err
+			}
+			if enabledMatches != len(canonical) {
+				return nil, ErrModelCatalogInvalid
+			}
+		}
+		encoded, err := json.Marshal(canonical)
+		if err != nil {
+			return nil, ErrModelCatalogInvalid
+		}
+		value = encoded
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE organizations SET model_allowlist = $2::jsonb, updated_at = $3 WHERE id = $1`, orgID, value, time.Now().UTC()); err != nil {
 		return nil, err
@@ -139,6 +165,11 @@ func (s *Service) SetOrganizationModelAllowlist(ctx context.Context, orgID int64
 		return nil, err
 	}
 	return result, nil
+}
+
+func lockPlatformModelCatalogTx(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock($1, $2)`, platformModelCatalogLockClass, platformModelCatalogLockObject)
+	return err
 }
 
 func listPlatformModelCatalog(ctx context.Context, tx *sql.Tx) ([]PlatformModel, error) {

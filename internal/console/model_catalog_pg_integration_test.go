@@ -59,13 +59,49 @@ func TestModelCatalogHTTPUsesPostgresMembershipScopeAndSalesPrices(t *testing.T)
 	if account.Code != http.StatusOK || !strings.Contains(account.Body.String(), `"model_allowlist":null`) {
 		t.Fatalf("platform account model settings status=%d body=%s", account.Code, account.Body.String())
 	}
-	updated := h.orgReq(http.MethodPut, "/api/v1/admin/organizations/"+formatID(orgID)+"/models", `{"model_allowlist":["gpt-missing"]}`, platform, true)
-	if updated.Code != http.StatusOK || !strings.Contains(updated.Body.String(), `"effective_models":[]`) {
+	updated := h.orgReq(http.MethodPut, "/api/v1/admin/organizations/"+formatID(orgID)+"/models", `{"model_allowlist":["gpt-sale"]}`, platform, true)
+	if updated.Code != http.StatusOK || !strings.Contains(updated.Body.String(), `"model_allowlist":["gpt-sale"]`) || !strings.Contains(updated.Body.String(), `"effective_models":[`) {
 		t.Fatalf("platform scope update status=%d body=%s", updated.Code, updated.Body.String())
 	}
 	customer = h.orgReq(http.MethodGet, "/api/v1/orgs/"+formatID(orgID)+"/models", "", owner, false)
+	if customer.Code != http.StatusOK || !strings.Contains(customer.Body.String(), `"model":"gpt-sale"`) {
+		t.Fatalf("customer catalog did not reflect valid organization scope: status=%d body=%s", customer.Code, customer.Body.String())
+	}
+
+	// Unknown and disabled model names must be rejected atomically, preserving
+	// the previously stored valid allowlist.
+	for _, model := range []string{"gpt-missing", "gpt-hidden"} {
+		response := h.orgReq(http.MethodPut, "/api/v1/admin/organizations/"+formatID(orgID)+"/models", `{"model_allowlist":["`+model+`"]}`, platform, true)
+		if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "enabled in the platform catalog") {
+			t.Fatalf("invalid scope %q status=%d body=%s", model, response.Code, response.Body.String())
+		}
+	}
+	stored, err := orgs.GetOrganizationModelAllowlist(context.Background(), orgID)
+	if err != nil || stored == nil || len(*stored) != 1 || (*stored)[0] != "gpt-sale" {
+		t.Fatalf("rejected scope changed stored allowlist: %v err=%v", stored, err)
+	}
+
+	// A global disable changes the effective catalog immediately but preserves
+	// the account's stored grant, which becomes effective again on re-enable.
+	global = h.orgReq(http.MethodPut, PathAdminModels, `{"items":[{"model":"gpt-sale","enabled":false},{"model":"gpt-hidden","enabled":false}]}`, platform, true)
+	if global.Code != http.StatusOK {
+		t.Fatalf("disable platform model status=%d body=%s", global.Code, global.Body.String())
+	}
+	customer = h.orgReq(http.MethodGet, "/api/v1/orgs/"+formatID(orgID)+"/models", "", owner, false)
 	if customer.Code != http.StatusOK || !strings.Contains(customer.Body.String(), `"effective_models":[]`) {
-		t.Fatalf("customer catalog did not immediately reflect organization scope: status=%d body=%s", customer.Code, customer.Body.String())
+		t.Fatalf("customer catalog did not hide globally disabled model: status=%d body=%s", customer.Code, customer.Body.String())
+	}
+	stored, err = orgs.GetOrganizationModelAllowlist(context.Background(), orgID)
+	if err != nil || stored == nil || len(*stored) != 1 || (*stored)[0] != "gpt-sale" {
+		t.Fatalf("global disable erased account grant: %v err=%v", stored, err)
+	}
+	global = h.orgReq(http.MethodPut, PathAdminModels, `{"items":[{"model":"gpt-sale","enabled":true},{"model":"gpt-hidden","enabled":false}]}`, platform, true)
+	if global.Code != http.StatusOK {
+		t.Fatalf("re-enable platform model status=%d body=%s", global.Code, global.Body.String())
+	}
+	customer = h.orgReq(http.MethodGet, "/api/v1/orgs/"+formatID(orgID)+"/models", "", owner, false)
+	if customer.Code != http.StatusOK || !strings.Contains(customer.Body.String(), `"model":"gpt-sale"`) {
+		t.Fatalf("customer catalog did not restore previously granted model: status=%d body=%s", customer.Code, customer.Body.String())
 	}
 }
 

@@ -208,7 +208,7 @@ func (s *server) setAdminOrganizationModels(ctx context.Context, c *app.RequestC
 	}
 	if requested != nil {
 		if err := validateModelNames(*requested); err != nil {
-			s.writeError(c, http.StatusBadRequest, "", "model_allowlist contains an invalid or duplicate model")
+			s.writeError(c, http.StatusBadRequest, "", "model_allowlist must contain unique non-empty model names")
 			return
 		}
 	}
@@ -237,7 +237,7 @@ func (s *server) setAdminOrganizationModels(ctx context.Context, c *app.RequestC
 		s.audit.Record(ctx, s.auditMutation(c, actionAdminOrgModelsUpdate, orgID,
 			"organization", formatID(orgID), "failure", "model_scope_update_failed", map[string]any{"mode": mode, "model_count": count}))
 		if errors.Is(err, organization.ErrModelCatalogInvalid) {
-			s.writeError(c, http.StatusBadRequest, "", "model_allowlist contains an invalid or duplicate model")
+			s.writeError(c, http.StatusBadRequest, "", "model_allowlist may only contain distinct models enabled in the platform catalog")
 			return
 		}
 		s.writeOrganizationError(c, "set organization model scope", err)
