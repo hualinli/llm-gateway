@@ -285,6 +285,7 @@ import os
 import pathlib
 import re
 import shlex
+import secrets
 import subprocess
 import sys
 import time
@@ -312,7 +313,8 @@ def redact_text(text):
             text = text.replace(value, "%s…<redacted:%d>" % (value[:6], len(value)))
     text = re.sub(r"(sk-[A-Za-z0-9_\-]{6})[A-Za-z0-9_\-]+", r"\1…<redacted>", text)
     text = re.sub(r'("csrf_token"\s*:\s*")[^"]+(")', r"\1<redacted>\2", text)
-    text = re.sub(r"(gw_session=)[^;\s\"]+", r"\1<redacted>", text)
+    text = re.sub(r"(?i)(gw_session|gw_csrf)=[^;\s\"]+", r"\1=<redacted>", text)
+    text = re.sub(r"(?i)(x-csrf-token\s*[:=]\s*)[^;\s,\"]+", r"\1<redacted>", text)
     text = re.sub(r"(Bearer\s+)[A-Za-z0-9_\-\.]{8,}", r"\1<redacted>", text)
     return text
 
@@ -1437,7 +1439,8 @@ def check_cookie_flags(args):
     httponly = any("HttpOnly" in c for c in session)
     samesite = any("SameSite=" in c for c in session)
     secure = any("Secure" in c for c in session)
-    safe = re.sub(r"gw_session=[^;]+", "gw_session=<redacted>", joined)
+    safe = re.sub(r"(?i)(gw_session|gw_csrf)=[^;,\s]+", lambda m: m.group(1) + "=<redacted>", joined)
+    safe = re.sub(r"(?i)(x-csrf-token\s*[:=]\s*)[^;,\s]+", r"\1<redacted>", safe)
     # demo profile 明确关闭 Secure（明文 http 调试）；HttpOnly/SameSite 是硬要求。
     ok = code == 200 and bool(session) and httponly and samesite
     record("cookie_flags", ok, [
@@ -1966,6 +1969,15 @@ rc_accept() {
     --org-a "$RC_ORG_A" --org-b "$RC_ORG_B" \
     --compose-cmd "$(rc_compose_command_string)" \
     "$@" 2>&1 | tee -a "$RC_WORK_DIR/logs/acceptance.log"
+  local -a pipeline_status=("${PIPESTATUS[@]}")
+  local driver_exit="${pipeline_status[0]:-1}"
+  local tee_exit="${pipeline_status[1]:-1}"
+  local command_exit="$driver_exit"
+  [[ "$command_exit" -ne 0 ]] || command_exit="$tee_exit"
+  printf '{"phase":"%s","driver_exit":%s,"tee_exit":%s,"exit_code":%s}\n' \
+    "$phase" "$driver_exit" "$tee_exit" "$command_exit" \
+    > "$RC_WORK_DIR/logs/accept-${phase}.exit.json"
+  return "$command_exit"
 }
 
 rc_security_checks() {
@@ -2104,7 +2116,9 @@ if ident.is_file():
 # 硬失败模式：出现在**本次运行的证据/日志**里就是真泄漏。
 hard_patterns = [
     ("api_key_secret", re.compile(r"sk-[A-Za-z0-9_\-]{20,}")),
-    ("session_cookie", re.compile(r"gw_session=[A-Za-z0-9_\-%]{10,}")),
+    ("session_cookie", re.compile(r"gw_session=(?!<redacted>)[A-Za-z0-9_\-%]{10,}")),
+    ("csrf_cookie", re.compile(r"gw_csrf=(?!<redacted>)[A-Za-z0-9_\-%]{8,}")),
+    ("csrf_token", re.compile(r"(?i)(?:csrf_token|x-csrf-token)\s*[:=]\s*[\"']?(?!<redacted>)[A-Za-z0-9_\-%]{8,}")),
     ("private_key", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")),
     ("aws_access_key", re.compile(r"AKIA[0-9A-Z]{16}")),
     ("bearer_token", re.compile(r"Bearer\s+(?!<redacted>)[A-Za-z0-9_\-\.]{20,}")),
@@ -2133,9 +2147,9 @@ def scan_file(path, label, patterns, with_secrets):
                 found.append({"file": label, "kind": "run_secret:" + kind,
                               "match": "<redacted>", "severity": "leak"})
     for kind, rx in patterns:
-        for m in rx.finditer(text):
+        for _ in rx.finditer(text):
             found.append({"file": label, "kind": kind,
-                          "match": m.group(0)[:24] + "…<redacted>", "severity": "leak"})
+                          "match": "<redacted>", "severity": "leak"})
     return found
 
 def scan_soft(path, label):
@@ -2229,46 +2243,77 @@ PY
 }
 
 rc_summary() {
-  python3 - "$RC_EVIDENCE_DIR" "$RC_RUN_ID" "$RC_PROJECT" "$RC_SECURITY_OK" <<'PY'
+  python3 - "$RC_EVIDENCE_DIR" "$RC_RUN_ID" "$RC_PROJECT" "$RC_SECURITY_OK" \
+    "$RC_WORK_DIR/logs/accept-accept.exit.json" "$RC_WITH_FAILURE" <<'PY'
 import json, pathlib, sys
-evidence, run_id, project, security = sys.argv[1:5]
+
+evidence, run_id, project, security, driver_path, with_failure = sys.argv[1:7]
 base = pathlib.Path(evidence)
-accept = {}
-p = base / "summary.json"
-if p.is_file():
-    accept = json.loads(p.read_text())
-observations = {}
+def read_json(path, default=None):
+    p = pathlib.Path(path)
+    if not p.is_file():
+        return default if default is not None else {}
+    try:
+        value = json.loads(p.read_text())
+        return value if isinstance(value, dict) else (default if default is not None else {})
+    except Exception:
+        return default if default is not None else {}
+
+accept = read_json(base / "summary.json")
+driver = read_json(driver_path)
+all_steps = []
 steps_path = base / "steps.jsonl"
 if steps_path.is_file():
     for line in steps_path.read_text().splitlines():
-        line = line.strip()
-        if not line:
-            continue
         try:
-            step = json.loads(line)
+            all_steps.append(json.loads(line))
         except Exception:
             continue
-        observations[step.get("id")] = step.get("observations")
-scan = {}
-p = base / "secret-scan.json"
-if p.is_file():
-    scan = json.loads(p.read_text())
-sec = {}
-p = base / "security" / "summary.json"
-if p.is_file():
-    sec = json.loads(p.read_text())
+step_count = accept.get("steps_total")
+steps = all_steps[-step_count:] if isinstance(step_count, int) and step_count > 0 else []
+observations = {step.get("id"): step.get("observations") for step in steps}
+scan_path = base / "secret-scan.json"
+sec_path = base / "security" / "summary.json"
+scan = read_json(scan_path)
+sec = read_json(sec_path)
+scan_valid = scan_path.is_file() and isinstance(scan.get("leaks"), list) and scan.get("leaks_ok") is True
+security_valid = security == "pass" and sec_path.is_file() and sec.get("ok") is True
+required_steps = ["S1", "S2", "S3", "S3B", "S4", "S5", "S6", "S7"]
+if with_failure == "1":
+    required_steps += ["S8", "S9"]
+passed_ids = {step.get("id") for step in steps if step.get("ok") is True and step.get("hard", True) is True}
+missing_steps = [sid for sid in required_steps if sid not in passed_ids]
+expected_skips = [] if with_failure == "1" else ["S8", "S9"]
+driver_exit = driver.get("driver_exit", -1)
+acceptance_valid = (
+    driver.get("phase") == "accept"
+    and driver_exit == 0
+    and driver.get("tee_exit", -1) == 0
+    and accept.get("phase") == "accept"
+    and accept.get("run_id") == run_id
+    and accept.get("ok") is True
+    and not missing_steps
+)
 summary = {
     "run_id": run_id,
     "compose_project": project,
-    "acceptance_ok": accept.get("ok"),
+    "acceptance_ok": acceptance_valid,
+    "acceptance_phase": accept.get("phase"),
+    "acceptance_driver_exit_code": driver_exit,
+    "acceptance_tee_exit_code": driver.get("tee_exit", -1),
     "acceptance_steps": accept.get("steps_total"),
+    "acceptance_expected_steps": required_steps,
+    "acceptance_missing_steps": missing_steps,
+    "acceptance_skipped_steps": expected_skips,
     "acceptance_hard_failures": accept.get("hard_failures", []),
     "acceptance_observations": observations,
-    "security_ok": sec.get("ok"),
+    "security_ok": security_valid,
+    "security_execution_status": security,
+    "secret_scan_valid": scan_valid,
     "security_failed": sec.get("failed", []),
     "secret_scan_leaks": len(scan.get("leaks", [])),
     "secret_scan_known_defaults": len(scan.get("known_defaults", [])),
-    "ok": bool(accept.get("ok")) and bool(sec.get("ok")) and not scan.get("leaks"),
+    "ok": acceptance_valid and security_valid and scan_valid and not scan.get("leaks"),
 }
 (base / "release-candidate-summary.json").write_text(
     json.dumps(summary, indent=2, ensure_ascii=False) + "\n")
@@ -2292,6 +2337,9 @@ rc_setup() {
 
 rc_cmd_run() {
   rc_setup
+  rm -f "$RC_WORK_DIR/logs/accept-seed.exit.json" "$RC_WORK_DIR/logs/accept-accept.exit.json"
+  rm -f "$RC_EVIDENCE_DIR/secret-scan.json" "$RC_EVIDENCE_DIR/security/summary.json" \
+    "$RC_EVIDENCE_DIR/release-candidate-summary.json"
   [[ "$RC_KEEP" == "1" ]] || RC_TEARDOWN=1
   trap rc_trap EXIT
   local failed=0
@@ -2302,10 +2350,15 @@ rc_cmd_run() {
   rc_assert_migrations
   rc_bootstrap
   rc_wait_gateway_applied
-  rc_accept seed || { rc_warn "seed 阶段失败"; failed=1; }
+  if ! rc_accept seed; then
+    rc_warn "seed 阶段失败"
+    failed=1
+  fi
   if [[ $failed -eq 0 ]]; then
-    rc_accept accept $([[ "$RC_WITH_FAILURE" == "1" ]] && printf '%s' --with-failure) \
-      || { rc_warn "端到端验收存在硬失败"; failed=1; }
+    if ! rc_accept accept $([[ "$RC_WITH_FAILURE" == "1" ]] && printf '%s' --with-failure); then
+      rc_warn "端到端验收存在硬失败"
+      failed=1
+    fi
   fi
   rc_security_checks
   [[ "$RC_SECURITY_OK" == "pass" ]] || { rc_warn "安全/profile 检查存在硬失败"; failed=1; }
@@ -2322,6 +2375,13 @@ rc_cmd_run() {
   cp "$RC_WORK_DIR/logs/isolation-before.txt" "$RC_EVIDENCE_DIR/stack/isolation-before.txt" 2>/dev/null || true
   cp "$RC_WORK_DIR/logs/isolation-after.txt" "$RC_EVIDENCE_DIR/stack/isolation-after.txt" 2>/dev/null || true
   rc_summary
+  local summary_ok
+  summary_ok="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("ok") is True)' \
+    "$RC_EVIDENCE_DIR/release-candidate-summary.json" 2>/dev/null || printf false)"
+  if [[ "$summary_ok" != "True" ]]; then
+    rc_warn "发布候选摘要未确认全部必需阶段和检查通过"
+    failed=1
+  fi
   if [[ $failed -ne 0 ]]; then
     rc_warn "发布候选验收未通过（见 $RC_EVIDENCE_DIR/release-candidate-summary.json）"
     exit 1
