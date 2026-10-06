@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        v7.36.2
-// source: control.proto
+// source: proto/control.proto
 
 package control
 
@@ -35,7 +35,7 @@ type ModelAllowlist struct {
 
 func (x *ModelAllowlist) Reset() {
 	*x = ModelAllowlist{}
-	mi := &file_control_proto_msgTypes[0]
+	mi := &file_proto_control_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -47,7 +47,7 @@ func (x *ModelAllowlist) String() string {
 func (*ModelAllowlist) ProtoMessage() {}
 
 func (x *ModelAllowlist) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[0]
+	mi := &file_proto_control_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -60,7 +60,7 @@ func (x *ModelAllowlist) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ModelAllowlist.ProtoReflect.Descriptor instead.
 func (*ModelAllowlist) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{0}
+	return file_proto_control_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *ModelAllowlist) GetModels() []string {
@@ -88,7 +88,7 @@ type OrgPolicy struct {
 
 func (x *OrgPolicy) Reset() {
 	*x = OrgPolicy{}
-	mi := &file_control_proto_msgTypes[1]
+	mi := &file_proto_control_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -100,7 +100,7 @@ func (x *OrgPolicy) String() string {
 func (*OrgPolicy) ProtoMessage() {}
 
 func (x *OrgPolicy) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[1]
+	mi := &file_proto_control_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -113,7 +113,7 @@ func (x *OrgPolicy) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OrgPolicy.ProtoReflect.Descriptor instead.
 func (*OrgPolicy) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{1}
+	return file_proto_control_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *OrgPolicy) GetOrgId() int64 {
@@ -179,15 +179,17 @@ type ApiKeyMetadata struct {
 	Status         string                 `protobuf:"bytes,8,opt,name=status,proto3" json:"status,omitempty"`                                       // active | revoked
 	PolicyVersion  int64                  `protobuf:"varint,9,opt,name=policy_version,json=policyVersion,proto3" json:"policy_version,omitempty"`
 	CreatedAt      *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	RevokedAt      *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=revoked_at,json=revokedAt,proto3" json:"revoked_at,omitempty"` // absent while active
-	TenantId       string                 `protobuf:"bytes,12,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`    // legacy tenant projection for the Gateway
+	RevokedAt      *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=revoked_at,json=revokedAt,proto3" json:"revoked_at,omitempty"`           // absent while active
+	TenantId       string                 `protobuf:"bytes,12,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`              // legacy tenant projection for the Gateway
+	Name           string                 `protobuf:"bytes,13,opt,name=name,proto3" json:"name,omitempty"`                                      // user-assigned label; never a secret
+	MembershipId   int64                  `protobuf:"varint,14,opt,name=membership_id,json=membershipId,proto3" json:"membership_id,omitempty"` // pinned membership incarnation
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ApiKeyMetadata) Reset() {
 	*x = ApiKeyMetadata{}
-	mi := &file_control_proto_msgTypes[2]
+	mi := &file_proto_control_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -199,7 +201,7 @@ func (x *ApiKeyMetadata) String() string {
 func (*ApiKeyMetadata) ProtoMessage() {}
 
 func (x *ApiKeyMetadata) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[2]
+	mi := &file_proto_control_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -212,7 +214,7 @@ func (x *ApiKeyMetadata) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApiKeyMetadata.ProtoReflect.Descriptor instead.
 func (*ApiKeyMetadata) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{2}
+	return file_proto_control_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *ApiKeyMetadata) GetKeyId() string {
@@ -299,10 +301,24 @@ func (x *ApiKeyMetadata) GetTenantId() string {
 	return ""
 }
 
+func (x *ApiKeyMetadata) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ApiKeyMetadata) GetMembershipId() int64 {
+	if x != nil {
+		return x.MembershipId
+	}
+	return 0
+}
+
 type Config struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
 	Version int64                  `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
-	// Deprecated: Marked as deprecated in control.proto.
+	// Deprecated: Marked as deprecated in proto/control.proto.
 	Keys          map[string]string          `protobuf:"bytes,2,rep,name=keys,proto3" json:"keys,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`                                   // legacy rawKey -> tenant; do not populate in new configs
 	Routes        map[string]*ProviderList   `protobuf:"bytes,3,rep,name=routes,proto3" json:"routes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`                               // model -> providers
 	KeyRecords    []*KeyRecord               `protobuf:"bytes,4,rep,name=key_records,json=keyRecords,proto3" json:"key_records,omitempty"`                                                                               // hash-based credentials for new configs
@@ -314,7 +330,7 @@ type Config struct {
 
 func (x *Config) Reset() {
 	*x = Config{}
-	mi := &file_control_proto_msgTypes[3]
+	mi := &file_proto_control_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -326,7 +342,7 @@ func (x *Config) String() string {
 func (*Config) ProtoMessage() {}
 
 func (x *Config) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[3]
+	mi := &file_proto_control_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -339,7 +355,7 @@ func (x *Config) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Config.ProtoReflect.Descriptor instead.
 func (*Config) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{3}
+	return file_proto_control_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Config) GetVersion() int64 {
@@ -349,7 +365,7 @@ func (x *Config) GetVersion() int64 {
 	return 0
 }
 
-// Deprecated: Marked as deprecated in control.proto.
+// Deprecated: Marked as deprecated in proto/control.proto.
 func (x *Config) GetKeys() map[string]string {
 	if x != nil {
 		return x.Keys
@@ -394,7 +410,7 @@ type ProviderList struct {
 
 func (x *ProviderList) Reset() {
 	*x = ProviderList{}
-	mi := &file_control_proto_msgTypes[4]
+	mi := &file_proto_control_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -406,7 +422,7 @@ func (x *ProviderList) String() string {
 func (*ProviderList) ProtoMessage() {}
 
 func (x *ProviderList) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[4]
+	mi := &file_proto_control_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -419,7 +435,7 @@ func (x *ProviderList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProviderList.ProtoReflect.Descriptor instead.
 func (*ProviderList) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{4}
+	return file_proto_control_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ProviderList) GetProviders() []string {
@@ -443,13 +459,14 @@ type KeyRecord struct {
 	OwnerUserId    *int64                 `protobuf:"varint,7,opt,name=owner_user_id,json=ownerUserId,proto3,oneof" json:"owner_user_id,omitempty"`
 	ExpiresAt      *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
 	ModelAllowlist *ModelAllowlist        `protobuf:"bytes,9,opt,name=model_allowlist,json=modelAllowlist,proto3" json:"model_allowlist,omitempty"`
+	MembershipId   int64                  `protobuf:"varint,10,opt,name=membership_id,json=membershipId,proto3" json:"membership_id,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
 
 func (x *KeyRecord) Reset() {
 	*x = KeyRecord{}
-	mi := &file_control_proto_msgTypes[5]
+	mi := &file_proto_control_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -461,7 +478,7 @@ func (x *KeyRecord) String() string {
 func (*KeyRecord) ProtoMessage() {}
 
 func (x *KeyRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[5]
+	mi := &file_proto_control_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -474,7 +491,7 @@ func (x *KeyRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeyRecord.ProtoReflect.Descriptor instead.
 func (*KeyRecord) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{5}
+	return file_proto_control_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *KeyRecord) GetKeyId() string {
@@ -540,6 +557,13 @@ func (x *KeyRecord) GetModelAllowlist() *ModelAllowlist {
 	return nil
 }
 
+func (x *KeyRecord) GetMembershipId() int64 {
+	if x != nil {
+		return x.MembershipId
+	}
+	return 0
+}
+
 // ProviderConfig contains non-secret provider settings. Secrets are referred
 // to by credential_ref and resolved through ProviderCredentialResolver when a
 // Gateway applies a snapshot. They are never stored in Config.
@@ -559,7 +583,7 @@ type ProviderConfig struct {
 
 func (x *ProviderConfig) Reset() {
 	*x = ProviderConfig{}
-	mi := &file_control_proto_msgTypes[6]
+	mi := &file_proto_control_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -571,7 +595,7 @@ func (x *ProviderConfig) String() string {
 func (*ProviderConfig) ProtoMessage() {}
 
 func (x *ProviderConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[6]
+	mi := &file_proto_control_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -584,7 +608,7 @@ func (x *ProviderConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProviderConfig.ProtoReflect.Descriptor instead.
 func (*ProviderConfig) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{6}
+	return file_proto_control_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ProviderConfig) GetId() string {
@@ -658,7 +682,7 @@ type ProviderTimeouts struct {
 
 func (x *ProviderTimeouts) Reset() {
 	*x = ProviderTimeouts{}
-	mi := &file_control_proto_msgTypes[7]
+	mi := &file_proto_control_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -670,7 +694,7 @@ func (x *ProviderTimeouts) String() string {
 func (*ProviderTimeouts) ProtoMessage() {}
 
 func (x *ProviderTimeouts) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[7]
+	mi := &file_proto_control_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -683,7 +707,7 @@ func (x *ProviderTimeouts) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProviderTimeouts.ProtoReflect.Descriptor instead.
 func (*ProviderTimeouts) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{7}
+	return file_proto_control_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ProviderTimeouts) GetConnectTimeoutMs() int64 {
@@ -743,7 +767,7 @@ type GetRequest struct {
 
 func (x *GetRequest) Reset() {
 	*x = GetRequest{}
-	mi := &file_control_proto_msgTypes[8]
+	mi := &file_proto_control_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -755,7 +779,7 @@ func (x *GetRequest) String() string {
 func (*GetRequest) ProtoMessage() {}
 
 func (x *GetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[8]
+	mi := &file_proto_control_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -768,7 +792,7 @@ func (x *GetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRequest.ProtoReflect.Descriptor instead.
 func (*GetRequest) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{8}
+	return file_proto_control_proto_rawDescGZIP(), []int{8}
 }
 
 type WatchRequest struct {
@@ -780,7 +804,7 @@ type WatchRequest struct {
 
 func (x *WatchRequest) Reset() {
 	*x = WatchRequest{}
-	mi := &file_control_proto_msgTypes[9]
+	mi := &file_proto_control_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -792,7 +816,7 @@ func (x *WatchRequest) String() string {
 func (*WatchRequest) ProtoMessage() {}
 
 func (x *WatchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[9]
+	mi := &file_proto_control_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -805,7 +829,7 @@ func (x *WatchRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchRequest.ProtoReflect.Descriptor instead.
 func (*WatchRequest) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{9}
+	return file_proto_control_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *WatchRequest) GetVersion() int64 {
@@ -831,7 +855,7 @@ type ReportGatewayStatusRequest struct {
 
 func (x *ReportGatewayStatusRequest) Reset() {
 	*x = ReportGatewayStatusRequest{}
-	mi := &file_control_proto_msgTypes[10]
+	mi := &file_proto_control_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -843,7 +867,7 @@ func (x *ReportGatewayStatusRequest) String() string {
 func (*ReportGatewayStatusRequest) ProtoMessage() {}
 
 func (x *ReportGatewayStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[10]
+	mi := &file_proto_control_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -856,7 +880,7 @@ func (x *ReportGatewayStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportGatewayStatusRequest.ProtoReflect.Descriptor instead.
 func (*ReportGatewayStatusRequest) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{10}
+	return file_proto_control_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ReportGatewayStatusRequest) GetInstanceId() string {
@@ -903,7 +927,7 @@ type ReportGatewayStatusResponse struct {
 
 func (x *ReportGatewayStatusResponse) Reset() {
 	*x = ReportGatewayStatusResponse{}
-	mi := &file_control_proto_msgTypes[11]
+	mi := &file_proto_control_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -915,7 +939,7 @@ func (x *ReportGatewayStatusResponse) String() string {
 func (*ReportGatewayStatusResponse) ProtoMessage() {}
 
 func (x *ReportGatewayStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[11]
+	mi := &file_proto_control_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -928,7 +952,7 @@ func (x *ReportGatewayStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportGatewayStatusResponse.ProtoReflect.Descriptor instead.
 func (*ReportGatewayStatusResponse) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{11}
+	return file_proto_control_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ReportGatewayStatusResponse) GetDesiredVersion() int64 {
@@ -949,7 +973,7 @@ type ResolveProviderCredentialRequest struct {
 
 func (x *ResolveProviderCredentialRequest) Reset() {
 	*x = ResolveProviderCredentialRequest{}
-	mi := &file_control_proto_msgTypes[12]
+	mi := &file_proto_control_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -961,7 +985,7 @@ func (x *ResolveProviderCredentialRequest) String() string {
 func (*ResolveProviderCredentialRequest) ProtoMessage() {}
 
 func (x *ResolveProviderCredentialRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[12]
+	mi := &file_proto_control_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -974,7 +998,7 @@ func (x *ResolveProviderCredentialRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveProviderCredentialRequest.ProtoReflect.Descriptor instead.
 func (*ResolveProviderCredentialRequest) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{12}
+	return file_proto_control_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ResolveProviderCredentialRequest) GetCredentialRef() string {
@@ -1007,7 +1031,7 @@ type ResolveProviderCredentialResponse struct {
 
 func (x *ResolveProviderCredentialResponse) Reset() {
 	*x = ResolveProviderCredentialResponse{}
-	mi := &file_control_proto_msgTypes[13]
+	mi := &file_proto_control_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1019,7 +1043,7 @@ func (x *ResolveProviderCredentialResponse) String() string {
 func (*ResolveProviderCredentialResponse) ProtoMessage() {}
 
 func (x *ResolveProviderCredentialResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[13]
+	mi := &file_proto_control_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1032,7 +1056,7 @@ func (x *ResolveProviderCredentialResponse) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use ResolveProviderCredentialResponse.ProtoReflect.Descriptor instead.
 func (*ResolveProviderCredentialResponse) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{13}
+	return file_proto_control_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ResolveProviderCredentialResponse) GetSecret() []byte {
@@ -1056,13 +1080,15 @@ type CreateApiKeyRequest struct {
 	OwnerUserId     *int64                 `protobuf:"varint,7,opt,name=owner_user_id,json=ownerUserId,proto3,oneof" json:"owner_user_id,omitempty"`
 	ExpiresAt       *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
 	ModelAllowlist  *ModelAllowlist        `protobuf:"bytes,9,opt,name=model_allowlist,json=modelAllowlist,proto3" json:"model_allowlist,omitempty"`
+	MembershipId    int64                  `protobuf:"varint,10,opt,name=membership_id,json=membershipId,proto3" json:"membership_id,omitempty"` // resolved from the authenticated actor
+	Name            string                 `protobuf:"bytes,11,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
 
 func (x *CreateApiKeyRequest) Reset() {
 	*x = CreateApiKeyRequest{}
-	mi := &file_control_proto_msgTypes[14]
+	mi := &file_proto_control_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1074,7 +1100,7 @@ func (x *CreateApiKeyRequest) String() string {
 func (*CreateApiKeyRequest) ProtoMessage() {}
 
 func (x *CreateApiKeyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[14]
+	mi := &file_proto_control_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1087,7 +1113,7 @@ func (x *CreateApiKeyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateApiKeyRequest.ProtoReflect.Descriptor instead.
 func (*CreateApiKeyRequest) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{14}
+	return file_proto_control_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *CreateApiKeyRequest) GetOperationId() string {
@@ -1153,6 +1179,20 @@ func (x *CreateApiKeyRequest) GetModelAllowlist() *ModelAllowlist {
 	return nil
 }
 
+func (x *CreateApiKeyRequest) GetMembershipId() int64 {
+	if x != nil {
+		return x.MembershipId
+	}
+	return 0
+}
+
+func (x *CreateApiKeyRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
 // CreateApiKeyResponse carries the raw key exactly once. An idempotent replay
 // returns the stored metadata with secret unset and replayed = true; the
 // secret cannot be recovered afterwards (use GetOperation for metadata).
@@ -1168,7 +1208,7 @@ type CreateApiKeyResponse struct {
 
 func (x *CreateApiKeyResponse) Reset() {
 	*x = CreateApiKeyResponse{}
-	mi := &file_control_proto_msgTypes[15]
+	mi := &file_proto_control_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1180,7 +1220,7 @@ func (x *CreateApiKeyResponse) String() string {
 func (*CreateApiKeyResponse) ProtoMessage() {}
 
 func (x *CreateApiKeyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[15]
+	mi := &file_proto_control_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1193,7 +1233,7 @@ func (x *CreateApiKeyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateApiKeyResponse.ProtoReflect.Descriptor instead.
 func (*CreateApiKeyResponse) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{15}
+	return file_proto_control_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *CreateApiKeyResponse) GetKey() *ApiKeyMetadata {
@@ -1236,13 +1276,14 @@ type RevokeApiKeyRequest struct {
 	RequestId       string                 `protobuf:"bytes,5,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	KeyId           string                 `protobuf:"bytes,6,opt,name=key_id,json=keyId,proto3" json:"key_id,omitempty"`
 	OrgId           int64                  `protobuf:"varint,7,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	MembershipId    int64                  `protobuf:"varint,8,opt,name=membership_id,json=membershipId,proto3" json:"membership_id,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
 
 func (x *RevokeApiKeyRequest) Reset() {
 	*x = RevokeApiKeyRequest{}
-	mi := &file_control_proto_msgTypes[16]
+	mi := &file_proto_control_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1254,7 +1295,7 @@ func (x *RevokeApiKeyRequest) String() string {
 func (*RevokeApiKeyRequest) ProtoMessage() {}
 
 func (x *RevokeApiKeyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[16]
+	mi := &file_proto_control_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1267,7 +1308,7 @@ func (x *RevokeApiKeyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeApiKeyRequest.ProtoReflect.Descriptor instead.
 func (*RevokeApiKeyRequest) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{16}
+	return file_proto_control_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *RevokeApiKeyRequest) GetOperationId() string {
@@ -1319,6 +1360,13 @@ func (x *RevokeApiKeyRequest) GetOrgId() int64 {
 	return 0
 }
 
+func (x *RevokeApiKeyRequest) GetMembershipId() int64 {
+	if x != nil {
+		return x.MembershipId
+	}
+	return 0
+}
+
 type RevokeApiKeyResponse struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	Key              *ApiKeyMetadata        `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
@@ -1330,7 +1378,7 @@ type RevokeApiKeyResponse struct {
 
 func (x *RevokeApiKeyResponse) Reset() {
 	*x = RevokeApiKeyResponse{}
-	mi := &file_control_proto_msgTypes[17]
+	mi := &file_proto_control_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1342,7 +1390,7 @@ func (x *RevokeApiKeyResponse) String() string {
 func (*RevokeApiKeyResponse) ProtoMessage() {}
 
 func (x *RevokeApiKeyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[17]
+	mi := &file_proto_control_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1355,7 +1403,7 @@ func (x *RevokeApiKeyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeApiKeyResponse.ProtoReflect.Descriptor instead.
 func (*RevokeApiKeyResponse) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{17}
+	return file_proto_control_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *RevokeApiKeyResponse) GetKey() *ApiKeyMetadata {
@@ -1394,13 +1442,14 @@ type ListApiKeysRequest struct {
 	OwnerUserId     *int64                 `protobuf:"varint,7,opt,name=owner_user_id,json=ownerUserId,proto3,oneof" json:"owner_user_id,omitempty"`
 	PageSize        int32                  `protobuf:"varint,8,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
 	PageToken       string                 `protobuf:"bytes,9,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	MembershipId    int64                  `protobuf:"varint,10,opt,name=membership_id,json=membershipId,proto3" json:"membership_id,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ListApiKeysRequest) Reset() {
 	*x = ListApiKeysRequest{}
-	mi := &file_control_proto_msgTypes[18]
+	mi := &file_proto_control_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1412,7 +1461,7 @@ func (x *ListApiKeysRequest) String() string {
 func (*ListApiKeysRequest) ProtoMessage() {}
 
 func (x *ListApiKeysRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[18]
+	mi := &file_proto_control_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1425,7 +1474,7 @@ func (x *ListApiKeysRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListApiKeysRequest.ProtoReflect.Descriptor instead.
 func (*ListApiKeysRequest) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{18}
+	return file_proto_control_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *ListApiKeysRequest) GetOperationId() string {
@@ -1491,6 +1540,13 @@ func (x *ListApiKeysRequest) GetPageToken() string {
 	return ""
 }
 
+func (x *ListApiKeysRequest) GetMembershipId() int64 {
+	if x != nil {
+		return x.MembershipId
+	}
+	return 0
+}
+
 type ListApiKeysResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Keys          []*ApiKeyMetadata      `protobuf:"bytes,1,rep,name=keys,proto3" json:"keys,omitempty"`
@@ -1501,7 +1557,7 @@ type ListApiKeysResponse struct {
 
 func (x *ListApiKeysResponse) Reset() {
 	*x = ListApiKeysResponse{}
-	mi := &file_control_proto_msgTypes[19]
+	mi := &file_proto_control_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1513,7 +1569,7 @@ func (x *ListApiKeysResponse) String() string {
 func (*ListApiKeysResponse) ProtoMessage() {}
 
 func (x *ListApiKeysResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[19]
+	mi := &file_proto_control_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1526,7 +1582,7 @@ func (x *ListApiKeysResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListApiKeysResponse.ProtoReflect.Descriptor instead.
 func (*ListApiKeysResponse) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{19}
+	return file_proto_control_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ListApiKeysResponse) GetKeys() []*ApiKeyMetadata {
@@ -1553,13 +1609,14 @@ type GetOperationRequest struct {
 	ActorUserId     int64                  `protobuf:"varint,3,opt,name=actor_user_id,json=actorUserId,proto3" json:"actor_user_id,omitempty"`
 	ActorOrgId      int64                  `protobuf:"varint,4,opt,name=actor_org_id,json=actorOrgId,proto3" json:"actor_org_id,omitempty"`
 	RequestId       string                 `protobuf:"bytes,5,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	MembershipId    int64                  `protobuf:"varint,6,opt,name=membership_id,json=membershipId,proto3" json:"membership_id,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
 
 func (x *GetOperationRequest) Reset() {
 	*x = GetOperationRequest{}
-	mi := &file_control_proto_msgTypes[20]
+	mi := &file_proto_control_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1571,7 +1628,7 @@ func (x *GetOperationRequest) String() string {
 func (*GetOperationRequest) ProtoMessage() {}
 
 func (x *GetOperationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[20]
+	mi := &file_proto_control_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1584,7 +1641,7 @@ func (x *GetOperationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetOperationRequest.ProtoReflect.Descriptor instead.
 func (*GetOperationRequest) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{20}
+	return file_proto_control_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *GetOperationRequest) GetOperationId() string {
@@ -1622,6 +1679,13 @@ func (x *GetOperationRequest) GetRequestId() string {
 	return ""
 }
 
+func (x *GetOperationRequest) GetMembershipId() int64 {
+	if x != nil {
+		return x.MembershipId
+	}
+	return 0
+}
+
 type GetOperationResponse struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	OperationId     string                 `protobuf:"bytes,1,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
@@ -1638,7 +1702,7 @@ type GetOperationResponse struct {
 
 func (x *GetOperationResponse) Reset() {
 	*x = GetOperationResponse{}
-	mi := &file_control_proto_msgTypes[21]
+	mi := &file_proto_control_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1650,7 +1714,7 @@ func (x *GetOperationResponse) String() string {
 func (*GetOperationResponse) ProtoMessage() {}
 
 func (x *GetOperationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[21]
+	mi := &file_proto_control_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1663,7 +1727,7 @@ func (x *GetOperationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetOperationResponse.ProtoReflect.Descriptor instead.
 func (*GetOperationResponse) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{21}
+	return file_proto_control_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *GetOperationResponse) GetOperationId() string {
@@ -1737,7 +1801,7 @@ type OperationResult struct {
 
 func (x *OperationResult) Reset() {
 	*x = OperationResult{}
-	mi := &file_control_proto_msgTypes[22]
+	mi := &file_proto_control_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1749,7 +1813,7 @@ func (x *OperationResult) String() string {
 func (*OperationResult) ProtoMessage() {}
 
 func (x *OperationResult) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[22]
+	mi := &file_proto_control_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1762,7 +1826,7 @@ func (x *OperationResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OperationResult.ProtoReflect.Descriptor instead.
 func (*OperationResult) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{22}
+	return file_proto_control_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *OperationResult) GetKind() string {
@@ -1822,7 +1886,7 @@ type ApplyOrgPolicyRequest struct {
 
 func (x *ApplyOrgPolicyRequest) Reset() {
 	*x = ApplyOrgPolicyRequest{}
-	mi := &file_control_proto_msgTypes[23]
+	mi := &file_proto_control_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1834,7 +1898,7 @@ func (x *ApplyOrgPolicyRequest) String() string {
 func (*ApplyOrgPolicyRequest) ProtoMessage() {}
 
 func (x *ApplyOrgPolicyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[23]
+	mi := &file_proto_control_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1847,7 +1911,7 @@ func (x *ApplyOrgPolicyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplyOrgPolicyRequest.ProtoReflect.Descriptor instead.
 func (*ApplyOrgPolicyRequest) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{23}
+	return file_proto_control_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ApplyOrgPolicyRequest) GetOperationId() string {
@@ -1924,7 +1988,7 @@ type ApplyOrgPolicyResponse struct {
 
 func (x *ApplyOrgPolicyResponse) Reset() {
 	*x = ApplyOrgPolicyResponse{}
-	mi := &file_control_proto_msgTypes[24]
+	mi := &file_proto_control_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1936,7 +2000,7 @@ func (x *ApplyOrgPolicyResponse) String() string {
 func (*ApplyOrgPolicyResponse) ProtoMessage() {}
 
 func (x *ApplyOrgPolicyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[24]
+	mi := &file_proto_control_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1949,7 +2013,7 @@ func (x *ApplyOrgPolicyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplyOrgPolicyResponse.ProtoReflect.Descriptor instead.
 func (*ApplyOrgPolicyResponse) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{24}
+	return file_proto_control_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ApplyOrgPolicyResponse) GetPolicy() *OrgPolicy {
@@ -1988,7 +2052,7 @@ type ListProvidersRequest struct {
 
 func (x *ListProvidersRequest) Reset() {
 	*x = ListProvidersRequest{}
-	mi := &file_control_proto_msgTypes[25]
+	mi := &file_proto_control_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2000,7 +2064,7 @@ func (x *ListProvidersRequest) String() string {
 func (*ListProvidersRequest) ProtoMessage() {}
 
 func (x *ListProvidersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[25]
+	mi := &file_proto_control_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2013,7 +2077,7 @@ func (x *ListProvidersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListProvidersRequest.ProtoReflect.Descriptor instead.
 func (*ListProvidersRequest) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{25}
+	return file_proto_control_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ListProvidersRequest) GetOperationId() string {
@@ -2054,7 +2118,7 @@ type ListProvidersResponse struct {
 
 func (x *ListProvidersResponse) Reset() {
 	*x = ListProvidersResponse{}
-	mi := &file_control_proto_msgTypes[26]
+	mi := &file_proto_control_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2066,7 +2130,7 @@ func (x *ListProvidersResponse) String() string {
 func (*ListProvidersResponse) ProtoMessage() {}
 
 func (x *ListProvidersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[26]
+	mi := &file_proto_control_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2079,7 +2143,7 @@ func (x *ListProvidersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListProvidersResponse.ProtoReflect.Descriptor instead.
 func (*ListProvidersResponse) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{26}
+	return file_proto_control_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *ListProvidersResponse) GetProviders() []*ProviderConfig {
@@ -2110,7 +2174,7 @@ type UpsertProviderRequest struct {
 
 func (x *UpsertProviderRequest) Reset() {
 	*x = UpsertProviderRequest{}
-	mi := &file_control_proto_msgTypes[27]
+	mi := &file_proto_control_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2122,7 +2186,7 @@ func (x *UpsertProviderRequest) String() string {
 func (*UpsertProviderRequest) ProtoMessage() {}
 
 func (x *UpsertProviderRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[27]
+	mi := &file_proto_control_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2135,7 +2199,7 @@ func (x *UpsertProviderRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpsertProviderRequest.ProtoReflect.Descriptor instead.
 func (*UpsertProviderRequest) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{27}
+	return file_proto_control_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *UpsertProviderRequest) GetOperationId() string {
@@ -2190,7 +2254,7 @@ type UpsertProviderResponse struct {
 
 func (x *UpsertProviderResponse) Reset() {
 	*x = UpsertProviderResponse{}
-	mi := &file_control_proto_msgTypes[28]
+	mi := &file_proto_control_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2202,7 +2266,7 @@ func (x *UpsertProviderResponse) String() string {
 func (*UpsertProviderResponse) ProtoMessage() {}
 
 func (x *UpsertProviderResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[28]
+	mi := &file_proto_control_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2215,7 +2279,7 @@ func (x *UpsertProviderResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpsertProviderResponse.ProtoReflect.Descriptor instead.
 func (*UpsertProviderResponse) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{28}
+	return file_proto_control_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *UpsertProviderResponse) GetProvider() *ProviderConfig {
@@ -2245,7 +2309,7 @@ type DeleteProviderRequest struct {
 
 func (x *DeleteProviderRequest) Reset() {
 	*x = DeleteProviderRequest{}
-	mi := &file_control_proto_msgTypes[29]
+	mi := &file_proto_control_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2257,7 +2321,7 @@ func (x *DeleteProviderRequest) String() string {
 func (*DeleteProviderRequest) ProtoMessage() {}
 
 func (x *DeleteProviderRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[29]
+	mi := &file_proto_control_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2270,7 +2334,7 @@ func (x *DeleteProviderRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteProviderRequest.ProtoReflect.Descriptor instead.
 func (*DeleteProviderRequest) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{29}
+	return file_proto_control_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *DeleteProviderRequest) GetOperationId() string {
@@ -2318,7 +2382,7 @@ type DeleteProviderResponse struct {
 
 func (x *DeleteProviderResponse) Reset() {
 	*x = DeleteProviderResponse{}
-	mi := &file_control_proto_msgTypes[30]
+	mi := &file_proto_control_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2330,7 +2394,7 @@ func (x *DeleteProviderResponse) String() string {
 func (*DeleteProviderResponse) ProtoMessage() {}
 
 func (x *DeleteProviderResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[30]
+	mi := &file_proto_control_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2343,7 +2407,7 @@ func (x *DeleteProviderResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteProviderResponse.ProtoReflect.Descriptor instead.
 func (*DeleteProviderResponse) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{30}
+	return file_proto_control_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *DeleteProviderResponse) GetProviderId() string {
@@ -2372,7 +2436,7 @@ type GetRoutesRequest struct {
 
 func (x *GetRoutesRequest) Reset() {
 	*x = GetRoutesRequest{}
-	mi := &file_control_proto_msgTypes[31]
+	mi := &file_proto_control_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2384,7 +2448,7 @@ func (x *GetRoutesRequest) String() string {
 func (*GetRoutesRequest) ProtoMessage() {}
 
 func (x *GetRoutesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[31]
+	mi := &file_proto_control_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2397,7 +2461,7 @@ func (x *GetRoutesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRoutesRequest.ProtoReflect.Descriptor instead.
 func (*GetRoutesRequest) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{31}
+	return file_proto_control_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *GetRoutesRequest) GetOperationId() string {
@@ -2438,7 +2502,7 @@ type GetRoutesResponse struct {
 
 func (x *GetRoutesResponse) Reset() {
 	*x = GetRoutesResponse{}
-	mi := &file_control_proto_msgTypes[32]
+	mi := &file_proto_control_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2450,7 +2514,7 @@ func (x *GetRoutesResponse) String() string {
 func (*GetRoutesResponse) ProtoMessage() {}
 
 func (x *GetRoutesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[32]
+	mi := &file_proto_control_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2463,7 +2527,7 @@ func (x *GetRoutesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRoutesResponse.ProtoReflect.Descriptor instead.
 func (*GetRoutesResponse) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{32}
+	return file_proto_control_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *GetRoutesResponse) GetRoutes() map[string]*ProviderList {
@@ -2494,7 +2558,7 @@ type ReplaceRoutesRequest struct {
 
 func (x *ReplaceRoutesRequest) Reset() {
 	*x = ReplaceRoutesRequest{}
-	mi := &file_control_proto_msgTypes[33]
+	mi := &file_proto_control_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2506,7 +2570,7 @@ func (x *ReplaceRoutesRequest) String() string {
 func (*ReplaceRoutesRequest) ProtoMessage() {}
 
 func (x *ReplaceRoutesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[33]
+	mi := &file_proto_control_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2519,7 +2583,7 @@ func (x *ReplaceRoutesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReplaceRoutesRequest.ProtoReflect.Descriptor instead.
 func (*ReplaceRoutesRequest) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{33}
+	return file_proto_control_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *ReplaceRoutesRequest) GetOperationId() string {
@@ -2574,7 +2638,7 @@ type ReplaceRoutesResponse struct {
 
 func (x *ReplaceRoutesResponse) Reset() {
 	*x = ReplaceRoutesResponse{}
-	mi := &file_control_proto_msgTypes[34]
+	mi := &file_proto_control_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2586,7 +2650,7 @@ func (x *ReplaceRoutesResponse) String() string {
 func (*ReplaceRoutesResponse) ProtoMessage() {}
 
 func (x *ReplaceRoutesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[34]
+	mi := &file_proto_control_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2599,7 +2663,7 @@ func (x *ReplaceRoutesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReplaceRoutesResponse.ProtoReflect.Descriptor instead.
 func (*ReplaceRoutesResponse) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{34}
+	return file_proto_control_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *ReplaceRoutesResponse) GetRoutes() map[string]*ProviderList {
@@ -2632,7 +2696,7 @@ type ProviderCredentialMetadata struct {
 
 func (x *ProviderCredentialMetadata) Reset() {
 	*x = ProviderCredentialMetadata{}
-	mi := &file_control_proto_msgTypes[35]
+	mi := &file_proto_control_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2644,7 +2708,7 @@ func (x *ProviderCredentialMetadata) String() string {
 func (*ProviderCredentialMetadata) ProtoMessage() {}
 
 func (x *ProviderCredentialMetadata) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[35]
+	mi := &file_proto_control_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2657,7 +2721,7 @@ func (x *ProviderCredentialMetadata) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProviderCredentialMetadata.ProtoReflect.Descriptor instead.
 func (*ProviderCredentialMetadata) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{35}
+	return file_proto_control_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *ProviderCredentialMetadata) GetCredentialId() string {
@@ -2722,7 +2786,7 @@ type ListProviderCredentialsRequest struct {
 
 func (x *ListProviderCredentialsRequest) Reset() {
 	*x = ListProviderCredentialsRequest{}
-	mi := &file_control_proto_msgTypes[36]
+	mi := &file_proto_control_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2734,7 +2798,7 @@ func (x *ListProviderCredentialsRequest) String() string {
 func (*ListProviderCredentialsRequest) ProtoMessage() {}
 
 func (x *ListProviderCredentialsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[36]
+	mi := &file_proto_control_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2747,7 +2811,7 @@ func (x *ListProviderCredentialsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListProviderCredentialsRequest.ProtoReflect.Descriptor instead.
 func (*ListProviderCredentialsRequest) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{36}
+	return file_proto_control_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *ListProviderCredentialsRequest) GetOperationId() string {
@@ -2794,7 +2858,7 @@ type ListProviderCredentialsResponse struct {
 
 func (x *ListProviderCredentialsResponse) Reset() {
 	*x = ListProviderCredentialsResponse{}
-	mi := &file_control_proto_msgTypes[37]
+	mi := &file_proto_control_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2806,7 +2870,7 @@ func (x *ListProviderCredentialsResponse) String() string {
 func (*ListProviderCredentialsResponse) ProtoMessage() {}
 
 func (x *ListProviderCredentialsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[37]
+	mi := &file_proto_control_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2819,7 +2883,7 @@ func (x *ListProviderCredentialsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListProviderCredentialsResponse.ProtoReflect.Descriptor instead.
 func (*ListProviderCredentialsResponse) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{37}
+	return file_proto_control_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *ListProviderCredentialsResponse) GetItems() []*ProviderCredentialMetadata {
@@ -2843,7 +2907,7 @@ type CreateProviderCredentialRequest struct {
 
 func (x *CreateProviderCredentialRequest) Reset() {
 	*x = CreateProviderCredentialRequest{}
-	mi := &file_control_proto_msgTypes[38]
+	mi := &file_proto_control_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2855,7 +2919,7 @@ func (x *CreateProviderCredentialRequest) String() string {
 func (*CreateProviderCredentialRequest) ProtoMessage() {}
 
 func (x *CreateProviderCredentialRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[38]
+	mi := &file_proto_control_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2868,7 +2932,7 @@ func (x *CreateProviderCredentialRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateProviderCredentialRequest.ProtoReflect.Descriptor instead.
 func (*CreateProviderCredentialRequest) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{38}
+	return file_proto_control_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *CreateProviderCredentialRequest) GetOperationId() string {
@@ -2922,7 +2986,7 @@ type CreateProviderCredentialResponse struct {
 
 func (x *CreateProviderCredentialResponse) Reset() {
 	*x = CreateProviderCredentialResponse{}
-	mi := &file_control_proto_msgTypes[39]
+	mi := &file_proto_control_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2934,7 +2998,7 @@ func (x *CreateProviderCredentialResponse) String() string {
 func (*CreateProviderCredentialResponse) ProtoMessage() {}
 
 func (x *CreateProviderCredentialResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[39]
+	mi := &file_proto_control_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2947,7 +3011,7 @@ func (x *CreateProviderCredentialResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateProviderCredentialResponse.ProtoReflect.Descriptor instead.
 func (*CreateProviderCredentialResponse) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{39}
+	return file_proto_control_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *CreateProviderCredentialResponse) GetCredential() *ProviderCredentialMetadata {
@@ -2970,7 +3034,7 @@ type RevokeProviderCredentialRequest struct {
 
 func (x *RevokeProviderCredentialRequest) Reset() {
 	*x = RevokeProviderCredentialRequest{}
-	mi := &file_control_proto_msgTypes[40]
+	mi := &file_proto_control_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2982,7 +3046,7 @@ func (x *RevokeProviderCredentialRequest) String() string {
 func (*RevokeProviderCredentialRequest) ProtoMessage() {}
 
 func (x *RevokeProviderCredentialRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[40]
+	mi := &file_proto_control_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2995,7 +3059,7 @@ func (x *RevokeProviderCredentialRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeProviderCredentialRequest.ProtoReflect.Descriptor instead.
 func (*RevokeProviderCredentialRequest) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{40}
+	return file_proto_control_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *RevokeProviderCredentialRequest) GetOperationId() string {
@@ -3042,7 +3106,7 @@ type RevokeProviderCredentialResponse struct {
 
 func (x *RevokeProviderCredentialResponse) Reset() {
 	*x = RevokeProviderCredentialResponse{}
-	mi := &file_control_proto_msgTypes[41]
+	mi := &file_proto_control_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3054,7 +3118,7 @@ func (x *RevokeProviderCredentialResponse) String() string {
 func (*RevokeProviderCredentialResponse) ProtoMessage() {}
 
 func (x *RevokeProviderCredentialResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_control_proto_msgTypes[41]
+	mi := &file_proto_control_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3067,7 +3131,7 @@ func (x *RevokeProviderCredentialResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeProviderCredentialResponse.ProtoReflect.Descriptor instead.
 func (*RevokeProviderCredentialResponse) Descriptor() ([]byte, []int) {
-	return file_control_proto_rawDescGZIP(), []int{41}
+	return file_proto_control_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *RevokeProviderCredentialResponse) GetCredential() *ProviderCredentialMetadata {
@@ -3077,11 +3141,11 @@ func (x *RevokeProviderCredentialResponse) GetCredential() *ProviderCredentialMe
 	return nil
 }
 
-var File_control_proto protoreflect.FileDescriptor
+var File_proto_control_proto protoreflect.FileDescriptor
 
-const file_control_proto_rawDesc = "" +
+const file_proto_control_proto_rawDesc = "" +
 	"\n" +
-	"\rcontrol.proto\x12\acontrol\x1a\x1fgoogle/protobuf/timestamp.proto\"(\n" +
+	"\x13proto/control.proto\x12\acontrol\x1a\x1fgoogle/protobuf/timestamp.proto\"(\n" +
 	"\x0eModelAllowlist\x12\x16\n" +
 	"\x06models\x18\x01 \x03(\tR\x06models\"\xd7\x02\n" +
 	"\tOrgPolicy\x12\x15\n" +
@@ -3095,7 +3159,7 @@ const file_control_proto_rawDesc = "" +
 	"\n" +
 	"updated_by\x18\a \x01(\x03R\tupdatedByB\x16\n" +
 	"\x14_requests_per_minuteB\b\n" +
-	"\x06_burst\"\x9a\x04\n" +
+	"\x06_burst\"\xd3\x04\n" +
 	"\x0eApiKeyMetadata\x12\x15\n" +
 	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12\x1d\n" +
 	"\n" +
@@ -3114,7 +3178,9 @@ const file_control_proto_rawDesc = "" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
 	"revoked_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\trevokedAt\x12\x1b\n" +
-	"\ttenant_id\x18\f \x01(\tR\btenantIdB\x10\n" +
+	"\ttenant_id\x18\f \x01(\tR\btenantId\x12\x12\n" +
+	"\x04name\x18\r \x01(\tR\x04name\x12#\n" +
+	"\rmembership_id\x18\x0e \x01(\x03R\fmembershipIdB\x10\n" +
 	"\x0e_owner_user_idB\r\n" +
 	"\v_created_by\"\xf8\x04\n" +
 	"\x06Config\x12\x18\n" +
@@ -3138,7 +3204,7 @@ const file_control_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\x03R\x03key\x12(\n" +
 	"\x05value\x18\x02 \x01(\v2\x12.control.OrgPolicyR\x05value:\x028\x01\",\n" +
 	"\fProviderList\x12\x1c\n" +
-	"\tproviders\x18\x01 \x03(\tR\tproviders\"\xe0\x02\n" +
+	"\tproviders\x18\x01 \x03(\tR\tproviders\"\x85\x03\n" +
 	"\tKeyRecord\x12\x15\n" +
 	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12\x19\n" +
 	"\bkey_hash\x18\x02 \x01(\tR\akeyHash\x12\x1d\n" +
@@ -3150,7 +3216,9 @@ const file_control_proto_rawDesc = "" +
 	"\rowner_user_id\x18\a \x01(\x03H\x00R\vownerUserId\x88\x01\x01\x129\n" +
 	"\n" +
 	"expires_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12@\n" +
-	"\x0fmodel_allowlist\x18\t \x01(\v2\x17.control.ModelAllowlistR\x0emodelAllowlistB\x10\n" +
+	"\x0fmodel_allowlist\x18\t \x01(\v2\x17.control.ModelAllowlistR\x0emodelAllowlist\x12#\n" +
+	"\rmembership_id\x18\n" +
+	" \x01(\x03R\fmembershipIdB\x10\n" +
 	"\x0e_owner_user_id\"\xfd\x02\n" +
 	"\x0eProviderConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +
@@ -3191,7 +3259,7 @@ const file_control_proto_rawDesc = "" +
 	"providerId\x12.\n" +
 	"\x13gateway_instance_id\x18\x03 \x01(\tR\x11gatewayInstanceId\";\n" +
 	"!ResolveProviderCredentialResponse\x12\x16\n" +
-	"\x06secret\x18\x01 \x01(\fR\x06secret\"\xb1\x03\n" +
+	"\x06secret\x18\x01 \x01(\fR\x06secret\"\xea\x03\n" +
 	"\x13CreateApiKeyRequest\x12!\n" +
 	"\foperation_id\x18\x01 \x01(\tR\voperationId\x12.\n" +
 	"\x10expected_version\x18\x02 \x01(\x03H\x00R\x0fexpectedVersion\x88\x01\x01\x12\"\n" +
@@ -3204,14 +3272,17 @@ const file_control_proto_rawDesc = "" +
 	"\rowner_user_id\x18\a \x01(\x03H\x01R\vownerUserId\x88\x01\x01\x129\n" +
 	"\n" +
 	"expires_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12@\n" +
-	"\x0fmodel_allowlist\x18\t \x01(\v2\x17.control.ModelAllowlistR\x0emodelAllowlistB\x13\n" +
+	"\x0fmodel_allowlist\x18\t \x01(\v2\x17.control.ModelAllowlistR\x0emodelAllowlist\x12#\n" +
+	"\rmembership_id\x18\n" +
+	" \x01(\x03R\fmembershipId\x12\x12\n" +
+	"\x04name\x18\v \x01(\tR\x04nameB\x13\n" +
 	"\x11_expected_versionB\x10\n" +
 	"\x0e_owner_user_id\"\xa2\x01\n" +
 	"\x14CreateApiKeyResponse\x12)\n" +
 	"\x03key\x18\x01 \x01(\v2\x17.control.ApiKeyMetadataR\x03key\x12\x16\n" +
 	"\x06secret\x18\x02 \x01(\tR\x06secret\x12+\n" +
 	"\x11resulting_version\x18\x03 \x01(\x03R\x10resultingVersion\x12\x1a\n" +
-	"\breplayed\x18\x04 \x01(\bR\breplayed\"\x90\x02\n" +
+	"\breplayed\x18\x04 \x01(\bR\breplayed\"\xb5\x02\n" +
 	"\x13RevokeApiKeyRequest\x12!\n" +
 	"\foperation_id\x18\x01 \x01(\tR\voperationId\x12.\n" +
 	"\x10expected_version\x18\x02 \x01(\x03H\x00R\x0fexpectedVersion\x88\x01\x01\x12\"\n" +
@@ -3221,12 +3292,13 @@ const file_control_proto_rawDesc = "" +
 	"\n" +
 	"request_id\x18\x05 \x01(\tR\trequestId\x12\x15\n" +
 	"\x06key_id\x18\x06 \x01(\tR\x05keyId\x12\x15\n" +
-	"\x06org_id\x18\a \x01(\x03R\x05orgIdB\x13\n" +
+	"\x06org_id\x18\a \x01(\x03R\x05orgId\x12#\n" +
+	"\rmembership_id\x18\b \x01(\x03R\fmembershipIdB\x13\n" +
 	"\x11_expected_version\"\x8a\x01\n" +
 	"\x14RevokeApiKeyResponse\x12)\n" +
 	"\x03key\x18\x01 \x01(\v2\x17.control.ApiKeyMetadataR\x03key\x12+\n" +
 	"\x11resulting_version\x18\x02 \x01(\x03R\x10resultingVersion\x12\x1a\n" +
-	"\breplayed\x18\x03 \x01(\bR\breplayed\"\xef\x02\n" +
+	"\breplayed\x18\x03 \x01(\bR\breplayed\"\x94\x03\n" +
 	"\x12ListApiKeysRequest\x12!\n" +
 	"\foperation_id\x18\x01 \x01(\tR\voperationId\x12.\n" +
 	"\x10expected_version\x18\x02 \x01(\x03H\x00R\x0fexpectedVersion\x88\x01\x01\x12\"\n" +
@@ -3239,12 +3311,14 @@ const file_control_proto_rawDesc = "" +
 	"\rowner_user_id\x18\a \x01(\x03H\x01R\vownerUserId\x88\x01\x01\x12\x1b\n" +
 	"\tpage_size\x18\b \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"page_token\x18\t \x01(\tR\tpageTokenB\x13\n" +
+	"page_token\x18\t \x01(\tR\tpageToken\x12#\n" +
+	"\rmembership_id\x18\n" +
+	" \x01(\x03R\fmembershipIdB\x13\n" +
 	"\x11_expected_versionB\x10\n" +
 	"\x0e_owner_user_id\"j\n" +
 	"\x13ListApiKeysResponse\x12+\n" +
 	"\x04keys\x18\x01 \x03(\v2\x17.control.ApiKeyMetadataR\x04keys\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xe2\x01\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\x87\x02\n" +
 	"\x13GetOperationRequest\x12!\n" +
 	"\foperation_id\x18\x01 \x01(\tR\voperationId\x12.\n" +
 	"\x10expected_version\x18\x02 \x01(\x03H\x00R\x0fexpectedVersion\x88\x01\x01\x12\"\n" +
@@ -3252,7 +3326,8 @@ const file_control_proto_rawDesc = "" +
 	"\factor_org_id\x18\x04 \x01(\x03R\n" +
 	"actorOrgId\x12\x1d\n" +
 	"\n" +
-	"request_id\x18\x05 \x01(\tR\trequestIdB\x13\n" +
+	"request_id\x18\x05 \x01(\tR\trequestId\x12#\n" +
+	"\rmembership_id\x18\x06 \x01(\x03R\fmembershipIdB\x13\n" +
 	"\x11_expected_version\"\xe6\x02\n" +
 	"\x14GetOperationResponse\x12!\n" +
 	"\foperation_id\x18\x01 \x01(\tR\voperationId\x12\x12\n" +
@@ -3429,19 +3504,19 @@ const file_control_proto_rawDesc = "" +
 	"\x18RevokeProviderCredential\x12(.control.RevokeProviderCredentialRequest\x1a).control.RevokeProviderCredentialResponseB#Z!llm-gateway/proto/control;controlb\x06proto3"
 
 var (
-	file_control_proto_rawDescOnce sync.Once
-	file_control_proto_rawDescData []byte
+	file_proto_control_proto_rawDescOnce sync.Once
+	file_proto_control_proto_rawDescData []byte
 )
 
-func file_control_proto_rawDescGZIP() []byte {
-	file_control_proto_rawDescOnce.Do(func() {
-		file_control_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_control_proto_rawDesc), len(file_control_proto_rawDesc)))
+func file_proto_control_proto_rawDescGZIP() []byte {
+	file_proto_control_proto_rawDescOnce.Do(func() {
+		file_proto_control_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_proto_control_proto_rawDesc), len(file_proto_control_proto_rawDesc)))
 	})
-	return file_control_proto_rawDescData
+	return file_proto_control_proto_rawDescData
 }
 
-var file_control_proto_msgTypes = make([]protoimpl.MessageInfo, 50)
-var file_control_proto_goTypes = []any{
+var file_proto_control_proto_msgTypes = make([]protoimpl.MessageInfo, 50)
+var file_proto_control_proto_goTypes = []any{
 	(*ModelAllowlist)(nil),                    // 0: control.ModelAllowlist
 	(*OrgPolicy)(nil),                         // 1: control.OrgPolicy
 	(*ApiKeyMetadata)(nil),                    // 2: control.ApiKeyMetadata
@@ -3494,7 +3569,7 @@ var file_control_proto_goTypes = []any{
 	nil,                                       // 49: control.ReplaceRoutesResponse.RoutesEntry
 	(*timestamppb.Timestamp)(nil),             // 50: google.protobuf.Timestamp
 }
-var file_control_proto_depIdxs = []int32{
+var file_proto_control_proto_depIdxs = []int32{
 	0,  // 0: control.OrgPolicy.model_allowlist:type_name -> control.ModelAllowlist
 	50, // 1: control.OrgPolicy.updated_at:type_name -> google.protobuf.Timestamp
 	50, // 2: control.ApiKeyMetadata.expires_at:type_name -> google.protobuf.Timestamp
@@ -3579,35 +3654,35 @@ var file_control_proto_depIdxs = []int32{
 	0,  // [0:43] is the sub-list for field type_name
 }
 
-func init() { file_control_proto_init() }
-func file_control_proto_init() {
-	if File_control_proto != nil {
+func init() { file_proto_control_proto_init() }
+func file_proto_control_proto_init() {
+	if File_proto_control_proto != nil {
 		return
 	}
-	file_control_proto_msgTypes[1].OneofWrappers = []any{}
-	file_control_proto_msgTypes[2].OneofWrappers = []any{}
-	file_control_proto_msgTypes[5].OneofWrappers = []any{}
-	file_control_proto_msgTypes[14].OneofWrappers = []any{}
-	file_control_proto_msgTypes[16].OneofWrappers = []any{}
-	file_control_proto_msgTypes[18].OneofWrappers = []any{}
-	file_control_proto_msgTypes[20].OneofWrappers = []any{}
-	file_control_proto_msgTypes[21].OneofWrappers = []any{}
-	file_control_proto_msgTypes[23].OneofWrappers = []any{}
+	file_proto_control_proto_msgTypes[1].OneofWrappers = []any{}
+	file_proto_control_proto_msgTypes[2].OneofWrappers = []any{}
+	file_proto_control_proto_msgTypes[5].OneofWrappers = []any{}
+	file_proto_control_proto_msgTypes[14].OneofWrappers = []any{}
+	file_proto_control_proto_msgTypes[16].OneofWrappers = []any{}
+	file_proto_control_proto_msgTypes[18].OneofWrappers = []any{}
+	file_proto_control_proto_msgTypes[20].OneofWrappers = []any{}
+	file_proto_control_proto_msgTypes[21].OneofWrappers = []any{}
+	file_proto_control_proto_msgTypes[23].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_control_proto_rawDesc), len(file_control_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_control_proto_rawDesc), len(file_proto_control_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   50,
 			NumExtensions: 0,
 			NumServices:   3,
 		},
-		GoTypes:           file_control_proto_goTypes,
-		DependencyIndexes: file_control_proto_depIdxs,
-		MessageInfos:      file_control_proto_msgTypes,
+		GoTypes:           file_proto_control_proto_goTypes,
+		DependencyIndexes: file_proto_control_proto_depIdxs,
+		MessageInfos:      file_proto_control_proto_msgTypes,
 	}.Build()
-	File_control_proto = out.File
-	file_control_proto_goTypes = nil
-	file_control_proto_depIdxs = nil
+	File_proto_control_proto = out.File
+	file_proto_control_proto_goTypes = nil
+	file_proto_control_proto_depIdxs = nil
 }

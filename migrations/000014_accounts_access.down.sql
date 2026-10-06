@@ -1,6 +1,8 @@
 BEGIN;
 
 DROP INDEX IF EXISTS idx_api_keys_membership_id;
+ALTER TABLE api_keys DROP CONSTRAINT IF EXISTS api_keys_name_shape_check;
+ALTER TABLE api_keys DROP COLUMN IF EXISTS name;
 ALTER TABLE api_keys DROP CONSTRAINT IF EXISTS api_keys_membership_owner_required_check;
 ALTER TABLE api_keys DROP CONSTRAINT IF EXISTS api_keys_membership_org_user_fkey;
 ALTER TABLE api_keys DROP COLUMN IF EXISTS membership_id;
