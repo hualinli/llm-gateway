@@ -725,13 +725,20 @@ class Env:
                     raise CheckFailure("create-org-%s: response missing organization.id" % label)
                 if self.args.seed_local_test_credit and org.get("type") != "enterprise":
                     raise CheckFailure("--seed-local-test-credit target is not a newly created enterprise")
-                if (self.args.seed_local_test_credit and label == "A" and
-                        ("model_allowlist" not in org or org.get("model_allowlist") is not None)):
-                    raise CheckFailure("--seed-local-test-credit requires the new enterprise to inherit platform models")
                 self.orgs[label] = {"id": org_id, "name": org.get("name", name)}
                 self.created_orgs.add(label)
                 created_any = True
                 self.save_state()
+                if self.args.seed_local_test_credit and label == "A":
+                    model_settings = self.client.call(
+                        check, "gateway-check-new-org-model-scope", "GET",
+                        "/api/v1/admin/organizations/%s/models" % org_id,
+                        session=admin_session)
+                    expect_status(check, model_settings, 200, label="new enterprise model scope")
+                    settings = model_settings.json() or {}
+                    if ("model_allowlist" not in settings or
+                            settings.get("model_allowlist") is not None):
+                        raise CheckFailure("--seed-local-test-credit requires the new enterprise to inherit platform models")
 
         # Members join through the ordinary application workflow; the enterprise owner approves.
         for label in ("A", "B"):
