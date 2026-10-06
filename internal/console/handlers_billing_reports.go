@@ -192,7 +192,7 @@ func (s *server) listOrgUsage(ctx context.Context, c *app.RequestContext) {
 	response := paidUsageResponse{
 		Month:  month.Label,
 		Scope:  usageScopeOrganization,
-		Items:  paidUsageEventDTOs(page.Items, auth.User.ID),
+		Items:  paidUsageEventDTOs(page.Items, auth.User.ID, selfScope),
 		Totals: toPaidUsageTotalsDTO(page.Totals),
 	}
 	if selfScope {
@@ -454,7 +454,7 @@ func (s *server) writeQuotaError(c *app.RequestContext, operation string, err er
 	}
 }
 
-func paidUsageEventDTOs(rows []PaidUsageRow, viewerUserID int64) []paidUsageEventDTO {
+func paidUsageEventDTOs(rows []PaidUsageRow, viewerUserID int64, selfScope bool) []paidUsageEventDTO {
 	out := make([]paidUsageEventDTO, 0, len(rows))
 	for _, row := range rows {
 		dto := paidUsageEventDTO{
@@ -474,7 +474,7 @@ func paidUsageEventDTOs(rows []PaidUsageRow, viewerUserID int64) []paidUsageEven
 			value := billing.FormatMicro(*row.ChargeMicro)
 			dto.ChargeMicro = &value
 		}
-		if row.UserID != nil && *row.UserID == viewerUserID && row.KeyID != nil {
+		if selfScope && row.UserID != nil && *row.UserID == viewerUserID && row.KeyID != nil {
 			value := *row.KeyID
 			dto.KeyID = &value
 		}
