@@ -75,24 +75,25 @@ export function KeysPage(): ReactNode {
   const canUse = membership !== null;
 
   return (
-    <Space direction="vertical" size={16} style={{ width: '100%' }}>
+    <Space className="responsive-page-content" direction="vertical" size={16} style={{ width: '100%', minWidth: 0 }}>
       <PageHeader title="我的 API Key" description="每个 Key 归属于当前账户和你本人。按 App 或服务命名，创建数量不限。" extra={canCreate ? <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setCreateOpen(true); }}>新建 Key</Button> : null} />
       <Alert type="info" showIcon message="Key 只会完整显示一次" description="请立即复制并保存到你的应用配置中。企业管理员也看不到你的 Key 名称、列表或密钥。切换账户会清除本页试用密钥；Key 的账单归属始终是创建它的账户。" />
       {membership?.status === 'suspended' ? <Alert type="warning" showIcon message="你在此企业中的成员资格已暂停" description="暂停期间不开放 Key 管理和模型试用；你仍可查看本人历史消费与额度。" /> : null}
       {membership?.organization.status === 'suspended' ? <Alert type="warning" showIcon message="此账户已暂停" description="暂停期间不能创建 Key 或发起模型试用。" /> : null}
-      <Card title="我的 Key" data-testid="keys-list-card">
+      <Card className="responsive-table-card" title="我的 Key" data-testid="keys-list-card">
         {membership?.status === 'suspended' ? <Typography.Text type="secondary">成员资格恢复后可管理自己的 Key。</Typography.Text> : <DataState query={keys} emptyDescription="还没有 API Key。创建一个 Key 后，可在模型页面试用。">
           {(page) => <Table<ApiKey>
             rowKey="key_id"
             size="middle"
             pagination={false}
+            scroll={{ x: 800 }}
             dataSource={page.items}
             columns={[
-              { title: '用途', dataIndex: 'name', render: (value: string | undefined) => <Typography.Text strong>{value || '未命名 Key'}</Typography.Text> },
-              { title: 'Key', dataIndex: 'prefix', render: (value: string) => <Typography.Text code>{value}</Typography.Text> },
-              { title: '状态', dataIndex: 'status', render: (value: ApiKey['status']) => <Tag color={value === 'active' ? 'green' : 'default'}>{value === 'active' ? '可用' : '已停用'}</Tag> },
-              { title: '创建时间', dataIndex: 'created_at', render: (value: string) => formatTimestamp(value) },
-              { title: '操作', key: 'action', render: (_, key) => canReadKeys && key.status === 'active' ? <Button danger size="small" onClick={() => confirmRevoke(key)}>停用</Button> : '—' },
+              { title: '用途', dataIndex: 'name', width: 240, render: (value: string | undefined) => <Typography.Text strong>{value || '未命名 Key'}</Typography.Text> },
+              { title: 'Key', dataIndex: 'prefix', width: 180, render: (value: string) => <Typography.Text code>{value}</Typography.Text> },
+              { title: '状态', dataIndex: 'status', width: 120, render: (value: ApiKey['status']) => <Tag color={value === 'active' ? 'green' : 'default'}>{value === 'active' ? '可用' : '已停用'}</Tag> },
+              { title: '创建时间', dataIndex: 'created_at', width: 220, render: (value: string) => formatTimestamp(value) },
+              { title: '操作', key: 'action', width: 120, render: (_, key) => canReadKeys && key.status === 'active' ? <Button danger size="small" onClick={() => confirmRevoke(key)}>停用</Button> : '—' },
             ]}
           />}
         </DataState>}

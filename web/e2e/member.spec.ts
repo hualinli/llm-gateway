@@ -16,17 +16,17 @@ test.describe('account entry', () => {
 
     await page.goto('/register');
     await page.getByLabel('邮箱').fill(email);
-    await page.getByLabel('密码').fill(originalPassword);
-    await page.getByLabel('确认密码').fill(originalPassword);
+    await page.getByLabel('密码', { exact: true }).fill(originalPassword);
+    await page.getByLabel('确认密码', { exact: true }).fill(originalPassword);
     await page.getByRole('button', { name: '创建账号' }).click();
     await expect(page).toHaveURL(/\/orgs\/[^/]+\/overview$/);
     await expect(page.getByText('个人账户管理员')).toBeVisible();
     await expect(page.getByTestId('overview-usage')).toBeVisible();
 
     await page.goto('/settings');
-    await page.getByLabel('当前密码').fill(originalPassword);
-    await page.getByLabel('新密码').fill(newPassword);
-    await page.getByLabel('确认新密码').fill(newPassword);
+    await page.getByLabel('当前密码', { exact: true }).fill(originalPassword);
+    await page.getByLabel('新密码', { exact: true }).fill(newPassword);
+    await page.getByLabel('确认新密码', { exact: true }).fill(newPassword);
     await page.getByRole('button', { name: '更新密码' }).click();
     await expect(page).toHaveURL(/\/login$/);
     await expect(page.getByText('密码已更新，请重新登录。')).toBeVisible();
@@ -37,7 +37,7 @@ test.describe('account entry', () => {
   test('login does not reveal whether an email exists', async ({ page }) => {
     await page.goto('/login');
     await page.getByLabel('邮箱').fill(state.member.email);
-    await page.getByLabel('密码').fill('incorrect-password-for-e2e');
+    await page.getByLabel('密码', { exact: true }).fill('incorrect-password-for-e2e');
     await button(page, '登录').click();
     await expect(page.getByText('邮箱或密码不正确。')).toBeVisible();
     await expect(page).toHaveURL(/\/login$/);

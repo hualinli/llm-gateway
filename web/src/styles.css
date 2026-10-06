@@ -61,10 +61,26 @@ body {
 
 .app-content {
   width: 100%;
+  min-width: 0;
   max-width: 1440px;
   margin: 0 auto;
   padding: 20px 24px 48px;
   box-sizing: border-box;
+}
+
+/* Wide data grids scroll inside their own cards instead of widening the page. */
+.responsive-page-content,
+.responsive-page-content > .ant-space-item,
+.responsive-page-content .ant-col,
+.responsive-page-content .ant-card,
+.responsive-page-content .ant-card-body,
+.responsive-page-content .ant-table-wrapper {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.responsive-page-content .ant-table-wrapper {
+  width: 100%;
 }
 
 .page-header {
@@ -172,6 +188,24 @@ body {
 
   .app-header-email {
     max-width: 120px;
+  }
+
+  .platform-providers-page .ant-form,
+  .platform-providers-page .ant-form > .ant-space {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .platform-providers-page .provider-form-field {
+    width: 100%;
+    min-width: 0 !important;
+    max-width: 100%;
+  }
+
+  .platform-providers-page .ant-form > .ant-space .ant-space-item {
+    min-width: 0;
+    max-width: 100%;
   }
 }
 

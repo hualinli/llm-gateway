@@ -96,11 +96,11 @@ export function PlatformAdminPage(): ReactNode {
   };
 
   return (
-    <Space direction="vertical" size={18} style={{ width: '100%' }}>
+    <Space className="responsive-page-content" direction="vertical" size={18} style={{ width: '100%', minWidth: 0 }}>
       <PageHeader title="企业与开户" description="开通企业账户、管理账户状态并安全发放开户码。" />
       <Row gutter={[16, 16]}>
         <Col xs={24} xl={12}>
-          <Card title="直接创建企业账户" data-testid="platform-enterprise-create">
+          <Card className="responsive-table-card" title="直接创建企业账户" data-testid="platform-enterprise-create">
             <Form form={enterpriseForm} layout="vertical" onFinish={() => void submitEnterprise()}>
               <Form.Item name="name" label="企业名称" rules={[{ required: true, max: 80, message: '请输入企业名称，最多 80 个字符' }]}>
                 <Input />
@@ -114,7 +114,7 @@ export function PlatformAdminPage(): ReactNode {
           </Card>
         </Col>
         <Col xs={24} xl={12}>
-          <Card title="生成开户码" data-testid="platform-activation-create">
+          <Card className="responsive-table-card" title="生成开户码" data-testid="platform-activation-create">
             <Form form={codeForm} layout="vertical" onFinish={() => void submitCode()}>
               <Form.Item name="enterprise_name" label="企业名称" rules={[{ required: true, max: 80, message: '请输入企业名称，最多 80 个字符' }]}>
                 <Input />
@@ -128,20 +128,21 @@ export function PlatformAdminPage(): ReactNode {
           </Card>
         </Col>
       </Row>
-      <Card title="平台账户" data-testid="platform-organizations">
+      <Card className="responsive-table-card" title="平台账户" data-testid="platform-organizations">
         <DataState query={organizations} emptyDescription="还没有企业或个人账户。">
           {(page) => <Table<PlatformOrganization>
             rowKey="id"
             size="middle"
             pagination={{ pageSize: 10 }}
+            scroll={{ x: 1240 }}
             dataSource={page.pages.flatMap((item) => item.items)}
             columns={[
-              { title: '账户', dataIndex: 'name', render: (name: string, row) => <Space direction="vertical" size={0}><Typography.Text strong>{name}</Typography.Text><Typography.Text type="secondary">{row.type === 'personal' ? '个人账户' : '企业账户'}</Typography.Text></Space> },
-              { title: '负责人', dataIndex: 'owner_email' },
-              { title: '可用模型', dataIndex: 'model_allowlist', render: (models: string[] | null) => models === null ? '跟随平台目录' : models.length ? models.join('、') : '未开放模型' },
-              { title: '状态', dataIndex: 'status', render: (status: string) => <Tag color={status === 'active' ? 'green' : 'red'}>{status === 'active' ? '正常' : '已暂停'}</Tag> },
-              { title: '开通时间', dataIndex: 'created_at', render: (value: string) => formatTimestamp(value) },
-              { title: '操作', key: 'action', render: (_, row) => <Button size="small" danger={row.status === 'active'} loading={setStatus.isPending} onClick={() => setStatus.mutate({ id: row.id, status: row.status === 'active' ? 'suspended' : 'active' })}>{row.status === 'active' ? '暂停账户' : '恢复账户'}</Button> },
+              { title: '账户', dataIndex: 'name', width: 220, render: (name: string, row) => <Space direction="vertical" size={0}><Typography.Text strong>{name}</Typography.Text><Typography.Text type="secondary">{row.type === 'personal' ? '个人账户' : '企业账户'}</Typography.Text></Space> },
+              { title: '负责人', dataIndex: 'owner_email', width: 260 },
+              { title: '可用模型', dataIndex: 'model_allowlist', width: 260, render: (models: string[] | null) => models === null ? '跟随平台目录' : models.length ? models.join('、') : '未开放模型' },
+              { title: '状态', dataIndex: 'status', width: 120, render: (status: string) => <Tag color={status === 'active' ? 'green' : 'red'}>{status === 'active' ? '正常' : '已暂停'}</Tag> },
+              { title: '开通时间', dataIndex: 'created_at', width: 220, render: (value: string) => formatTimestamp(value) },
+              { title: '操作', key: 'action', width: 160, render: (_, row) => <Button size="small" danger={row.status === 'active'} loading={setStatus.isPending} onClick={() => setStatus.mutate({ id: row.id, status: row.status === 'active' ? 'suspended' : 'active' })}>{row.status === 'active' ? '暂停账户' : '恢复账户'}</Button> },
             ]}
           />}
         </DataState>
@@ -152,19 +153,20 @@ export function PlatformAdminPage(): ReactNode {
         >加载更多账户（已载入 {organizations.data.pages.reduce((count, page) => count + page.items.length, 0)} 个）</Button> : null}
         {setStatus.isError ? <div style={{ marginTop: 12 }}><ErrorView error={setStatus.error} title="账户状态未更新" /></div> : null}
       </Card>
-      <Card title="已发放的开户码" data-testid="platform-activation-codes">
+      <Card className="responsive-table-card" title="已发放的开户码" data-testid="platform-activation-codes">
         <Alert style={{ marginBottom: 16 }} type="info" showIcon message="开户码只在生成时显示一次。" description="请通过你们认可的安全渠道交给负责人；列表不保存或再次显示完整代码。" />
         <DataState query={codes} emptyDescription="还没有发放开户码。">
           {(page) => <Table<ActivationCode>
             rowKey="id"
             size="small"
             pagination={{ pageSize: 10 }}
+            scroll={{ x: 840 }}
             dataSource={page.pages.flatMap((item) => item.items)}
             columns={[
-              { title: '企业', dataIndex: 'enterprise_name' },
-              { title: '状态', dataIndex: 'status', render: (status: string) => <Tag>{status === 'active' ? '未使用' : status === 'redeemed' ? '已兑换' : status === 'expired' ? '已过期' : '已撤销'}</Tag> },
-              { title: '有效期', dataIndex: 'expires_at', render: (value: string | null) => value ? formatTimestamp(value) : '长期有效' },
-              { title: '创建时间', dataIndex: 'created_at', render: (value: string) => formatTimestamp(value) },
+              { title: '企业', dataIndex: 'enterprise_name', width: 240 },
+              { title: '状态', dataIndex: 'status', width: 130, render: (status: string) => <Tag>{status === 'active' ? '未使用' : status === 'redeemed' ? '已兑换' : status === 'expired' ? '已过期' : '已撤销'}</Tag> },
+              { title: '有效期', dataIndex: 'expires_at', width: 230, render: (value: string | null) => value ? formatTimestamp(value) : '长期有效' },
+              { title: '创建时间', dataIndex: 'created_at', width: 230, render: (value: string) => formatTimestamp(value) },
             ]}
           />}
         </DataState>
