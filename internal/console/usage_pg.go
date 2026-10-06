@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"llm-gateway/internal/billing"
 )
 
 // PGUsageStore reads usage from metering_events.
@@ -30,6 +32,25 @@ const DefaultUsageQueryTimeout = 10 * time.Second
 
 // NewPGUsageStore returns the PostgreSQL usage store.
 func NewPGUsageStore(db *sql.DB) *PGUsageStore { return &PGUsageStore{DB: db} }
+
+// The formal billing reports share this store's database handle and timeout;
+// legacy metering_events remain available to reconciliation but do not back
+// the user-facing bill or quota.
+func (s *PGUsageStore) QueryUsage(ctx context.Context, query PaidUsageQuery) (PaidUsagePage, error) {
+	return (&PGBillingReports{DB: s.DB, Timeout: s.Timeout}).QueryUsage(ctx, query)
+}
+
+func (s *PGUsageStore) GetMemberQuota(ctx context.Context, orgID, userID int64, month billing.BillingMonth) (billing.MemberQuota, error) {
+	return (&PGBillingReports{DB: s.DB, Timeout: s.Timeout}).GetMemberQuota(ctx, orgID, userID, month)
+}
+
+func (s *PGUsageStore) MemberSummary(ctx context.Context, orgID int64, month billing.BillingMonth) ([]MemberBillingSummary, error) {
+	return (&PGBillingReports{DB: s.DB, Timeout: s.Timeout}).MemberSummary(ctx, orgID, month)
+}
+
+func (s *PGUsageStore) PlatformSummary(ctx context.Context, month billing.BillingMonth) (PlatformBillingSummary, error) {
+	return (&PGBillingReports{DB: s.DB, Timeout: s.Timeout}).PlatformSummary(ctx, month)
+}
 
 // usageWhere is shared by the page and the totals query so both always filter
 // the same window: a page and its totals must never disagree.

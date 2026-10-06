@@ -13,7 +13,7 @@ import (
 // explicit, and the response states that this is an internal consumption report
 // and which time axis it totals.
 func TestStatementEndpointRendersStringAmountsAndTheFrozenDisclaimer(t *testing.T) {
-	h, statements, _, fixture := statementHarness(t, "billing_viewer")
+	h, statements, _, fixture := statementHarness(t, "admin")
 	occurredAt := time.Date(2026, 8, 15, 10, 0, 0, 0, time.UTC)
 	statements.page = billing.StatementPage{
 		Totals: billing.StatementTotals{
@@ -66,10 +66,10 @@ func TestStatementEndpointRendersStringAmountsAndTheFrozenDisclaimer(t *testing.
 	}
 	decodeBillingBody(t, rec.Body.Bytes(), &body)
 
-	if body.OrganizationID != "7" || body.Month != "2026-09" || body.Timezone != "UTC" || body.Basis != "posted_at" {
+	if body.OrganizationID != "7" || body.Month != "2026-09" || body.Timezone != "Asia/Shanghai" || body.Basis != "posted_at" {
 		t.Fatalf("statement envelope = %+v", body)
 	}
-	if body.CutoffAt != "2026-10-01T00:00:00Z" || body.Window.From != "2026-09-01T00:00:00Z" || body.Window.To != body.CutoffAt {
+	if body.CutoffAt != "2026-09-30T16:00:00Z" || body.Window.From != "2026-08-31T16:00:00Z" || body.Window.To != body.CutoffAt {
 		t.Fatalf("cutoff window = %+v cutoff=%s", body.Window, body.CutoffAt)
 	}
 	if body.Totals.Entries != "4" || body.Totals.NetMicro != "-4000" || body.Totals.LateMicro != "5000" || body.Totals.LateEntries != "1" {
@@ -88,7 +88,7 @@ func TestStatementEndpointRendersStringAmountsAndTheFrozenDisclaimer(t *testing.
 	}
 }
 
-func TestStatementEndpointDefaultsToTheCurrentUTCMonth(t *testing.T) {
+func TestStatementEndpointDefaultsToTheCurrentBeijingMonth(t *testing.T) {
 	h, statements, _, fixture := statementHarness(t, "owner")
 	rec := h.serve(http.MethodGet, "/api/v1/orgs/7/billing/statements", nil, cookieHeader(fixture.rawToken, fixture.csrfToken))
 	if rec.Code != http.StatusOK {
@@ -96,7 +96,7 @@ func TestStatementEndpointDefaultsToTheCurrentUTCMonth(t *testing.T) {
 	}
 	call, ok := statements.lastCall()
 	if !ok || call.Month.Label != "2026-10" {
-		t.Fatalf("default month = %+v, want the harness clock's UTC month", call)
+		t.Fatalf("default month = %+v, want the harness clock's Beijing month", call)
 	}
 }
 
@@ -154,7 +154,7 @@ func TestStatementEndpointScopeMatrix(t *testing.T) {
 // TestExceptionEndpointsReadTheDurableQueue covers the list, the detail with its
 // audit trail, and the string rendering of the money fields.
 func TestExceptionEndpointsReadTheDurableQueue(t *testing.T) {
-	h, _, exceptions, fixture := statementHarness(t, "billing_viewer")
+	h, _, exceptions, fixture := statementHarness(t, "admin")
 	exceptions.items = []billing.Exception{sampleException(11, 7, billing.ExceptionStatusResolved)}
 	exceptions.totals = billing.ExceptionBacklog{Open: 1, Resolved: 1}
 	exceptions.nextCursor = &billing.ExceptionCursor{

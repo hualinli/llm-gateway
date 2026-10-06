@@ -32,7 +32,8 @@ const (
 
 const executionColumns = `execution_id, org_id, user_id, key_id, gateway_id, price_version_id,
        model, status, reserved_micro, input_tokens_upper, output_tokens_upper, request_id,
-       created_at, updated_at, receipt_recorded_at, terminal_reason`
+       created_at, updated_at, receipt_recorded_at, terminal_reason, membership_id,
+       to_char(quota_month, 'YYYY-MM')`
 
 const (
 	queryGetExecution = `SELECT ` + executionColumns + `
@@ -45,8 +46,9 @@ WHERE execution_id = $1`
 
 	queryInsertExecution = `INSERT INTO billing_executions
   (execution_id, org_id, user_id, key_id, gateway_id, price_version_id, model, status,
-   reserved_micro, input_tokens_upper, output_tokens_upper, request_id, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13)
+   reserved_micro, input_tokens_upper, output_tokens_upper, request_id, created_at, updated_at,
+   membership_id, quota_month)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13, $14, $15::date)
 RETURNING ` + executionColumns
 
 	// COALESCE keeps a transition that has nothing to say about a column from
@@ -176,6 +178,21 @@ func (s *PGAccountStore) reserveTx(ctx context.Context, tx txExecutor, params Re
 	if account.Status != AccountStatusActive {
 		return ReserveResult{}, fmt.Errorf("%w: org_id=%d status=%s", ErrAccountSuspended, params.OrgID, account.Status)
 	}
+	member, err := lockAdmissionMembershipTx(ctx, tx, params)
+	if err != nil {
+		return ReserveResult{}, err
+	}
+	quotaMonth := quotaMonthDate(params.Now)
+	usage, err := lockMemberQuotaTx(ctx, tx, params.OrgID, params.UserID, quotaMonth, params.Now)
+	if err != nil {
+		return ReserveResult{}, err
+	}
+	if member.LimitMicro != nil && *member.LimitMicro == 0 {
+		return ReserveResult{}, ErrMemberMonthlyLimit
+	}
+	if err := quotaCapAllows(member.LimitMicro, usage.ActualMicro, usage.ReservedMicro, amount); err != nil {
+		return ReserveResult{}, err
+	}
 	if available := account.AvailableMicro(); available < amount {
 		return ReserveResult{}, fmt.Errorf("%w: available=%s micro, required=%s micro",
 			ErrInsufficientFunds, FormatMicro(available), FormatMicro(amount))
@@ -183,6 +200,9 @@ func (s *PGAccountStore) reserveTx(ctx context.Context, tx txExecutor, params Re
 
 	execution, err := insertExecutionTx(ctx, tx, params, amount)
 	if err != nil {
+		return ReserveResult{}, err
+	}
+	if err := reserveMemberQuotaTx(ctx, tx, params.OrgID, params.UserID, quotaMonth, amount, params.Now); err != nil {
 		return ReserveResult{}, err
 	}
 
@@ -431,6 +451,9 @@ func (s *PGAccountStore) terminalizeTx(ctx context.Context, tx txExecutor, execu
 			return ExecutionResult{}, err
 		}
 	}
+	if err := releaseMemberQuotaTx(ctx, tx, *execution, execution.ReservedMicro, 0, now); err != nil {
+		return ExecutionResult{}, err
+	}
 
 	updated, err := updateExecutionTx(ctx, tx, ExecutionTransitionParams{
 		ExecutionID:    executionID,
@@ -532,7 +555,7 @@ func insertExecutionTx(ctx context.Context, tx txExecutor, params ReserveParams,
 		params.ExecutionID, params.OrgID, nullableID(params.UserID), nullableString(params.KeyID),
 		nullableString(params.GatewayID), params.PriceVersionID, params.Model, StatusReserved,
 		amount, params.InputTokensUpper, params.OutputTokensUpper,
-		nullableString(params.RequestID), params.Now))
+		nullableString(params.RequestID), params.Now, params.MembershipID, quotaMonthDate(params.Now)))
 	if err != nil {
 		return nil, mapExecutionWriteError(err)
 	}
@@ -645,21 +668,23 @@ func scanExecutionWithReason(row interface{ Scan(...any) error }) (Execution, *s
 
 func scanExecutionFields(row interface{ Scan(...any) error }, includeReason bool) (Execution, *string, error) {
 	var (
-		execution   Execution
-		userID      sql.NullInt64
-		keyID       sql.NullString
-		gatewayID   sql.NullString
-		inputUpper  sql.NullInt64
-		outputUpper sql.NullInt64
-		requestID   sql.NullString
-		receiptAt   sql.NullTime
-		terminal    sql.NullString
-		reason      sql.NullString
+		execution    Execution
+		userID       sql.NullInt64
+		membershipID sql.NullInt64
+		quotaMonth   sql.NullString
+		keyID        sql.NullString
+		gatewayID    sql.NullString
+		inputUpper   sql.NullInt64
+		outputUpper  sql.NullInt64
+		requestID    sql.NullString
+		receiptAt    sql.NullTime
+		terminal     sql.NullString
+		reason       sql.NullString
 	)
 	dest := []any{&execution.ExecutionID, &execution.OrgID, &userID, &keyID, &gatewayID,
 		&execution.PriceVersionID, &execution.Model, &execution.Status, &execution.ReservedMicro,
 		&inputUpper, &outputUpper, &requestID, &execution.CreatedAt, &execution.UpdatedAt,
-		&receiptAt, &terminal}
+		&receiptAt, &terminal, &membershipID, &quotaMonth}
 	if includeReason {
 		dest = append(dest, &reason)
 	}
@@ -669,6 +694,14 @@ func scanExecutionFields(row interface{ Scan(...any) error }, includeReason bool
 	if userID.Valid {
 		value := userID.Int64
 		execution.UserID = &value
+	}
+	if membershipID.Valid {
+		value := membershipID.Int64
+		execution.MembershipID = &value
+	}
+	if quotaMonth.Valid {
+		value := quotaMonth.String
+		execution.QuotaMonth = &value
 	}
 	if keyID.Valid {
 		value := keyID.String

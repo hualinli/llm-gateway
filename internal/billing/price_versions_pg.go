@@ -245,3 +245,10 @@ func nullableID(id int64) any {
 	}
 	return id
 }
+
+func nullableIDPointer(id *int64) any {
+	if id == nil {
+		return nil
+	}
+	return *id
+}

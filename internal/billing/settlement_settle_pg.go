@@ -315,6 +315,9 @@ func (s *PGAccountStore) postSettlementTx(ctx context.Context, tx txExecutor, pa
 			return settlementPostings{}, err
 		}
 	}
+	if err := settleMemberQuotaTx(ctx, tx, params.Execution, params.Execution.ReservedMicro, params.ChargeMicro, params.Now); err != nil {
+		return settlementPostings{}, err
+	}
 	return postings, nil
 }
 
