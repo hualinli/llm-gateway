@@ -80,6 +80,17 @@ func membershipRole(t *testing.T, db *sql.DB, orgID, userID int64) (role, status
 	return role, status
 }
 
+func membershipFacts(t *testing.T, db *sql.DB, orgID, userID int64) (id int64, role, status string, cap sql.NullInt64) {
+	t.Helper()
+	err := db.QueryRow(`SELECT id, role, status, monthly_limit_micro FROM memberships
+		WHERE org_id = $1 AND user_id = $2 AND status IN ('active', 'suspended') ORDER BY id DESC LIMIT 1`, orgID, userID).
+		Scan(&id, &role, &status, &cap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return
+}
+
 // seedEnterprise 建一个企业并把 users 按 roles 加进去（第一个用户是创建者 owner）。
 func seedEnterprise(t *testing.T, db *sql.DB, svc *organization.Service, name string, users []int64, roles []string) organization.Organization {
 	t.Helper()
@@ -275,6 +286,153 @@ func TestRemoveMemberRefusesOwnerRemovalByAdmin(t *testing.T) {
 	// 移除会递增 revision 并留下发布记录（数据面据此撤销 Key，见报告）。
 	if orgRevisionOf(t, db, org.ID) != 2 {
 		t.Fatalf("revision after one removal = %d, want 2 (create=1)", orgRevisionOf(t, db, org.ID))
+	}
+}
+
+func TestPersonalAccountRejectsTeamManagement(t *testing.T) {
+	db, _ := isolatedDSN(t)
+	svc := organization.NewService(db)
+	ctx := context.Background()
+	owner := createUser(t, db, "personal-owner@example.com")
+	other := createUser(t, db, "personal-other@example.com")
+	personal, err := svc.EnsurePersonalOrganization(ctx, owner.ID, "Owner")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := svc.ListMembers(ctx, owner.ID, personal.ID); !errors.Is(err, organization.ErrPersonalTeam) {
+		t.Fatalf("personal ListMembers = %v, want ErrPersonalTeam", err)
+	}
+	if _, err := svc.AddMember(ctx, personal.ID, other.ID, "member"); !errors.Is(err, organization.ErrPersonalTeam) {
+		t.Fatalf("personal AddMember = %v, want ErrPersonalTeam", err)
+	}
+	if _, _, err := svc.CreateInvitationWithLimit(ctx, owner.ID, personal.ID, other.Email, "member", nil, true, time.Hour); !errors.Is(err, organization.ErrPersonalTeam) {
+		t.Fatalf("personal invitation = %v, want ErrPersonalTeam", err)
+	}
+	if err := svc.ChangeMemberStatus(ctx, owner.ID, personal.ID, owner.ID, "suspended"); !errors.Is(err, organization.ErrPersonalTeam) {
+		t.Fatalf("personal member status = %v, want ErrPersonalTeam", err)
+	}
+	if err := svc.TransferOwnership(ctx, owner.ID, personal.ID, other.ID); !errors.Is(err, organization.ErrPersonalTeam) {
+		t.Fatalf("personal ownership transfer = %v, want ErrPersonalTeam", err)
+	}
+}
+
+func TestMembershipCapStatusAndRejoinIncarnation(t *testing.T) {
+	db, _ := isolatedDSN(t)
+	svc := organization.NewService(db)
+	ctx := context.Background()
+	owner := createUser(t, db, "owner@example.com")
+	admin := createUser(t, db, "admin@example.com")
+	admin2 := createUser(t, db, "admin2@example.com")
+	member := createUser(t, db, "member@example.com")
+	org := seedEnterprise(t, db, svc, "Acme", []int64{owner.ID, admin.ID, member.ID}, []string{"owner", "admin", "member"})
+	if _, err := svc.AddMember(ctx, org.ID, admin2.ID, "admin"); err != nil {
+		t.Fatal(err)
+	}
+
+	zero := int64(0)
+	if _, err := svc.ChangeMemberMonthlyLimit(ctx, owner.ID, org.ID, member.ID, &zero); err != nil {
+		t.Fatalf("owner sets zero cap: %v", err)
+	}
+	oldID, role, status, cap := membershipFacts(t, db, org.ID, member.ID)
+	if role != "member" || status != "active" || !cap.Valid || cap.Int64 != 0 {
+		t.Fatalf("member facts = %d/%s/%s/%+v, want active member with cap 0", oldID, role, status, cap)
+	}
+	finite := int64(900)
+	if _, err := svc.ChangeMemberMonthlyLimit(ctx, admin.ID, org.ID, member.ID, &finite); err != nil {
+		t.Fatalf("admin sets ordinary member cap: %v", err)
+	}
+	sameRoleLimit := int64(1000)
+	if err := svc.ChangeMemberRoleWithLimit(ctx, owner.ID, org.ID, member.ID, "member", &sameRoleLimit, true); err != nil {
+		t.Fatalf("same-role cap update = %v", err)
+	}
+	_, _, _, cap = membershipFacts(t, db, org.ID, member.ID)
+	if !cap.Valid || cap.Int64 != sameRoleLimit {
+		t.Fatalf("same-role cap update = %+v, want %d", cap, sameRoleLimit)
+	}
+	if _, err := svc.ChangeMemberMonthlyLimit(ctx, admin.ID, org.ID, admin.ID, &finite); !errors.Is(err, organization.ErrForbidden) {
+		t.Fatalf("admin changes own cap = %v, want ErrForbidden", err)
+	}
+	if _, err := svc.ChangeMemberMonthlyLimit(ctx, admin.ID, org.ID, owner.ID, &finite); !errors.Is(err, organization.ErrForbidden) {
+		t.Fatalf("admin changes owner cap = %v, want ErrForbidden", err)
+	}
+	if _, err := svc.ChangeMemberMonthlyLimit(ctx, admin.ID, org.ID, admin2.ID, &finite); !errors.Is(err, organization.ErrForbidden) {
+		t.Fatalf("admin changes another admin cap = %v, want ErrForbidden", err)
+	}
+	if _, err := svc.ChangeMemberMonthlyLimit(ctx, owner.ID, org.ID, owner.ID, &finite); err != nil {
+		t.Fatalf("owner sets own cap: %v", err)
+	}
+	if _, err := svc.ChangeMemberMonthlyLimit(ctx, owner.ID, org.ID, admin.ID, nil); err != nil {
+		t.Fatalf("owner sets admin unlimited: %v", err)
+	}
+	if _, err := svc.ChangeMemberMonthlyLimit(ctx, owner.ID, org.ID, admin2.ID, &finite); err != nil {
+		t.Fatalf("owner sets other admin cap: %v", err)
+	}
+	_, _, _, cap = membershipFacts(t, db, org.ID, admin.ID)
+	if cap.Valid {
+		t.Fatalf("admin cap = %+v, want unlimited NULL", cap)
+	}
+
+	if err := svc.ChangeMemberStatus(ctx, admin.ID, org.ID, member.ID, "suspended"); err != nil {
+		t.Fatalf("admin suspends ordinary member: %v", err)
+	}
+	_, _, status, _ = membershipFacts(t, db, org.ID, member.ID)
+	if status != "suspended" {
+		t.Fatalf("member status = %q, want suspended", status)
+	}
+	if _, err := svc.AuthorizeOwnBillingHistory(ctx, member.ID, org.ID); err != nil {
+		t.Fatalf("suspended member reads own history: %v", err)
+	}
+	if _, err := svc.AuthorizeOrgAction(ctx, member.ID, org.ID, organization.ActionUseModel); !errors.Is(err, organization.ErrNotMember) {
+		t.Fatalf("suspended member uses model = %v, want ErrNotMember", err)
+	}
+	if err := svc.ChangeMemberStatus(ctx, admin.ID, org.ID, admin.ID, "suspended"); !errors.Is(err, organization.ErrForbidden) {
+		t.Fatalf("admin suspends self = %v, want ErrForbidden", err)
+	}
+	if err := svc.ChangeMemberStatus(ctx, admin.ID, org.ID, owner.ID, "suspended"); !errors.Is(err, organization.ErrForbidden) {
+		t.Fatalf("admin suspends owner = %v, want ErrForbidden", err)
+	}
+	if err := svc.ChangeMemberStatus(ctx, admin.ID, org.ID, member.ID, "active"); err != nil {
+		t.Fatalf("admin restores ordinary member: %v", err)
+	}
+	if err := svc.ChangeMemberStatus(ctx, owner.ID, org.ID, admin.ID, "suspended"); err != nil {
+		t.Fatalf("owner suspends admin: %v", err)
+	}
+	if err := svc.ChangeMemberStatus(ctx, owner.ID, org.ID, admin.ID, "active"); err != nil {
+		t.Fatalf("owner restores admin: %v", err)
+	}
+	if err := svc.ChangeMemberStatus(ctx, owner.ID, org.ID, owner.ID, "suspended"); !errors.Is(err, organization.ErrLastOwner) {
+		t.Fatalf("owner suspends self = %v, want ErrLastOwner", err)
+	}
+
+	if err := svc.RemoveMember(ctx, owner.ID, org.ID, member.ID); err != nil {
+		t.Fatalf("owner removes member: %v", err)
+	}
+	rejoined, err := svc.AddMember(ctx, org.ID, member.ID, "member")
+	if err != nil {
+		t.Fatalf("member rejoin: %v", err)
+	}
+	if rejoined.ID <= oldID {
+		t.Fatalf("rejoin membership id = %d, want new incarnation after %d", rejoined.ID, oldID)
+	}
+}
+
+func TestOrdinaryMemberInvitationRequiresExplicitCap(t *testing.T) {
+	db, _ := isolatedDSN(t)
+	svc := organization.NewService(db)
+	ctx := context.Background()
+	owner := createUser(t, db, "owner@example.com")
+	org := seedEnterprise(t, db, svc, "Acme", []int64{owner.ID}, []string{"owner"})
+	if _, _, err := svc.CreateInvitationWithLimit(ctx, owner.ID, org.ID, "new@example.com", "member", nil, false, time.Hour); !errors.Is(err, organization.ErrLimitRequired) {
+		t.Fatalf("invitation without cap = %v, want ErrLimitRequired", err)
+	}
+	zero := int64(0)
+	invite, _, err := svc.CreateInvitationWithLimit(ctx, owner.ID, org.ID, "new@example.com", "member", &zero, true, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if invite.MonthlyLimitMicro == nil || *invite.MonthlyLimitMicro != 0 {
+		t.Fatalf("invitation cap = %v, want 0", invite.MonthlyLimitMicro)
 	}
 }
 
