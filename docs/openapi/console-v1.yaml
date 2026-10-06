@@ -118,13 +118,21 @@ paths:
   /api/v1/me/join-requests:
     get:
       tags: [accounts]
+      parameters: [{ $ref: '#/components/parameters/Limit' }, { $ref: '#/components/parameters/Cursor' }]
       responses:
         '200': { description: Join requests submitted by the current user, content: { application/json: { schema: { $ref: '#/components/schemas/JoinRequestList' } } } }
         default: { $ref: '#/components/responses/Error' }
   /api/v1/orgs/{org}/join-requests:
     get:
       tags: [accounts]
-      parameters: [{ $ref: '#/components/parameters/Org' }]
+      parameters:
+        - { $ref: '#/components/parameters/Org' }
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - name: status
+          in: query
+          schema: { type: string, enum: [pending, approved, rejected, cancelled] }
+          description: Filter by request state; pending is used by the approval queue.
       responses:
         '200': { description: Requests awaiting or with a decision, content: { application/json: { schema: { $ref: '#/components/schemas/JoinRequestList' } } } }
         default: { $ref: '#/components/responses/Error' }

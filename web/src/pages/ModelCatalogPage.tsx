@@ -27,7 +27,7 @@ interface StreamState { running: boolean; text: string; error: unknown; finished
 const EMPTY_STREAM: StreamState = { running: false, text: '', error: null, finished: false, cancelled: false };
 
 export function ModelCatalogPage(): ReactNode {
-  const { orgId } = useActiveOrg();
+  const { orgId, membership } = useActiveOrg();
   const handoff = usePlaygroundKey();
   const [apiKey, setApiKey] = useState('');
   const [activeKey, setActiveKey] = useState('');
@@ -35,6 +35,7 @@ export function ModelCatalogPage(): ReactNode {
   const [prompt, setPrompt] = useState('');
   const [maxTokens, setMaxTokens] = useState<number>(512);
   const [stream, setStream] = useState<StreamState>(EMPTY_STREAM);
+  const canTry = membership?.status === 'active' && membership.organization.status === 'active';
   const abortRef = useRef<AbortController | null>(null);
   const outputRef = useRef<HTMLPreElement | null>(null);
   const models = useAccountModels(orgId, orgId !== null);
@@ -48,6 +49,18 @@ export function ModelCatalogPage(): ReactNode {
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
+  useEffect(() => {
+    if (canTry) return;
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setApiKey('');
+    setActiveKey('');
+    setModel(null);
+    setPrompt('');
+    setStream(EMPTY_STREAM);
+    handoff.clearKey();
+  }, [canTry, handoff.clearKey]);
+
   const clearKey = (): void => {
     abortRef.current?.abort();
     abortRef.current = null;
@@ -57,7 +70,7 @@ export function ModelCatalogPage(): ReactNode {
   };
 
   const send = async (): Promise<void> => {
-    if (!activeKey || !model || prompt.trim() === '') return;
+    if (!canTry || !activeKey || !model || prompt.trim() === '') return;
     const controller = new AbortController();
     abortRef.current = controller;
     setStream({ ...EMPTY_STREAM, running: true });
@@ -95,18 +108,19 @@ export function ModelCatalogPage(): ReactNode {
               { title: '模型', dataIndex: 'model', render: (value: string) => <Typography.Text strong>{value}</Typography.Text> },
               { title: '输入价格', dataIndex: 'input_price_micro_per_million', render: (value: string) => `${formatMicroYuan(value)} 元 / 百万 tokens` },
               { title: '输出价格', dataIndex: 'output_price_micro_per_million', render: (value: string) => `${formatMicroYuan(value)} 元 / 百万 tokens` },
-              { title: '试用', key: 'use', render: (_, row) => <Button size="small" onClick={() => { setModel(row.model); document.getElementById('playground-card')?.scrollIntoView({ behavior: 'smooth' }); }}>在下方试用</Button> },
+              { title: '试用', key: 'use', render: (_, row) => <Button size="small" disabled={!canTry} onClick={() => { setModel(row.model); document.getElementById('playground-card')?.scrollIntoView({ behavior: 'smooth' }); }}>在下方试用</Button> },
             ]}
           />}
         </DataState>
       </Card>
       <Card id="playground-card" title="模型试用" data-testid="playground-card">
-        <Alert style={{ marginBottom: 16 }} type="info" showIcon message="每个 Key 都绑定创建它的账户" description="试用调用的费用会按此 Key 的创建账户结算。切换账户会清除试用区中的密钥和未提交内容。" />
+        {!canTry ? <Alert style={{ marginBottom: 16 }} type="warning" showIcon message={membership?.status === 'suspended' ? '你在此企业中的成员资格已暂停' : '此账户当前已暂停'} description="暂停期间不能发起新的模型试用；试用区中的密钥和未提交内容已清除。" /> : <Alert style={{ marginBottom: 16 }} type="info" showIcon message="每个 Key 都绑定创建它的账户" description="试用调用的费用会按此 Key 的创建账户结算。切换账户会清除试用区中的密钥和未提交内容。" />}
         <Space direction="vertical" size={16} style={{ width: '100%' }}>
           <Row gutter={[16, 12]}>
             <Col xs={24} lg={12}>
               <Input.Password
                 value={apiKey}
+                disabled={!canTry}
                 aria-label="我的 API Key"
                 placeholder="粘贴你保存的 API Key"
                 autoComplete="off"
@@ -119,24 +133,25 @@ export function ModelCatalogPage(): ReactNode {
                 placeholder="选择模型"
                 aria-label="选择模型"
                 value={model}
+                disabled={!canTry}
                 onChange={setModel}
                 options={modelRows.map((item) => ({ value: item.model, label: item.model }))}
                 notFoundContent="当前账户没有已开通的模型"
               />
             </Col>
             <Col xs={12} lg={3}>
-              <InputNumber min={1} max={8192} value={maxTokens} onChange={(value) => setMaxTokens(value ?? 512)} style={{ width: '100%' }} aria-label="回答长度上限" />
+              <InputNumber min={1} max={8192} value={maxTokens} disabled={!canTry} onChange={(value) => setMaxTokens(value ?? 512)} style={{ width: '100%' }} aria-label="回答长度上限" />
             </Col>
             <Col xs={12} lg={2}>
               <Space>
-                <Button onClick={() => setActiveKey(apiKey.trim())} disabled={!apiKey.trim() || apiKey.trim() === activeKey}>使用</Button>
+                <Button onClick={() => setActiveKey(apiKey.trim())} disabled={!canTry || !apiKey.trim() || apiKey.trim() === activeKey}>使用</Button>
                 {activeKey ? <Button icon={<ClearOutlined />} aria-label="清除Key" onClick={clearKey} /> : null}
               </Space>
             </Col>
           </Row>
-          <Input.TextArea rows={4} value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="输入你想试用的问题" aria-label="试用内容" />
+          <Input.TextArea rows={4} value={prompt} disabled={!canTry} onChange={(event) => setPrompt(event.target.value)} placeholder="输入你想试用的问题" aria-label="试用内容" />
           <Space>
-            <Button type="primary" icon={<SendOutlined />} onClick={() => void send()} loading={stream.running} disabled={!activeKey || !model || prompt.trim() === ''}>发送</Button>
+            <Button type="primary" icon={<SendOutlined />} onClick={() => void send()} loading={stream.running} disabled={!canTry || !activeKey || !model || prompt.trim() === ''}>发送</Button>
             {stream.running ? <Button danger icon={<StopOutlined />} onClick={() => abortRef.current?.abort()}>停止</Button> : null}
             {stream.cancelled ? <Typography.Text type="secondary">已停止生成</Typography.Text> : null}
             {stream.finished ? <Typography.Text type="secondary">回答完成</Typography.Text> : null}

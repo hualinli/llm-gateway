@@ -175,6 +175,18 @@ describe('platform billing inspection routes', () => {
   });
 });
 
+describe('onboarding cursor routes', () => {
+  it('passes bounded cursors and filters for the request lists', async () => {
+    const { client, mock } = harness(() => jsonResponse(200, { items: [], next_cursor: null }));
+
+    await client.listMyJoinRequests({ limit: 100, cursor: 'request-100' });
+    await client.listJoinRequests('org-4', { status: 'pending', limit: 100, cursor: 'request-200' });
+
+    expect(callAt(mock, 0).url).toBe('/api/v1/me/join-requests?limit=100&cursor=request-100');
+    expect(callAt(mock, 1).url).toBe('/api/v1/orgs/org-4/join-requests?status=pending&limit=100&cursor=request-200');
+  });
+});
+
 /* --------------------------------------------------------- error mapping */
 
 describe('error mapping', () => {

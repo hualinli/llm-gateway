@@ -7,6 +7,7 @@
  */
 
 import {
+  useInfiniteQuery,
   useMutation,
   useQuery,
   useQueryClient,
@@ -46,7 +47,6 @@ import type {
   JoinRequestDecisionRequest,
   Membership,
   MembershipPage,
-  JoinRequestPage,
   OrgRole,
   OwnerTransferResponse,
   PriceQuery,
@@ -164,10 +164,16 @@ export function useChangeMemberRole(
   });
 }
 
-export function useOrgJoinRequests(org: string | null, enabled: boolean): UseQueryResult<JoinRequestPage> {
-  return useQuery({
-    queryKey: queryKeys.joinRequests(org ?? ''),
-    queryFn: () => consoleApi.listJoinRequests(org as string),
+export function useOrgJoinRequests(org: string | null, enabled: boolean) {
+  return useInfiniteQuery({
+    queryKey: [...queryKeys.joinRequests(org ?? ''), { status: 'pending' }],
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) => consoleApi.listJoinRequests(org as string, {
+      status: 'pending',
+      limit: 100,
+      ...(pageParam ? { cursor: pageParam } : {}),
+    }),
+    getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
     enabled: enabled && org !== null,
   });
 }
@@ -425,10 +431,15 @@ export function useSetUserStatus(): UseMutationResult<
 
 /* -------------------------------------------------------- organizations */
 
-export function useMyJoinRequests(enabled: boolean): UseQueryResult<JoinRequestPage> {
-  return useQuery({
+export function useMyJoinRequests(enabled: boolean) {
+  return useInfiniteQuery({
     queryKey: queryKeys.myJoinRequests,
-    queryFn: () => consoleApi.listMyJoinRequests(),
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) => consoleApi.listMyJoinRequests({
+      limit: 100,
+      ...(pageParam ? { cursor: pageParam } : {}),
+    }),
+    getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
     enabled,
   });
 }

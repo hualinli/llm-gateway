@@ -185,6 +185,12 @@ export interface JoinRequestPage {
   next_cursor: string | null;
 }
 
+export interface JoinRequestListQuery {
+  status?: JoinRequestStatus;
+  limit?: number;
+  cursor?: string;
+}
+
 export interface JoinRequestDecisionRequest {
   status: 'approved' | 'rejected';
   monthly_limit_micro: string | null;

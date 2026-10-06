@@ -132,7 +132,7 @@ export function PlatformBillingPage(): ReactNode {
       setRetryRequired(false);
     } catch (error) {
       setRetryRequired(true);
-      message.error(`资金变动未完成：${errorSummary(error)}`);
+      message.error(`未能确认资金变动结果：${errorSummary(error)}。请用同一请求编号重试，或先核对所选账户的流水。`);
     }
   };
 
@@ -261,7 +261,7 @@ export function PlatformBillingPage(): ReactNode {
           ><Button>放弃并开始新操作</Button></Popconfirm> : null}
         </Form>
         {retryRequired ? <Alert type="warning" showIcon style={{ marginTop: 12 }} message="上次提交结果尚未确认" description="表单已锁定。再次提交会用相同请求编号核对同一笔操作；如需改动，请先确认流水后再明确开始新操作。" /> : null}
-        {adjust.isError ? <div style={{ marginTop: 12 }}><ErrorView error={adjust.error} title="资金变动未完成" /></div> : null}
+        {adjust.isError ? <div style={{ marginTop: 12 }}><ErrorView error={adjust.error} title="未能确认资金变动结果" /></div> : null}
         {selectedOrg ? (
           <Card size="small" title="所选账户当前余额" style={{ marginTop: 16 }}>
             <DataState query={account}>

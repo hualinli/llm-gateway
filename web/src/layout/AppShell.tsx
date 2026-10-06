@@ -74,7 +74,7 @@ export function buildMenuItems(
     if (CAN.manageBilling(membership)) {
       account.push({ key: `${base}/billing`, icon: <WalletOutlined />, label: personal ? '账户流水' : '企业账单' });
     }
-    if (!personal && CAN.manageMembers(membership.role)) {
+    if (!personal && membership.status === 'active' && CAN.manageMembers(membership.role)) {
       account.push({ key: `${base}/members`, icon: <TeamOutlined />, label: '成员与申请' });
       account.push({ key: `${base}/audit`, icon: <TagsOutlined />, label: '操作记录' });
     }
@@ -140,7 +140,7 @@ export function AppShell(): ReactNode {
           <Space size={8} wrap>
             {isNarrow ? <Button icon={<MenuOutlined />} onClick={() => setDrawerOpen(true)} aria-label="打开导航" /> : null}
             <OrgSwitcher />
-            {membership ? <Tag color={membership.organization.type === 'personal' ? 'default' : 'blue'}>{roleLabel}</Tag> : null}
+            {membership && roleLabel ? <Tag color={membership.organization.type === 'personal' ? 'default' : 'blue'}>{roleLabel}</Tag> : null}
             {membership?.organization.status === 'suspended' ? <Tag color="red">账户已暂停</Tag> : null}
             {membership?.organization.type === 'enterprise' && membership.status === 'suspended' ? <Tag color="orange">成员资格已暂停</Tag> : null}
           </Space>

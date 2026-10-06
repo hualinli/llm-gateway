@@ -179,7 +179,8 @@ export function PlatformProvidersPage(): ReactNode {
     value: item.credential_ref,
     label: item.provider_id + ' · ' + item.fingerprint + ' · ' + (item.status === 'active' ? '可用' : '已停用'),
     provider_id: item.provider_id,
-  })), [credentials.data]);
+    status: item.status,
+  })).filter((item) => item.status === 'active' || item.value === editing?.credential_ref), [credentials.data, editing?.credential_ref]);
   const modelNames = Object.keys(routeDraft).sort((left, right) => left.localeCompare(right));
 
   if (me && !isAdmin) {
@@ -193,6 +194,7 @@ export function PlatformProvidersPage(): ReactNode {
   };
   const openEdit = (provider: ProviderConfiguration): void => {
     setEditing(provider);
+    providerForm.resetFields();
     providerForm.setFieldsValue({
       id: provider.id,
       url: provider.url,
@@ -206,6 +208,15 @@ export function PlatformProvidersPage(): ReactNode {
   };
   const submitProvider = async (): Promise<void> => {
     const values = await providerForm.validateFields();
+    const unavailableExistingCredential = Boolean(
+      editing?.credential_ref &&
+      values.credential_ref === editing.credential_ref &&
+      !credentials.data?.items.some((item) => item.credential_ref === editing.credential_ref && item.status === 'active'),
+    );
+    if (unavailableExistingCredential) {
+      providerForm.setFields([{ name: 'credential_ref', errors: ['此凭据已停用，请改选可用凭据或清空绑定。'] }]);
+      return;
+    }
     await saveProvider.mutateAsync(providerBody(values));
   };
   const submitCredential = async (): Promise<void> => {
@@ -395,6 +406,13 @@ export function PlatformProvidersPage(): ReactNode {
           <Form.Item name="credential_ref" label="访问凭据">
             <Select allowClear options={credentialOptions.filter((item) => !providerForm.getFieldValue('id') || item.provider_id === providerForm.getFieldValue('id'))} placeholder="可稍后添加" />
           </Form.Item>
+          {editing?.credential_ref && credentials.data?.items.some((item) => item.credential_ref === editing.credential_ref && item.status !== 'active') ? <Alert
+            style={{ marginBottom: 16 }}
+            type="warning"
+            showIcon
+            message="当前绑定的凭据已停用"
+            description="请选择一份可用凭据，或清空绑定后保存。已停用的凭据不能绑定到新的配置。"
+          /> : null}
           <Form.Item name="model" label="服务商默认模型">
             <Input placeholder="留空时由模型路由指定" />
           </Form.Item>

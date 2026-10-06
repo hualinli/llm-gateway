@@ -51,7 +51,7 @@ export function JoinEnterprisePage(): ReactNode {
           <Form.Item name="organization_id" label="企业编号" rules={[{ required: true, message: '请输入企业编号' }]}>
             <Input autoComplete="off" placeholder="向企业负责人获取" />
           </Form.Item>
-          <Form.Item name="display_name" label="你的姓名或称呼" rules={[{ required: true, max: 120, message: '请输入姓名或称呼' }]}>
+          <Form.Item name="display_name" label="你的姓名或称呼" rules={[{ required: true, max: 80, message: '请输入姓名或称呼，最多 80 个字符' }]}>
             <Input autoComplete="name" />
           </Form.Item>
           <Button type="primary" htmlType="submit" loading={pending}>提交申请</Button>
@@ -64,7 +64,7 @@ export function JoinEnterprisePage(): ReactNode {
             rowKey="id"
             size="middle"
             pagination={false}
-            dataSource={page.items}
+            dataSource={page.pages.flatMap((item) => item.items)}
             columns={[
               { title: '企业编号', dataIndex: 'organization_id' },
               { title: '称呼', dataIndex: 'display_name' },
@@ -73,6 +73,11 @@ export function JoinEnterprisePage(): ReactNode {
             ]}
           />}
         </DataState>
+        {requests.data && requests.hasNextPage ? <Button
+          size="small"
+          loading={requests.isFetchingNextPage}
+          onClick={() => void requests.fetchNextPage()}
+        >加载更多申请（已载入 {requests.data.pages.reduce((count, page) => count + page.items.length, 0)} 条）</Button> : null}
       </Card>
     </Space>
   );
