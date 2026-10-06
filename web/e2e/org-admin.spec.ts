@@ -82,18 +82,31 @@ test.describe('enterprise owner', () => {
     await expect(memberRow).toBeVisible();
     await expect(ownerRow).toBeVisible();
 
+    const readMonthlyLimit = async (userId: string): Promise<string | null | undefined> => {
+      const response = await page.request.get('/api/v1/orgs/' + state.orgA.id + '/members');
+      expect(response.status()).toBe(200);
+      const payload = (await response.json()) as {
+        items: Array<{ user_id: string; monthly_limit_micro: string | null }>;
+      };
+      return payload.items.find((row) => row.user_id === userId)?.monthly_limit_micro;
+    };
+    const expectMonthlyLimit = async (userId: string, value: string | null): Promise<void> => {
+      await expect.poll(() => readMonthlyLimit(userId), { timeout: 10_000 }).toBe(value);
+    };
+
     await button(ownerRow, '调整额度').click();
     const ownerDialog = page.getByRole('dialog', { name: '调整 ' + state.owner.email + ' 的月度额度' });
     await ownerDialog.getByRole('radio', { name: '设置金额' }).check();
     await ownerDialog.getByLabel('额度（元）').fill('7.25');
     await button(ownerDialog, '保存额度').click();
-    let memberPage = await page.request.get('/api/v1/orgs/' + state.orgA.id + '/members');
-    let memberRows = (await memberPage.json()) as { items: Array<{ user_id: string; monthly_limit_micro: string | null }> };
-    expect(memberRows.items.find((row) => row.user_id === state.owner.userId)?.monthly_limit_micro).toBe('7250000');
+    await expect(ownerDialog).toBeHidden();
+    await expectMonthlyLimit(state.owner.userId, '7250000');
     await button(ownerRow, '调整额度').click();
     const resetOwnerDialog = page.getByRole('dialog', { name: '调整 ' + state.owner.email + ' 的月度额度' });
     await resetOwnerDialog.getByRole('radio', { name: '不限额' }).check();
     await button(resetOwnerDialog, '保存额度').click();
+    await expect(resetOwnerDialog).toBeHidden();
+    await expectMonthlyLimit(state.owner.userId, null);
 
     const setLimit = async (mode: 'unlimited' | 'limited', amount?: string): Promise<void> => {
       await button(memberRow, '调整额度').click();
@@ -109,20 +122,13 @@ test.describe('enterprise owner', () => {
     };
 
     await setLimit('limited', '12.345678');
-    let members = await page.request.get('/api/v1/orgs/' + state.orgA.id + '/members');
-    expect(members.status()).toBe(200);
-    let rows = (await members.json()) as { items: Array<{ user_id: string; monthly_limit_micro: string | null }> };
-    expect(rows.items.find((row) => row.user_id === state.member.userId)?.monthly_limit_micro).toBe('12345678');
+    await expectMonthlyLimit(state.member.userId, '12345678');
 
     await setLimit('unlimited');
-    members = await page.request.get('/api/v1/orgs/' + state.orgA.id + '/members');
-    rows = (await members.json()) as { items: Array<{ user_id: string; monthly_limit_micro: string | null }> };
-    expect(rows.items.find((row) => row.user_id === state.member.userId)?.monthly_limit_micro).toBeNull();
+    await expectMonthlyLimit(state.member.userId, null);
 
     await setLimit('limited', '0');
-    members = await page.request.get('/api/v1/orgs/' + state.orgA.id + '/members');
-    rows = (await members.json()) as { items: Array<{ user_id: string; monthly_limit_micro: string | null }> };
-    expect(rows.items.find((row) => row.user_id === state.member.userId)?.monthly_limit_micro).toBe('0');
+    await expectMonthlyLimit(state.member.userId, '0');
     await expect(memberRow.getByText('禁止消费')).toBeVisible();
   });
 
