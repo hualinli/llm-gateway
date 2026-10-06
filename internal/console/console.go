@@ -15,7 +15,14 @@
 //	GET  /api/v1/me                               session
 //	GET  /api/v1/organizations                    session
 //	GET  /api/v1/organizations/{org}              session
-//	POST /api/v1/organizations                    session + CSRF
+//	POST /api/v1/auth/register                    public
+//	POST /api/v1/organizations/activate           session + CSRF
+//	GET  /api/v1/admin/activation-codes           session + platform admin
+//	POST /api/v1/admin/activation-codes           session + platform admin + CSRF
+//	POST /api/v1/orgs/{org}/join-requests         session + CSRF
+//	GET  /api/v1/me/join-requests                 session
+//	GET  /api/v1/orgs/{org}/join-requests         session + owner/admin membership
+//	POST /api/v1/orgs/{org}/join-requests/{id}/decision session + CSRF + owner/admin membership
 //	POST /api/v1/admin/users                      session + platform admin + CSRF
 //	POST /api/v1/admin/users/{user}/status        session + platform admin + CSRF
 //	GET  /api/v1/orgs/{org}/members               session (matrix decides visibility)
@@ -375,7 +382,6 @@ func Register(engine *route.Engine, opts Options) error {
 	engine.GET(PathOrganization, s.withSession, s.getOrganization)
 
 	engine.POST(PathLogout, s.withSession, s.withCSRF, s.logout)
-	engine.POST(PathOrganizations, s.withSession, s.withCSRF, s.createOrganization)
 	engine.POST(PathAdminUsers, s.withSession, s.withCSRF, s.withPlatformAdmin, s.createUser)
 	engine.POST(PathAdminUserStatus, s.withSession, s.withCSRF, s.withPlatformAdmin, s.setUserStatus)
 
@@ -399,6 +405,7 @@ func Register(engine *route.Engine, opts Options) error {
 	engine.GET(PathOrgUsage, s.withSession, s.listOrgUsage)
 	s.registerBillingReportRoutes(engine)
 	s.registerProviderAdminRoutes(engine)
+	s.registerOnboardingRoutes(engine)
 
 	// T05 (ADR-0004): price versions are a platform-admin surface; the account
 	// and its ledger are organization reads (view_org_usage); an adjustment is a

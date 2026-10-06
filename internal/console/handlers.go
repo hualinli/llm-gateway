@@ -222,32 +222,6 @@ func (s *server) getOrganization(ctx context.Context, c *app.RequestContext) {
 	writeJSON(c, http.StatusOK, toMembershipDTO(membership))
 }
 
-// createOrganization implements POST /api/v1/organizations.
-func (s *server) createOrganization(ctx context.Context, c *app.RequestContext) {
-	auth, ok := authFrom(c)
-	if !ok {
-		s.writeError(c, http.StatusUnauthorized, "", "authentication required")
-		return
-	}
-	var req createOrganizationRequest
-	if !s.decodeJSON(c, &req) {
-		return
-	}
-	name := strings.TrimSpace(req.Name)
-	if name == "" {
-		s.writeError(c, http.StatusBadRequest, "", "name is required")
-		return
-	}
-	org, err := s.orgs.CreateEnterprise(ctx, auth.User.ID, name)
-	if err != nil {
-		s.writeOrganizationError(c, "create organization", err)
-		return
-	}
-	// The creator becomes owner in the same transaction (ADR-0002 §2.2), so the
-	// response can state the role without a second round trip.
-	writeJSON(c, http.StatusCreated, membershipDTO{Organization: toOrganizationDTO(org), Role: "owner"})
-}
-
 // createUser implements POST /api/v1/admin/users (session + platform admin +
 // CSRF). Audit is mandatory for this endpoint; the audit sink never sees a
 // password.
