@@ -412,6 +412,7 @@ func Register(engine *route.Engine, opts Options) error {
 	engine.POST(PathOrgKeyRevoke, s.withSession, s.withCSRF, s.revokeOrgKey)
 	engine.GET(PathOrgUsage, s.withSession, s.listOrgUsage)
 	s.registerBillingReportRoutes(engine)
+	s.registerPlatformOrganizationReadRoutes(engine)
 	s.registerProviderAdminRoutes(engine)
 	s.registerOnboardingRoutes(engine)
 	s.registerPlatformAccountRoutes(engine)

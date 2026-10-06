@@ -494,12 +494,9 @@ func TestAdminCreateUserReturns201AndAudits(t *testing.T) {
 	h.iam.createUserFn = func(_ context.Context, email, password string, platformAdmin bool) (iam.User, error) {
 		return iam.User{ID: 5, Email: email, Status: "active", PlatformAdmin: platformAdmin, CreatedAt: time.Now().UTC()}, nil
 	}
-	h.orgs.getFn = func(_ context.Context, userID, orgID int64) (organization.MemberOrg, error) {
-		return sampleMembership(orgID, "acme", "owner"), nil
-	}
 
 	rec := h.serve(http.MethodPost, PathAdminUsers,
-		jsonBody(`{"email":"new@example.com","password":"pw","platform_admin":true,"organizations":["7"]}`),
+		jsonBody(`{"email":"new@example.com","password":"pw","platform_admin":true}`),
 		cookieHeader(fx.rawToken, fx.csrfToken), hdr("X-CSRF-Token", fx.csrfToken))
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status=%d, want 201 (body=%s)", rec.Code, rec.Body.String())
@@ -511,8 +508,8 @@ func TestAdminCreateUserReturns201AndAudits(t *testing.T) {
 	if body.ID != "5" || body.Email != "new@example.com" || !body.PlatformAdmin {
 		t.Fatalf("body=%+v", body)
 	}
-	if len(h.orgs.addCalls) != 1 || h.orgs.addCalls[0] != (addMemberCall{OrgID: 7, UserID: 5, Role: "member"}) {
-		t.Fatalf("addMember calls=%+v", h.orgs.addCalls)
+	if len(h.orgs.addCalls) != 0 {
+		t.Fatalf("legacy admin user creation must not add memberships: %+v", h.orgs.addCalls)
 	}
 	events := h.audit.all()
 	if len(events) != 1 || events[0].Action != "admin.user.create" || events[0].Outcome != "success" {
@@ -542,23 +539,20 @@ func TestAdminCreateUserDuplicateEmailIs409Conflict(t *testing.T) {
 	}
 }
 
-func TestAdminCreateUserRejectsInvisibleOrganizationBeforeCreatingUser(t *testing.T) {
+func TestAdminCreateUserRejectsLegacyOrganizationAssignment(t *testing.T) {
 	h := newHarness(t, nil)
 	fx := defaultFixture()
 	h.withSessionFixture(fx)
-	h.orgs.getFn = func(context.Context, int64, int64) (organization.MemberOrg, error) {
-		return organization.MemberOrg{}, organization.ErrNotMember
-	}
 	h.iam.createUserFn = func(context.Context, string, string, bool) (iam.User, error) {
-		t.Fatal("user must not be created when an organization is not visible")
+		t.Fatal("user must not be created when the legacy organizations field is present")
 		return iam.User{}, nil
 	}
 
 	rec := h.serve(http.MethodPost, PathAdminUsers,
 		jsonBody(`{"email":"new@example.com","password":"pw","organizations":["7"]}`),
 		cookieHeader(fx.rawToken, fx.csrfToken), hdr("X-CSRF-Token", fx.csrfToken))
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("status=%d, want 404 (body=%s)", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d, want 400 (body=%s)", rec.Code, rec.Body.String())
 	}
 }
 
