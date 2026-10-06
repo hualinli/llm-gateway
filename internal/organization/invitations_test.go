@@ -166,14 +166,14 @@ func TestAcceptInvitationRejectsBlankTokenWithoutDatabase(t *testing.T) {
 }
 
 // TestCheckInvitationGrantKeepsEscalationClosed：邀请路径与成员角色变更共用授予
-// 规则，唯一区别是 owner 可以邀请 owner。
+// 规则；owner 必须通过原子 ownership-transfer 路径任命。
 func TestCheckInvitationGrantKeepsEscalationClosed(t *testing.T) {
 	cases := []struct {
 		actor  string
 		invite string
 		want   error
 	}{
-		{roleOwner, roleOwner, nil},
+		{roleOwner, roleOwner, ErrOwnerGrant},
 		{roleAdmin, roleOwner, ErrOwnerGrant},
 		{roleOwner, roleAdmin, nil},
 		{roleAdmin, roleAdmin, ErrForbidden},

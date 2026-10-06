@@ -34,6 +34,18 @@ var queryLinkLegacyTenant string
 //go:embed queries/get_organization.sql
 var queryGetOrganization string
 
+//go:embed queries/get_organization_type.sql
+var queryGetOrganizationType string
+
+//go:embed queries/update_organization_owner.sql
+var queryUpdateOrganizationOwner string
+
+//go:embed queries/update_member_monthly_limit.sql
+var queryUpdateMemberMonthlyLimit string
+
+//go:embed queries/update_member_status.sql
+var queryUpdateMemberStatus string
+
 //go:embed queries/find_legacy_tenant_holder.sql
 var queryFindLegacyTenantHolder string
 
@@ -54,6 +66,9 @@ var queryCountActiveOwners string
 //go:embed queries/update_member_role.sql
 var queryUpdateMemberRole string
 
+//go:embed queries/update_member_role_and_limit.sql
+var queryUpdateMemberRoleAndLimit string
+
 //go:embed queries/remove_member.sql
 var queryRemoveMember string
 
@@ -70,6 +85,12 @@ var queryInsertInvitation string
 
 //go:embed queries/lock_invitation.sql
 var queryLockInvitation string
+
+//go:embed queries/get_invitation_org.sql
+var queryGetInvitationOrg string
+
+//go:embed queries/lock_invitation_by_id.sql
+var queryLockInvitationByID string
 
 //go:embed queries/accept_invitation.sql
 var queryAcceptInvitation string
