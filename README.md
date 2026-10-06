@@ -4,6 +4,16 @@
 
 当前仍处于开发阶段，已包含个人与企业账户、成员月度额度、按角色管理、模型接入和持久计费。实现状态与尚未验证的边界见[当前状态](docs/PROJECT-STATUS.md)；目标规则见[业务方案](docs/BUSINESS.md)。
 
+## 本地完整预览
+
+```bash
+bash scripts/preview.sh up
+```
+
+打开 `http://127.0.0.1:5173`。网页、后端、数据库和开发 Mock 均由 Compose 管理；重复启动复用已有数据。`bash scripts/preview.sh stop` 暂停并保留数据，`down` 会删除本项目数据卷。
+
+Mock 只定义在开发专用 `docker-compose.mock.yml` 中，主 `docker-compose.yml` 不包含 Mock；生产不要加载该开发文件。配置与验证细节见[开发说明](docs/DEVELOPMENT.md)。
+
 ## 从哪里看
 
 | 文档 | 内容 |

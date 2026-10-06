@@ -15,12 +15,12 @@ printf '%s\n' "$sha" > "$evidence_dir/commit.txt"
 git status --short > "$evidence_dir/worktree-status.txt"
 
 restore_mocks() {
-  docker compose --profile demo-mocks stop mock-primary mock-backup >/dev/null 2>&1 || true
+  docker compose -f docker-compose.yml -f docker-compose.mock.yml --profile demo-mocks stop mock-primary mock-backup >/dev/null 2>&1 || true
 }
 trap restore_mocks EXIT
 
 make ensure-master-key > "$evidence_dir/setup.log" 2>&1
-HOST_UID="$(id -u)" HOST_GID="$(id -g)" docker compose --profile demo-mocks up -d --build --wait >> "$evidence_dir/setup.log" 2>&1
+HOST_UID="$(id -u)" HOST_GID="$(id -g)" docker compose -f docker-compose.yml -f docker-compose.mock.yml --profile demo-mocks up -d --build --wait >> "$evidence_dir/setup.log" 2>&1
 go run ./cmd/democtl configure -primary-url http://mock-primary:18080 -backup-url http://mock-backup:18081 > "$evidence_dir/configure.log" 2>&1
 
 ledger_count() {
@@ -33,12 +33,12 @@ for run in 1 2 3; do
   # `docker compose start --wait` is not supported by every Compose 2.x build
   # (unknown flag on v2.24); `up -d --wait` starts/keeps the profile services and
   # waits for health, which is what the round needs.
-  docker compose --profile demo-mocks up -d --wait mock-primary mock-backup > "$run_dir/start.log" 2>&1
+  docker compose -f docker-compose.yml -f docker-compose.mock.yml --profile demo-mocks up -d --wait mock-primary mock-backup > "$run_dir/start.log" 2>&1
   before="$(ledger_count)"
   go run ./cmd/democtl request -expect-provider primary > "$run_dir/primary.log" 2>&1
-  docker compose --profile demo-mocks stop mock-primary > "$run_dir/stop-primary.log" 2>&1
+  docker compose -f docker-compose.yml -f docker-compose.mock.yml --profile demo-mocks stop mock-primary > "$run_dir/stop-primary.log" 2>&1
   go run ./cmd/democtl request -expect-provider backup > "$run_dir/backup.log" 2>&1
-  docker compose --profile demo-mocks stop mock-backup > "$run_dir/stop-backup.log" 2>&1
+  docker compose -f docker-compose.yml -f docker-compose.mock.yml --profile demo-mocks stop mock-backup > "$run_dir/stop-backup.log" 2>&1
   go run ./cmd/democtl request -expect-status 502 > "$run_dir/unavailable.log" 2>&1
   after="$(ledger_count)"
   curl --fail --silent --show-error http://127.0.0.1:8091/reconcile > "$run_dir/reconcile.json"

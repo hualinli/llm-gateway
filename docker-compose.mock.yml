@@ -1,0 +1,62 @@
+# Development / verification / load testing ONLY. Never load this file in production.
+services:
+  mock-primary:
+    profiles: ["demo-mocks"]
+    build:
+      context: .
+    entrypoint: ["/usr/local/bin/upstream-mock"]
+    command: ["-listen", ":18080", "-name", "primary", "-ttft", "20ms", "-token-interval", "15ms"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:18080/healthz"]
+      interval: 1s
+      timeout: 1s
+      retries: 20
+
+  mock-backup:
+    profiles: ["demo-mocks"]
+    build:
+      context: .
+    entrypoint: ["/usr/local/bin/upstream-mock"]
+    command: ["-listen", ":18081", "-name", "backup", "-ttft", "80ms", "-token-interval", "15ms"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:18081/healthz"]
+      interval: 1s
+      timeout: 1s
+      retries: 20
+
+  mock-fixed:
+    profiles: [preview]
+    build:
+      context: .
+    entrypoint: ["/usr/local/bin/upstream-mock"]
+    command: ["-listen", ":18080", "-name", "mock-fixed", "-mode", "fixed", "-text", "夜色降临，小镇的灯一盏盏亮起来。旅人推开书店的门，看见桌上留着一封未署名的信。", "-repeat", "100", "-tokens", "256", "-chunk-tokens", "4", "-tps", "200", "-ttft", "20ms"]
+    ports:
+      - "127.0.0.1:18180:18080"
+    healthcheck: &mock-health
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:18080/healthz"]
+      interval: 2s
+      timeout: 1s
+      retries: 20
+    restart: unless-stopped
+
+  mock-echo:
+    profiles: [preview]
+    build:
+      context: .
+    entrypoint: ["/usr/local/bin/upstream-mock"]
+    command: ["-listen", ":18080", "-name", "mock-echo", "-mode", "echo", "-repeat", "32", "-tokens", "256", "-chunk-tokens", "2", "-tps", "40", "-ttft", "100ms"]
+    ports:
+      - "127.0.0.1:18181:18080"
+    healthcheck: *mock-health
+    restart: unless-stopped
+
+  mock-flaky:
+    profiles: [preview]
+    build:
+      context: .
+    entrypoint: ["/usr/local/bin/upstream-mock"]
+    command: ["-listen", ":18080", "-name", "mock-flaky", "-mode", "info", "-repeat", "10", "-tokens", "256", "-chunk-tokens", "4", "-tps", "80", "-ttft", "50ms", "-fault-every", "5", "-fault-status", "503"]
+    ports:
+      - "127.0.0.1:18182:18080"
+    healthcheck: *mock-health
+    restart: unless-stopped

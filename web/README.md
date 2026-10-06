@@ -8,7 +8,9 @@
 
 ## 本地开发
 
-先按[开发说明](../docs/DEVELOPMENT.md)启动后端，再安装依赖并启动前端：
+完整预览使用 `bash scripts/preview.sh up`，Compose 会构建并启动网页，无需单独运行前端。
+
+需要热更新开发时，先按[开发说明](../docs/DEVELOPMENT.md)启动后端并停止 Compose 的 web 容器，再安装依赖并启动 Vite：
 
 ```bash
 cd web

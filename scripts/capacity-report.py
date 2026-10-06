@@ -454,7 +454,7 @@ class Stack:
         return [PROFILE_MOCKS] + ([PROFILE_MULTI] if self.two_gateways else [])
 
     def compose(self, *extra, profiles=None):
-        args = ["docker", "compose", "-p", self.project, "-f", BASE_COMPOSE_NAME,
+        args = ["docker", "compose", "-p", self.project, "-f", BASE_COMPOSE_NAME, "-f", "docker-compose.mock.yml",
                 "-f", rel(self.override_path)]
         for profile in (profiles if profiles is not None else self.profiles()):
             args += ["--profile", profile]

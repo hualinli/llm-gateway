@@ -33,6 +33,11 @@ RC_WORK_DIR="${RC_WORK_DIR:-}"
 RC_EVIDENCE_DIR="${RC_EVIDENCE_DIR:-}"
 RC_KEEP=0
 RC_SKIP_BUILD=0
+RC_WEB_PORT_SET=0
+RC_MOCK_BASE_PORT_SET=0
+RC_WITH_PREVIEW=0
+RC_WEB_PORT="${RC_WEB_PORT:-5173}"
+RC_MOCK_BASE_PORT="${RC_MOCK_BASE_PORT:-18180}"
 RC_WITH_E2E=0
 RC_E2E_FAILED=0
 RC_WITH_FAILURE=1
@@ -77,6 +82,8 @@ rc_usage() {
 用法:
   scripts/release-candidate.sh [run] [选项]   构建 → 全栈 → bootstrap/seed → 端到端验收 → 安全检查 → 证据 → 回收
   scripts/release-candidate.sh up   [选项]    只做 构建/启动/bootstrap/seed，保留栈继续运行
+  scripts/release-candidate.sh preview [选项] Web + 全栈 + 三个可控 Mock；已有 state 时保留数据更新
+  scripts/release-candidate.sh stop [选项]   停止本项目服务，保留数据卷
   scripts/release-candidate.sh demo [选项]    对着已运行的栈走 5 分钟 Demo（操作见 docs/DEVELOPMENT.md）
   scripts/release-candidate.sh e2e  [选项]    对着已运行的栈跑 Playwright 三角色套件
   scripts/release-candidate.sh security [选]  对着已运行的栈只跑安全/profile 检查
@@ -97,6 +104,8 @@ rc_usage() {
   --timeout SECONDS      单阶段超时（默认 900）
   --admin-email EMAIL    平台管理员邮箱（默认 rc-admin@example.com）
   --run-id ID            运行 ID（默认 UTC 时间戳-pid）
+  --port-web N          完整预览网页端口（默认 5173）
+  --port-mock-base N    三个可控 Mock 起始端口（默认 18180）
   --port-gateway N       宿主 Gateway 端口（默认 18090，被占用时自动改选）
   --port-console N       宿主 Console 端口（默认 18092，被占用时自动改选）
   --port-metering N      宿主 Metering 端口（默认 18091）
@@ -118,7 +127,7 @@ USAGE
 rc_parse_args() {
   if [[ $# -gt 0 ]]; then
     case "$1" in
-      run|up|demo|e2e|status|down|security|help) RC_COMMAND="$1"; shift ;;
+      run|up|preview|stop|demo|e2e|status|down|security|help) RC_COMMAND="$1"; shift ;;
       -h|--help) RC_COMMAND="help"; shift ;;
       -*) ;;
       *) rc_die "未知命令 $1（见 --help）" ;;
@@ -145,6 +154,8 @@ rc_parse_args() {
       --admin-email=*) RC_ADMIN_EMAIL="${1#*=}"; shift ;;
       --run-id) RC_RUN_ID="${2:-}"; shift 2 ;;
       --run-id=*) RC_RUN_ID="${1#*=}"; shift ;;
+      --port-web) RC_WEB_PORT="${2:-}"; RC_WEB_PORT_SET=1; shift 2 ;;
+      --port-mock-base) RC_MOCK_BASE_PORT="${2:-}"; RC_MOCK_BASE_PORT_SET=1; shift 2 ;;
       --port-gateway) RC_GATEWAY_PORT="${2:-}"; shift 2 ;;
       --port-console) RC_CONSOLE_PORT="${2:-}"; shift 2 ;;
       --port-metering) RC_METERING_PORT="${2:-}"; shift 2 ;;
@@ -157,6 +168,7 @@ rc_parse_args() {
       *) rc_die "未知参数 $1（见 --help）" ;;
     esac
   done
+  [[ "$RC_COMMAND" != "preview" ]] || RC_WITH_PREVIEW=1
   RC_RUN_ID="${RC_RUN_ID:-$RC_STAMP-$$}"
 }
 
@@ -201,7 +213,11 @@ rc_random_master_key() { python3 -c 'import base64,os; print(base64.b64encode(os
 # ---------------------------------------------------------------------------
 # compose 包装：永远显式 -p 与本脚本自己的 -f 列表
 # ---------------------------------------------------------------------------
-rc_compose() { docker compose --project-name "$RC_PROJECT" "${RC_COMPOSE_FILES[@]}" "$@"; }
+rc_compose() {
+  local profiles=()
+  [[ "$RC_WITH_PREVIEW" != "1" ]] || profiles+=(--profile web --profile preview)
+  docker compose --project-name "$RC_PROJECT" "${RC_COMPOSE_FILES[@]}" "${profiles[@]}" "$@"
+}
 
 # 把 -f/路径列表原样拼成一条可复制的命令字符串（供 --compose-cmd 与 DEMO 使用）。
 # 注意不要写成 `printf ' -f %s' "${RC_COMPOSE_FILES[@]}"`：数组里本来就有 -f 元素，
@@ -210,6 +226,7 @@ rc_compose() { docker compose --project-name "$RC_PROJECT" "${RC_COMPOSE_FILES[@
 rc_compose_command_string() {
   local out="docker compose --project-name $RC_PROJECT" f
   for f in "${RC_COMPOSE_FILES[@]}"; do out+=" $f"; done
+  [[ "$RC_WITH_PREVIEW" != "1" ]] || out+=" --profile web --profile preview"
   printf '%s' "$out"
 }
 
@@ -259,7 +276,7 @@ rc_prepare_dirs() {
 
 rc_base_compose_file() {
   # 顺序固定：基础文件 → 构建覆盖（可选）→ 本次运行的 RC 覆盖。
-  RC_COMPOSE_FILES=(-f "$RC_ROOT/docker-compose.yml")
+  RC_COMPOSE_FILES=(-f "$RC_ROOT/docker-compose.yml" -f "$RC_ROOT/docker-compose.mock.yml")
 }
 
 rc_materialize_drivers() {
@@ -1651,9 +1668,9 @@ rc_secrets_init() {
 rc_write_compose_files() {
   if [[ "$RC_GOPROXY" != "https://proxy.golang.org,direct" ]]; then
     python3 - "$RC_ROOT/Dockerfile" "$RC_WORK_DIR/Dockerfile.rc" "$RC_GOPROXY" \
-      "$RC_ROOT" "$RC_WORK_DIR/compose.build.yml" <<'PY'
+      "$RC_ROOT" "$RC_WORK_DIR/compose.build.yml" "$RC_WITH_PREVIEW" <<'PY'
 import sys, pathlib
-src, dst, goproxy, root, buildyml = sys.argv[1:6]
+src, dst, goproxy, root, buildyml, preview = sys.argv[1:7]
 out = []
 for line in pathlib.Path(src).read_text().splitlines():
     out.append(line)
@@ -1663,7 +1680,9 @@ for line in pathlib.Path(src).read_text().splitlines():
 pathlib.Path(dst).write_text("\n".join(out) + "\n")
 lines = ["# 由 scripts/release-candidate.sh 生成：只为构建注入 GOPROXY，不改仓库 Dockerfile。",
          "services:"]
-for svc in ("gateway", "control", "console", "metering", "migrate", "mock-primary", "mock-backup"):
+services = ["gateway", "control", "console", "metering", "migrate", "mock-primary", "mock-backup"]
+if preview == "1": services += ["mock-fixed", "mock-echo", "mock-flaky"]
+for svc in services:
     lines += ["  %s:" % svc, "    build:", "      context: %s" % root,
               "      dockerfile: %s" % dst, "      args:", "        GOPROXY: %s" % goproxy]
 pathlib.Path(buildyml).write_text("\n".join(lines) + "\n")
@@ -1721,6 +1740,21 @@ services:
 PY
   RC_COMPOSE_FILES+=(-f "$RC_WORK_DIR/compose.rc.yml")
 
+  if [[ "$RC_WITH_PREVIEW" == "1" ]]; then
+    python3 - "$RC_WORK_DIR/compose.preview.ports.yml" "$RC_WEB_PORT" "$RC_MOCK_BASE_PORT" <<'PY'
+import pathlib, sys
+path, web, base = sys.argv[1:]
+web, base = int(web), int(base)
+if not 1024 <= web <= 65535 or not 1024 <= base <= 65533:
+    raise SystemExit("preview ports out of range")
+lines = ["services:", "  web:", "    ports: !override", f'      - "127.0.0.1:{web}:8080"']
+for i, service in enumerate(("mock-fixed", "mock-echo", "mock-flaky")):
+    lines += [f"  {service}:", "    ports: !override", f'      - "127.0.0.1:{base+i}:18080"']
+pathlib.Path(path).write_text("\n".join(lines)+"\n")
+PY
+    RC_COMPOSE_FILES+=(-f "$RC_WORK_DIR/compose.preview.ports.yml")
+  fi
+
   rc_compose config >"$RC_WORK_DIR/logs/compose.config.yml" 2>&1 \
     || rc_die "compose 配置合并失败（需要 docker compose >= 2.24 才支持 !override）：见 $RC_WORK_DIR/logs/compose.config.yml"
   rc_compose config --format json >"$RC_WORK_DIR/logs/compose.config.raw.json" 2>&1 || true
@@ -1749,6 +1783,9 @@ rc_write_state() {
     RC_COMPOSE_PATHS+=("$_f")
   done
   cat > "$RC_STATE_FILE" <<EOF
+RC_WITH_PREVIEW=$RC_WITH_PREVIEW
+RC_WEB_PORT=$RC_WEB_PORT
+RC_MOCK_BASE_PORT=$RC_MOCK_BASE_PORT
 RC_RUN_ID=$RC_RUN_ID
 RC_PROJECT=$RC_PROJECT
 RC_WORK_DIR=$RC_WORK_DIR
@@ -1784,6 +1821,13 @@ rc_load_state() {
   RC_COMPOSE_FILES=()
   local f
   for f in $COMPOSE_PATHS; do RC_COMPOSE_FILES+=(-f "$f"); done
+  # Old local runs predate the separate mock file; restore complete test-only definitions.
+  if [[ "$COMPOSE_PATHS" != *"docker-compose.mock.yml"* ]]; then
+    RC_COMPOSE_FILES=(-f "$RC_ROOT/docker-compose.yml" -f "$RC_ROOT/docker-compose.mock.yml")
+    for f in $COMPOSE_PATHS; do
+      [[ "$f" == "$RC_ROOT/docker-compose.yml" || "$f" == *"docker-compose.preview.yml" ]] || RC_COMPOSE_FILES+=(-f "$f")
+    done
+  fi
   [[ ${#RC_COMPOSE_FILES[@]} -gt 0 ]] || rc_die "state.env 里没有 compose 文件列表"
 }
 
@@ -2426,11 +2470,46 @@ rc_cmd_up() {
   rc_wait_gateway_applied
   rc_accept seed
   rc_log "==> 栈已就绪并保留运行。"
+  if [[ "$RC_WITH_PREVIEW" == "1" ]]; then
+    rc_log "    Web      http://127.0.0.1:$RC_WEB_PORT"
+    rc_log "    可控 Provider 内网地址：http://mock-fixed:18080 / http://mock-echo:18080 / http://mock-flaky:18080"
+  fi
   rc_log "    Console  http://127.0.0.1:$RC_CONSOLE_PORT"
   rc_log "    Gateway  http://127.0.0.1:$RC_GATEWAY_PORT"
   rc_log "    Metering http://127.0.0.1:$RC_METERING_PORT"
   rc_log "    work dir $RC_WORK_DIR"
   rc_log "    下一步：scripts/release-candidate.sh demo | e2e | security | down"
+}
+
+rc_cmd_preview() {
+  # Repeat startup reuses the saved ports/secrets and never reruns onboarding seed.
+  local state_dir="${RC_WORK_DIR:-$RC_ROOT/data/release-candidate/current}"
+  if [[ ! -f "$state_dir/state.env" ]]; then
+    rc_cmd_up
+    return
+  fi
+  local requested_web="$RC_WEB_PORT" requested_mock="$RC_MOCK_BASE_PORT"
+  rc_load_state
+  [[ "$RC_WEB_PORT_SET" != "1" ]] || RC_WEB_PORT="$requested_web"
+  [[ "$RC_MOCK_BASE_PORT_SET" != "1" ]] || RC_MOCK_BASE_PORT="$requested_mock"
+  RC_WITH_PREVIEW=1
+  rc_preflight
+  rc_base_compose_file
+  rc_write_compose_files
+  rc_write_state
+  RC_TEARDOWN=0
+  rc_build
+  rc_up
+  rc_log "==> 完整预览已就绪，已有账户和数据保留。"
+  rc_log "    Web http://127.0.0.1:$RC_WEB_PORT"
+  rc_log "    Provider 内网地址：http://mock-fixed:18080 / http://mock-echo:18080 / http://mock-flaky:18080"
+}
+
+rc_cmd_stop() {
+  rc_preflight
+  rc_load_state
+  rc_compose_run --profile demo-mocks stop
+  rc_log "==> 已停止本项目服务，数据卷保留。"
 }
 
 rc_cmd_demo() {
@@ -2478,6 +2557,8 @@ rc_main() {
     help) rc_usage; exit 0 ;;
     run) rc_cmd_run ;;
     up) rc_cmd_up ;;
+    preview) rc_cmd_preview ;;
+    stop) rc_cmd_stop ;;
     demo) rc_cmd_demo ;;
     e2e) rc_cmd_e2e ;;
     security) rc_cmd_security ;;

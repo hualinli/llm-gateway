@@ -6,3 +6,12 @@ data
 docs/verification
 *.out
 *.test
+
+web/node_modules
+web/dist
+web/.vite
+web/coverage
+web/test-results
+web/playwright-report
+web/e2e/.auth
+web/e2e/.state.json

@@ -38,11 +38,12 @@ demo-smoke-unavailable:
 demo-accept:
 	bash scripts/demo-accept.sh
 
-demo-down: down
+demo-down:
+	docker compose -f docker-compose.yml -f docker-compose.mock.yml --profile demo-mocks down
 
 # Explicitly destructive: removes PostgreSQL, Redis, Grafana and spool volumes.
 demo-clean:
-	docker compose down -v
+	docker compose -f docker-compose.yml -f docker-compose.mock.yml --profile demo-mocks down -v
 
 ensure-master-key:
 	go run ./cmd/democtl ensure-master-key

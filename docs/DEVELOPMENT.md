@@ -1,14 +1,37 @@
 # 本地开发
 
-## 启动全栈 Demo
+## 启动完整预览
 
-要预览完整业务并验证账户、模型授权和正式计费，使用含 PostgreSQL 访问检查与计费的隔离发布候选环境；它通过 mock Provider 避免依赖真实上游：
+一条命令启动 Web、Gateway、Console、Control、Metering、PostgreSQL、Redis、原有主备 Mock 和三个可控 Mock：
+
+```bash
+bash scripts/preview.sh up
+```
+
+`docker-compose.yml` 不包含任何 Mock 服务；网页在其中的 `web` profile。开发、验收和压测脚本显式追加 `docker-compose.mock.yml`，生产不要加载这个文件。
+
+所有服务都由 Docker Compose 管理，不需要在宿主机安装 Node 或单独启动 Vite。首次运行构建镜像、迁移数据库并准备演示账户；默认 Web 为 `http://127.0.0.1:5173`，模型接口为 `http://127.0.0.1:5173/v1`（也可直接使用 Gateway `18090/v1`）。网页通过 Nginx 同源代理 API，支持会话、CSRF 和 SSE 实时输出。
+
+固定使用 `gateway-preview` 项目和 `data/preview/local` 状态目录。再次执行 `up` 会复用账户、数据、端口和密钥，不重复开户/充值；代码变更时重新构建镜像。查看状态和暂停服务：
+
+```bash
+bash scripts/preview.sh status
+bash scripts/preview.sh stop
+```
+
+`stop` 保留数据库卷，下次 `up` 恢复；`down` 会删除本项目容器和数据卷，仅需要重建开发库时使用。首次启动前确认端口空闲；可通过 `--port-web 5180`、`--port-mock-base 18280` 及发布候选的后端端口参数改选。重复启动默认使用 state 中保存的端口；显式传 `--port-web` 或 `--port-mock-base` 可更新对应端口。修改后端端口时使用新的项目/状态目录。已有发布候选环境可原地增加网页和可控 Mock，不重建数据库：
+
+```bash
+bash scripts/preview.sh up --project-name 既有项目名 --work-dir 既有运行目录
+```
+
+三个可控 Provider 在同一 Compose 网络内，平台工作台填写 `http://mock-fixed:18080`、`http://mock-echo:18080`、`http://mock-flaky:18080`。宿主机对应 `18180`、`18181`、`18182`，可查看 `/stats` 和 `/metrics`。新增 Provider 的模型路由和授权仍由平台工作台配置，默认模型保留原有主备路由。
+
+直接运行不含 Web 的隔离后端发布候选栈仍使用：
 
 ```bash
 bash scripts/release-candidate.sh up --project-name gateway-dev --run-id local-dev
 ```
-
-脚本会启动本次专属的 PostgreSQL、Redis、Control、Metering、Console、Gateway 和 mock Provider，运行迁移并准备演示账户。它会打印 Console、Gateway、Metering 地址和运行目录；若默认端口冲突，以打印的地址为准。之后可在 `web/` 启动前端。
 
 如只调试早期的 HTTP 代理和 mock Provider，可使用基础 Compose：
 
@@ -20,7 +43,7 @@ make demo-up
 
 首次单独运行 Console 时，先在 `data/console-admin-password` 写入本地管理员密码并将权限设为 `0600`，再运行 `make console-bootstrap`。需要两家演示企业和演示成员时用 `make console-bootstrap-demo`；生成的演示凭据写入被忽略的 `data/console-demo-credentials.txt`，不要提交。
 
-要开发 Web 页面，在另一个终端运行：
+需要编辑前端并立即热更新时，可选择 Vite 开发模式（先停止 Compose 的 web 容器，避免占用同一端口），在另一个终端运行：
 
 ```bash
 cd web
@@ -67,7 +90,7 @@ go run ./cmd/democtl credential-revoke --id 旧凭据ID
 bash scripts/mock-fleet.sh
 ```
 
-默认监听本机 `18180`（固定短篇文本，200 TPS）、`18181`（重复回显，40 TPS）、`18182`（Provider 信息，80 TPS，每第五个有效请求返回 503）。每条流独立限速，实例各自统计。日志在 `data/mock-fleet/`，退出或 Ctrl-C 会关闭这三个子进程；已有业务预览不受影响。端口冲突时设置 `MOCK_BASE_PORT=18280`，也可设置 `MOCK_FLEET_DIR`。修改模拟行为后重启，不提供远程修改配置接口。
+上面的独立脚本仅用于单独调试上游；完整预览已用 Compose 启动同样的三个实例，不要再运行此脚本占用相同端口。独立脚本默认监听本机 `18180`（固定短篇文本，200 TPS）、`18181`（重复回显，40 TPS）、`18182`（Provider 信息，80 TPS，每第五个有效请求返回 503）。每条流独立限速，实例各自统计。日志在 `data/mock-fleet/`，退出或 Ctrl-C 会关闭这三个子进程；已有业务预览不受影响。端口冲突时设置 `MOCK_BASE_PORT=18280`，也可设置 `MOCK_FLEET_DIR`。修改模拟行为后重启，不提供远程修改配置接口。
 
 每个实例提供 `GET /healthz`、`GET /stats`（JSON）和 `GET /metrics`（Prometheus）。`/stats` 包含总输出 Token、响应字节、活动/峰值请求数、完成/拒绝/取消/断流数量、启动以来平均 TPS，以及约 10 秒滑动窗口的实例总 TPS（按秒分桶）；启动不足 10 秒使用实际运行时长。统计包含断流前已写出的 Token，不把未发出的 Token 计入吞吐。写成功表示字节交给 HTTP writer，不代表客户端已读取。
 
@@ -111,7 +134,7 @@ go run ./cmd/loadtest -target http://127.0.0.1:18180/v1/chat/completions \
   -mode open -rate 10 -c 40 -n 100 -json data/mock-fleet/direct.json
 ```
 
-接入平台时，在 Provider 工作台填写对应 **base URL**，再配置模型路由和模型价格/授权。若 Gateway 是本机进程，可使用上述 loopback 地址；若 Gateway 在容器中，`127.0.0.1` 指的是该容器自身，应把 mock 放到同一容器网络并使用服务名，或在确认网络可达后使用宿主机地址（本机模拟脚本可通过 `MOCK_BIND` 调整监听地址）。每个实例可按名称配置独立 Provider 和路由，允许同时压测不同模型或主备。平台当前运行的预览路由仍使用原有 mock，不自动替换。
+接入平台时，在 Provider 工作台填写对应 **base URL**，再配置模型路由和模型价格/授权。若 Gateway 是本机进程，可使用上述 loopback 地址；若 Gateway 在容器中，`127.0.0.1` 指的是该容器自身，应把 mock 放到同一容器网络并使用服务名，或在确认网络可达后使用宿主机地址（本机模拟脚本可通过 `MOCK_BIND` 调整监听地址）。每个实例可按名称配置独立 Provider 和路由，允许同时压测不同模型或主备。完整预览默认模型的路由仍使用原有 mock，不自动替换。
 
 然后用已有 `cmd/loadtest` 把 `-target` 改为 Gateway 的 `/v1/chat/completions`，通过环境变量 `GATEWAY_API_KEY` 提供测试成员的 Key。对比上游 `/metrics` 的 `rate(upstream_mock_output_tokens_total[1m])`、请求结果，以及压测报告的成功率、首内容延迟、流时长、字节量和生成器有效性；不能把生成器丢请求或本机资源耗尽误判为 Gateway 容量。文本模式不使用 `-shape`/`-large-event`，它们属于旧合成事件测试。所有 `x_mock_*` 仅用于 mock。统计端点不暴露消息、固定文本或认证凭据，默认仅本机监听；需要上游鉴权时使用 `UPSTREAM_MOCK_AUTHORIZATION`。
 
@@ -130,6 +153,7 @@ bash scripts/release-candidate.sh down --project-name gateway-dev --run-id local
 ```bash
 docker compose --project-name gateway-dev \
   -f docker-compose.yml \
+  -f docker-compose.mock.yml \
   -f data/release-candidate/local-dev/compose.rc.yml \
   --profile demo-mocks stop
 ```
