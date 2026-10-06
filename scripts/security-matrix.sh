@@ -66,8 +66,8 @@ usage() {
                    租约超时拒新请求、在途流排水、恢复后收敛、Control 重启不复活已撤销 Key
   REV-01..REV-04   F12：长流期间改价（在途钉住原价）/ 撤销 Key / 移除成员，
                    新请求拒绝、旧流排水、账本不重复
-  ISO-01..ISO-04   Console 分页/聚合报表压测下 Gateway SSE 不受影响；Console 重启不打断
-                   在途流；Console 连接池饱和不耗尽 Gateway 池（如实报告共享 PG 争用）
+  ISO-01..ISO-04   Gateway SSE 基线与 Console 报表负载下的完成数/错误/p95 观察；
+                   Console 重启不打断在途流；按 application_name 观测各自连接池上限
 USAGE
 }
 
@@ -137,8 +137,8 @@ fixture_password_file="$T10_SECRETS_DIR/fixture-passwords.json"
 control_admin_token="$(t10_random_secret)"
 metering_admin_token="$(t10_random_secret)"
 dsn="postgres://gateway_test:test_only_local@127.0.0.1:${pg_port}/gateway_test?sslmode=disable"
-# 每个组件用不同的 application_name，便于在 pg_stat_activity 里证明"Console 连接池
-# 饱和 ≠ Gateway 连接池被耗尽"（ISO-04）。application_name 是纯观测标签，不改变语义。
+# 每个组件用不同的 application_name，便于在 pg_stat_activity 里观察 Console 与
+# Gateway 各自的连接池使用（ISO-04）。application_name 是纯观测标签，不改变语义。
 dsn_gateway="${dsn}&application_name=t10-gateway"
 dsn_console="${dsn}&application_name=t10-console"
 dsn_console_short="${dsn}&application_name=t10-console-short"
@@ -2828,22 +2828,39 @@ class FailurePhases:
         # 先证明两把 Key 都可用。
         before = sse_request(self.lab, revoke_key["secret"], timeout=30, request_id="t10-ctrl04-before")
         check.require(before["status"] == 200, "撤销前目标 Key 应可用，实际 %s" % before["status"])
-        # 撤销（Console → Control → 快照）并等待传播（目标 ≤5s）。
-        started = time.time()
+        # Measure the real end-to-end budget from before the revoke HTTP request
+        # until a fresh request receives 401. Probe with a one-token stream so an
+        # accepted response cannot hide the admission decision behind a long drain.
+        revoke_started = time.monotonic()
         response = self.matrix.call(check, "revoke-owner-key", "POST",
                                     "/api/v1/orgs/%s/keys/%s/revoke" % (org, revoke_key["key_id"]),
                                     session=owner.session)
         check.require_status(response, 200, label="撤销 Key")
+        revoke_acknowledged = time.monotonic()
         revocation_propagation = None
-        deadline = time.time() + 15
-        while time.time() < deadline:
-            probe = sse_request(self.lab, revoke_key["secret"], timeout=20, request_id="t10-ctrl04-revoked")
+        post_ack_propagation = None
+        revoke_probe_body = {"model": "t10-model", "messages": [{"role": "user", "content": "hi"}],
+                             "stream": True, "x_mock_ttft_ms": 1,
+                             "x_mock_token_interval_ms": 1, "x_mock_tokens": 1}
+        deadline = revoke_started + 5.0
+        probe_index = 0
+        probe = None
+        while time.monotonic() < deadline:
+            probe_index += 1
+            probe = sse_request(self.lab, revoke_key["secret"], body=revoke_probe_body,
+                                timeout=max(0.1, min(2.0, deadline - time.monotonic())),
+                                request_id="t10-ctrl04-revoked-%d" % probe_index)
+            observed = time.monotonic()
             if probe["status"] == 401:
-                revocation_propagation = time.time() - started
+                revocation_propagation = observed - revoke_started
+                post_ack_propagation = observed - revoke_acknowledged
                 break
-            time.sleep(0.3)
-        check.require(revocation_propagation is not None,
-                      "撤销后 15s 内 Key 仍可用（超过 5s 目标）")
+            remaining = deadline - observed
+            if remaining > 0:
+                time.sleep(min(0.2, remaining))
+        check.require(revocation_propagation is not None and revocation_propagation <= 5.0,
+                      "撤销提交开始后 5s 内新请求未收到 401：elapsed=%r last_status=%r" %
+                      (revocation_propagation, (probe or {}).get("status")))
         revoke_status, revoke_view = self.lab.control_json("/gateways")
         check.require(revoke_status == 200, "撤销后 /gateways 不可读")
         # 停 Control：租约到期后所有本地 Key 被撤销，新请求 fail-closed。
@@ -2879,10 +2896,15 @@ class FailurePhases:
         resurrected = sse_request(self.lab, revoke_key["secret"], timeout=20, request_id="t10-ctrl04-resurrect")
         check.require(resurrected["status"] == 401,
                       "Control 重启后已撤销的 Key 被复活了（status=%s）" % resurrected["status"])
-        check.detail("revocation_propagation_seconds", round(revocation_propagation, 3))
+        check.detail("revocation_timing_seconds", {
+            "request_to_first_refusal": round(revocation_propagation, 3),
+            "revoke_http": round(revoke_acknowledged - revoke_started, 3),
+            "post_ack_to_first_refusal": round(post_ack_propagation, 3),
+        })
         check.detail("view_after_control_restart", view)
-        check.note("撤销传播 %.3fs；Control 停机+租约到期 401；重启后合法 Key 200、已撤销 Key 仍 401"
-                   % revocation_propagation)
+        check.note("撤销请求发出后 %.3fs 内首个新请求收到 401（HTTP 请求 %.3fs，响应后传播 %.3fs）；"
+                   "Control 停机+租约到期 401；重启后合法 Key 200、已撤销 Key 仍 401"
+                   % (revocation_propagation, revoke_acknowledged - revoke_started, post_ack_propagation))
 
 
 # ---------------------------------------------------------------------------
@@ -3050,29 +3072,51 @@ class LongStreamPhases:
         thread = threading.Thread(target=run_stream)
         thread.start()
         time.sleep(1.2)
-        started = time.time()
+        revoke_started = time.monotonic()
         revoke = self.matrix.call(check, "revoke-midflight", "POST",
                                   "/api/v1/orgs/%s/keys/%s/revoke" % (org, key["key_id"]),
                                   session=member.session)
         check.require_status(revoke, 200, label="长流期间撤销 Key")
+        revoke_acknowledged = time.monotonic()
+        propagation = None
+        post_ack_propagation = None
+        revoke_probe_body = {"model": "t10-model", "messages": [{"role": "user", "content": "hi"}],
+                             "stream": True, "x_mock_ttft_ms": 1,
+                             "x_mock_token_interval_ms": 1, "x_mock_tokens": 1}
+        deadline = revoke_started + 5.0
+        probe_index = 0
+        probe = None
+        while time.monotonic() < deadline:
+            probe_index += 1
+            probe = sse_request(self.lab, key["secret"], body=revoke_probe_body,
+                                timeout=max(0.1, min(2.0, deadline - time.monotonic())),
+                                request_id="t10-rev02-after-%d" % probe_index)
+            observed = time.monotonic()
+            if probe["status"] == 401:
+                propagation = observed - revoke_started
+                post_ack_propagation = observed - revoke_acknowledged
+                break
+            remaining = deadline - observed
+            if remaining > 0:
+                time.sleep(min(0.2, remaining))
         thread.join(timeout=90)
+        check.require(not thread.is_alive(), "撤销后的在途流线程在 90s 内没有结束")
         result = holder.get("result") or {}
         check.require(result.get("status") == 200 and result.get("done") is not None,
                       "撤销打断了在途流: status=%s done=%s" % (result.get("status"), result.get("done")))
-        propagation = None
-        deadline = time.time() + 15
-        probe = None
-        while time.time() < deadline:
-            probe = sse_request(self.lab, key["secret"], timeout=20, request_id="t10-rev02-after")
-            if probe["status"] == 401:
-                propagation = time.time() - started
-                break
-            time.sleep(0.2)
-        check.require(propagation is not None,
-                      "撤销后 15s 内新请求仍未被拒（最后 status=%s）" % (probe or {}).get("status"))
-        check.detail("propagation_seconds", round(propagation, 3))
-        check.note("撤销在 %.3fs 内对新请求生效（目标 ≤5s），在途流排水完成（%.2fs）"
-                   % (propagation, result.get("total") or 0))
+        check.require(propagation is not None and propagation <= 5.0,
+                      "撤销提交开始后 5s 内新请求未收到 401：elapsed=%r last_status=%r" %
+                      (propagation, (probe or {}).get("status")))
+        check.detail("revocation_timing_seconds", {
+            "request_to_first_refusal": round(propagation, 3),
+            "revoke_http": round(revoke_acknowledged - revoke_started, 3),
+            "post_ack_to_first_refusal": round(post_ack_propagation, 3),
+            "inflight_drain": round(result.get("total") or 0, 3),
+        })
+        check.note("撤销请求发出后 %.3fs 内首个新请求收到 401（HTTP 请求 %.3fs，响应后传播 %.3fs）；"
+                   "在途流排水完成（%.2fs）"
+                   % (propagation, revoke_acknowledged - revoke_started, post_ack_propagation,
+                      result.get("total") or 0))
         self.revoked_key = key
 
     def rev03(self, check):
@@ -3291,7 +3335,7 @@ class IsolationPhases:
 
     def iso01(self, check):
         # 先把组织 RPM 提到与隔离性实验无关的高位：否则 96 个请求会先撞上
-        # 动态限流（429），把"Console 与 Gateway 的资源隔离"变成"限流实验"。
+        # 动态限流（429），把"Console 报表负载下的 Gateway 观察"变成"限流实验"。
         self.lab.control_json("/config", method="POST", payload={
             "org_policies": {self.fx.orgs["A"]: {"requests_per_minute": 60000, "burst": 6000}}})
         time.sleep(2.0)
@@ -3305,13 +3349,19 @@ class IsolationPhases:
         result = run.run()
         summary = report_summary(result["report"])
         check.detail("baseline", summary)
+        check.require(result["exit_code"] == 0,
+                      "基线 loadtest 进程退出码非零：%s" % result["exit_code"])
         check.require(summary["completed"] == summary["scheduled"] and summary["scheduled"] == 96,
                       "基线轮次未全部完成（存在 429/拒绝）: %r" % summary)
         check.require((summary["incomplete"] or 0) == 0, "基线轮次出现 incomplete: %r" % summary)
+        for field in ("rejected", "transport_error", "cancelled", "parse_error", "loadgen_dropped"):
+            check.require((summary[field] or 0) == 0,
+                          "基线 loadtest 有 %s=%r: %r" % (field, summary[field], summary))
+        baseline_p95 = (summary["first_content"] or {}).get("p95_ms")
+        check.require(baseline_p95 is not None, "基线缺少 first_content p95 样本")
         self.baseline = summary
-        check.note("基线：%s/%s 完成，first_content p95=%sms，无 incomplete，status=%s" % (
-            summary["completed"], summary["scheduled"],
-            (summary["first_content"] or {}).get("p95_ms"), summary["status"]))
+        check.note("基线观察：%s/%s 完成，first_content p95=%sms，无错误/不完整请求；status=%s" % (
+            summary["completed"], summary["scheduled"], baseline_p95, summary["status"]))
 
     def iso02(self, check):
         # 造压数据：只写 metering_events 与 console_audit_events（两者都不在
@@ -3332,10 +3382,11 @@ class IsolationPhases:
         results = []
         stop_event = threading.Event()
         deadline = time.time() + 45
+        worker_count = 40
         threads = [threading.Thread(target=self.console_worker,
                                     args=(roles[i % len(roles)][1], roles[i % len(roles)][0],
                                           deadline, results, stop_event))
-                   for i in range(40)]
+                   for i in range(worker_count)]
         for thread in threads:
             thread.start()
         time.sleep(2.0)
@@ -3350,6 +3401,8 @@ class IsolationPhases:
         stop_event.set()
         for thread in threads:
             thread.join(timeout=60)
+        check.require(all(not thread.is_alive() for thread in threads),
+                      "Console 报表 worker 未在 60s 内停止")
         elapsed = [item["elapsed"] for item in results if item["status"] == 200]
         statuses = {}
         for item in results:
@@ -3363,6 +3416,13 @@ class IsolationPhases:
         check.detail("console_load", console_stats)
         check.detail("gateway_under_load", summary)
         check.detail("pg_samples", samples)
+        check.require(len(results) >= worker_count,
+                      "Console 报表负载不足：%d 个 worker 只返回 %d 次" % (worker_count, len(results)))
+        check.require(statuses.get(200, 0) >= worker_count and
+                      all(item["status"] == 200 for item in results),
+                      "Console 报表负载存在错误响应：%r" % statuses)
+        check.require(result["exit_code"] == 0,
+                      "Console 负载期间 Gateway loadtest 进程退出码非零：%s" % result["exit_code"])
         baseline = self.baseline
         base_p95 = (baseline["first_content"] or {}).get("p95_ms")
         load_p95 = (summary["first_content"] or {}).get("p95_ms")
@@ -3370,14 +3430,25 @@ class IsolationPhases:
                       "Console 压测期间 Gateway 流未全部完成: %r" % summary)
         check.require((summary["incomplete"] or 0) == 0,
                       "Console 压测期间出现 incomplete: %r" % summary)
+        for field in ("rejected", "transport_error", "cancelled", "parse_error", "loadgen_dropped"):
+            check.require((summary[field] or 0) == 0,
+                          "Console 压测期间 Gateway 有 %s=%r: %r" % (field, summary[field], summary))
+        check.require(base_p95 is not None and load_p95 is not None,
+                      "基线或 Console 报表负载轮次缺少 first_content p95 样本")
         check.detail("first_content_p95_ms", {"baseline": base_p95, "under_console_load": load_p95})
-        # 归因：Console 自己的池（t10-console）在采样里不应超过 10；Gateway 仍然能拿到连接。
+        # 这些是负载期间的连接数观察；按进程 application_name 分开检查各自的池上限。
         gateway_conns = [sample["by_application"].get("t10-gateway", 0) for sample in samples]
-        console_conns = [sample["by_application"].get("t10-console", 0) +
-                         sample["by_application"].get("t10-console-short", 0) for sample in samples]
-        check.detail("pg_connections", {"gateway": gateway_conns, "console": console_conns})
-        check.require(max(console_conns) <= 11,
-                      "Console 连接数超过硬编码池上限 10: %r" % console_conns)
+        console_main_conns = [sample["by_application"].get("t10-console", 0) for sample in samples]
+        console_short_conns = [sample["by_application"].get("t10-console-short", 0) for sample in samples]
+        console_conns = [main + short for main, short in zip(console_main_conns, console_short_conns)]
+        check.detail("pg_connections", {"gateway": gateway_conns, "console": console_conns,
+                                        "console_main": console_main_conns, "console_short": console_short_conns})
+        check.require(max(console_main_conns) > 0,
+                      "PG 采样没有观察到 t10-console application_name")
+        check.require(max(console_short_conns) <= 10,
+                      "Console short 实例连接数超过自身池上限 10: %r" % console_short_conns)
+        check.require(max(console_main_conns) <= 10,
+                      "Console 主实例连接数超过自身池上限 10: %r" % console_main_conns)
         check.require(max(gateway_conns) >= 1,
                       "压测期间 Gateway 没有拿到任何 PG 连接: %r" % gateway_conns)
         contention = {
@@ -3393,10 +3464,10 @@ class IsolationPhases:
             self.matrix.finding("共享 PG 争用可见：Console 压测下 Gateway first_content p95 从 %sms 升到 %sms "
                                 "（Console 自身 p95=%sms）——进程/连接池是隔离的，但 PG 是共享的"
                                 % (base_p95, load_p95, console_stats["p95_ms"]))
-        check.note("Console %d 次报表请求（status=%s，p95=%sms）；Gateway 96/96 完成，"
-                   "first_content p95 %sms→%sms；PG 连接 console≤%s gateway≥%s"
+        check.note("Console 报表负载观察：%d 次请求（status=%s，p95=%sms）；Gateway 96/96 无错误，"
+                   "first_content p95 基线/负载=%s/%sms（未设性能 SLO）；PG 采样连接 console=%s gateway=%s"
                    % (console_stats["requests"], statuses, console_stats["p95_ms"], base_p95, load_p95,
-                      max(console_conns), min(gateway_conns)))
+                      max(console_conns), max(gateway_conns)))
 
     def iso03(self, check):
         """Console 重启不能打断在途 Gateway 流。"""
@@ -3450,21 +3521,34 @@ class IsolationPhases:
                    % (restart_seconds, durations))
 
     def iso04(self, check):
-        """连接池归属：Console 池饱和时 Gateway 池仍独立可用（含共享 PG 事实）。"""
+        """报表负载期间按 application_name 观察 Console 与 Gateway 各自连接池。"""
         samples = self.isolation["pg_samples"]
+        check.require(bool(samples), "ISO-02 没有 PostgreSQL 连接池采样")
         gateway_max = max(sample["by_application"].get("t10-gateway", 0) for sample in samples)
+        console_main_max = max(sample["by_application"].get("t10-console", 0) for sample in samples)
+        console_short_max = max(sample["by_application"].get("t10-console-short", 0) for sample in samples)
         console_max = max(sample["by_application"].get("t10-console", 0) +
                           sample["by_application"].get("t10-console-short", 0) for sample in samples)
         total_max = max(sum(value for key, value in sample["by_application"].items()
                             if not key.startswith("<")) for sample in samples)
         check.detail("gateway_conns_max", gateway_max)
+        check.detail("console_main_conns_max", console_main_max)
+        check.detail("console_short_conns_max", console_short_max)
         check.detail("console_conns_max", console_max)
         check.detail("all_backends_max", total_max)
+        check.require(console_main_max > 0,
+                      "采样中没有观察到 t10-console application_name")
+        check.require(gateway_max > 0,
+                      "采样中没有观察到 t10-gateway application_name")
+        check.require(console_main_max <= 10,
+                      "Console 主实例连接数 %d 超过自身池上限 10" % console_main_max)
+        check.require(console_short_max <= 10,
+                      "Console short 实例连接数 %d 超过自身池上限 10" % console_short_max)
         check.require(gateway_max <= 16,
-                      "Gateway 连接数 %d 超过自己的两个池（8+8）" % gateway_max)
-        # 压测期间 Gateway 的 SSE 成功与延迟已经记录在 ISO-02；这里给出池归属结论。
-        check.note("Console 池上限 10（硬编码），Gateway 两个池各 8；采样中 console=%d、gateway=%d、"
-                   "全部后端=%d —— Console 饱和没有耗尽 Gateway 池" % (console_max, gateway_max, total_max))
+                      "Gateway 连接数 %d 超过自身两个池上限（8+8）" % gateway_max)
+        check.note("报表负载期间的连接池隔离观察：t10-console=%d/10、t10-console-short=%d/10、"
+                   "t10-gateway=%d/16、全部后端=%d；这些是观测上限检查，不代表池已饱和"
+                   % (console_main_max, console_short_max, gateway_max, total_max))
 
 
 # ---------------------------------------------------------------------------
@@ -3563,9 +3647,10 @@ def main():
     if "isolation" in wanted:
         log("\n== 管理面/数据面隔离 ==")
         matrix.run("ISO-01", "Gateway SSE 基线（loadtest closed-loop）", isolation_phases.iso01)
-        matrix.run("ISO-02", "Console 报表压测下 Gateway SSE 不受影响", isolation_phases.iso02)
+        matrix.run("ISO-02", "Console 报表负载下 Gateway SSE 完成/错误/p95 实测", isolation_phases.iso02)
         matrix.run("ISO-03", "Console 重启不打断在途 Gateway 流", isolation_phases.iso03)
-        matrix.run("ISO-04", "Console 池饱和不等于 Gateway 池被耗尽", isolation_phases.iso04)
+        matrix.run("ISO-04", "报表负载下连接池隔离观察（按 application_name 和池上限）",
+                   isolation_phases.iso04)
 
     if "security" in wanted:
         log("\n== 全局泄密扫描 ==")
