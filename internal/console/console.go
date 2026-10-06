@@ -414,6 +414,7 @@ func Register(engine *route.Engine, opts Options) error {
 	s.registerBillingReportRoutes(engine)
 	s.registerProviderAdminRoutes(engine)
 	s.registerOnboardingRoutes(engine)
+	s.registerPlatformAccountRoutes(engine)
 
 	// T05 (ADR-0004): price versions are a platform-admin surface; the account
 	// and its ledger are organization reads (view_org_usage); an adjustment is a
