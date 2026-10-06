@@ -59,6 +59,62 @@ go run ./cmd/democtl credential-revoke --id 旧凭据ID
 
 仍被当前配置引用的凭据不能撤销；先移除或替换该引用。凭据创建、配置发布和撤销都需要 Control 管理权限。生产部署需按[当前技术约束](decisions.md)启用 mTLS 并安全挂载主密钥。
 
+## 可控 Mock Provider 与压测
+
+`cmd/upstream-mock` 是独立的 OpenAI-compatible HTTP/SSE 上游，Gateway 按普通 Provider 访问它，可用于验证路由、主备、取消、计费和异常恢复。它只支持 `stream: true`，不调用真实模型。启动三个独立实例：
+
+```bash
+bash scripts/mock-fleet.sh
+```
+
+默认监听本机 `18180`（固定短篇文本，200 TPS）、`18181`（重复回显，40 TPS）、`18182`（Provider 信息，80 TPS，每第五个有效请求返回 503）。每条流独立限速，实例各自统计。日志在 `data/mock-fleet/`，退出或 Ctrl-C 会关闭这三个子进程；已有业务预览不受影响。端口冲突时设置 `MOCK_BASE_PORT=18280`，也可设置 `MOCK_FLEET_DIR`。修改模拟行为后重启，不提供远程修改配置接口。
+
+每个实例提供 `GET /healthz`、`GET /stats`（JSON）和 `GET /metrics`（Prometheus）。`/stats` 包含总输出 Token、响应字节、活动/峰值请求数、完成/拒绝/取消/断流数量、启动以来平均 TPS，以及约 10 秒滑动窗口的实例总 TPS（按秒分桶）；启动不足 10 秒使用实际运行时长。统计包含断流前已写出的 Token，不把未发出的 Token 计入吞吐。写成功表示字节交给 HTTP writer，不代表客户端已读取。
+
+单独实例可以自定义完整文本或 UTF-8 文件，例如本地小说：
+
+```bash
+go run ./cmd/upstream-mock -listen 127.0.0.1:18280 -name novel \
+  -mode fixed -text-file ./data/novel.txt -tokens 100000 -tps 100 -chunk-tokens 5
+```
+
+| 参数 | 含义 |
+| --- | --- |
+| `-mode synthetic\|fixed\|echo\|info` | 兼容旧压测的合成内容 / 固定文本 / 拼接消息文本的纯回显 / Provider 信息 |
+| `-text`、`-text-file` | 固定内容；文件优先，最大 4 MiB UTF-8 |
+| `-repeat` | 重复固定文本、回显或信息；最终仍受输出上限约束 |
+| `-tokens` | 输出上限，最大 100000；合成模式默认 8 个事件，文本模式默认 1024 个字符 |
+| `-tps` | 每条流的目标输出 Token/秒，0 使用旧的 `-token-interval` |
+| `-chunk-tokens` | 文本模式每个 SSE 内容事件的字符数，默认 1，可提高压测效率 |
+| `-ttft` | 首事件等待时间；启用 role-only 首帧后首内容还需等待一个事件间隔 |
+| `-max-inflight` | 同时执行的请求数上限，超出返回 429；0 不限制 |
+| `-status`、`-fault-every`、`-fault-status` | 固定 HTTP 错误 / 每 N 个有效请求注入 HTTP 错误（默认 503） |
+| `-hang`、`-fail-after` | 一直等待客户端取消 / 发出 N 个内容事件后结束，缺少 usage 和 `[DONE]` |
+| `-stall-after`、`-stall-duration` | 在第 N 个内容事件后停顿，验证读取超时和恢复 |
+| `-usage normal\|missing\|negative\|mismatch` | 正常计费用量 / 缺失 / 负数 / 总量不一致 |
+
+文本模式明确采用 **一个 Unicode 字符 = 一个模拟 Token**，支持中文和 emoji；usage 的输入量按消息文本字符数、输出量按实际返回字符数计算。它不代表任何真实模型的 tokenizer。`max_completion_tokens`（优先）或 `max_tokens` 进一步限制文本输出。首个 chunk 在 TTFT 后立即发出，后续间隔按上个 chunk 的 Token 数 / TPS 计算，短流可能因首块突发显示高于目标 TPS；长流、系统调度及客户端背压会影响实际吞吐。`-tps` 是每条流的节奏，**不是实例总吞吐上限**。旧 synthetic 模式维持“一事件一模拟 Token”和可控 padding，`-echo` 保留旧 checksum 转发验证行为；文本模式不允许 padding，避免内容与计数混淆。
+
+无需重启即可在测试请求 JSON 中使用 `x_mock_tps`、`x_mock_tokens`、`x_mock_ttft_ms`、`x_mock_status`、`x_mock_hang`、`x_mock_fail_after`、`x_mock_stall_after`、`x_mock_stall_ms`、`x_mock_usage` 覆盖对应行为。周期性错误优先于请求指定的 status。例如：
+
+```bash
+curl -N http://127.0.0.1:18181/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"default","stream":true,"messages":[{"role":"user","content":"你好 mock"}],"max_tokens":128,"x_mock_tps":80}'
+curl http://127.0.0.1:18181/stats
+```
+
+直接压测上游可测出 mock 自身的瓶颈：
+
+```bash
+go run ./cmd/loadtest -target http://127.0.0.1:18180/v1/chat/completions \
+  -mode open -rate 10 -c 40 -n 100 -json data/mock-fleet/direct.json
+```
+
+接入平台时，在 Provider 工作台填写对应 **base URL**，再配置模型路由和模型价格/授权。若 Gateway 是本机进程，可使用上述 loopback 地址；若 Gateway 在容器中，`127.0.0.1` 指的是该容器自身，应把 mock 放到同一容器网络并使用服务名，或在确认网络可达后使用宿主机地址（本机模拟脚本可通过 `MOCK_BIND` 调整监听地址）。每个实例可按名称配置独立 Provider 和路由，允许同时压测不同模型或主备。平台当前运行的预览路由仍使用原有 mock，不自动替换。
+
+然后用已有 `cmd/loadtest` 把 `-target` 改为 Gateway 的 `/v1/chat/completions`，通过环境变量 `GATEWAY_API_KEY` 提供测试成员的 Key。对比上游 `/metrics` 的 `rate(upstream_mock_output_tokens_total[1m])`、请求结果，以及压测报告的成功率、首内容延迟、流时长、字节量和生成器有效性；不能把生成器丢请求或本机资源耗尽误判为 Gateway 容量。文本模式不使用 `-shape`/`-large-event`，它们属于旧合成事件测试。所有 `x_mock_*` 仅用于 mock。统计端点不暴露消息、固定文本或认证凭据，默认仅本机监听；需要上游鉴权时使用 `UPSTREAM_MOCK_AUTHORIZATION`。
+
 ## 停止与清理
 
 基础 Demo 使用 `make down` 停止并移除容器和网络，但保留 PostgreSQL、Redis 与计量 spool 等命名卷；之后 `make demo-up` 会继续使用原数据。`make demo-clean` 会额外删除这些卷并清空数据。
