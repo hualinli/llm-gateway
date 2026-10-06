@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
   App as AntdApp,
@@ -32,9 +32,14 @@ export function PlatformModelsPage(): ReactNode {
   const { message } = AntdApp.useApp();
   const queryClient = useQueryClient();
   const isAdmin = me?.user.platform_admin === true;
-  const organizations = useQuery({
+  const organizations = useInfiniteQuery({
     queryKey: ['platform', 'organizations', 'all'],
-    queryFn: () => consoleApi.listPlatformOrganizations({ limit: 100 }),
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) => consoleApi.listPlatformOrganizations({
+      limit: 100,
+      ...(pageParam ? { cursor: pageParam } : {}),
+    }),
+    getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
     enabled: isAdmin,
   });
   const models = usePlatformModels(isAdmin);
@@ -89,11 +94,13 @@ export function PlatformModelsPage(): ReactNode {
     }
   };
 
-  const options = (organizations.data?.items ?? []).map((item: PlatformOrganization) => ({
+  const organizationItems = organizations.data?.pages.flatMap((page) => page.items) ?? [];
+  const options = organizationItems.map((item: PlatformOrganization) => ({
     value: item.id,
     label: `${item.name}（${item.type === 'personal' ? '个人账户' : '企业账户'} · ${item.owner_email}）`,
   }));
-  const enabledModels = globalDraft.filter((item) => item.enabled).map((item) => item.model);
+  const enabledModels = models.data?.items.filter((item) => item.enabled).map((item) => item.model) ?? [];
+  const unavailableAccountModels = accountModels.filter((model) => !enabledModels.includes(model));
   const addModel = (): void => {
     const model = newModel.trim();
     if (!model || globalDraft.some((item) => item.model === model)) return;
@@ -153,6 +160,11 @@ export function PlatformModelsPage(): ReactNode {
             style={{ width: '100%', maxWidth: 560 }}
             aria-label="选择账户"
           />
+          {organizations.data && organizations.hasNextPage ? <Button
+            size="small"
+            loading={organizations.isFetchingNextPage}
+            onClick={() => void organizations.fetchNextPage()}
+          >加载更多账户（已载入 {organizationItems.length} 个）</Button> : null}
           {organizationId ? (
             <Card key={organizationId} size="small" loading={settings.isLoading}>
               <DataState query={settings} emptyDescription="无法读取此账户的模型范围。">
@@ -161,11 +173,30 @@ export function PlatformModelsPage(): ReactNode {
                   {scopeMode === 'inherit' ? (
                     <Typography.Text type="secondary">此账户会自动使用所有平台开放且已定价的模型。</Typography.Text>
                   ) : (
-                    enabledModels.length === 0 ? <Alert type="warning" message="平台当前没有开放模型。" /> : <Checkbox.Group value={accountModels} onChange={(values) => { setAccountModels(values as string[]); setAccountDraftDirty(true); }} style={{ width: '100%' }}>
-                      <Row gutter={[12, 12]}>
-                        {enabledModels.map((model) => <Col xs={24} sm={12} lg={8} key={model}><Checkbox value={model}>{model}</Checkbox></Col>)}
-                      </Row>
-                    </Checkbox.Group>
+                    <>
+                      {unavailableAccountModels.length ? <Alert
+                        type="warning"
+                        showIcon
+                        style={{ marginBottom: 12 }}
+                        message="部分已授权模型已被平台关闭"
+                        description={<Space wrap>
+                          {unavailableAccountModels.map((model) => <Tag key={model} color="orange">{model}</Tag>)}
+                          <Button size="small" onClick={() => {
+                            setAccountModels((current) => current.filter((model) => enabledModels.includes(model)));
+                            setAccountDraftDirty(true);
+                          }}>从账户范围移除</Button>
+                        </Space>}
+                      /> : null}
+                      {enabledModels.length === 0 ? <Alert type="warning" message="平台当前没有已保存的开放模型。" /> : <Checkbox.Group value={accountModels.filter((model) => enabledModels.includes(model))} onChange={(values) => {
+                        const selectedEnabled = values as string[];
+                        setAccountModels([...unavailableAccountModels, ...selectedEnabled]);
+                        setAccountDraftDirty(true);
+                      }} style={{ width: '100%' }}>
+                        <Row gutter={[12, 12]}>
+                          {enabledModels.map((model) => <Col xs={24} sm={12} lg={8} key={model}><Checkbox value={model}>{model}</Checkbox></Col>)}
+                        </Row>
+                      </Checkbox.Group>}
+                    </>
                   )}
                   <Button type="primary" loading={saveSettings.isPending} disabled={!accountDraftDirty} onClick={() => void saveAccountScope()}>保存此账户范围</Button>
                   {saveSettings.isError ? <ErrorView error={saveSettings.error} title="账户范围未保存" /> : null}

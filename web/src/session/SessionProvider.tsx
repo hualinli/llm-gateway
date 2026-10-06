@@ -185,7 +185,11 @@ export function useActiveOrg(): {
 
   return {
     membership: membershipFor(memberships, orgId ?? undefined),
-    role: roleFor(memberships, orgId ?? undefined),
+    // Suspended memberships retain personal history access but no longer grant
+    // organization-wide permissions in navigation or page-level controls.
+    role: membershipFor(memberships, orgId ?? undefined)?.status === 'active'
+      ? roleFor(memberships, orgId ?? undefined)
+      : null,
     orgId,
   };
 }

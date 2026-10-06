@@ -1,5 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { Alert, App as AntdApp, Button, Card, Form, Input, Modal, Space, Table, Tag, Typography } from 'antd';
 import { CopyOutlined, PlusOutlined } from '@ant-design/icons';
 
@@ -17,6 +18,7 @@ interface KeyForm { name: string }
 export function KeysPage(): ReactNode {
   const { orgId, membership } = useActiveOrg();
   const { message, modal } = AntdApp.useApp();
+  const queryClient = useQueryClient();
   const navigate = useNavigate();
   const playground = usePlaygroundKey();
   const [form] = Form.useForm<KeyForm>();
@@ -27,8 +29,10 @@ export function KeysPage(): ReactNode {
   const keys = useKeys(orgId, { limit: 20, ...(pager.cursor ? { cursor: pager.cursor } : {}) }, orgId !== null);
   const create = useCreateKey(orgId ?? '');
   const revoke = useRevokeKey(orgId ?? '');
+  const canCreate = membership?.status === 'active' && membership.organization.status === 'active';
 
   const submit = async (): Promise<void> => {
+    if (!canCreate) return;
     const values = await form.validateFields();
     try {
       const result = await create.mutateAsync({ name: values.name.trim(), operation_id: operationId.current ??= crypto.randomUUID() });
@@ -38,7 +42,11 @@ export function KeysPage(): ReactNode {
       pager.reset();
       form.resetFields();
       if (!result.secret) message.info('Key 已创建，但本次没有返回可复制的密钥。');
-    } catch { /* The form shows the real response below. */ }
+    } catch {
+      // A network failure may have happened after the server created the Key.
+      // Refresh the list so the user can verify before retrying this same id.
+      await queryClient.invalidateQueries({ queryKey: ['org', orgId ?? '', 'keys'] });
+    }
   };
 
   const confirmRevoke = (key: ApiKey): void => {
@@ -59,8 +67,10 @@ export function KeysPage(): ReactNode {
 
   return (
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
-      <PageHeader title="我的 API Key" description="每个 Key 归属于当前账户和你本人。按 App 或服务命名，创建数量不限。" extra={<Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setCreateOpen(true); }}>新建 Key</Button>} />
+      <PageHeader title="我的 API Key" description="每个 Key 归属于当前账户和你本人。按 App 或服务命名，创建数量不限。" extra={canCreate ? <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setCreateOpen(true); }}>新建 Key</Button> : null} />
       <Alert type="info" showIcon message="Key 只会完整显示一次" description="请立即复制并保存到你的应用配置中。企业管理员也看不到你的 Key 名称、列表或密钥。切换账户会清除本页试用密钥；Key 的账单归属始终是创建它的账户。" />
+      {membership?.status === 'suspended' ? <Alert type="warning" showIcon message="你在此企业中的成员资格已暂停" description="你仍可查看自己的 Key 和历史消费；暂停期间不能创建 Key 或发起模型试用。" /> : null}
+      {membership?.organization.status === 'suspended' ? <Alert type="warning" showIcon message="此账户已暂停" description="暂停期间不能创建 Key 或发起模型试用。" /> : null}
       <Card title="我的 Key" data-testid="keys-list-card">
         <DataState query={keys} emptyDescription="还没有 API Key。创建一个 Key 后，可在模型页面试用。">
           {(page) => <Table<ApiKey>
@@ -86,13 +96,16 @@ export function KeysPage(): ReactNode {
         /> : null}
         {revoke.isError ? <div style={{ marginTop: 12 }}><ErrorView error={revoke.error} title="Key 未停用" /></div> : null}
       </Card>
-      <Modal title="新建 API Key" open={createOpen} onCancel={() => { setCreateOpen(false); operationId.current = null; }} onOk={() => void submit()} confirmLoading={create.isPending} okText="创建 Key" cancelText="取消" destroyOnHidden>
+      <Modal title="新建 API Key" open={createOpen} onCancel={() => { setCreateOpen(false); operationId.current = null; }} onOk={() => void submit()} confirmLoading={create.isPending} okButtonProps={{ disabled: !canCreate }} okText="创建 Key" cancelText="取消" destroyOnHidden>
         <Form form={form} layout="vertical" onFinish={() => void submit()} requiredMark={false}>
           <Form.Item name="name" label="用途 / App 名称" rules={[{ required: true, max: 120, message: '请输入名称，最多 120 个字符' }]}>
             <Input autoFocus placeholder="例如：客服机器人、数据分析服务" />
           </Form.Item>
         </Form>
-        {create.isError ? <ErrorView error={create.error} title="Key 未创建" /> : null}
+        {create.isError ? <>
+          <ErrorView error={create.error} title="未能确认 Key 创建结果" />
+          <Alert style={{ marginTop: 12 }} type="warning" showIcon message="请先核对 Key 列表" description="再次提交会复用当前窗口的请求编号；网络结果不明时，请勿改名后重复创建。" />
+        </> : null}
         {!canUse ? <Alert type="warning" message="请先选择一个账户。" /> : null}
       </Modal>
       <Modal
@@ -101,7 +114,7 @@ export function KeysPage(): ReactNode {
         onCancel={() => setCreated(null)}
         footer={created?.secret ? <Space wrap>
           <Button onClick={() => setCreated(null)}>稍后使用</Button>
-          <Button type="primary" onClick={() => {
+          <Button type="primary" disabled={!canCreate} onClick={() => {
             if (created.secret) playground.setKey(created.secret, 'created');
             setCreated(null);
             navigate(`/orgs/${encodeURIComponent(orgId ?? '')}/models`);

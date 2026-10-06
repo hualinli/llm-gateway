@@ -7,8 +7,10 @@ export const CAN = {
   manageMembers: (role: OrgRole | null): boolean => role === 'admin' || role === 'owner',
   manageAdmins: (role: OrgRole | null): boolean => role === 'owner',
   manageBilling: (membership: Membership | null): boolean =>
-    membership?.organization.type === 'personal' ||
-    membership?.role === 'owner' || membership?.role === 'admin',
+    membership?.status === 'active' && (
+      membership.organization.type === 'personal' ||
+      membership.role === 'owner' || membership.role === 'admin'
+    ),
   platform: (platformAdmin: boolean): boolean => platformAdmin,
   createAdmin: (role: OrgRole | null): boolean => role === 'owner',
   transferOwner: (role: OrgRole | null): boolean => role === 'owner',

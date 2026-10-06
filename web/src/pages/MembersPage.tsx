@@ -273,7 +273,7 @@ export function MembersPage(): ReactNode {
             rowKey="id"
             size="middle"
             pagination={false}
-            dataSource={page.items.filter((item) => item.status === 'pending')}
+            dataSource={page.pages.flatMap((item) => item.items)}
             locale={{ emptyText: '暂时没有待审批的申请。' }}
             columns={[
               { title: '申请人', dataIndex: 'email', render: (email: string, row) => <Space direction="vertical" size={0}><Typography.Text strong>{row.display_name}</Typography.Text><Typography.Text type="secondary">{email}</Typography.Text></Space> },
@@ -282,6 +282,11 @@ export function MembersPage(): ReactNode {
             ]}
           />}
         </DataState>
+        {joinRequests.data && joinRequests.hasNextPage ? <Button
+          size="small"
+          loading={joinRequests.isFetchingNextPage}
+          onClick={() => void joinRequests.fetchNextPage()}
+        >加载更多待审批申请（已载入 {joinRequests.data.pages.reduce((count, page) => count + page.items.length, 0)} 条）</Button> : null}
       </Card>
       <Card title="待接受邀请" data-testid="member-invitations">
         <DataState query={invitations} emptyDescription="没有待接受的邀请。">

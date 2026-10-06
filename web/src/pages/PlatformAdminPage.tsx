@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
   App as AntdApp,
@@ -37,14 +37,24 @@ export function PlatformAdminPage(): ReactNode {
   const [codeForm] = Form.useForm<CodeForm>();
   const [freshCode, setFreshCode] = useState<CreateActivationCodeResponse | null>(null);
 
-  const organizations = useQuery({
+  const organizations = useInfiniteQuery({
     queryKey: ['platform', 'organizations'],
-    queryFn: () => consoleApi.listPlatformOrganizations({ limit: 100 }),
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) => consoleApi.listPlatformOrganizations({
+      limit: 100,
+      ...(pageParam ? { cursor: pageParam } : {}),
+    }),
+    getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
     enabled: me?.user.platform_admin === true,
   });
-  const codes = useQuery({
+  const codes = useInfiniteQuery({
     queryKey: ['platform', 'activation-codes'],
-    queryFn: () => consoleApi.listActivationCodes({ limit: 100 }),
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) => consoleApi.listActivationCodes({
+      limit: 100,
+      ...(pageParam ? { cursor: pageParam } : {}),
+    }),
+    getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
     enabled: me?.user.platform_admin === true,
   });
   const createEnterprise = useMutation({
@@ -92,7 +102,7 @@ export function PlatformAdminPage(): ReactNode {
         <Col xs={24} xl={12}>
           <Card title="直接创建企业账户" data-testid="platform-enterprise-create">
             <Form form={enterpriseForm} layout="vertical" onFinish={() => void submitEnterprise()}>
-              <Form.Item name="name" label="企业名称" rules={[{ required: true, max: 120, message: '请输入企业名称' }]}>
+              <Form.Item name="name" label="企业名称" rules={[{ required: true, max: 80, message: '请输入企业名称，最多 80 个字符' }]}>
                 <Input />
               </Form.Item>
               <Form.Item name="owner_email" label="负责人邮箱" rules={[{ required: true, type: 'email', message: '请输入已注册用户的邮箱' }]}>
@@ -100,13 +110,13 @@ export function PlatformAdminPage(): ReactNode {
               </Form.Item>
               <Button type="primary" htmlType="submit" loading={createEnterprise.isPending}>创建企业账户</Button>
             </Form>
-            {createEnterprise.isError ? <div style={{ marginTop: 12 }}><ErrorView error={createEnterprise.error} title="企业账户未创建" /></div> : null}
+            {createEnterprise.isError ? <div style={{ marginTop: 12 }}><ErrorView error={createEnterprise.error} title="未能确认企业开户结果" /></div> : null}
           </Card>
         </Col>
         <Col xs={24} xl={12}>
           <Card title="生成开户码" data-testid="platform-activation-create">
             <Form form={codeForm} layout="vertical" onFinish={() => void submitCode()}>
-              <Form.Item name="enterprise_name" label="企业名称" rules={[{ required: true, max: 120, message: '请输入企业名称' }]}>
+              <Form.Item name="enterprise_name" label="企业名称" rules={[{ required: true, max: 80, message: '请输入企业名称，最多 80 个字符' }]}>
                 <Input />
               </Form.Item>
               <Form.Item name="expires_at" label="有效期至（可选）">
@@ -114,7 +124,7 @@ export function PlatformAdminPage(): ReactNode {
               </Form.Item>
               <Button type="primary" htmlType="submit" loading={createCode.isPending}>生成一次性开户码</Button>
             </Form>
-            {createCode.isError ? <div style={{ marginTop: 12 }}><ErrorView error={createCode.error} title="开户码未生成" /></div> : null}
+            {createCode.isError ? <div style={{ marginTop: 12 }}><ErrorView error={createCode.error} title="未能确认开户码生成结果" /></div> : null}
           </Card>
         </Col>
       </Row>
@@ -124,7 +134,7 @@ export function PlatformAdminPage(): ReactNode {
             rowKey="id"
             size="middle"
             pagination={{ pageSize: 10 }}
-            dataSource={page.items}
+            dataSource={page.pages.flatMap((item) => item.items)}
             columns={[
               { title: '账户', dataIndex: 'name', render: (name: string, row) => <Space direction="vertical" size={0}><Typography.Text strong>{name}</Typography.Text><Typography.Text type="secondary">{row.type === 'personal' ? '个人账户' : '企业账户'}</Typography.Text></Space> },
               { title: '负责人', dataIndex: 'owner_email' },
@@ -135,6 +145,11 @@ export function PlatformAdminPage(): ReactNode {
             ]}
           />}
         </DataState>
+        {organizations.data && organizations.hasNextPage ? <Button
+          size="small"
+          loading={organizations.isFetchingNextPage}
+          onClick={() => void organizations.fetchNextPage()}
+        >加载更多账户（已载入 {organizations.data.pages.reduce((count, page) => count + page.items.length, 0)} 个）</Button> : null}
         {setStatus.isError ? <div style={{ marginTop: 12 }}><ErrorView error={setStatus.error} title="账户状态未更新" /></div> : null}
       </Card>
       <Card title="已发放的开户码" data-testid="platform-activation-codes">
@@ -144,7 +159,7 @@ export function PlatformAdminPage(): ReactNode {
             rowKey="id"
             size="small"
             pagination={{ pageSize: 10 }}
-            dataSource={page.items}
+            dataSource={page.pages.flatMap((item) => item.items)}
             columns={[
               { title: '企业', dataIndex: 'enterprise_name' },
               { title: '状态', dataIndex: 'status', render: (status: string) => <Tag>{status === 'active' ? '未使用' : status === 'redeemed' ? '已兑换' : status === 'expired' ? '已过期' : '已撤销'}</Tag> },
@@ -153,6 +168,11 @@ export function PlatformAdminPage(): ReactNode {
             ]}
           />}
         </DataState>
+        {codes.data && codes.hasNextPage ? <Button
+          size="small"
+          loading={codes.isFetchingNextPage}
+          onClick={() => void codes.fetchNextPage()}
+        >加载更多开户码（已载入 {codes.data.pages.reduce((count, page) => count + page.items.length, 0)} 个）</Button> : null}
       </Card>
       <Modal title="一次性开户码" open={freshCode !== null} onCancel={() => setFreshCode(null)} footer={<Button type="primary" onClick={() => setFreshCode(null)}>完成</Button>} destroyOnHidden>
         {freshCode ? <Space direction="vertical" size={12} style={{ width: '100%' }}>

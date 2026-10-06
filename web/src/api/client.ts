@@ -51,6 +51,7 @@ import type {
   CreateActivationCodeResponse,
   CreatePlatformOrganizationRequest,
   JoinRequest,
+  JoinRequestListQuery,
   JoinRequestDecisionRequest,
   JoinRequestPage,
   RegisterResponse,
@@ -317,12 +318,12 @@ export class ConsoleClient {
     return this.request<JoinRequest>('POST', `/orgs/${encodeURIComponent(org)}/join-requests`, { body: { display_name: displayName } });
   }
 
-  async listMyJoinRequests(): Promise<JoinRequestPage> {
-    return this.request<JoinRequestPage>('GET', '/me/join-requests');
+  async listMyJoinRequests(params: Omit<JoinRequestListQuery, 'status'> = {}): Promise<JoinRequestPage> {
+    return this.request<JoinRequestPage>('GET', '/me/join-requests', { query: { ...params } });
   }
 
-  async listJoinRequests(org: string): Promise<JoinRequestPage> {
-    return this.request<JoinRequestPage>('GET', `/orgs/${encodeURIComponent(org)}/join-requests`);
+  async listJoinRequests(org: string, params: JoinRequestListQuery = {}): Promise<JoinRequestPage> {
+    return this.request<JoinRequestPage>('GET', `/orgs/${encodeURIComponent(org)}/join-requests`, { query: { ...params } });
   }
 
   async decideJoinRequest(org: string, requestId: string, body: JoinRequestDecisionRequest): Promise<JoinRequest> {
