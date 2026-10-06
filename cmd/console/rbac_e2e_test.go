@@ -44,7 +44,7 @@ type rbacFixture struct {
 	db     *sql.DB
 	orgs   *organization.Service
 
-	// Acme: alice owner, bob member, carol billing_viewer.
+	// Acme: alice owner, bob member, carol admin.
 	alice, bob, carol rbacActor
 	acmeOrgID         int64
 	// Beta: dave owner, erin member.
@@ -75,7 +75,7 @@ func newRbacFixture(t *testing.T) *rbacFixture {
 	if _, err := orgs.AddMember(ctx, acme.ID, f.bob.id, "member"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := orgs.AddMember(ctx, acme.ID, f.carol.id, "billing_viewer"); err != nil {
+	if _, err := orgs.AddMember(ctx, acme.ID, f.carol.id, "admin"); err != nil {
 		t.Fatal(err)
 	}
 	beta, err := orgs.CreateEnterprise(ctx, f.dave.id, "beta-rbac")
@@ -219,14 +219,14 @@ func TestRbacHTTPMemberVisibilityAndCrossOrgNotFound(t *testing.T) {
 		return rec.Code, emails, code
 	}
 
-	// owner / billing_viewer see the whole organization (3 members).
+	// owner / admin see the whole organization (3 members).
 	code, emails, _ := memberPage(f.alice, f.acmeOrgID)
 	if code != http.StatusOK || len(emails) != 3 {
 		t.Fatalf("owner members = %d, %v; want 200 with 3 members", code, emails)
 	}
 	code, emails, _ = memberPage(f.carol, f.acmeOrgID)
 	if code != http.StatusOK || len(emails) != 3 {
-		t.Fatalf("billing_viewer members = %d, %v; want 200 with 3 members", code, emails)
+		t.Fatalf("admin members = %d, %v; want 200 with 3 members", code, emails)
 	}
 	// A plain member sees only themselves.
 	code, emails, _ = memberPage(f.bob, f.acmeOrgID)
@@ -257,8 +257,8 @@ func TestRbacHTTPMemberVisibilityAndCrossOrgNotFound(t *testing.T) {
 		t.Fatalf("member audit = %d, want 403 (body=%s)", rec.Code, rec.Body.String())
 	}
 	rec = e2eRequest(f.engine, http.MethodGet, f.auditPath(f.acmeOrgID), "", f.carol.session.cookieHeader())
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("billing_viewer audit = %d, want 403 (body=%s)", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("admin audit = %d, want 200 (body=%s)", rec.Code, rec.Body.String())
 	}
 	// No session and missing CSRF are still 401/403 on the new routes.
 	rec = e2eRequest(f.engine, http.MethodGet, f.membersPath(f.acmeOrgID), "")
@@ -266,7 +266,7 @@ func TestRbacHTTPMemberVisibilityAndCrossOrgNotFound(t *testing.T) {
 		t.Fatalf("members without session = %d, want 401", rec.Code)
 	}
 	rec = e2eRequest(f.engine, http.MethodPost, f.invitationsPath(f.acmeOrgID),
-		`{"email":"x@rbac.test","role":"member"}`, f.alice.session.cookieHeader())
+		`{"email":"x@rbac.test","role":"member","monthly_limit_micro":null}`, f.alice.session.cookieHeader())
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("invitation without CSRF = %d, want 403", rec.Code)
 	}
@@ -280,7 +280,7 @@ func TestRbacHTTPInvitationLifecycle(t *testing.T) {
 
 	// A plain member has no manage_members: 403, and nothing is created.
 	rec := e2eRequest(f.engine, http.MethodPost, f.invitationsPath(f.acmeOrgID),
-		fmt.Sprintf(`{"email":%q,"role":"member"}`, f.frank.email),
+		fmt.Sprintf(`{"email":%q,"role":"member","monthly_limit_micro":null}`, f.frank.email),
 		f.bob.session.cookieHeader(), f.bob.session.csrfHeader())
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("member creates invitation = %d, want 403 (body=%s)", rec.Code, rec.Body.String())
@@ -295,7 +295,7 @@ func TestRbacHTTPInvitationLifecycle(t *testing.T) {
 	// The owner creates an invitation for an email with different casing: the
 	// stored value is normalized and fixed.
 	rec = e2eRequest(f.engine, http.MethodPost, f.invitationsPath(f.acmeOrgID),
-		fmt.Sprintf(`{"email":%q,"role":"member"}`, strings.ToUpper(f.frank.email)),
+		fmt.Sprintf(`{"email":%q,"role":"member","monthly_limit_micro":null}`, strings.ToUpper(f.frank.email)),
 		f.alice.session.cookieHeader(), f.alice.session.csrfHeader())
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("owner creates invitation = %d, want 201 (body=%s)", rec.Code, rec.Body.String())
@@ -454,7 +454,7 @@ func TestRbacHTTPLastOwnerAndOwnershipTransfer(t *testing.T) {
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("PATCH role=admin = %d, want 204 (body=%s)", rec.Code, rec.Body.String())
 	}
-	rec = e2eRequest(f.engine, http.MethodPatch, f.memberPath(f.acmeOrgID, f.alice.id), `{"role":"member"}`,
+	rec = e2eRequest(f.engine, http.MethodPatch, f.memberPath(f.acmeOrgID, f.alice.id), `{"role":"member","monthly_limit_micro":null}`,
 		f.bob.session.cookieHeader(), f.bob.session.csrfHeader())
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("admin demotes owner = %d, want 403 (body=%s)", rec.Code, rec.Body.String())
@@ -587,8 +587,8 @@ func TestRbacHTTPCrossOrgMutationsAreNotFound(t *testing.T) {
 		path   string
 		body   string
 	}{
-		{http.MethodPost, f.invitationsPath(f.acmeOrgID), fmt.Sprintf(`{"email":%q,"role":"member"}`, f.erin.email)},
-		{http.MethodPatch, f.memberPath(f.acmeOrgID, f.bob.id), `{"role":"member"}`},
+		{http.MethodPost, f.invitationsPath(f.acmeOrgID), fmt.Sprintf(`{"email":%q,"role":"member","monthly_limit_micro":null}`, f.erin.email)},
+		{http.MethodPatch, f.memberPath(f.acmeOrgID, f.bob.id), `{"role":"member","monthly_limit_micro":null}`},
 		{http.MethodDelete, f.memberPath(f.acmeOrgID, f.bob.id), ""},
 		{http.MethodPost, f.transferPath(f.acmeOrgID), fmt.Sprintf(`{"user":"%d"}`, f.bob.id)},
 		{http.MethodGet, f.invitationsPath(f.acmeOrgID), ""},
@@ -643,7 +643,7 @@ func TestRbacHTTPErrorMappingExamples(t *testing.T) {
 
 	// 403: a member tries to invite.
 	rec := e2eRequest(f.engine, http.MethodPost, f.invitationsPath(f.acmeOrgID),
-		fmt.Sprintf(`{"email":%q,"role":"member"}`, f.erin.email),
+		fmt.Sprintf(`{"email":%q,"role":"member","monthly_limit_micro":null}`, f.erin.email),
 		f.bob.session.cookieHeader(), f.bob.session.csrfHeader())
 	t.Logf("403 matrix: %d %s", rec.Code, rec.Body.String())
 	if rec.Code != http.StatusForbidden {
