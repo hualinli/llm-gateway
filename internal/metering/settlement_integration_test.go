@@ -26,14 +26,16 @@ import (
 // deleted in Redis.
 
 type settlementE2E struct {
-	db        *sql.DB
-	scoped    string
-	accounts  *billing.PGAccountStore
-	prices    *billing.PGPriceVersionStore
-	rdb       *redis.Client
-	orgID     int64
-	price     billing.PriceVersion
-	publisher *ReceiptStreamPublisher
+	db           *sql.DB
+	scoped       string
+	accounts     *billing.PGAccountStore
+	prices       *billing.PGPriceVersionStore
+	rdb          *redis.Client
+	orgID        int64
+	userID       int64
+	membershipID int64
+	price        billing.PriceVersion
+	publisher    *ReceiptStreamPublisher
 }
 
 func newSettlementE2E(t *testing.T) *settlementE2E {
@@ -93,6 +95,12 @@ VALUES ($1, 'hash', 'active', true, 1, $2, $2) RETURNING id`, "settlement-"+id+"
 VALUES ('enterprise', $1, 'active', $2, $3, $3) RETURNING id`, "settlement-"+id, userID, now).Scan(&orgID); err != nil {
 		t.Fatalf("seed organization: %v", err)
 	}
+	var membershipID int64
+	if err := db.QueryRow(`INSERT INTO memberships
+  (org_id, user_id, role, status, created_at, updated_at, monthly_limit_micro)
+VALUES ($1, $2, 'owner', 'active', $3, $3, NULL) RETURNING id`, orgID, userID, now).Scan(&membershipID); err != nil {
+		t.Fatalf("seed billing membership: %v", err)
+	}
 
 	accounts := billing.NewPGAccountStore(db)
 	accounts.AdmissionTimeout = 30 * time.Second
@@ -133,7 +141,8 @@ VALUES ('enterprise', $1, 'active', $2, $3, $3) RETURNING id`, "settlement-"+id,
 
 	return &settlementE2E{
 		db: db, scoped: scoped, accounts: accounts, prices: prices, rdb: rdb,
-		orgID: orgID, price: price, publisher: NewReceiptStreamPublisher(rdb),
+		orgID: orgID, userID: userID, membershipID: membershipID,
+		price: price, publisher: NewReceiptStreamPublisher(rdb),
 	}
 }
 
@@ -154,6 +163,8 @@ func (e *settlementE2E) admitAndFinalize(t *testing.T, executionID, eventID stri
 	params := billing.ReserveParams{
 		ExecutionID:       executionID,
 		OrgID:             e.orgID,
+		UserID:            e.userID,
+		MembershipID:      e.membershipID,
 		KeyID:             "key-e2e",
 		GatewayID:         "gateway-e2e",
 		Model:             e.price.Model,
