@@ -50,6 +50,8 @@ func tenantOf(orgID int64) string { return "org:" + strconv.FormatInt(orgID, 10)
 func newHTTPFixture(t *testing.T, dsn string) *httpFixture {
 	t.Helper()
 	s := newSeed(t, dsn)
+	// newSeed installs the configured global catalog entries used below; the
+	// organization scope defaults to inherited access.
 
 	// Two enterprises with distinct members.
 	member := s.user(t, "active")     // org A member, key owner
@@ -289,15 +291,14 @@ func TestGatewayChainAccessGuardHTTPIntegration(t *testing.T) {
 		}
 	})
 
-	t.Run("org policy allowlist narrows every key of the org", func(t *testing.T) {
+	t.Run("database organization scope narrows every key of the org", func(t *testing.T) {
 		record, ok := fixture.store.Lookup(fixture.keys["member"])
 		if !ok {
 			t.Fatal("member key missing from the snapshot")
 		}
-		fixture.policies.Replace(map[int64]gatewayguard.OrgPolicy{
-			record.OrgID: {OrgID: record.OrgID, ModelAllowlist: &[]string{"gpt-other"}},
-		})
-		defer fixture.policies.Replace(nil)
+		if _, err := fixture.guard.DB().Exec(`UPDATE organizations SET model_allowlist='["gpt-other"]'::jsonb WHERE id=$1`, record.OrgID); err != nil {
+			t.Fatal(err)
+		}
 		rec := fixture.request(t, fixture.keys["member"], chatBody)
 		if rec.Code != http.StatusForbidden {
 			t.Fatalf("org allowlist did not narrow the key: status=%d body=%s", rec.Code, rec.Body.String())
@@ -305,6 +306,23 @@ func TestGatewayChainAccessGuardHTTPIntegration(t *testing.T) {
 		other := fixture.request(t, fixture.keys["member"], `{"model":"gpt-other","stream":true,"messages":[]}`)
 		if other.Code != http.StatusOK {
 			t.Fatalf("org-allowed model rejected: status=%d body=%s", other.Code, other.Body.String())
+		}
+	})
+
+	t.Run("fresh platform disable blocks before proxy metering", func(t *testing.T) {
+		if _, err := fixture.guard.DB().Exec(`UPDATE organizations SET model_allowlist=NULL WHERE name LIKE 'org-%'`); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := fixture.guard.DB().Exec(`UPDATE platform_model_catalog SET enabled=false WHERE model='gpt-allowed'`); err != nil {
+			t.Fatal(err)
+		}
+		before := len(fixture.producer.events)
+		response := fixture.request(t, fixture.keys["member"], chatBody)
+		if response.Code != http.StatusForbidden {
+			t.Fatalf("disabled platform model status=%d body=%s, want 403", response.Code, response.Body.String())
+		}
+		if len(fixture.producer.events) != before {
+			t.Fatalf("disabled platform model reached proxy metering: before=%d after=%d", before, len(fixture.producer.events))
 		}
 	})
 

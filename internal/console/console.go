@@ -413,6 +413,7 @@ func Register(engine *route.Engine, opts Options) error {
 	engine.GET(PathOrgUsage, s.withSession, s.listOrgUsage)
 	s.registerBillingReportRoutes(engine)
 	s.registerPlatformOrganizationReadRoutes(engine)
+	s.registerModelCatalogRoutes(engine)
 	s.registerProviderAdminRoutes(engine)
 	s.registerOnboardingRoutes(engine)
 	s.registerPlatformAccountRoutes(engine)

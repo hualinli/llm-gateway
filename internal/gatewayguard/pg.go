@@ -81,6 +81,12 @@ type Facts struct {
 	KeyAllowlist *[]string
 	OrgID        int64
 	OrgStatus    string
+	// GlobalModelAllowlist is the platform's enabled model set. It is always
+	// explicit, so an empty slice on a fresh DB closes the catalog.
+	GlobalModelAllowlist *[]string
+	// OrgModelAllowlist is the authoritative organizations.model_allowlist
+	// tri-state: nil inherits the global catalog and [] denies every model.
+	OrgModelAllowlist *[]string
 	// UserID is 0 when api_keys.owner_user_id is NULL (legacy or
 	// organization-scoped key).
 	UserID       int64
@@ -278,6 +284,8 @@ func (g *PGGuard) evaluate(key auth.KeyRecord, facts Facts, now time.Time) (Perm
 		MembershipID: facts.MembershipID,
 		KeyID:        keyID,
 		Model: ModelPolicy{
+			Global: facts.GlobalModelAllowlist,
+			Org:    facts.OrgModelAllowlist,
 			Member: facts.MemberAllowlist,
 			// Two scopes describe the same key limit: the authoritative fact
 			// table and its snapshot projection. Taking the narrower (intersect)
@@ -285,9 +293,6 @@ func (g *PGGuard) evaluate(key auth.KeyRecord, facts Facts, now time.Time) (Perm
 			// snapshot can never widen the permission.
 			Key: intersectAllowlists(facts.KeyAllowlist, key.ModelAllowlist),
 		},
-	}
-	if g.policies != nil {
-		permit.Model.Org = g.policies.ModelAllowlistFor(facts.OrgID)
 	}
 	return permit, Denial{}
 }
@@ -312,6 +317,8 @@ func (g *PGGuard) readFacts(ctx context.Context, keyHash string) (Facts, error) 
 		keyAllowlist []byte
 		orgID        sql.NullInt64
 		orgStatus    sql.NullString
+		orgAllowlist []byte
+		globalModels []byte
 		ownerUserID  sql.NullInt64
 		userStatus   sql.NullString
 		memberID     sql.NullInt64
@@ -320,6 +327,7 @@ func (g *PGGuard) readFacts(ctx context.Context, keyHash string) (Facts, error) 
 	)
 	err = tx.QueryRowContext(ctx, queryGuardFacts, keyHash).Scan(
 		&keyID, &keyStatus, &expiresAt, &keyAllowlist, &orgID, &orgStatus,
+		&orgAllowlist, &globalModels,
 		&ownerUserID, &userStatus, &memberID, &memberRole, &memberStatus,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -349,6 +357,19 @@ func (g *PGGuard) readFacts(ctx context.Context, keyHash string) (Facts, error) 
 		}
 		facts.KeyAllowlist = models
 	}
+	orgModels, err := parseAllowlistJSON(orgAllowlist)
+	if err != nil {
+		return Facts{}, fmt.Errorf("organizations.model_allowlist for org %d: %w", orgID.Int64, err)
+	}
+	facts.OrgModelAllowlist = orgModels
+	globalModelList, err := parseAllowlistJSON(globalModels)
+	if err != nil || globalModelList == nil {
+		if err == nil {
+			err = errors.New("global catalog query returned SQL NULL")
+		}
+		return Facts{}, fmt.Errorf("platform_model_catalog enabled model list: %w", err)
+	}
+	facts.GlobalModelAllowlist = globalModelList
 	facts.OrgID = orgID.Int64
 	facts.OrgStatus = orgStatus.String
 	if ownerUserID.Valid && ownerUserID.Int64 > 0 {
@@ -422,6 +443,9 @@ func intersectAllowlists(a, b *[]string) *[]string {
 // exact membership incarnation rather than whichever relation is current.
 const queryGuardFacts = `
 SELECT k.key_id, k.status, k.expires_at, k.model_allowlist, k.org_id, o.status,
+       o.model_allowlist,
+       to_jsonb(COALESCE((SELECT array_agg(c.model ORDER BY c.model)
+                          FROM platform_model_catalog c WHERE c.enabled), ARRAY[]::text[])),
        k.owner_user_id, u.status, m.id, m.role, m.status
 FROM api_keys k
 JOIN organizations o ON o.id = k.org_id
