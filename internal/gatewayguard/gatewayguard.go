@@ -37,7 +37,11 @@ type Permit struct {
 	// UserID is 0 when the key has no owner (legacy or organization-scoped
 	// key). Metering stores NULL for 0.
 	UserID int64
-	KeyID  string
+	// MembershipID identifies the current membership incarnation that owns
+	// this key. Billing pins it to each admitted execution so a later rejoin
+	// cannot make an old key valid again.
+	MembershipID int64
+	KeyID        string
 	// Model carries the tri-state allowlist intersection inputs for this
 	// request. The model itself is only known after the body is parsed, so the
 	// model check runs in the HTTP middleware (and in the proxy for any caller
@@ -210,10 +214,11 @@ func (g SnapshotGuard) Check(_ context.Context, key auth.KeyRecord, now time.Tim
 		return Permit{}, denial
 	}
 	permit := Permit{
-		TenantID: key.TenantID,
-		OrgID:    key.OrgID,
-		UserID:   userIDOf(key.OwnerUserID),
-		KeyID:    key.ID,
+		TenantID:     key.TenantID,
+		OrgID:        key.OrgID,
+		UserID:       userIDOf(key.OwnerUserID),
+		MembershipID: key.MembershipID,
+		KeyID:        key.ID,
 		Model: ModelPolicy{
 			Key: key.ModelAllowlist,
 		},
