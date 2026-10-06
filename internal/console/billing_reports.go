@@ -206,8 +206,9 @@ func (s *PGBillingReports) usageTotals(ctx context.Context, query PaidUsageQuery
 	statement := `SELECT
   COALESCE(SUM(CASE WHEN e.status = 'settled' THEN COALESCE(d.amount_micro, 0) ELSE 0 END), 0)::bigint,
   count(*) FILTER (WHERE e.status = 'settled'),
-  count(*) FILTER (WHERE e.status IN ('reserved', 'executing', 'receipt_recorded')
-    OR r.status IN ('pending_dispatch', 'dispatched')),
+  count(*) FILTER (WHERE e.status NOT IN ('settled', 'review_required')
+    AND (e.status IN ('reserved', 'executing', 'receipt_recorded')
+      OR r.status IN ('pending_dispatch', 'dispatched'))),
   count(*) FILTER (WHERE e.status = 'review_required'),
   COALESCE(SUM(CASE WHEN e.status = 'settled' AND r.execution_id IS NOT NULL AND r.status <> 'exception' THEN r.prompt_tokens ELSE 0 END), 0)::bigint,
   COALESCE(SUM(CASE WHEN e.status = 'settled' AND r.execution_id IS NOT NULL AND r.status <> 'exception' THEN r.output_tokens ELSE 0 END), 0)::bigint,

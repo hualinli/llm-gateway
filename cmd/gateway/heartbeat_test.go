@@ -184,7 +184,7 @@ func gatewayBillingConfig(dsn string) billingConfig {
 
 // seedGatewayBillingOrg creates one funded organization and one price version,
 // returning everything the T07B tests need to admit an execution.
-func seedGatewayBillingOrg(t *testing.T, db *sql.DB, name string) (int64, billing.PriceVersion) {
+func seedGatewayBillingOrg(t *testing.T, db *sql.DB, name string) (int64, int64, int64, billing.PriceVersion) {
 	t.Helper()
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -199,6 +199,12 @@ VALUES ($1, 'hash', 'active', false, 1, $2, $2) RETURNING id`, name+"@example.co
   (type, name, status, owner_user_id, created_at, updated_at)
 VALUES ('enterprise', $1, 'active', $2, $3, $3) RETURNING id`, name, userID, now).Scan(&orgID); err != nil {
 		t.Fatalf("seed organization: %v", err)
+	}
+	var membershipID int64
+	if err := db.QueryRow(`INSERT INTO memberships
+  (org_id, user_id, role, status, monthly_limit_micro, created_at, updated_at)
+VALUES ($1, $2, 'owner', 'active', NULL, $3, $3) RETURNING id`, orgID, userID, now).Scan(&membershipID); err != nil {
+		t.Fatalf("seed owner membership: %v", err)
 	}
 	prices := billing.NewPGPriceVersionStore(db)
 	price, err := prices.CreatePriceVersion(ctx, billing.CreatePriceVersionParams{
@@ -225,7 +231,7 @@ VALUES ('enterprise', $1, 'active', $2, $3, $3) RETURNING id`, name, userID, now
 	if _, err := accounts.Adjust(ctx, adjust); err != nil {
 		t.Fatalf("fund org: %v", err)
 	}
-	return orgID, price
+	return orgID, userID, membershipID, price
 }
 
 func TestBillingAdapterHeartbeatsItsInstance(t *testing.T) {
@@ -285,7 +291,7 @@ func TestFinalizationOfAReleasedExecutionIsRefusedAndAudited(t *testing.T) {
 	}
 	defer func() { _ = closeBilling() }()
 
-	orgID, price := seedGatewayBillingOrg(t, db, "gateway-late-usage")
+	orgID, userID, membershipID, price := seedGatewayBillingOrg(t, db, "gateway-late-usage")
 	ctx := context.Background()
 	accounts := billing.NewPGAccountStore(db)
 	accounts.AdmissionTimeout = 10 * time.Second
@@ -293,6 +299,8 @@ func TestFinalizationOfAReleasedExecutionIsRefusedAndAudited(t *testing.T) {
 	params := billing.ReserveParams{
 		ExecutionID:      executionID,
 		OrgID:            orgID,
+		MembershipID:     membershipID,
+		UserID:           userID,
 		KeyID:            "key-late",
 		GatewayID:        "gw-late-usage-owner",
 		Model:            price.Model,
