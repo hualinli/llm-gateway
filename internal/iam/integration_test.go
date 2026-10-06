@@ -413,6 +413,113 @@ func TestLoginAndSessionLifecycle(t *testing.T) {
 	}
 }
 
+func TestRegisterAtomicallyCreatesPersonalAccountWalletAndSession(t *testing.T) {
+	db, _ := isolatedDSN(t)
+	clock := newTestClock()
+	svc := newService(t, db, clock)
+	ctx := context.Background()
+
+	user, issued, err := svc.Register(ctx, "  NEW.USER@example.com  ", testPassword, "127.0.0.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if user.Email != "new.user@example.com" || user.PlatformAdmin || issued.Token == "" || issued.CSRFToken == "" {
+		t.Fatalf("Register returned user/session = %+v / %+v", user, issued)
+	}
+	var orgID, ownerID, membershipUserID int64
+	var orgType, orgStatus, role, membershipStatus, currency, walletStatus string
+	var membershipLimit sql.NullInt64
+	var balance, reserved int64
+	if err := db.QueryRowContext(ctx, `SELECT o.id, o.type, o.status, o.owner_user_id,
+		m.user_id, m.role, m.status, m.monthly_limit_micro,
+		b.currency, b.posted_balance_micro, b.reserved_micro, b.status
+		FROM organizations o JOIN memberships m ON m.org_id=o.id
+		JOIN billing_accounts b ON b.org_id=o.id WHERE o.owner_user_id=$1`, user.ID).
+		Scan(&orgID, &orgType, &orgStatus, &ownerID, &membershipUserID, &role, &membershipStatus,
+			&membershipLimit, &currency, &balance, &reserved, &walletStatus); err != nil {
+		t.Fatal(err)
+	}
+	if orgType != "personal" || orgStatus != "active" || ownerID != user.ID || membershipUserID != user.ID ||
+		role != "owner" || membershipStatus != "active" || membershipLimit.Valid ||
+		currency != "CNY" || balance != 0 || reserved != 0 || walletStatus != "active" {
+		t.Fatalf("registration provisioning = org %d %s/%s owner=%d membership=%d %s/%s cap=%+v wallet=%s %d/%d %s",
+			orgID, orgType, orgStatus, ownerID, membershipUserID, role, membershipStatus, membershipLimit,
+			currency, balance, reserved, walletStatus)
+	}
+	if _, _, err := svc.ResolveSession(ctx, issued.Token); err != nil {
+		t.Fatalf("new registration session does not resolve: %v", err)
+	}
+	for _, table := range []string{"users", "organizations", "memberships", "billing_accounts", "sessions"} {
+		var count int
+		if err := db.QueryRowContext(ctx, `SELECT count(*) FROM `+table).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		if count != 1 {
+			t.Fatalf("%s row count=%d, want 1", table, count)
+		}
+	}
+	if _, _, err := svc.Register(ctx, "NEW.USER@example.com", testPassword, "127.0.0.1"); !errors.Is(err, iam.ErrEmailTaken) {
+		t.Fatalf("duplicate Register = %v, want ErrEmailTaken", err)
+	}
+	var users, orgs, wallets int
+	if err := db.QueryRowContext(ctx, `SELECT (SELECT count(*) FROM users),
+		(SELECT count(*) FROM organizations), (SELECT count(*) FROM billing_accounts)`).
+		Scan(&users, &orgs, &wallets); err != nil {
+		t.Fatal(err)
+	}
+	if users != 1 || orgs != 1 || wallets != 1 {
+		t.Fatalf("duplicate registration left partial rows: users=%d orgs=%d wallets=%d", users, orgs, wallets)
+	}
+}
+
+func TestChangePasswordRevokesAllSessionsOnlyAfterOldPasswordMatches(t *testing.T) {
+	db, _ := isolatedDSN(t)
+	clock := newTestClock()
+	svc := newService(t, db, clock)
+	ctx := context.Background()
+	user, first, err := svc.Register(ctx, "password-change@example.com", testPassword, "127.0.0.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, second, err := svc.Login(ctx, user.Email, testPassword, "127.0.0.2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count, err := svc.CountActiveSessions(ctx, user.ID); err != nil || count != 2 {
+		t.Fatalf("active sessions before change = %d, %v; want 2", count, err)
+	}
+	if _, err := svc.ChangePassword(ctx, user.ID, "wrong old password", "new password"); !errors.Is(err, iam.ErrPasswordIncorrect) {
+		t.Fatalf("ChangePassword(wrong old) = %v, want ErrPasswordIncorrect", err)
+	}
+	if count, err := svc.CountActiveSessions(ctx, user.ID); err != nil || count != 2 {
+		t.Fatalf("wrong old password changed session state: count=%d err=%v", count, err)
+	}
+	if _, _, err := svc.ResolveSession(ctx, first.Token); err != nil {
+		t.Fatalf("wrong old password invalidated first session: %v", err)
+	}
+	changed, err := svc.ChangePassword(ctx, user.ID, testPassword, "new password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed.AuthVersion != user.AuthVersion+1 {
+		t.Fatalf("auth_version after change=%d, want %d", changed.AuthVersion, user.AuthVersion+1)
+	}
+	if count, err := svc.CountActiveSessions(ctx, user.ID); err != nil || count != 0 {
+		t.Fatalf("active sessions after change = %d, %v; want 0", count, err)
+	}
+	for _, token := range []string{first.Token, second.Token} {
+		if _, _, err := svc.ResolveSession(ctx, token); !errors.Is(err, iam.ErrSessionInvalid) {
+			t.Fatalf("ResolveSession(old token) = %v, want ErrSessionInvalid", err)
+		}
+	}
+	if _, _, err := svc.Login(ctx, user.Email, testPassword, "127.0.0.3"); !errors.Is(err, iam.ErrInvalidCredentials) {
+		t.Fatalf("Login(old password) = %v, want ErrInvalidCredentials", err)
+	}
+	if _, _, err := svc.Login(ctx, user.Email, "new password", "127.0.0.3"); err != nil {
+		t.Fatalf("Login(new password) = %v, want nil", err)
+	}
+}
+
 func TestSessionExpiryUsesInjectedClock(t *testing.T) {
 	db, _ := isolatedDSN(t)
 	clock := newTestClock()

@@ -51,6 +51,16 @@ func TestAdminServiceRejectsUnverifiedTransport(t *testing.T) {
 	if status.Code(err) != codes.Unauthenticated {
 		t.Fatalf("plaintext admin caller err = %v, want UNAUTHENTICATED", err)
 	}
+	_, err = client.ListProviders(context.Background(), &pb.ListProvidersRequest{OperationId: "provider-op"})
+	if status.Code(err) != codes.Unauthenticated {
+		t.Fatalf("plaintext provider-admin caller err = %v, want UNAUTHENTICATED", err)
+	}
+	_, err = client.CreateProviderCredential(context.Background(), &pb.CreateProviderCredentialRequest{
+		OperationId: "credential-op", ProviderId: "provider", Secret: []byte("provider-secret"),
+	})
+	if status.Code(err) != codes.Unauthenticated {
+		t.Fatalf("plaintext provider-credential caller err = %v, want UNAUTHENTICATED", err)
+	}
 }
 
 func serveAdminGRPC(t *testing.T, srv *Server, dialOptions []grpc.DialOption) (pb.AdminServiceClient, func()) {
@@ -313,6 +323,10 @@ func TestAPIKeyAdminGRPCEndToEndPostgres(t *testing.T) {
 	_, err = pb.NewAdminServiceClient(foreignConn).ListApiKeys(ctx, &pb.ListApiKeysRequest{OperationId: "op-e2e-foreign"})
 	if status.Code(err) != codes.PermissionDenied {
 		t.Fatalf("foreign identity err = %v, want PERMISSION_DENIED", err)
+	}
+	_, err = pb.NewAdminServiceClient(foreignConn).ListProviders(ctx, &pb.ListProvidersRequest{OperationId: "op-provider-foreign"})
+	if status.Code(err) != codes.PermissionDenied {
+		t.Fatalf("foreign provider-admin identity err = %v, want PERMISSION_DENIED", err)
 	}
 	// ConfigService stays open to that same identity: only the management API
 	// is identity-restricted.

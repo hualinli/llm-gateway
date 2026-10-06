@@ -59,11 +59,12 @@ type AdminServiceOptions struct {
 // without the mTLS console check.
 type APIKeyAdminService struct {
 	pb.UnimplementedAdminServiceServer
-	server *Server
-	store  APIKeyStore
-	audit  AuditSink
-	auth   *adminAuthorizer
-	now    func() time.Time
+	server              *Server
+	store               APIKeyStore
+	providerCredentials *ProviderCredentialService
+	audit               AuditSink
+	auth                *adminAuthorizer
+	now                 func() time.Time
 }
 
 // NewAPIKeyAdminService builds the Console-facing gRPC service. It returns the
@@ -82,16 +83,21 @@ func NewAPIKeyAdminService(server *Server, store APIKeyStore, audit AuditSink, o
 	if audit == nil {
 		audit = NopAuditSink{}
 	}
+	providerCredentials, err := NewProviderCredentialService(server, server.providerCredentials, audit)
+	if err != nil {
+		return nil, err
+	}
 	clock := opts.Clock
 	if clock == nil {
 		clock = func() time.Time { return time.Now().UTC() }
 	}
 	inner := &APIKeyAdminService{
-		server: server,
-		store:  store,
-		audit:  audit,
-		auth:   &adminAuthorizer{consoleServiceName: serviceName, allowInsecure: opts.AllowInsecure},
-		now:    clock,
+		server:              server,
+		store:               store,
+		providerCredentials: providerCredentials,
+		audit:               audit,
+		auth:                &adminAuthorizer{consoleServiceName: serviceName, allowInsecure: opts.AllowInsecure},
+		now:                 clock,
 	}
 	return &authorizingAdminService{inner: inner, auth: inner.auth}, nil
 }
@@ -615,10 +621,16 @@ func adminStatusError(err error) error {
 		return status.Errorf(codes.FailedPrecondition, "%v; retry with expected_version=%d", versionErr, versionErr.Current)
 	case errors.Is(err, ErrOperationConflict):
 		return status.Errorf(codes.AlreadyExists, "%v", err)
-	case errors.Is(err, ErrAPIKeyNotFound), errors.Is(err, ErrOrganizationNotFound), errors.Is(err, ErrOperationNotFound):
+	case errors.Is(err, ErrAPIKeyNotFound), errors.Is(err, ErrOrganizationNotFound), errors.Is(err, ErrOperationNotFound), errors.Is(err, ErrProviderNotFound):
 		return status.Error(codes.NotFound, err.Error())
 	case errors.Is(err, ErrAdminInvalidArgument):
 		return status.Error(codes.InvalidArgument, err.Error())
+	case errors.Is(err, ErrProviderAlreadySet):
+		return status.Error(codes.AlreadyExists, "provider already exists")
+	case errors.Is(err, ErrProviderInUse):
+		return status.Error(codes.FailedPrecondition, "provider is referenced by a model route")
+	case errors.Is(err, ErrProviderRouteInvalid), errors.Is(err, ErrInvalidConfig):
+		return status.Error(codes.InvalidArgument, "provider configuration is invalid")
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		return status.Error(codes.Canceled, "request canceled")
 	default:
