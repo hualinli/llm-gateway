@@ -63,6 +63,19 @@ func (f *fakeModelCatalogOrganizations) SetOrganizationModelAllowlist(_ context.
 	if _, exists := f.scopes[orgID]; !exists {
 		return nil, organization.ErrNotFound
 	}
+	if requested != nil {
+		enabled := make(map[string]struct{}, len(f.catalog))
+		for _, item := range f.catalog {
+			if item.Enabled {
+				enabled[item.Model] = struct{}{}
+			}
+		}
+		for _, model := range *requested {
+			if _, ok := enabled[strings.TrimSpace(model)]; !ok {
+				return nil, organization.ErrModelCatalogInvalid
+			}
+		}
+	}
 	f.sets++
 	f.lastSet = cloneModelNames(requested)
 	f.scopes[orgID] = cloneModelNames(requested)
@@ -193,6 +206,32 @@ func TestPlatformOrganizationModelsPreserveNullAndEmptyScopes(t *testing.T) {
 	}
 	if rec := h.orgReq(http.MethodPut, "/api/v1/admin/organizations/77/models", `{"model_allowlist":null}`, admin, true); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"model_allowlist":null`) {
 		t.Fatalf("inherit mutation status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestPlatformOrganizationModelsRejectUnknownAndDisabledWithoutChangingScope(t *testing.T) {
+	h, orgs, _ := modelCatalogHarness(t)
+	orgs.catalog = []organization.PlatformModel{{Model: "gpt-sale", Enabled: true}, {Model: "gpt-disabled", Enabled: false}}
+	original := []string{"gpt-sale"}
+	orgs.scopes[77] = &original
+	admin := h.t03Session(9, "platform@example.com")
+	admin.user.PlatformAdmin = true
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		{name: "unknown", body: `{"model_allowlist":["gpt-unknown"]}`},
+		{name: "disabled", body: `{"model_allowlist":["gpt-disabled"]}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			response := h.orgReq(http.MethodPut, "/api/v1/admin/organizations/77/models", tc.body, admin, true)
+			if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "enabled in the platform catalog") {
+				t.Fatalf("rejected %s scope status=%d body=%s", tc.name, response.Code, response.Body.String())
+			}
+			if orgs.sets != 0 || orgs.scopes[77] == nil || !reflect.DeepEqual(*orgs.scopes[77], original) {
+				t.Fatalf("rejected %s scope changed stored value: sets=%d scope=%v", tc.name, orgs.sets, orgs.scopes[77])
+			}
+		})
 	}
 }
 
