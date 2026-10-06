@@ -15,15 +15,17 @@ import (
 // the real OrganizationService contract, and the assertion is always made on
 // the query the store actually received.
 
+type usageBodyItem struct {
+	ExecutionID      string  `json:"execution_id"`
+	UserID           *string `json:"user_id"`
+	KeyID            *string `json:"key_id"`
+	ChargeMicro      *string `json:"charge_micro"`
+	SettlementStatus string  `json:"settlement_status"`
+}
+
 type usageBody struct {
-	Items []struct {
-		ExecutionID      string  `json:"execution_id"`
-		UserID           *string `json:"user_id"`
-		KeyID            *string `json:"key_id"`
-		ChargeMicro      *string `json:"charge_micro"`
-		SettlementStatus string  `json:"settlement_status"`
-	} `json:"items"`
-	NextCursor *string `json:"next_cursor"`
+	Items      []usageBodyItem `json:"items"`
+	NextCursor *string         `json:"next_cursor"`
 	Totals     struct {
 		SalesMicro        string `json:"sales_micro"`
 		SettledCount      int64  `json:"settled_count"`
@@ -321,7 +323,7 @@ func TestUsageFiltersLimitAndCursor(t *testing.T) {
 	}
 }
 
-func TestUsageHidesKeysForOtherUsersAndUnknownOwners(t *testing.T) {
+func TestUsageOrganizationScopeHidesAllKeys(t *testing.T) {
 	h := usageHarness(t)
 	admin := h.t03Session(11, "admin@example.com")
 	otherUser, viewer := int64(10), int64(11)
@@ -342,14 +344,57 @@ func TestUsageHidesKeysForOtherUsersAndUnknownOwners(t *testing.T) {
 	if len(body.Items) != 3 {
 		t.Fatalf("items=%d, want 3", len(body.Items))
 	}
-	if body.Items[0].KeyID != nil {
-		t.Fatalf("other member's key leaked: %+v", body.Items[0])
+	if body.Scope != usageScopeOrganization {
+		t.Fatalf("scope=%q, want organization", body.Scope)
 	}
-	if body.Items[1].KeyID == nil || *body.Items[1].KeyID != ownKey {
-		t.Fatalf("viewer's own key should remain visible: %+v", body.Items[1])
+	for i, item := range body.Items {
+		if item.KeyID != nil {
+			t.Fatalf("organization scope row %d exposes key metadata: %+v", i, item)
+		}
 	}
-	if body.Items[2].KeyID != nil || body.Items[2].UserID != nil {
-		t.Fatalf("key of unknown owner leaked: %+v", body.Items[2])
+	if body.Items[1].UserID == nil || *body.Items[1].UserID != "11" {
+		t.Fatalf("organization response should retain the admin's own usage row: %+v", body.Items[1])
+	}
+	if body.Items[2].UserID != nil {
+		t.Fatalf("unknown-owner row unexpectedly has user metadata: %+v", body.Items[2])
+	}
+
+	// The explicit own-user view has self scope and may include that user's key.
+	// A filtered view for another user remains redacted even to an organization admin.
+	for _, testCase := range []struct {
+		query      string
+		wantUserID string
+		wantKey    *string
+		wantScope  string
+	}{
+		{query: "?user=11", wantUserID: "11", wantKey: &ownKey, wantScope: usageScopeSelf},
+		{query: "?user=10", wantUserID: "10", wantScope: usageScopeOrganization},
+	} {
+		rec = h.orgReq(http.MethodGet, "/api/v1/orgs/2/usage"+testCase.query, "", admin, false)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("usage%s status=%d body=%s", testCase.query, rec.Code, rec.Body.String())
+		}
+		decodeInto(t, rec, &body)
+		if body.Scope != testCase.wantScope || len(body.Items) != 3 {
+			t.Fatalf("usage%s response scope/items=%s/%d", testCase.query, body.Scope, len(body.Items))
+		}
+		var selected *usageBodyItem
+		for i := range body.Items {
+			if body.Items[i].UserID != nil && *body.Items[i].UserID == testCase.wantUserID {
+				selected = &body.Items[i]
+				break
+			}
+		}
+		if selected == nil {
+			t.Fatalf("usage%s response missing user %s: %+v", testCase.query, testCase.wantUserID, body.Items)
+		}
+		if testCase.wantKey == nil {
+			if selected.KeyID != nil {
+				t.Fatalf("usage%s exposed another user's key: %+v", testCase.query, *selected)
+			}
+		} else if selected.KeyID == nil || *selected.KeyID != *testCase.wantKey {
+			t.Fatalf("usage%s own key=%v, want %s", testCase.query, selected.KeyID, *testCase.wantKey)
+		}
 	}
 }
 
