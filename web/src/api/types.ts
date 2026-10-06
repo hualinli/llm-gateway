@@ -1,14 +1,12 @@
 /**
- * Hand-written types for the frozen Console contract
- * (`docs/openapi/console-v1.yaml`, T02 + T03 + T05/T06/T07A billing) and the
- * OpenAI-compatible data plane subset the Playground uses (`GET /v1/models`,
- * `POST /v1/chat/completions`).
+ * Hand-written types for the Console contract (`docs/openapi/console-v1.yaml`)
+ * and the OpenAI-compatible data plane subset used by the Playground.
  *
  * The Console contract is frozen; this file is a transcription, not a schema.
  * Rules kept from the specification:
  *   - every 64-bit id is a JSON *string* (never a number);
  *   - every timestamp is RFC 3339 UTC;
- *   - money (`cost_cents`, `*_micro`) is a decimal string and is never parsed
+ *   - money (`*_micro`) is a decimal string and is never parsed
  *     into a JavaScript number: `formatMicroYuan` in `utils/format.ts` does
  *     string arithmetic so no amount can lose precision on the way to the DOM;
  *   - list responses are `{ items, next_cursor }` with an opaque cursor.
@@ -65,6 +63,16 @@ export interface LoginRequest {
   password: string;
 }
 
+export interface RegisterRequest {
+  email: string;
+  password: string;
+}
+
+export interface ChangePasswordRequest {
+  old_password: string;
+  new_password: string;
+}
+
 /**
  * `POST /api/v1/auth/login` and `GET /api/v1/me` share this exact shape
  * (`LoginResponse` / `MeResponse` in the OpenAPI document).
@@ -80,12 +88,14 @@ export interface SessionResponse {
 export type LoginResponse = SessionResponse;
 /** `GET /api/v1/me` response. */
 export type MeResponse = SessionResponse;
+/** `POST /api/v1/auth/register` creates a personal account and starts a session. */
+export type RegisterResponse = SessionResponse;
 
 /* ----------------------------------------------------------- organizations */
 
 export type OrganizationType = 'personal' | 'enterprise';
 export type OrganizationStatus = 'active' | 'suspended';
-export type OrgRole = 'owner' | 'admin' | 'member' | 'billing_viewer';
+export type OrgRole = 'owner' | 'admin' | 'member';
 
 export interface Organization {
   id: string;
@@ -100,11 +110,182 @@ export interface Organization {
 export interface Membership {
   organization: Organization;
   role: OrgRole;
+  membership_id: string;
+  status: 'active' | 'suspended';
+  monthly_limit_micro: string | null;
 }
 
 export interface MembershipPage {
   items: Membership[];
   next_cursor: string | null;
+}
+
+export interface PlatformOrganization extends Organization {
+  owner_user_id: string;
+  owner_email: string;
+  model_allowlist: string[] | null;
+}
+
+export interface PlatformOrganizationPage {
+  items: PlatformOrganization[];
+  next_cursor: string | null;
+}
+
+export interface CreatePlatformOrganizationRequest {
+  name: string;
+  owner_email: string;
+}
+
+export interface ActivationCode {
+  id: string;
+  enterprise_name: string;
+  status: 'active' | 'redeemed' | 'expired' | 'revoked';
+  expires_at: string | null;
+  created_at: string;
+}
+
+export interface ActivationCodePage {
+  items: ActivationCode[];
+  next_cursor: string | null;
+}
+
+export interface CreateActivationCodeRequest {
+  enterprise_name: string;
+  expires_at?: string;
+}
+
+export interface CreateActivationCodeResponse {
+  id: string;
+  /** Single-use code returned once, shown to the operator for secure handoff. */
+  code: string;
+  enterprise_name: string;
+  status: ActivationCode['status'];
+  expires_at: string | null;
+  created_at: string;
+}
+
+export type JoinRequestStatus = 'pending' | 'approved' | 'rejected';
+
+export interface JoinRequest {
+  id: string;
+  organization_id: string;
+  user_id: string;
+  email: string;
+  display_name: string;
+  status: JoinRequestStatus;
+  monthly_limit_micro: string | null;
+  created_at: string;
+  updated_at: string;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+}
+
+export interface JoinRequestPage {
+  items: JoinRequest[];
+  next_cursor: string | null;
+}
+
+export interface JoinRequestDecisionRequest {
+  status: 'approved' | 'rejected';
+  monthly_limit_micro: string | null;
+}
+
+export interface EffectiveModel {
+  model: string;
+  input_price_micro_per_million: string;
+  output_price_micro_per_million: string;
+}
+
+export interface AccountModelCatalog {
+  organization_id: string;
+  effective_models: EffectiveModel[];
+}
+
+export interface AccountModelSettings extends AccountModelCatalog {
+  model_allowlist: string[] | null;
+}
+
+export interface PlatformModel {
+  model: string;
+  enabled: boolean;
+}
+
+export interface PlatformModelCatalog {
+  items: PlatformModel[];
+}
+
+export interface UpdatePlatformModelCatalogRequest {
+  items: PlatformModel[];
+}
+
+export type ProviderProtocol = 'openai-compatible';
+
+export interface ProviderTimeouts {
+  connect_timeout_ms?: number;
+  tls_handshake_timeout_ms?: number;
+  response_header_timeout_ms?: number;
+  first_byte_timeout_ms?: number;
+  idle_timeout_ms?: number;
+  attempt_timeout_ms?: number;
+  max_event_bytes?: number;
+}
+
+export interface ProviderConfiguration {
+  id: string;
+  protocol: ProviderProtocol;
+  url: string;
+  credential_ref?: string;
+  model?: string;
+  timeouts?: ProviderTimeouts;
+  model_mapping?: Record<string, string>;
+  mock_delay_ms?: number;
+}
+
+export interface ProviderPage {
+  items: ProviderConfiguration[];
+  version: number;
+}
+
+export interface ProviderChangeResponse {
+  provider: ProviderConfiguration;
+  version: number;
+}
+
+export interface ProviderCredential {
+  credential_id: string;
+  credential_ref: string;
+  provider_id: string;
+  fingerprint: string;
+  status: 'active' | 'revoked';
+  created_at: string;
+  revoked_at?: string | null;
+}
+
+export interface ProviderCredentialPage {
+  items: ProviderCredential[];
+}
+
+export interface CreateProviderCredentialResponse {
+  credential: ProviderCredential;
+}
+
+export interface CreateProviderCredentialRequest {
+  provider_id: string;
+  secret: string;
+}
+
+export interface ModelRoutes {
+  routes: Record<string, string[]>;
+  version: number;
+}
+
+export interface UpdateModelRoutesRequest {
+  routes: Record<string, string[]>;
+  expected_version: number;
+}
+
+export interface UpdateAccountModelSettingsRequest {
+  model_allowlist: string[] | null;
 }
 
 /* --------------------------------------------------------------- members */
@@ -113,8 +294,8 @@ export interface Member {
   user_id: string;
   email: string;
   role: OrgRole;
-  /** Only active members are ever listed. */
-  status: 'active';
+  status: 'active' | 'suspended';
+  monthly_limit_micro?: string | null;
   created_at: string;
 }
 
@@ -125,6 +306,12 @@ export interface MemberPage {
 
 export interface ChangeMemberRoleRequest {
   role: OrgRole;
+}
+
+export interface UpdateMemberRequest {
+  role?: 'admin' | 'member';
+  status?: 'active' | 'suspended';
+  monthly_limit_micro?: string | null;
 }
 
 export interface OwnerTransferRequest {
@@ -170,6 +357,7 @@ export interface InvitationPage {
 export interface CreateInvitationRequest {
   email: string;
   role: OrgRole;
+  monthly_limit_micro?: string | null;
   /** 60 … 2592000 seconds; the server clamps and defaults to 259200 (72h). */
   expires_in_seconds?: number;
 }
@@ -186,6 +374,7 @@ export type ApiKeyStatus = 'active' | 'revoked';
 
 export interface ApiKey {
   key_id: string;
+  name: string;
   /** Display prefix only (`sk-xxxxxxxx...`); useless for authentication. */
   prefix: string;
   organization_id: string;
@@ -209,6 +398,7 @@ export interface ApiKeyPage {
 }
 
 export interface CreateApiKeyRequest {
+  name: string;
   owner_user_id?: string;
   expires_at?: string;
   model_allowlist?: string[];
@@ -234,59 +424,95 @@ export interface RevokeApiKeyResponse {
 
 /* ----------------------------------------------------------------- usage */
 
-export type UsageScope = 'self' | 'organization';
-export type UsageAttribution = 'attributed' | 'legacy_unknown_user';
+/* ------------------------------------------------------ formal account use */
 
-export interface UsageEvent {
-  id: string;
+export interface MonthlyUsageItem {
+  execution_id: string;
+  user_id?: string | null;
+  email?: string | null;
   occurred_at: string;
-  organization_id: string | null;
-  user_id: string | null;
-  key_id: string | null;
-  execution_id: string | null;
-  tenant_id: string;
   model: string;
-  provider: string;
-  prompt_tokens: number;
-  completion_tokens: number;
-  total_tokens: number;
-  /** Decimal string; legacy demo consumption (1 token = 1 cent). */
-  cost_cents: string;
-  attribution: UsageAttribution;
+  provider: string | null;
+  prompt_tokens: number | null;
+  completion_tokens: number | null;
+  total_tokens: number | null;
+  /** Set only after an actual settlement; pending rows never use zero. */
+  charge_micro: string | null;
+  settlement_status:
+    | 'settled'
+    | 'manual_settled'
+    | 'pending_dispatch'
+    | 'dispatched'
+    | 'reserved'
+    | 'executing'
+    | 'receipt_recorded'
+    | 'review_required';
+  /** Returned only when this is the signed-in member's own usage. */
+  key_id?: string;
 }
 
-export interface UsageTotals {
-  events: number;
-  prompt_tokens: number;
-  completion_tokens: number;
-  total_tokens: number;
-  cost_cents: string;
-  cost_kind: 'demo_consumption';
-  cost_note: string;
-}
-
-/** The window the server actually applied, after defaults. */
-export interface UsageWindow {
-  from: string;
-  to: string;
-}
-
-export interface UsagePage {
-  items: UsageEvent[];
+export interface MonthlyUsage {
+  items: MonthlyUsageItem[];
+  totals: {
+    sales_micro: string;
+    settled_count: number;
+    pending_count: number;
+    review_required_count: number;
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+    observed_prompt_tokens: number;
+    observed_completion_tokens: number;
+    observed_total_tokens: number;
+    unknown_usage_count: number;
+  };
+  month: string;
+  scope: 'self' | 'organization';
   next_cursor: string | null;
-  totals: UsageTotals;
-  window: UsageWindow;
-  scope: UsageScope;
 }
 
-export interface UsageQuery {
-  from?: string | undefined;
-  to?: string | undefined;
-  model?: string | undefined;
-  user?: string | undefined;
-  key?: string | undefined;
-  limit?: number | undefined;
-  cursor?: string | undefined;
+export interface AccountQuota {
+  organization_id: string;
+  user_id: string;
+  month: string;
+  limit_micro: string | null;
+  used_micro: string;
+  reserved_micro: string;
+  remaining_micro: string | null;
+}
+
+export interface MemberUsageSummaryItem {
+  user_id: string;
+  email: string;
+  sales_micro: string;
+  settled_count: number;
+  pending_count: number;
+  review_required_count: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  unknown_usage_count: number;
+}
+
+export interface MemberUsageSummary {
+  month: string;
+  scope: 'organization';
+  items: MemberUsageSummaryItem[];
+}
+
+export interface PlatformBillingSummary {
+  month: string;
+  sales_micro: string;
+  known_provider_cost_micro: string;
+  unknown_provider_cost_count: number;
+  settled_count: number;
+  pending_count: number;
+  released_count: number;
+  review_required_count: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  unknown_usage_count: number;
 }
 
 /* ----------------------------------------------------------------- audit */
@@ -417,6 +643,9 @@ export interface BillingEntry {
   reason: string | null;
   operator_user_id: string | null;
   request_id: string | null;
+  manual_operation?: 'recharge' | 'reversal' | null;
+  payment_reference?: string | null;
+  reversal_of_entry_id?: string | null;
   posted_at: string;
   created_at: string;
 }
@@ -454,10 +683,10 @@ export interface BillingStatementTotals {
 
 export interface BillingStatement {
   organization_id: string;
-  /** `YYYY-MM` (UTC month). */
+  /** `YYYY-MM` (Asia/Shanghai posted month). */
   month: string;
   currency: 'CNY';
-  timezone: 'UTC';
+  timezone: 'Asia/Shanghai';
   basis: 'posted_at';
   cutoff_at: string;
   generated_at: string;
@@ -470,7 +699,7 @@ export interface BillingStatement {
 }
 
 export interface BillingStatementQuery {
-  /** `YYYY-MM`; defaults to the UTC month containing the current instant. */
+  /** `YYYY-MM`; defaults to the Asia/Shanghai month containing the current instant. */
   month?: string | undefined;
   limit?: number | undefined;
   cursor?: string | undefined;
@@ -481,8 +710,10 @@ export interface BillingStatementQuery {
 export interface AdjustmentRequest {
   /** Strictly positive decimal string of micro-yuan; a JSON number is `400`. */
   amount_micro: string;
-  direction: BillingDirection;
+  type: 'recharge' | 'reversal';
   reason: string;
+  payment_reference?: string;
+  reverse_of?: string;
 }
 
 export interface AdjustmentResponse {

@@ -1,7 +1,7 @@
 /**
- * Playwright configuration for the T08 role-based browser tests.
+ * Playwright configuration for the account and billing browser tests.
  *
- * The backend is **not** started here: `web/e2e/README.md` documents
+ * The backend is **not** started here: `web/README.md` documents
  * `scripts/prepare-backend.sh` (isolated PostgreSQL + Redis + migrations +
  * `console bootstrap --demo-data`) and `scripts/start-console.sh`. Only the Vite
  * dev server is managed by Playwright, and it proxies `/api/v1` and `/v1` to the
@@ -21,8 +21,7 @@ export const GATEWAY_URL = process.env.E2E_GATEWAY_URL ?? 'http://127.0.0.1:1809
 
 export default defineConfig({
   testDir: '.',
-  // The specs share one seeded organization and mutate money/records; a single
-  // worker keeps the run deterministic and the report readable.
+  // The specs create accounts and ledger entries; one worker keeps the run deterministic.
   workers: 1,
   fullyParallel: false,
   forbidOnly: !!process.env.CI,

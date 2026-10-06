@@ -19,6 +19,9 @@ import { consoleApi } from './client';
 import type {
   AdjustmentRequest,
   AdjustmentResponse,
+  AccountQuota,
+  AccountModelCatalog,
+  AccountModelSettings,
   ApiKeyPage,
   AuditEventPage,
   BillingAccount,
@@ -38,20 +41,27 @@ import type {
   InvitationPage,
   MeResponse,
   MemberPage,
+  MemberUsageSummary,
+  MonthlyUsage,
+  JoinRequestDecisionRequest,
   Membership,
   MembershipPage,
+  JoinRequestPage,
   OrgRole,
   OwnerTransferResponse,
   PriceQuery,
   PriceVersion,
   PriceVersionPage,
+  PlatformBillingSummary,
+  PlatformModelCatalog,
   ResolveExceptionRequest,
   ResolveExceptionResponse,
   RevokeApiKeyResponse,
-  UsagePage,
-  UsageQuery,
   User,
   UserStatus,
+  UpdateMemberRequest,
+  UpdateAccountModelSettingsRequest,
+  UpdatePlatformModelCatalogRequest,
 } from './types';
 
 export const queryKeys = {
@@ -61,7 +71,6 @@ export const queryKeys = {
   members: (org: string) => ['org', org, 'members'] as const,
   invitations: (org: string) => ['org', org, 'invitations'] as const,
   keys: (org: string, params: KeyListParams) => ['org', org, 'keys', params] as const,
-  usage: (org: string, query: UsageQuery) => ['org', org, 'usage', query] as const,
   audit: (org: string, cursor: string | null) => ['org', org, 'audit', cursor] as const,
   billingAccount: (org: string) => ['org', org, 'billing', 'account'] as const,
   billingEntries: (org: string, query: BillingEntriesQuery) =>
@@ -72,7 +81,18 @@ export const queryKeys = {
     ['org', org, 'billing', 'exceptions', query] as const,
   billingException: (org: string, exception: string) =>
     ['org', org, 'billing', 'exception', exception] as const,
+  platformBilling: (org: string) => ['platform', 'billing', org] as const,
   prices: (query: PriceQuery) => ['prices', query] as const,
+  monthlyUsage: (org: string, month: string, cursor: string | null, user?: string) =>
+    ['org', org, 'monthly-usage', month, cursor, user ?? null] as const,
+  quota: (org: string) => ['org', org, 'quota'] as const,
+  memberUsageSummary: (org: string, month: string) => ['org', org, 'member-summary', month] as const,
+  accountModels: (org: string) => ['org', org, 'models'] as const,
+  platformModels: ['platform', 'models'] as const,
+  accountModelSettings: (org: string) => ['platform', 'account-models', org] as const,
+  platformBillingSummary: (month: string) => ['platform', 'billing-summary', month] as const,
+  myJoinRequests: ['my-join-requests'] as const,
+  joinRequests: (org: string) => ['org', org, 'join-requests'] as const,
 };
 
 export interface KeyListParams {
@@ -133,13 +153,37 @@ export function useMembers(org: string | null, enabled: boolean): UseQueryResult
 
 export function useChangeMemberRole(
   org: string,
-): UseMutationResult<void, Error, { user: string; role: OrgRole }> {
+): UseMutationResult<void, Error, { user: string; role: OrgRole | UpdateMemberRequest }> {
   const client = useQueryClient();
   return useMutation({
     mutationFn: ({ user, role }) => consoleApi.changeMemberRole(org, user, role),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: queryKeys.members(org) });
       void client.invalidateQueries({ queryKey: ['org', org, 'audit'] });
+    },
+  });
+}
+
+export function useOrgJoinRequests(org: string | null, enabled: boolean): UseQueryResult<JoinRequestPage> {
+  return useQuery({
+    queryKey: queryKeys.joinRequests(org ?? ''),
+    queryFn: () => consoleApi.listJoinRequests(org as string),
+    enabled: enabled && org !== null,
+  });
+}
+
+export function useDecideJoinRequest(org: string): UseMutationResult<
+  unknown,
+  Error,
+  { requestId: string; body: JoinRequestDecisionRequest }
+> {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ requestId, body }) => consoleApi.decideJoinRequest(org, requestId, body),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.joinRequests(org) });
+      void client.invalidateQueries({ queryKey: queryKeys.members(org) });
+      void client.invalidateQueries({ queryKey: queryKeys.me });
     },
   });
 }
@@ -237,15 +281,115 @@ export function useRevokeKey(
 
 /* --------------------------------------------------------------- usage */
 
-export function useUsage(
+export function useMonthlyUsage(
   org: string | null,
-  query: UsageQuery,
+  month: string,
   enabled: boolean,
-): UseQueryResult<UsagePage> {
+  cursor?: string | null,
+  user?: string,
+): UseQueryResult<MonthlyUsage> {
   return useQuery({
-    queryKey: queryKeys.usage(org ?? '', query),
-    queryFn: () => consoleApi.listUsage(org as string, query),
+    queryKey: queryKeys.monthlyUsage(org ?? '', month, cursor ?? null, user),
+    queryFn: () => consoleApi.listMonthlyUsage(org as string, { month, ...(cursor ? { cursor } : {}), ...(user ? { user } : {}) }),
     enabled: enabled && org !== null,
+  });
+}
+
+export function useQuota(org: string | null, enabled: boolean): UseQueryResult<AccountQuota> {
+  return useQuery({
+    queryKey: queryKeys.quota(org ?? ''),
+    queryFn: () => consoleApi.getQuota(org as string),
+    enabled: enabled && org !== null,
+  });
+}
+
+export function useAccountModels(org: string | null, enabled: boolean): UseQueryResult<AccountModelCatalog> {
+  return useQuery({
+    queryKey: queryKeys.accountModels(org ?? ''),
+    queryFn: () => consoleApi.getAccountModels(org as string),
+    enabled: enabled && org !== null,
+  });
+}
+
+export function useSetMemberQuota(org: string): UseMutationResult<
+  void,
+  Error,
+  { user: string; monthlyLimitMicro: string | null }
+> {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ user, monthlyLimitMicro }) => consoleApi.setMemberQuota(org, user, monthlyLimitMicro),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.members(org) });
+      void client.invalidateQueries({ queryKey: ['org', org, 'member-summary'] });
+      void client.invalidateQueries({ queryKey: ['org', org, 'quota'] });
+    },
+  });
+}
+
+export function useMemberUsageSummary(
+  org: string | null,
+  month: string,
+  enabled: boolean,
+): UseQueryResult<MemberUsageSummary> {
+  return useQuery({
+    queryKey: queryKeys.memberUsageSummary(org ?? '', month),
+    queryFn: () => consoleApi.getMemberUsageSummary(org as string, { month }),
+    enabled: enabled && org !== null,
+  });
+}
+
+export function usePlatformBillingSummary(month: string, enabled: boolean): UseQueryResult<PlatformBillingSummary> {
+  return useQuery({
+    queryKey: queryKeys.platformBillingSummary(month),
+    queryFn: () => consoleApi.getPlatformBillingSummary(month),
+    enabled,
+  });
+}
+
+export function usePlatformModels(enabled: boolean): UseQueryResult<PlatformModelCatalog> {
+  return useQuery({
+    queryKey: queryKeys.platformModels,
+    queryFn: () => consoleApi.listPlatformModels(),
+    enabled,
+  });
+}
+
+export function useSavePlatformModels(): UseMutationResult<
+  PlatformModelCatalog,
+  Error,
+  UpdatePlatformModelCatalogRequest
+> {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body) => consoleApi.updatePlatformModels(body),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.platformModels });
+      void client.invalidateQueries({ queryKey: ['org'] });
+    },
+  });
+}
+
+export function useAccountModelSettings(org: string | null, enabled: boolean): UseQueryResult<AccountModelSettings> {
+  return useQuery({
+    queryKey: queryKeys.accountModelSettings(org ?? ''),
+    queryFn: () => consoleApi.getAccountModelSettings(org as string),
+    enabled: enabled && org !== null,
+  });
+}
+
+export function useSaveAccountModelSettings(org: string): UseMutationResult<
+  AccountModelSettings,
+  Error,
+  UpdateAccountModelSettingsRequest
+> {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body) => consoleApi.updateAccountModelSettings(org, body),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.accountModelSettings(org) });
+      void client.invalidateQueries({ queryKey: queryKeys.accountModels(org) });
+    },
   });
 }
 
@@ -281,14 +425,11 @@ export function useSetUserStatus(): UseMutationResult<
 
 /* -------------------------------------------------------- organizations */
 
-export function useCreateOrganization(): UseMutationResult<Membership, Error, string> {
-  const client = useQueryClient();
-  return useMutation({
-    mutationFn: (name: string) => consoleApi.createOrganization(name),
-    onSuccess: () => {
-      void client.invalidateQueries({ queryKey: queryKeys.me });
-      void client.invalidateQueries({ queryKey: queryKeys.organizations });
-    },
+export function useMyJoinRequests(enabled: boolean): UseQueryResult<JoinRequestPage> {
+  return useQuery({
+    queryKey: queryKeys.myJoinRequests,
+    queryFn: () => consoleApi.listMyJoinRequests(),
+    enabled,
   });
 }
 
@@ -334,10 +475,15 @@ export function useCreatePrice(): UseMutationResult<
 export function useBillingAccount(
   org: string | null,
   enabled: boolean,
+  platformAdminOnly = false,
 ): UseQueryResult<BillingAccount> {
   return useQuery({
-    queryKey: queryKeys.billingAccount(org ?? ''),
-    queryFn: () => consoleApi.getBillingAccount(org as string),
+    queryKey: platformAdminOnly
+      ? [...queryKeys.platformBilling(org ?? ''), 'account']
+      : queryKeys.billingAccount(org ?? ''),
+    queryFn: () => platformAdminOnly
+      ? consoleApi.getPlatformBillingAccount(org as string)
+      : consoleApi.getBillingAccount(org as string),
     enabled: enabled && org !== null,
   });
 }
@@ -346,10 +492,15 @@ export function useBillingEntries(
   org: string | null,
   query: BillingEntriesQuery,
   enabled: boolean,
+  platformAdminOnly = false,
 ): UseQueryResult<BillingEntryPage> {
   return useQuery({
-    queryKey: queryKeys.billingEntries(org ?? '', query),
-    queryFn: () => consoleApi.listBillingEntries(org as string, query),
+    queryKey: platformAdminOnly
+      ? [...queryKeys.platformBilling(org ?? ''), 'entries', query]
+      : queryKeys.billingEntries(org ?? '', query),
+    queryFn: () => platformAdminOnly
+      ? consoleApi.listPlatformBillingEntries(org as string, query)
+      : consoleApi.listBillingEntries(org as string, query),
     enabled: enabled && org !== null,
   });
 }
@@ -370,10 +521,15 @@ export function useBillingExceptions(
   org: string | null,
   query: BillingExceptionsQuery,
   enabled: boolean,
+  platformAdminOnly = false,
 ): UseQueryResult<BillingExceptionPage> {
   return useQuery({
-    queryKey: queryKeys.billingExceptions(org ?? '', query),
-    queryFn: () => consoleApi.listBillingExceptions(org as string, query),
+    queryKey: platformAdminOnly
+      ? [...queryKeys.platformBilling(org ?? ''), 'exceptions', query]
+      : queryKeys.billingExceptions(org ?? '', query),
+    queryFn: () => platformAdminOnly
+      ? consoleApi.listPlatformBillingExceptions(org as string, query)
+      : consoleApi.listBillingExceptions(org as string, query),
     enabled: enabled && org !== null,
   });
 }
@@ -382,10 +538,15 @@ export function useBillingException(
   org: string | null,
   exception: string | null,
   enabled: boolean,
+  platformAdminOnly = false,
 ): UseQueryResult<BillingExceptionDetail> {
   return useQuery({
-    queryKey: queryKeys.billingException(org ?? '', exception ?? ''),
-    queryFn: () => consoleApi.getBillingException(org as string, exception as string),
+    queryKey: platformAdminOnly
+      ? [...queryKeys.platformBilling(org ?? ''), 'exception', exception ?? '']
+      : queryKeys.billingException(org ?? '', exception ?? ''),
+    queryFn: () => platformAdminOnly
+      ? consoleApi.getPlatformBillingException(org as string, exception as string)
+      : consoleApi.getBillingException(org as string, exception as string),
     enabled: enabled && org !== null && exception !== null,
   });
 }
@@ -408,6 +569,7 @@ export function useAdjustBillingAccount(): UseMutationResult<
     onSuccess: (_result, variables) => {
       void client.invalidateQueries({ queryKey: queryKeys.billingAccount(variables.org) });
       void client.invalidateQueries({ queryKey: ['org', variables.org, 'billing'] });
+      void client.invalidateQueries({ queryKey: queryKeys.platformBilling(variables.org) });
     },
   });
 }
@@ -424,8 +586,12 @@ export function useResolveBillingException(
     mutationFn: ({ exception, body }) => consoleApi.resolveBillingException(exception, body),
     onSuccess: (_result, variables) => {
       void client.invalidateQueries({ queryKey: ['org', org, 'billing'] });
+      void client.invalidateQueries({ queryKey: queryKeys.platformBilling(org) });
       void client.invalidateQueries({
         queryKey: queryKeys.billingException(org, variables.exception),
+      });
+      void client.invalidateQueries({
+        queryKey: [...queryKeys.platformBilling(org), 'exception', variables.exception],
       });
     },
   });

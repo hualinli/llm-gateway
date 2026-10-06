@@ -24,10 +24,12 @@ export interface SessionValue {
   error: ApiError | null;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
+  register: (email: string, password: string) => Promise<void>;
+  changePassword: (oldPassword: string, newPassword: string) => Promise<void>;
   logout: () => Promise<void>;
   /** Navigate to another organization and drop its siblings' cached data. */
   switchOrg: (orgId: string) => void;
-  refresh: () => void;
+  refresh: () => Promise<void>;
 }
 
 const SessionContext = createContext<SessionValue | null>(null);
@@ -94,6 +96,25 @@ export function SessionProvider({ children }: { children: ReactNode }): ReactNod
     [queryClient],
   );
 
+  const register = useCallback(
+    async (email: string, password: string) => {
+      const session = await consoleApi.register(email, password);
+      queryClient.setQueryData(queryKeys.me, session);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.organizations });
+    },
+    [queryClient],
+  );
+
+  const changePassword = useCallback(
+    async (oldPassword: string, newPassword: string) => {
+      await consoleApi.changePassword(oldPassword, newPassword);
+      consoleApi.clearCsrfToken();
+      queryClient.clear();
+      navigate('/login', { replace: true, state: { passwordChanged: true } });
+    },
+    [navigate, queryClient],
+  );
+
   const logout = useCallback(async () => {
     try {
       await consoleApi.logout();
@@ -114,8 +135,8 @@ export function SessionProvider({ children }: { children: ReactNode }): ReactNod
     [navigate, queryClient],
   );
 
-  const refresh = useCallback(() => {
-    void meQuery.refetch();
+  const refresh = useCallback(async () => {
+    await meQuery.refetch();
   }, [meQuery]);
 
   const error = meQuery.isError ? toApiError(meQuery.error) : null;
@@ -129,11 +150,13 @@ export function SessionProvider({ children }: { children: ReactNode }): ReactNod
       error: unauthorized ? null : error,
       isAuthenticated: meQuery.data !== undefined,
       login,
+      register,
+      changePassword,
       logout,
       switchOrg,
       refresh,
     }),
-    [error, login, logout, meQuery.data, meQuery.isPending, refresh, switchOrg, unauthorized],
+    [error, login, register, changePassword, logout, meQuery.data, meQuery.isPending, refresh, switchOrg, unauthorized],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

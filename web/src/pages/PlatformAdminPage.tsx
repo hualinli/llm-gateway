@@ -1,222 +1,170 @@
-/**
- * Platform-administrator surface.
- *
- * The frozen contract only has two platform-admin endpoints — create a
- * controlled user and activate/disable a user — so this page wires exactly
- * those. There is **no** user-list endpoint, so no table is rendered: a fake
- * list would be a lie.
- */
-
 import { useState, type ReactNode } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
   App as AntdApp,
   Button,
   Card,
+  Col,
+  DatePicker,
   Form,
   Input,
+  Modal,
   Result,
-  Select,
+  Row,
   Space,
-  Switch,
+  Table,
+  Tag,
   Typography,
 } from 'antd';
+import { CopyOutlined } from '@ant-design/icons';
 
-import { useCreateUser, useSetUserStatus } from '../api/queries';
-import type { User, UserStatus } from '../api/types';
-import { ErrorView, errorSummary } from '../components/states';
-import { ContractGap, PageHeader } from '../components/PageHeader';
+import { consoleApi } from '../api/client';
+import type { ActivationCode, CreateActivationCodeResponse, PlatformOrganization } from '../api/types';
+import { PageHeader } from '../components/PageHeader';
+import { DataState, ErrorView } from '../components/states';
 import { useSession } from '../session/SessionProvider';
 import { formatTimestamp } from '../utils/format';
 
-interface CreateUserForm {
-  email: string;
-  password: string;
-  platform_admin: boolean;
-  organizations?: string[];
-}
+interface EnterpriseForm { name: string; owner_email: string }
+interface CodeForm { enterprise_name: string; expires_at?: Date }
 
 export function PlatformAdminPage(): ReactNode {
-  const { me, memberships } = useSession();
+  const { me } = useSession();
   const { message } = AntdApp.useApp();
-  const createUser = useCreateUser();
-  const setStatus = useSetUserStatus();
-  const [createForm] = Form.useForm<CreateUserForm>();
-  const [statusForm] = Form.useForm<{ user: string; status: UserStatus }>();
-  const [lastCreated, setLastCreated] = useState<User | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<User | null>(null);
+  const client = useQueryClient();
+  const [enterpriseForm] = Form.useForm<EnterpriseForm>();
+  const [codeForm] = Form.useForm<CodeForm>();
+  const [freshCode, setFreshCode] = useState<CreateActivationCodeResponse | null>(null);
+
+  const organizations = useQuery({
+    queryKey: ['platform', 'organizations'],
+    queryFn: () => consoleApi.listPlatformOrganizations({ limit: 100 }),
+    enabled: me?.user.platform_admin === true,
+  });
+  const codes = useQuery({
+    queryKey: ['platform', 'activation-codes'],
+    queryFn: () => consoleApi.listActivationCodes({ limit: 100 }),
+    enabled: me?.user.platform_admin === true,
+  });
+  const createEnterprise = useMutation({
+    mutationFn: (body: EnterpriseForm) => consoleApi.createPlatformOrganization(body),
+    onSuccess: async (membership) => {
+      await client.invalidateQueries({ queryKey: ['platform', 'organizations'] });
+      enterpriseForm.resetFields();
+      message.success(`已创建企业账户「${membership.organization.name}」`);
+    },
+  });
+  const createCode = useMutation({
+    mutationFn: (body: { enterprise_name: string; expires_at?: string }) => consoleApi.createActivationCode(body),
+    onSuccess: async (result) => {
+      setFreshCode(result);
+      codeForm.resetFields();
+      await client.invalidateQueries({ queryKey: ['platform', 'activation-codes'] });
+      message.success('开户码已生成，请现在安全交给企业负责人。');
+    },
+  });
+  const setStatus = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: 'active' | 'suspended' }) => consoleApi.setOrganizationStatus(id, status),
+    onSuccess: async () => { await client.invalidateQueries({ queryKey: ['platform', 'organizations'] }); },
+  });
 
   if (me && !me.user.platform_admin) {
-    return (
-      <Result
-        status="403"
-        title="需要平台管理员权限"
-        subTitle="users.platform_admin 是用户级标志，与组织角色无关：企业 admin/owner 不是平台管理员。服务端对这些端点固定返回 403 forbidden。"
-      />
-    );
+    return <Result status="warning" title="此工作区仅供平台管理员使用" subTitle="请切换到个人或企业账户继续工作。" />;
   }
 
-  const submitCreate = async (): Promise<void> => {
-    const values = await createForm.validateFields();
-    try {
-      const user = await createUser.mutateAsync({
-        email: values.email.trim(),
-        password: values.password,
-        platform_admin: values.platform_admin,
-        ...(values.organizations && values.organizations.length > 0
-          ? { organizations: values.organizations }
-          : {}),
-      });
-      setLastCreated(user);
-      createForm.resetFields();
-      message.success(`已创建用户 ${user.email}`);
-    } catch {
-      // Rendered inline.
-    }
+  const submitEnterprise = async (): Promise<void> => {
+    const values = await enterpriseForm.validateFields();
+    createEnterprise.mutate({ name: values.name.trim(), owner_email: values.owner_email.trim() });
   };
-
-  const submitStatus = async (): Promise<void> => {
-    const values = await statusForm.validateFields();
-    try {
-      const user = await setStatus.mutateAsync({
-        userId: values.user.trim(),
-        status: values.status,
-      });
-      setLastUpdated(user);
-      message.success(`${user.email} 已设为 ${user.status}`);
-      if (values.status === 'disabled') {
-        message.warning('禁用会递增 auth_version：该用户所有已存在的会话立即失效。');
-      }
-    } catch (error) {
-      message.error(`状态变更失败 — ${errorSummary(error)}`);
-    }
+  const submitCode = async (): Promise<void> => {
+    const values = await codeForm.validateFields();
+    createCode.mutate({
+      enterprise_name: values.enterprise_name.trim(),
+      ...(values.expires_at ? { expires_at: values.expires_at.toISOString() } : {}),
+    });
   };
 
   return (
-    <Space direction="vertical" size={16} style={{ width: '100%' }}>
-      <PageHeader
-        title="平台管理"
-        description="仅 users.platform_admin 可用；每个动作都会写入审计（actor / target / outcome / request_id）。"
-      />
-
-      <Alert
-        type="info"
-        showIcon
-        message="契约只提供两个平台端点"
-        description="POST /api/v1/admin/users（创建受控用户）与 POST /api/v1/admin/users/{user}/status（启用/禁用）。"
-      />
-
-      <Card size="small" title="创建受控用户">
-        <Form<CreateUserForm>
-          form={createForm}
-          layout="vertical"
-          initialValues={{ platform_admin: false }}
-          style={{ maxWidth: 560 }}
-        >
-          <Form.Item
-            name="email"
-            label="邮箱"
-            rules={[{ required: true, type: 'email', message: '请输入合法邮箱' }]}
-          >
-            <Input placeholder="member@example.com" autoComplete="off" />
-          </Form.Item>
-          <Form.Item
-            name="password"
-            label="初始密码"
-            rules={[{ required: true, min: 8, message: '至少 8 位' }]}
-            extra="只通过请求体发送一次；服务端存 bcrypt 哈希，审计与日志都不记录它。"
-          >
-            <Input.Password autoComplete="new-password" />
-          </Form.Item>
-          <Form.Item name="platform_admin" label="平台管理员" valuePropName="checked">
-            <Switch />
-          </Form.Item>
-          <Form.Item
-            name="organizations"
-            label="加入组织（member 角色）"
-            extra="只能选择你可见的组织；不可见的 id 会让服务端返回 404 且不创建用户。"
-          >
-            <Select
-              mode="multiple"
-              allowClear
-              placeholder="可留空"
-              options={memberships.map((membership) => ({
-                value: membership.organization.id,
-                label: `${membership.organization.name}（id=${membership.organization.id}）`,
-              }))}
-            />
-          </Form.Item>
-          <Button type="primary" loading={createUser.isPending} onClick={() => void submitCreate()}>
-            创建用户
-          </Button>
-        </Form>
-        {createUser.isError ? (
-          <div style={{ marginTop: 12 }}>
-            <ErrorView error={createUser.error} title="创建用户失败" />
-          </div>
-        ) : null}
-        {lastCreated ? (
-          <Alert
-            style={{ marginTop: 12 }}
-            type="success"
-            showIcon
-            message={`已创建 ${lastCreated.email}（user_id=${lastCreated.id}）`}
-            description={`status=${lastCreated.status} · platform_admin=${String(lastCreated.platform_admin)} · created_at=${formatTimestamp(lastCreated.created_at)}`}
-          />
-        ) : null}
+    <Space direction="vertical" size={18} style={{ width: '100%' }}>
+      <PageHeader title="企业与开户" description="开通企业账户、管理账户状态并安全发放开户码。" />
+      <Row gutter={[16, 16]}>
+        <Col xs={24} xl={12}>
+          <Card title="直接创建企业账户" data-testid="platform-enterprise-create">
+            <Form form={enterpriseForm} layout="vertical" onFinish={() => void submitEnterprise()}>
+              <Form.Item name="name" label="企业名称" rules={[{ required: true, max: 120, message: '请输入企业名称' }]}>
+                <Input />
+              </Form.Item>
+              <Form.Item name="owner_email" label="负责人邮箱" rules={[{ required: true, type: 'email', message: '请输入已注册用户的邮箱' }]}>
+                <Input autoComplete="email" />
+              </Form.Item>
+              <Button type="primary" htmlType="submit" loading={createEnterprise.isPending}>创建企业账户</Button>
+            </Form>
+            {createEnterprise.isError ? <div style={{ marginTop: 12 }}><ErrorView error={createEnterprise.error} title="企业账户未创建" /></div> : null}
+          </Card>
+        </Col>
+        <Col xs={24} xl={12}>
+          <Card title="生成开户码" data-testid="platform-activation-create">
+            <Form form={codeForm} layout="vertical" onFinish={() => void submitCode()}>
+              <Form.Item name="enterprise_name" label="企业名称" rules={[{ required: true, max: 120, message: '请输入企业名称' }]}>
+                <Input />
+              </Form.Item>
+              <Form.Item name="expires_at" label="有效期至（可选）">
+                <DatePicker showTime style={{ width: '100%' }} />
+              </Form.Item>
+              <Button type="primary" htmlType="submit" loading={createCode.isPending}>生成一次性开户码</Button>
+            </Form>
+            {createCode.isError ? <div style={{ marginTop: 12 }}><ErrorView error={createCode.error} title="开户码未生成" /></div> : null}
+          </Card>
+        </Col>
+      </Row>
+      <Card title="平台账户" data-testid="platform-organizations">
+        <DataState query={organizations} emptyDescription="还没有企业或个人账户。">
+          {(page) => <Table<PlatformOrganization>
+            rowKey="id"
+            size="middle"
+            pagination={{ pageSize: 10 }}
+            dataSource={page.items}
+            columns={[
+              { title: '账户', dataIndex: 'name', render: (name: string, row) => <Space direction="vertical" size={0}><Typography.Text strong>{name}</Typography.Text><Typography.Text type="secondary">{row.type === 'personal' ? '个人账户' : '企业账户'}</Typography.Text></Space> },
+              { title: '负责人', dataIndex: 'owner_email' },
+              { title: '可用模型', dataIndex: 'model_allowlist', render: (models: string[] | null) => models === null ? '跟随平台目录' : models.length ? models.join('、') : '未开放模型' },
+              { title: '状态', dataIndex: 'status', render: (status: string) => <Tag color={status === 'active' ? 'green' : 'red'}>{status === 'active' ? '正常' : '已暂停'}</Tag> },
+              { title: '开通时间', dataIndex: 'created_at', render: (value: string) => formatTimestamp(value) },
+              { title: '操作', key: 'action', render: (_, row) => <Button size="small" danger={row.status === 'active'} loading={setStatus.isPending} onClick={() => setStatus.mutate({ id: row.id, status: row.status === 'active' ? 'suspended' : 'active' })}>{row.status === 'active' ? '暂停账户' : '恢复账户'}</Button> },
+            ]}
+          />}
+        </DataState>
+        {setStatus.isError ? <div style={{ marginTop: 12 }}><ErrorView error={setStatus.error} title="账户状态未更新" /></div> : null}
       </Card>
-
-      <Card size="small" title="启用 / 禁用用户">
-        <Form<{ user: string; status: UserStatus }>
-          form={statusForm}
-          layout="inline"
-          initialValues={{ status: 'disabled' }}
-          style={{ rowGap: 8 }}
-        >
-          <Form.Item
-            name="user"
-            label="user_id"
-            rules={[{ required: true, pattern: /^[1-9][0-9]*$/, message: '十进制字符串 id' }]}
-          >
-            <Input placeholder="例如 3" style={{ width: 160 }} />
-          </Form.Item>
-          <Form.Item name="status" label="状态" rules={[{ required: true }]}>
-            <Select
-              style={{ width: 140 }}
-              options={[
-                { value: 'disabled', label: 'disabled' },
-                { value: 'active', label: 'active' },
-              ]}
-            />
-          </Form.Item>
-          <Button type="primary" loading={setStatus.isPending} onClick={() => void submitStatus()}>
-            提交
-          </Button>
-        </Form>
-        {setStatus.isError ? (
-          <div style={{ marginTop: 12 }}>
-            <ErrorView error={setStatus.error} title="状态变更失败" />
-          </div>
-        ) : null}
-        {lastUpdated ? (
-          <Alert
-            style={{ marginTop: 12 }}
-            type="success"
-            showIcon
-            message={`${lastUpdated.email} 现在是 ${lastUpdated.status}`}
-            description={`updated_at=${formatTimestamp(lastUpdated.updated_at)}。重新启用不会恢复旧会话。`}
-          />
-        ) : null}
+      <Card title="已发放的开户码" data-testid="platform-activation-codes">
+        <Alert style={{ marginBottom: 16 }} type="info" showIcon message="开户码只在生成时显示一次。" description="请通过你们认可的安全渠道交给负责人；列表不保存或再次显示完整代码。" />
+        <DataState query={codes} emptyDescription="还没有发放开户码。">
+          {(page) => <Table<ActivationCode>
+            rowKey="id"
+            size="small"
+            pagination={{ pageSize: 10 }}
+            dataSource={page.items}
+            columns={[
+              { title: '企业', dataIndex: 'enterprise_name' },
+              { title: '状态', dataIndex: 'status', render: (status: string) => <Tag>{status === 'active' ? '未使用' : status === 'redeemed' ? '已兑换' : status === 'expired' ? '已过期' : '已撤销'}</Tag> },
+              { title: '有效期', dataIndex: 'expires_at', render: (value: string | null) => value ? formatTimestamp(value) : '长期有效' },
+              { title: '创建时间', dataIndex: 'created_at', render: (value: string) => formatTimestamp(value) },
+            ]}
+          />}
+        </DataState>
       </Card>
-
-      <Typography.Text type="secondary">
-        当前身份：{me?.user.email ?? '—'}（user_id={me?.user.id ?? '—'}）
-      </Typography.Text>
-
-      <ContractGap title="没有用户列表 / 组织列表 / 充值端点">
-        GET /api/v1/admin/users 不存在：平台管理员无法在界面上枚举用户，只能凭已知
-        user_id 操作。“管理员额度调整”需要 T05/T06 的账本端点，本页不提供任何充值与价格控件。
-      </ContractGap>
+      <Modal title="一次性开户码" open={freshCode !== null} onCancel={() => setFreshCode(null)} footer={<Button type="primary" onClick={() => setFreshCode(null)}>完成</Button>} destroyOnHidden>
+        {freshCode ? <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          <Alert type="warning" showIcon message="关闭后无法再次查看完整代码。" />
+          <Typography.Text strong>{freshCode.enterprise_name}</Typography.Text>
+          <Input.Password readOnly visibilityToggle={false} value={freshCode.code} aria-label="一次性开户码" />
+          <Button icon={<CopyOutlined />} onClick={async () => {
+            try { await navigator.clipboard.writeText(freshCode.code); message.success('已复制开户码'); }
+            catch { message.error('复制失败，请安全记录后再关闭。'); }
+          }}>复制开户码</Button>
+        </Space> : null}
+      </Modal>
     </Space>
   );
 }

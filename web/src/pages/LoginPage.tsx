@@ -1,14 +1,5 @@
-/**
- * Login page: `POST /api/v1/auth/login`.
- *
- * The password never leaves this component; the response's `csrf_token` is
- * handed to the API client (memory only) and the HttpOnly `gw_session` cookie
- * is set by the browser. A 401 here is a form error, not an expired session:
- * no redirect loop.
- */
-
 import { useState, type ReactNode } from 'react';
-import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Alert, Button, Card, Form, Input, Space, Typography } from 'antd';
 import { LockOutlined, UserOutlined } from '@ant-design/icons';
 
@@ -26,8 +17,8 @@ export function LoginPage(): ReactNode {
   const location = useLocation();
   const [error, setError] = useState<unknown>(null);
   const [submitting, setSubmitting] = useState(false);
-
   const from = (location.state as { from?: string } | null)?.from ?? '/';
+  const passwordChanged = (location.state as { passwordChanged?: boolean } | null)?.passwordChanged;
 
   if (isAuthenticated) return <Navigate to={from} replace />;
 
@@ -45,95 +36,34 @@ export function LoginPage(): ReactNode {
   };
 
   const apiError = asApiError(error);
-  const isCredentialFailure = apiError?.kind === 'unauthorized';
-  const isThrottled = apiError?.kind === 'rate_limited';
-
   return (
     <div className="app-centered">
-      <Card style={{ width: '100%', maxWidth: 420 }}>
+      <Card style={{ width: '100%', maxWidth: 440 }}>
         <Space direction="vertical" size={4} style={{ width: '100%' }}>
-          <Typography.Title level={3} style={{ marginBottom: 0 }}>
-            LLM Gateway Console
-          </Typography.Title>
-          <Typography.Text type="secondary">
-            统一接入模型 API，管理团队权限、调用用量与费用。
-          </Typography.Text>
+          <Typography.Title level={3} style={{ marginBottom: 0 }}>LLM Gateway</Typography.Title>
+          <Typography.Text type="secondary">管理你的模型调用、账户和团队。</Typography.Text>
         </Space>
-
+        {passwordChanged ? <Alert style={{ marginTop: 16 }} type="success" showIcon message="密码已更新，请重新登录。" /> : null}
         <Form<LoginForm>
           layout="vertical"
-          onFinish={(values) => {
-            void submit(values);
-          }}
           requiredMark={false}
-          style={{ marginTop: 16 }}
+          style={{ marginTop: 18 }}
           disabled={submitting || isLoading}
+          onFinish={(values) => void submit(values)}
         >
-          <Form.Item
-            name="email"
-            label="邮箱"
-            rules={[{ required: true, type: 'email', message: '请输入合法邮箱' }]}
-          >
-            <Input
-              prefix={<UserOutlined />}
-              placeholder="admin@example.com"
-              autoComplete="username"
-              autoFocus
-            />
+          <Form.Item name="email" label="邮箱" rules={[{ required: true, type: 'email', message: '请输入有效邮箱' }]}>
+            <Input prefix={<UserOutlined />} autoComplete="username" autoFocus />
           </Form.Item>
-          <Form.Item
-            name="password"
-            label="密码"
-            rules={[{ required: true, message: '请输入密码' }]}
-          >
-            <Input.Password
-              prefix={<LockOutlined />}
-              placeholder="密码"
-              autoComplete="current-password"
-            />
+          <Form.Item name="password" label="密码" rules={[{ required: true, message: '请输入密码' }]}>
+            <Input.Password prefix={<LockOutlined />} autoComplete="current-password" />
           </Form.Item>
-          <Button type="primary" htmlType="submit" block loading={submitting}>
-            登录
-          </Button>
+          <Button type="primary" htmlType="submit" block loading={submitting}>登录</Button>
         </Form>
-
-        <div style={{ marginTop: 16 }}>
-          {isCredentialFailure ? (
-            <Alert
-              type="error"
-              showIcon
-              message="邮箱或密码错误（401 unauthorized）"
-              description={
-                <Typography.Text type="secondary">
-                  code={apiError?.code}
-                  {apiError?.requestId ? ` · request_id=${apiError.requestId}` : ''}
-                  。服务端不区分“邮箱不存在”与“密码错误”。
-                </Typography.Text>
-              }
-            />
-          ) : null}
-          {isThrottled ? (
-            <Alert
-              type="warning"
-              showIcon
-              message="登录被节流（429 rate_limited）"
-              description={
-                <Typography.Text type="secondary">
-                  {apiError?.message}
-                  {apiError?.retryAfterSeconds !== null && apiError?.retryAfterSeconds !== undefined
-                    ? ` · ${apiError.retryAfterSeconds} 秒后可重试`
-                    : ''}
-                </Typography.Text>
-              }
-            />
-          ) : null}
-          {apiError && !isCredentialFailure && !isThrottled ? (
-            <ErrorView error={apiError} title="登录失败" />
-          ) : null}
-        </div>
-
-        <Typography.Paragraph type="secondary" style={{ marginTop: 16, marginBottom: 0 }}>
-          使用管理员提供的账号登录。需要开通账号或重置密码，请联系平台管理员。
+        {apiError?.kind === 'unauthorized' ? (
+          <Alert style={{ marginTop: 16 }} type="error" showIcon message="邮箱或密码不正确。" />
+        ) : apiError ? <div style={{ marginTop: 16 }}><ErrorView error={apiError} title="登录失败" /></div> : null}
+        <Typography.Paragraph type="secondary" style={{ marginTop: 18, marginBottom: 0 }}>
+          还没有账号？<Link to="/register">创建个人账户</Link>
         </Typography.Paragraph>
       </Card>
     </div>

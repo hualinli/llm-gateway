@@ -29,17 +29,18 @@ export function asApiError(error: unknown): ApiError | null {
   });
 }
 
-/** One-line summary of a failed call, for `message.error(...)`: code + message + request id. */
+/** A short, user-facing summary for a failed action. */
 export function errorSummary(error: unknown): string {
   const apiError = asApiError(error);
   if (!apiError) return '未知错误';
-  const parts = [apiError.code, apiError.message];
-  if (apiError.requestId) parts.push(`request_id=${apiError.requestId}`);
-  if (apiError.retryAfterSeconds !== null) parts.push(`Retry-After=${apiError.retryAfterSeconds}s`);
-  return parts.join(' · ');
+  if (apiError.kind === 'unauthorized') return '登录已过期，请重新登录';
+  if (apiError.kind === 'forbidden') return '当前账号无法执行此操作';
+  if (apiError.kind === 'not_found') return '没有找到对应内容';
+  if (apiError.kind === 'conflict') return '内容已变化，请刷新后重试';
+  return '暂时无法完成，请稍后重试';
 }
 
-/** Renders any failed Console/Gateway call, including its correlation id. */
+/** Shows a plain recovery message when a page cannot load. */
 export function ErrorView({
   error,
   onRetry,
@@ -56,24 +57,12 @@ export function ErrorView({
     const forbidden = apiError.kind === 'forbidden';
     return (
       <Result
-        status={forbidden ? '403' : '404'}
-        title={title ?? (forbidden ? '没有权限（403 forbidden）' : '资源不存在或不可见（404 not_found）')}
+        status="warning"
+        title={title ?? (forbidden ? '当前账号无法访问' : '没有找到对应内容')}
         subTitle={
           <Space direction="vertical" size={2}>
-            <Typography.Text>{apiError.message}</Typography.Text>
-            <Typography.Text type="secondary">
-              code={apiError.code}
-              {apiError.requestId ? ` · request_id=${apiError.requestId}` : ''}
-            </Typography.Text>
-            {forbidden ? (
-              <Typography.Text type="secondary">
-                该操作由服务端权限矩阵判定：界面隐藏按钮不构成授权，服务端始终是唯一执行点。
-              </Typography.Text>
-            ) : (
-              <Typography.Text type="secondary">
-                非成员访问组织资源时服务端固定返回 404，以避免泄露组织是否存在。
-              </Typography.Text>
-            )}
+            <Typography.Text>{forbidden ? '请切换到有权限的账户，或联系企业负责人。' : '请检查账户选择或返回工作台。'}</Typography.Text>
+            {apiError.requestId ? <Typography.Text type="secondary">支持编号：{apiError.requestId}</Typography.Text> : null}
           </Space>
         }
         extra={
@@ -90,9 +79,9 @@ export function ErrorView({
   if (apiError.kind === 'unauthorized') {
     return (
       <Result
-        status="403"
+        status="warning"
         title="会话已失效"
-        subTitle="正在跳转到登录页…"
+        subTitle="正在返回登录页面…"
       />
     );
   }
@@ -104,14 +93,8 @@ export function ErrorView({
       message={title ?? errorKindLabel(apiError.kind)}
       description={
         <Space direction="vertical" size={2}>
-          <Typography.Text>{apiError.message}</Typography.Text>
-          <Typography.Text type="secondary">
-            code={apiError.code}
-            {apiError.requestId ? ` · request_id=${apiError.requestId}` : ' · request_id 未返回'}
-            {apiError.retryAfterSeconds !== null
-              ? ` · Retry-After=${apiError.retryAfterSeconds}s`
-              : ''}
-          </Typography.Text>
+          <Typography.Text>{errorSummary(error)}</Typography.Text>
+          {apiError.requestId ? <Typography.Text type="secondary">支持编号：{apiError.requestId}</Typography.Text> : null}
         </Space>
       }
       action={
@@ -164,8 +147,8 @@ export function StaleBanner({
       style={{ marginBottom: 12 }}
       message={
         <Space size={8} wrap>
-          <span>数据可能已过期（stale）</span>
-          <Tag color="orange">{isFetching ? '正在刷新…' : `最后更新 ${formatLocalTime(dataUpdatedAt)}`}</Tag>
+          <span>数据可能已更新</span>
+          <Tag color="orange">{isFetching ? '正在刷新…' : `更新于 ${formatLocalTime(dataUpdatedAt)}`}</Tag>
         </Space>
       }
       action={

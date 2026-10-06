@@ -19,9 +19,9 @@ import {
   formatMicroYuan,
   formatMicroYuanWithUnit,
   formatSignedMicroYuan,
-  isUtcMonth,
-  shiftUtcMonth,
-  utcMonthOf,
+  isBusinessMonth,
+  shiftBusinessMonth,
+  beijingMonthOf,
 } from '../utils/format';
 
 const CSRF = 'csrf-token-from-body';
@@ -116,28 +116,28 @@ describe('formatMicroYuan (string arithmetic, no Number())', () => {
   });
 });
 
-describe('UTC month helpers', () => {
+describe('Beijing business month helpers', () => {
   it('accepts only the exact YYYY-MM shape the contract accepts', () => {
-    expect(isUtcMonth('2026-09')).toBe(true);
-    expect(isUtcMonth('2026-9')).toBe(false);
-    expect(isUtcMonth('2026-13')).toBe(false);
-    expect(isUtcMonth('2026-09-01')).toBe(false);
-    expect(isUtcMonth('')).toBe(false);
+    expect(isBusinessMonth('2026-09')).toBe(true);
+    expect(isBusinessMonth('2026-9')).toBe(false);
+    expect(isBusinessMonth('2026-13')).toBe(false);
+    expect(isBusinessMonth('2026-09-01')).toBe(false);
+    expect(isBusinessMonth('')).toBe(false);
   });
 
   it('shifts months across year boundaries', () => {
-    expect(shiftUtcMonth('2026-01', -1)).toBe('2025-12');
-    expect(shiftUtcMonth('2026-12', 1)).toBe('2027-01');
-    expect(shiftUtcMonth('2026-09', 0)).toBe('2026-09');
+    expect(shiftBusinessMonth('2026-01', -1)).toBe('2025-12');
+    expect(shiftBusinessMonth('2026-12', 1)).toBe('2027-01');
+    expect(shiftBusinessMonth('2026-09', 0)).toBe('2026-09');
   });
 
   it('returns a malformed month unchanged instead of repairing it', () => {
-    expect(shiftUtcMonth('2026-9', 1)).toBe('2026-9');
+    expect(shiftBusinessMonth('2026-9', 1)).toBe('2026-9');
   });
 
-  it('derives the current UTC month from an instant', () => {
-    expect(utcMonthOf(new Date('2026-09-30T23:59:59Z'))).toBe('2026-09');
-    expect(utcMonthOf(new Date('2026-10-01T00:00:00Z'))).toBe('2026-10');
+  it('uses Asia/Shanghai at the UTC month boundary', () => {
+    expect(beijingMonthOf(new Date('2026-09-30T15:59:59Z'))).toBe('2026-09');
+    expect(beijingMonthOf(new Date('2026-09-30T16:00:00Z'))).toBe('2026-10');
   });
 
   it('renders a backlog age from the seconds string the server sends', () => {
@@ -326,7 +326,7 @@ describe('billing client', () => {
 
     const result = await client.adjustBillingAccount(
       '2',
-      { amount_micro: '1500000', direction: 'credit', reason: 'goodwill credit' },
+      { amount_micro: '1500000', type: 'recharge', payment_reference: 'bank-2026-1001', reason: '到账记录' },
       'adj-2026-10-01-0001',
     );
 
@@ -338,6 +338,8 @@ describe('billing client', () => {
     const body = JSON.parse(String(init.body)) as Record<string, unknown>;
     expect(body['amount_micro']).toBe('1500000');
     expect(typeof body['amount_micro']).toBe('string');
+    expect(body['type']).toBe('recharge');
+    expect(body['payment_reference']).toBe('bank-2026-1001');
     expect(result.replayed).toBe(false);
   });
 
@@ -349,7 +351,7 @@ describe('billing client', () => {
 
     const result = await client.adjustBillingAccount(
       '2',
-      { amount_micro: '1500000', direction: 'credit', reason: 'goodwill credit' },
+      { amount_micro: '1500000', type: 'recharge', payment_reference: 'bank-2026-1001', reason: '到账记录' },
       'adj-2026-10-01-0001',
     );
 
@@ -367,7 +369,7 @@ describe('billing client', () => {
     await expect(
       client.adjustBillingAccount(
         '2',
-        { amount_micro: '999', direction: 'debit', reason: 'different payload' },
+        { amount_micro: '999', type: 'recharge', payment_reference: 'other-bank-ref', reason: '不同的入账' },
         'adj-2026-10-01-0001',
       ),
     ).rejects.toMatchObject({ kind: 'conflict' });

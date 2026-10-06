@@ -1,5 +1,5 @@
 /**
- * Shared fixtures for the T08 browser tests.
+ * Shared fixtures for the account and billing browser tests.
  *
  * `global-setup.ts` writes `.state.json` with the real identities it seeded
  * through the Console API; every spec loads that file, and if the backend was
@@ -19,6 +19,7 @@ export interface E2EIdentity {
   password: string;
   /** Server-assigned decimal user id. */
   userId: string;
+  personalAccountId?: string;
 }
 
 export interface E2EState {
@@ -29,18 +30,16 @@ export interface E2EState {
   generatedAt: string;
   runId: string;
   admin: E2EIdentity;
+  owner: E2EIdentity;
+  orgAdmin: E2EIdentity;
+  orgAdmin2: E2EIdentity;
+  member: E2EIdentity;
+  applicant: E2EIdentity;
+  invitee: E2EIdentity;
   orgA: { id: string; name: string };
   orgB: { id: string; name: string };
-  /** Enterprise administrator of `orgA` (owner/admin surface, seeded per run). */
-  orgAdmin: E2EIdentity;
-  member: E2EIdentity;
-  viewer: E2EIdentity;
-  /** `Idempotency-Key` of the seeded credit adjustment (stable per run). */
-  adjustmentKey: string;
-  /** Model whose price version the setup published (stable across runs). */
-  priceModel: string;
-  /** Optional: a real Gateway API key when the data plane was configured. */
-  gatewayKey: string | null;
+  controlAvailable: boolean;
+  usageSeeded: boolean;
 }
 
 export const STATE_PATH = join(here, '.state.json');
@@ -48,17 +47,18 @@ export const STATE_PATH = join(here, '.state.json');
 /**
  * Per-role browser sessions captured by global-setup (`storageState`).
  *
- * The specs attach one of these instead of logging in through the form on every
- * test: the Console rate-limits login attempts (429 `rate_limited`, 60s window),
- * and a suite that logs in 25 times would spend its time throttled. Exactly one
- * test per run still performs the real form login (see `member.spec.ts`).
+ * The specs use these captured sessions so each case can focus on a product
+ * workflow. Signup and password changes are also exercised through the real UI.
  */
 export const AUTH_DIR = join(here, '.auth');
 export const AUTH = {
   admin: join(AUTH_DIR, 'admin.json'),
+  owner: join(AUTH_DIR, 'owner.json'),
   orgAdmin: join(AUTH_DIR, 'org-admin.json'),
+  orgAdmin2: join(AUTH_DIR, 'org-admin-2.json'),
   member: join(AUTH_DIR, 'member.json'),
-  viewer: join(AUTH_DIR, 'viewer.json'),
+  applicant: join(AUTH_DIR, 'applicant.json'),
+  invitee: join(AUTH_DIR, 'invitee.json'),
 } as const;
 
 /** An explicitly anonymous browser state (the real login-form test). */
@@ -76,20 +76,22 @@ export function loadState(): E2EState {
   } catch (cause) {
     return {
       backend: false,
-      reason: `e2e/.state.json 不存在或不可读（${String(cause)}）：请用 "npm run e2e" 运行（它会先执行 global-setup），见 web/e2e/README.md`,
+      reason: `e2e/.state.json 不存在或不可读（${String(cause)}）：请用 "npm run e2e" 运行（它会先执行 global-setup），见 web/README.md`,
       consoleBaseUrl: process.env.E2E_CONSOLE_URL ?? 'http://127.0.0.1:18092',
       gatewayBaseUrl: process.env.E2E_GATEWAY_URL ?? 'http://127.0.0.1:18090',
       generatedAt: new Date(0).toISOString(),
       runId: 'unseeded',
       admin: { email: '', password: '', userId: '' },
-      orgA: { id: '', name: 'demo-enterprise-a' },
-      orgB: { id: '', name: 'demo-enterprise-b' },
+      owner: { email: '', password: '', userId: '' },
+      orgA: { id: '', name: '' },
+      orgB: { id: '', name: '' },
       orgAdmin: { email: '', password: '', userId: '' },
+      orgAdmin2: { email: '', password: '', userId: '' },
       member: { email: '', password: '', userId: '' },
-      viewer: { email: '', password: '', userId: '' },
-      adjustmentKey: '',
-      priceModel: 'e2e-model',
-      gatewayKey: null,
+      applicant: { email: '', password: '', userId: '' },
+      invitee: { email: '', password: '', userId: '' },
+      controlAvailable: false,
+      usageSeeded: false,
     };
   }
 }
@@ -100,7 +102,7 @@ export function requireBackend(state: E2EState): void {
     !state.backend,
     state.backend
       ? undefined
-      : `本地 Console 不可用，跳过真实后端用例：${state.reason}（见 web/e2e/README.md，用例保留而不删除）`,
+      : `本地 Console 不可用，跳过真实后端用例：${state.reason}（见 web/README.md）`,
   );
 }
 

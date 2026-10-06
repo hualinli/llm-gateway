@@ -72,8 +72,9 @@ function headersOf(init: RequestInit): Record<string, string> {
 /* ------------------------------------------------------------------ CSRF */
 
 describe('CSRF header behaviour', () => {
-  it('classifies methods exactly like ADR-0002 §2.5', () => {
+  it('classifies state-changing methods for the Console API', () => {
     expect(isUnsafeMethod('POST')).toBe(true);
+    expect(isUnsafeMethod('PUT')).toBe(true);
     expect(isUnsafeMethod('PATCH')).toBe(true);
     expect(isUnsafeMethod('DELETE')).toBe(true);
     expect(isUnsafeMethod('GET')).toBe(false);
@@ -85,7 +86,7 @@ describe('CSRF header behaviour', () => {
 
     await client.changeMemberRole('2', '3', 'admin');
     await client.removeMember('2', '3');
-    await client.createOrganization('acme');
+    await client.createJoinRequest('2', 'Ada');
     await client.logout();
 
     expect(mock).toHaveBeenCalledTimes(4);
@@ -112,7 +113,7 @@ describe('CSRF header behaviour', () => {
 
     await client.me();
     await client.listMembers('2');
-    await client.listUsage('2', { limit: 5 });
+    await client.listMonthlyUsage('2', { limit: 5 });
 
     for (const index of [0, 1, 2]) {
       const { init } = callAt(mock, index);
@@ -155,6 +156,22 @@ describe('CSRF header behaviour', () => {
 
     expect(client.getCsrfToken()).toBeNull();
     expect(headersOf(callAt(mock, 1).init)['X-CSRF-Token']).toBeUndefined();
+  });
+});
+
+describe('platform billing inspection routes', () => {
+  it('uses dedicated platform paths instead of organization-membership paths', async () => {
+    const { client, mock } = harness(() => jsonResponse(200, { items: [], next_cursor: null }));
+
+    await client.getPlatformBillingAccount('acct-42');
+    await client.listPlatformBillingEntries('acct-42', { limit: 80, cursor: 'older', kind: 'credit' });
+    await client.listPlatformBillingExceptions('acct-42', { limit: 20, status: 'open' });
+    await client.getPlatformBillingException('acct-42', 'exception-7');
+
+    expect(callAt(mock, 0).url).toBe('/api/v1/admin/billing/accounts/acct-42');
+    expect(callAt(mock, 1).url).toBe('/api/v1/admin/billing/accounts/acct-42/entries?limit=80&cursor=older&kind=credit');
+    expect(callAt(mock, 2).url).toBe('/api/v1/admin/billing/accounts/acct-42/exceptions?limit=20&status=open');
+    expect(callAt(mock, 3).url).toBe('/api/v1/admin/billing/accounts/acct-42/exceptions/exception-7');
   });
 });
 
@@ -236,7 +253,7 @@ describe('error mapping', () => {
     const missingChannel = harness(() =>
       jsonResponse(503, envelope('unavailable', 'the control channel is not configured')),
     );
-    await expect(missingChannel.client.createKey('2')).rejects.toMatchObject({
+    await expect(missingChannel.client.createKey('2', { name: 'test' })).rejects.toMatchObject({
       kind: 'unavailable',
       code: 'unavailable',
     });
@@ -320,16 +337,11 @@ describe('request building', () => {
   it('encodes path parameters and skips empty query values', async () => {
     const { client, mock } = harness(() => jsonResponse(200, { items: [], next_cursor: null }));
 
-    await client.listUsage('2', {
-      from: '2026-09-30T12:00:00Z',
-      model: '',
-      limit: 20,
-      cursor: undefined,
-    });
+    await client.listMonthlyUsage('2', { month: '2026-09', limit: 20 });
     await client.revokeKey('2', 'key_7f3c1a2b/x');
 
     expect(callAt(mock, 0).url).toBe(
-      '/api/v1/orgs/2/usage?from=2026-09-30T12%3A00%3A00Z&limit=20',
+      '/api/v1/orgs/2/usage?month=2026-09&limit=20',
     );
     expect(callAt(mock, 1).url).toBe('/api/v1/orgs/2/keys/key_7f3c1a2b%2Fx/revoke');
   });
@@ -338,16 +350,16 @@ describe('request building', () => {
     const { client, mock } = harness(() => jsonResponse(201, { key: { key_id: 'key_1' } }));
     client.setCsrfToken(CSRF);
 
-    await client.createKey('2', { operation_id: 'web-1' });
+    await client.createKey('2', { name: 'web app', operation_id: 'web-1' });
 
     const { init } = callAt(mock);
-    expect(init.body).toBe(JSON.stringify({ operation_id: 'web-1' }));
+    expect(init.body).toBe(JSON.stringify({ name: 'web app', operation_id: 'web-1' }));
     expect(headersOf(init)['Content-Type']).toBe('application/json');
   });
 
   it('returns the parsed create-key response so the secret can be shown once', async () => {
     const body = {
-      key: { key_id: 'key_7f3c1a2b', prefix: 'sk-7f3c1a...' },
+      key: { key_id: 'key_7f3c1a2b', name: 'web app', prefix: 'sk-7f3c1a...' },
       secret: 'sk-7f3c1a2b4d5e6f708192a3b4c5d6e7f8',
       secret_returned_once: true,
       replayed: false,
@@ -356,7 +368,7 @@ describe('request building', () => {
     };
     const { client } = harness(() => jsonResponse(201, body));
 
-    const response = await client.createKey('2', {});
+    const response = await client.createKey('2', { name: 'web app' });
     expect(response.secret).toBe(body.secret);
     expect(response.secret_returned_once).toBe(true);
   });

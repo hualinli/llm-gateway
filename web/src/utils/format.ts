@@ -2,14 +2,9 @@
  * Formatting helpers. All money/time rendering goes through here so the app
  * keeps one definition of each unit.
  *
- * Two money worlds exist and are never mixed:
- *   - `cost_cents` (usage) is legacy *demo consumption* (1 token = 1 cent). It is
- *     not a balance and not an invoice amount; the API labels it
- *     `cost_kind: demo_consumption`.
- *   - `*_micro` (billing ledger, account, prices) is real money in micro-yuan
- *     (`1 元 = 1_000_000 µ¥`). Those values are **decimal strings** and are
- *     formatted with string arithmetic below: no amount is ever parsed into a
- *     JavaScript `number`, so no precision can be lost on the way to the DOM.
+ * Money uses micro-yuan (`1 元 = 1_000_000 µ¥`). Values are decimal strings
+ * and are formatted with string arithmetic below, so no amount is parsed into
+ * a JavaScript `number` and no precision is lost on the way to the DOM.
  */
 
 /** RFC 3339 UTC -> `2026-10-01 12:00:00Z`. Returns the raw string if unparsable. */
@@ -31,14 +26,6 @@ export function formatLocalTime(value: string | number | Date | null | undefined
 export function formatNumber(value: number | null | undefined): string {
   if (value === null || value === undefined) return '—';
   return value.toLocaleString('en-US');
-}
-
-/** Decimal string cents -> `1234` (integer cents, no currency symbol invented). */
-export function formatCostCents(value: string | number | null | undefined): string {
-  if (value === null || value === undefined) return '—';
-  const text = typeof value === 'number' ? String(value) : value;
-  if (text === '') return '—';
-  return `${text} 分（演示）`;
 }
 
 /* ------------------------------------------------------------- micro-yuan */
@@ -94,6 +81,25 @@ export function formatMicroExact(value: string | null | undefined): string {
   return `${value} µ¥`;
 }
 
+/** Convert a non-negative yuan input to exact integer micro-yuan without float math. */
+export function yuanToMicro(value: string): string | null {
+  const match = /^([0-9]+)(?:\.([0-9]{1,6}))?$/.exec(value.trim());
+  if (!match) return null;
+  const integer = match[1] ?? '0';
+  const fraction = (match[2] ?? '').padEnd(MICRO_DECIMALS, '0');
+  const combined = `${integer}${fraction}`.replace(/^0+(?=\d)/, '');
+  return combined;
+}
+
+/** Convert micro-yuan to a plain editable yuan string without grouping. */
+export function microToYuanInput(value: string | null | undefined): string {
+  if (value === null || value === undefined || !/^[0-9]+$/.test(value)) return '';
+  const digits = value.padStart(MICRO_DECIMALS + 1, '0');
+  const integer = digits.slice(0, -MICRO_DECIMALS).replace(/^0+(?=\d)/, '');
+  const fraction = digits.slice(-MICRO_DECIMALS).replace(/0+$/, '');
+  return fraction ? `${integer}.${fraction}` : integer;
+}
+
 /**
  * A ledger entry's signed amount. The sign is the `direction` field; the amount
  * itself is always a strictly positive string, so `formatMicroYuan` is applied
@@ -111,34 +117,41 @@ export function formatSignedMicroYuan(
 
 /* --------------------------------------------------------------- months */
 
-const UTC_MONTH_PATTERN = /^[0-9]{4}-(0[1-9]|1[0-2])$/;
+const MONTH_PATTERN = /^[0-9]{4}-(0[1-9]|1[0-2])$/;
 
-/** `true` only for the exact `YYYY-MM` shape the statements endpoint accepts. */
-export function isUtcMonth(value: string): boolean {
-  return UTC_MONTH_PATTERN.test(value);
+/** `true` only for the exact `YYYY-MM` shape used by month filters. */
+export function isBusinessMonth(value: string): boolean {
+  return MONTH_PATTERN.test(value);
 }
 
-/** The UTC month containing `date` (default: now), as `YYYY-MM`. */
-export function utcMonthOf(date: Date = new Date()): string {
-  return date.toISOString().slice(0, 7);
+/** The business consumption month in Asia/Shanghai. */
+export function beijingMonthOf(date: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat('en', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+  }).formatToParts(date);
+  const year = parts.find((part) => part.type === 'year')?.value;
+  const month = parts.find((part) => part.type === 'month')?.value;
+  return year && month ? `${year}-${month}` : date.toISOString().slice(0, 7);
 }
 
 /**
  * Shift a `YYYY-MM` string by whole months (`delta` may be negative).
  * A malformed input is returned unchanged rather than repaired silently.
  */
-export function shiftUtcMonth(month: string, delta: number): string {
-  if (!isUtcMonth(month) || !Number.isFinite(delta)) return month;
+export function shiftBusinessMonth(month: string, delta: number): string {
+  if (!isBusinessMonth(month) || !Number.isFinite(delta)) return month;
   const year = Number(month.slice(0, 4));
   const monthIndex = Number(month.slice(5, 7)) - 1;
   const shifted = new Date(Date.UTC(year, monthIndex + delta, 1));
   return shifted.toISOString().slice(0, 7);
 }
 
-/** `2026-09` -> `2026-09（UTC 月）`. */
-export function formatUtcMonthLabel(month: string | null | undefined): string {
+/** `2026-09` -> `2026-09（北京时间）`. */
+export function formatBusinessMonthLabel(month: string | null | undefined): string {
   if (!month) return '—';
-  return `${month}（UTC 月）`;
+  return `${month}（北京时间）`;
 }
 
 /**

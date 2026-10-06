@@ -1,322 +1,248 @@
-/**
- * Seeds the real backend through the real HTTP API.
- *
- * Nothing here writes to PostgreSQL directly: the Console is the only writer of
- * identity, membership, price and ledger rows, so the fixtures go through
- * `/api/v1` exactly like the browser does (session cookie + CSRF token).
- *
- * Seeded state per run:
- *   - a plain `member` and a read-only `billing_viewer` in `demo-enterprise-a`,
- *     created by the platform admin, invited by the organization owner and
- *     accepted by the invited user — the T08 invitation flow itself;
- *   - one credit adjustment (a stable reason + a per-run `Idempotency-Key`) so
- *     the organization has a billing account and a real ledger row;
- *   - one immutable price version for `e2e-model`.
- *
- * Everything is idempotent enough to re-run: users are created with a per-run
- * suffix, the price publish tolerates `409 conflict`.
- */
-
-import { request, type APIRequestContext, type FullConfig } from '@playwright/test';
+import { request, type APIRequestContext, type APIResponse, type FullConfig } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 
 import type { E2EIdentity, E2EState } from './fixtures';
 import { AUTH, STATE_PATH } from './fixtures';
 
 const CONSOLE_URL = process.env.E2E_CONSOLE_URL ?? 'http://127.0.0.1:18092';
+const GATEWAY_URL = process.env.E2E_GATEWAY_URL ?? 'http://127.0.0.1:18090';
 const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL ?? 't08-admin@example.com';
 const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD ?? 't08-e2e-admin-pw';
 
-const ORG_A_NAME = 'demo-enterprise-a';
-const ORG_B_NAME = 'demo-enterprise-b';
-const PRICE_MODEL = 'e2e-model';
-
-interface LoginResponse {
+interface SessionResponse {
   user: { id: string; email: string; platform_admin: boolean };
-  organizations: Array<{ organization: { id: string; name: string }; role: string }>;
+  organizations: Array<{ organization: { id: string; type: string; name: string } }>;
   csrf_token: string;
 }
 
-async function probe(context: APIRequestContext): Promise<string | null> {
-  try {
-    const response = await context.get('/livez', { timeout: 3_000 });
-    if (!response.ok()) return `GET /livez -> ${response.status()}`;
-    return null;
-  } catch (cause) {
-    return cause instanceof Error ? cause.message : String(cause);
-  }
+interface MembershipResponse {
+  organization: { id: string; name: string };
 }
 
-async function login(
-  context: APIRequestContext,
-  email: string,
-  password: string,
-): Promise<LoginResponse> {
-  const response = await context.post('/api/v1/auth/login', { data: { email, password } });
-  if (!response.ok()) {
-    throw new Error(`login ${email} failed: ${response.status()} ${await response.text()}`);
-  }
-  return (await response.json()) as LoginResponse;
+function csrfHeaders(token: string): Record<string, string> {
+  return { 'X-CSRF-Token': token };
 }
 
-function csrfHeaders(csrf: string): Record<string, string> {
-  return { 'X-CSRF-Token': csrf };
+async function readSession(response: APIResponse, label: string): Promise<SessionResponse> {
+  if (!response.ok()) throw new Error(label + ': ' + response.status() + ' ' + await response.text());
+  return (await response.json()) as SessionResponse;
+}
+
+async function register(context: APIRequestContext, identity: E2EIdentity): Promise<SessionResponse> {
+  const response = await context.post('/api/v1/auth/register', {
+    data: { email: identity.email, password: identity.password },
+  });
+  const session = await readSession(response, 'register ' + identity.email);
+  identity.userId = session.user.id;
+  const personal = session.organizations.find((item) => item.organization.type === 'personal');
+  if (!personal) throw new Error('register response did not create a personal account for ' + identity.email);
+  identity.personalAccountId = personal.organization.id;
+  return session;
+}
+
+async function acceptInvitation(context: APIRequestContext, token: string, csrf: string, email: string): Promise<void> {
+  const accepted = await context.post('/api/v1/invitations/' + encodeURIComponent(token) + '/accept', {
+    headers: csrfHeaders(csrf),
+  });
+  if (!accepted.ok()) throw new Error('accept invitation ' + email + ': ' + accepted.status() + ' ' + await accepted.text());
 }
 
 export default async function globalSetup(_config: FullConfig): Promise<void> {
   const runId = Date.now().toString(36);
+  const orgName = 'e2e-team-' + runId;
   const base: Omit<E2EState, 'backend' | 'reason'> = {
     consoleBaseUrl: CONSOLE_URL,
-    gatewayBaseUrl: process.env.E2E_GATEWAY_URL ?? 'http://127.0.0.1:18090',
+    gatewayBaseUrl: GATEWAY_URL,
     generatedAt: new Date().toISOString(),
     runId,
     admin: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, userId: '' },
-    orgA: { id: '', name: ORG_A_NAME },
-    orgB: { id: '', name: ORG_B_NAME },
-    orgAdmin: {
-      email: `e2e-orgadmin-${runId}@example.com`,
-      password: `orgadmin-${runId}-pw`,
-      userId: '',
-    },
-    member: { email: `e2e-member-${runId}@example.com`, password: `member-${runId}-pw`, userId: '' },
-    viewer: {
-      email: `e2e-viewer-${runId}@example.com`,
-      password: `viewer-${runId}-pw`,
-      userId: '',
-    },
-    adjustmentKey: `e2e-seed-credit-${runId}`,
-    priceModel: PRICE_MODEL,
-    gatewayKey: process.env.E2E_GATEWAY_KEY ?? null,
+    owner: { email: 'e2e-owner-' + runId + '@example.com', password: 'owner-' + runId + '-pw', userId: '' },
+    orgAdmin: { email: 'e2e-admin-' + runId + '@example.com', password: 'team-admin-' + runId + '-pw', userId: '' },
+    orgAdmin2: { email: 'e2e-admin-2-' + runId + '@example.com', password: 'team-admin-2-' + runId + '-pw', userId: '' },
+    member: { email: 'e2e-member-' + runId + '@example.com', password: 'member-' + runId + '-pw', userId: '' },
+    applicant: { email: 'e2e-applicant-' + runId + '@example.com', password: 'applicant-' + runId + '-pw', userId: '' },
+    invitee: { email: 'e2e-invitee-' + runId + '@example.com', password: 'invitee-' + runId + '-pw', userId: '' },
+    orgA: { id: '', name: orgName },
+    orgB: { id: '', name: 'e2e-activation-' + runId },
+    controlAvailable: false,
+    usageSeeded: false,
   };
 
-  const context = await request.newContext({ baseURL: CONSOLE_URL });
-  const failure = await probe(context);
-  if (failure !== null) {
-    writeState({
-      ...base,
-      backend: false,
-      reason: `Console ${CONSOLE_URL} 不可达：${failure}`,
-    });
-    await context.dispose();
-    return;
-  }
-
+  const probe = await request.newContext({ baseURL: CONSOLE_URL });
   try {
-    const admin = await login(context, ADMIN_EMAIL, ADMIN_PASSWORD);
-    const orgA = admin.organizations.find((item) => item.organization.name === ORG_A_NAME);
-    const orgB = admin.organizations.find((item) => item.organization.name === ORG_B_NAME);
-    if (!orgA || !orgB) {
-      throw new Error(
-        `bootstrap demo organizations are missing; run console bootstrap --demo-data (found: ${admin.organizations
-          .map((item) => item.organization.name)
-          .join(', ')})`,
-      );
+    const live = await probe.get('/livez', { timeout: 3_000 });
+    if (!live.ok()) {
+      writeState({ ...base, backend: false, reason: 'Console /livez 返回 ' + live.status() });
+      return;
     }
-    base.admin.userId = admin.user.id;
-    base.orgA.id = orgA.organization.id;
-    base.orgB.id = orgB.organization.id;
-
-    // --- the invitation flow: platform admin creates, owner invites, user accepts.
-    base.member = await seedMember(context, admin.csrf_token, orgA.organization.id, base.member, 'member');
-
-    // --- the viewer joins directly (created by the platform admin with an
-    // organization list), which keeps the scripted login count inside the
-    // Console's login bucket.
-    base.viewer = await seedUserInOrg(
-      context,
-      admin.csrf_token,
-      orgA.organization.id,
-      base.viewer,
-      'billing_viewer',
-    );
-
-    // --- an enterprise administrator for org A: created by the platform admin,
-    // added to the organization, then promoted with PATCH /members/{user}.
-    base.orgAdmin = await seedUserInOrg(
-      context,
-      admin.csrf_token,
-      orgA.organization.id,
-      base.orgAdmin,
-      'admin',
-    );
-
-    // --- one credit adjustment so the account projection exists with real data.
-    const adjustment = await context.post(
-      `/api/v1/admin/billing/accounts/${encodeURIComponent(orgA.organization.id)}/adjustments`,
-      {
-        headers: { ...csrfHeaders(admin.csrf_token), 'Idempotency-Key': base.adjustmentKey },
-        data: {
-          amount_micro: '100000000',
-          direction: 'credit',
-          reason: 'e2e seed: platform credit so the billing views have real ledger rows',
-        },
-      },
-    );
-    if (!adjustment.ok() && adjustment.status() !== 409) {
-      throw new Error(
-        `seed adjustment failed: ${adjustment.status()} ${await adjustment.text()}`,
-      );
-    }
-
-    // --- one immutable price version (409 means a previous run published it).
-    const effectiveAt = new Date(Date.now() - 60 * 60 * 1000);
-    effectiveAt.setUTCSeconds(0, 0);
-    const price = await context.post('/api/v1/admin/prices', {
-      headers: csrfHeaders(admin.csrf_token),
-      data: {
-        model: PRICE_MODEL,
-        currency: 'CNY',
-        input_price_micro_per_million: '1500000',
-        output_price_micro_per_million: '6000000',
-        effective_at: effectiveAt.toISOString(),
-      },
-    });
-    if (!price.ok() && price.status() !== 409) {
-      throw new Error(`seed price failed: ${price.status()} ${await price.text()}`);
-    }
-
-    // --- browser sessions for the roles, captured once per run. The admin
-    // session is the one already used for seeding (no extra login).
-    await context.storageState({ path: AUTH.admin });
-    await captureStorageState(base.orgAdmin, 'orgAdmin');
-    await captureStorageState(base.viewer, 'viewer');
-
-    writeState({
-      ...base,
-      backend: true,
-      reason: 'ok',
-    });
   } catch (cause) {
-    writeState({
-      ...base,
-      backend: false,
-      reason: `seed 失败：${cause instanceof Error ? cause.message : String(cause)}`,
-    });
+    writeState({ ...base, backend: false, reason: cause instanceof Error ? cause.message : String(cause) });
+    return;
   } finally {
-    await context.dispose();
+    await probe.dispose();
   }
-}
 
-/** Creates a user, invites them into the organization and accepts as that user. */
-async function seedMember(
-  adminContext: APIRequestContext,
-  adminCsrf: string,
-  orgId: string,
-  identity: E2EIdentity,
-  role: 'member' | 'billing_viewer',
-): Promise<E2EIdentity> {
-  const created = await adminContext.post('/api/v1/admin/users', {
-    headers: csrfHeaders(adminCsrf),
-    data: { email: identity.email, password: identity.password, platform_admin: false },
-  });
-  if (!created.ok()) {
-    throw new Error(`create user ${identity.email}: ${created.status()} ${await created.text()}`);
-  }
-  const user = (await created.json()) as { id: string };
-
-  const invitation = await adminContext.post(
-    `/api/v1/orgs/${encodeURIComponent(orgId)}/invitations`,
-    {
-      headers: csrfHeaders(adminCsrf),
-      data: { email: identity.email, role, expires_in_seconds: 3600 },
-    },
-  );
-  if (!invitation.ok()) {
-    throw new Error(`invite ${identity.email}: ${invitation.status()} ${await invitation.text()}`);
-  }
-  const invitationBody = (await invitation.json()) as { token: string };
-
-  const invitee = await request.newContext({ baseURL: CONSOLE_URL });
+  const adminContext = await request.newContext({ baseURL: CONSOLE_URL });
+  const ownerContext = await request.newContext({ baseURL: CONSOLE_URL });
+  const adminInvitee = await request.newContext({ baseURL: CONSOLE_URL });
+  const secondAdminInvitee = await request.newContext({ baseURL: CONSOLE_URL });
+  const memberContext = await request.newContext({ baseURL: CONSOLE_URL });
+  const applicantContext = await request.newContext({ baseURL: CONSOLE_URL });
+  const inviteeContext = await request.newContext({ baseURL: CONSOLE_URL });
   try {
-    const session = await login(invitee, identity.email, identity.password);
-    const accepted = await invitee.post(
-      `/api/v1/invitations/${encodeURIComponent(invitationBody.token)}/accept`,
-      { headers: csrfHeaders(session.csrf_token) },
-    );
-    if (!accepted.ok()) {
-      throw new Error(`accept ${identity.email}: ${accepted.status()} ${await accepted.text()}`);
-    }
-    // Seed one real API key for the member. With a Control channel (the T12
-    // release-candidate stack) the keys page then renders real rows; without one
-    // this is a `503 unavailable` and the specs assert that honest error state
-    // instead (see README §5). The result is deliberately not asserted here.
-    const key = await invitee.post(`/api/v1/orgs/${encodeURIComponent(orgId)}/keys`, {
-      headers: csrfHeaders(session.csrf_token),
-      data: {},
+    const adminResponse = await adminContext.post('/api/v1/auth/login', {
+      data: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
     });
-    if (!key.ok() && key.status() !== 503) {
-      throw new Error(`seed key for ${identity.email}: ${key.status()} ${await key.text()}`);
+    const admin = await readSession(adminResponse, 'platform admin login');
+    if (!admin.user.platform_admin) throw new Error('E2E_ADMIN_EMAIL is not a platform administrator');
+    base.admin.userId = admin.user.id;
+
+    const owner = await register(ownerContext, base.owner);
+    const team = await adminContext.post('/api/v1/admin/organizations', {
+      headers: csrfHeaders(admin.csrf_token),
+      data: { name: orgName, owner_email: base.owner.email },
+    });
+    if (!team.ok()) throw new Error('create E2E enterprise: ' + team.status() + ' ' + await team.text());
+    base.orgA.id = ((await team.json()) as MembershipResponse).organization.id;
+
+    const member = await register(memberContext, base.member);
+    const memberInvite = await ownerContext.post('/api/v1/orgs/' + encodeURIComponent(base.orgA.id) + '/invitations', {
+      headers: csrfHeaders(owner.csrf_token),
+      data: { email: base.member.email, role: 'member', monthly_limit_micro: '100000000', expires_in_seconds: 3600 },
+    });
+    if (!memberInvite.ok()) throw new Error('invite E2E member: ' + memberInvite.status() + ' ' + await memberInvite.text());
+    const memberInviteBody = (await memberInvite.json()) as { token: string };
+    await acceptInvitation(memberContext, memberInviteBody.token, member.csrf_token, base.member.email);
+
+    const orgAdmin = await register(adminInvitee, base.orgAdmin);
+    const adminInvite = await ownerContext.post('/api/v1/orgs/' + encodeURIComponent(base.orgA.id) + '/invitations', {
+      headers: csrfHeaders(owner.csrf_token),
+      data: { email: base.orgAdmin.email, role: 'admin', expires_in_seconds: 3600 },
+    });
+    if (!adminInvite.ok()) throw new Error('invite E2E administrator: ' + adminInvite.status() + ' ' + await adminInvite.text());
+    const adminInviteBody = (await adminInvite.json()) as { token: string };
+    await acceptInvitation(adminInvitee, adminInviteBody.token, orgAdmin.csrf_token, base.orgAdmin.email);
+
+    const orgAdmin2 = await register(secondAdminInvitee, base.orgAdmin2);
+    const secondAdminInvite = await ownerContext.post('/api/v1/orgs/' + encodeURIComponent(base.orgA.id) + '/invitations', {
+      headers: csrfHeaders(owner.csrf_token),
+      data: { email: base.orgAdmin2.email, role: 'admin', expires_in_seconds: 3600 },
+    });
+    if (!secondAdminInvite.ok()) throw new Error('invite second E2E administrator: ' + secondAdminInvite.status() + ' ' + await secondAdminInvite.text());
+    const secondAdminInviteBody = (await secondAdminInvite.json()) as { token: string };
+    await acceptInvitation(secondAdminInvitee, secondAdminInviteBody.token, orgAdmin2.csrf_token, base.orgAdmin2.email);
+
+    await register(applicantContext, base.applicant);
+    const invitee = await register(inviteeContext, base.invitee);
+    const codeResponse = await adminContext.post('/api/v1/admin/activation-codes', {
+      headers: csrfHeaders(admin.csrf_token),
+      data: { enterprise_name: base.orgB.name },
+    });
+    if (!codeResponse.ok()) throw new Error('create activation-code fixture: ' + codeResponse.status() + ' ' + await codeResponse.text());
+    const codeBody = (await codeResponse.json()) as { code: string };
+    const activated = await inviteeContext.post('/api/v1/organizations/activate', {
+      headers: csrfHeaders(invitee.csrf_token),
+      data: { code: codeBody.code },
+    });
+    if (!activated.ok()) throw new Error('redeem activation-code fixture: ' + activated.status() + ' ' + await activated.text());
+    base.orgB.id = ((await activated.json()) as MembershipResponse).organization.id;
+    const secondEnterpriseInvite = await inviteeContext.post('/api/v1/orgs/' + encodeURIComponent(base.orgB.id) + '/invitations', {
+      headers: csrfHeaders(invitee.csrf_token),
+      data: { email: base.member.email, role: 'member', monthly_limit_micro: '25000000', expires_in_seconds: 3600 },
+    });
+    if (!secondEnterpriseInvite.ok()) throw new Error('invite E2E member into second enterprise: ' + secondEnterpriseInvite.status() + ' ' + await secondEnterpriseInvite.text());
+    const secondEnterpriseInviteBody = (await secondEnterpriseInvite.json()) as { token: string };
+    await acceptInvitation(memberContext, secondEnterpriseInviteBody.token, member.csrf_token, base.member.email);
+
+    // Console-only runs keep their honest service-unavailable state. The full
+    // release-candidate stack creates real named Keys and exercises their privacy.
+    let gatewayKey: string | null = null;
+    const keyNames = [
+      ...Array.from({ length: 19 }, (_, index) => `web-e2e extra app ${index + 1}`),
+      'web-e2e first app',
+      'web-e2e second app',
+    ];
+    let createdKeyCount = 0;
+    for (const name of keyNames) {
+      const key = await memberContext.post('/api/v1/orgs/' + encodeURIComponent(base.orgA.id) + '/keys', {
+        headers: csrfHeaders(member.csrf_token),
+        data: { name, operation_id: 'web-e2e-' + runId + '-' + name.replaceAll(' ', '-') },
+      });
+      if (key.status() === 503) break;
+      if (!key.ok()) throw new Error('create E2E Key "' + name + '": ' + key.status() + ' ' + await key.text());
+      const keyResult = (await key.json()) as { secret?: string };
+      createdKeyCount++;
+      if (!gatewayKey && keyResult.secret) gatewayKey = keyResult.secret;
     }
-    // The accepting session is the member's browser session for the specs.
-    await invitee.storageState({ path: AUTH.member });
+    base.controlAvailable = createdKeyCount === keyNames.length;
+
+    // When the full stack has a configured mock/production-like model, create
+    // one real charge through the Gateway. The raw Key stays only in this
+    // process; neither it nor a prompt is written to test state.
+    const model = process.env.E2E_GATEWAY_MODEL;
+    if (base.controlAvailable && model && gatewayKey) {
+      const gateway = await request.newContext({ baseURL: GATEWAY_URL });
+      try {
+        const completion = await gateway.post('/v1/chat/completions', {
+          headers: { Authorization: 'Bearer ' + gatewayKey },
+          data: { model, messages: [{ role: 'user', content: 'Reply with OK.' }], max_tokens: 8 },
+          timeout: 30_000,
+        });
+        if (!completion.ok()) throw new Error('seed one metered Gateway call: ' + completion.status() + ' ' + await completion.text());
+      } finally {
+        await gateway.dispose();
+      }
+      const dateParts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit',
+      }).formatToParts(new Date());
+      const year = dateParts.find((part) => part.type === 'year')?.value;
+      const month = dateParts.find((part) => part.type === 'month')?.value;
+      const beijingMonth = year && month ? year + '-' + month : '';
+      const deadline = Date.now() + 45_000;
+      while (Date.now() < deadline) {
+        const usageResponse = await memberContext.get(
+          '/api/v1/orgs/' + encodeURIComponent(base.orgA.id) + '/usage?month=' + beijingMonth,
+        );
+        if (!usageResponse.ok()) throw new Error('read seeded monthly usage: ' + usageResponse.status() + ' ' + await usageResponse.text());
+        const usage = (await usageResponse.json()) as {
+          items: Array<{ model: string; settlement_status: string; charge_micro: string | null }>;
+        };
+        if (usage.items.some((item) =>
+          item.model === model &&
+          (item.settlement_status === 'settled' || item.settlement_status === 'manual_settled') &&
+          item.charge_micro !== null
+        )) {
+          base.usageSeeded = true;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1_000));
+      }
+      if (!base.usageSeeded) throw new Error('the real Gateway call did not appear as a settled monthly charge within 45 seconds');
+    }
+
+    await adminContext.storageState({ path: AUTH.admin });
+    await ownerContext.storageState({ path: AUTH.owner });
+    await adminInvitee.storageState({ path: AUTH.orgAdmin });
+    await secondAdminInvitee.storageState({ path: AUTH.orgAdmin2 });
+    await memberContext.storageState({ path: AUTH.member });
+    await applicantContext.storageState({ path: AUTH.applicant });
+    await inviteeContext.storageState({ path: AUTH.invitee });
+    writeState({ ...base, backend: true, reason: 'ok' });
+  } catch (cause) {
+    // A live backend missing a required product endpoint fails visibly instead
+    // of silently converting the entire suite to skipped tests.
+    throw new Error('Browser setup failed: ' + (cause instanceof Error ? cause.message : String(cause)));
   } finally {
-    await invitee.dispose();
-  }
-
-  return { ...identity, userId: user.id };
-}
-
-/**
- * Creates a user, adds them to the organization through
- * `POST /admin/users { organizations: [...] }` and promotes them with
- * `PATCH /orgs/{org}/members/{user}` — the same audited paths the UI uses.
- * No invitation (and therefore no extra login) is involved.
- */
-async function seedUserInOrg(
-  adminContext: APIRequestContext,
-  adminCsrf: string,
-  orgId: string,
-  identity: E2EIdentity,
-  role: 'admin' | 'billing_viewer',
-): Promise<E2EIdentity> {
-  const created = await adminContext.post('/api/v1/admin/users', {
-    headers: csrfHeaders(adminCsrf),
-    data: {
-      email: identity.email,
-      password: identity.password,
-      platform_admin: false,
-      organizations: [orgId],
-    },
-  });
-  if (!created.ok()) {
-    throw new Error(`create ${identity.email}: ${created.status()} ${await created.text()}`);
-  }
-  const user = (await created.json()) as { id: string };
-
-  const promoted = await adminContext.patch(
-    `/api/v1/orgs/${encodeURIComponent(orgId)}/members/${encodeURIComponent(user.id)}`,
-    { headers: csrfHeaders(adminCsrf), data: { role } },
-  );
-  if (!promoted.ok()) {
-    throw new Error(`set ${role} for ${identity.email}: ${promoted.status()} ${await promoted.text()}`);
-  }
-
-  return { ...identity, userId: user.id };
-}
-
-/**
- * Logs one identity in over the API and stores its cookie jar for the browser
- * specs. This is the same session the login form creates — only the throttled
- * form POST is skipped.
- */
-async function captureStorageState(
-  identity: E2EIdentity,
-  role: keyof typeof AUTH,
-): Promise<void> {
-  const context = await request.newContext({ baseURL: CONSOLE_URL });
-  try {
-    await login(context, identity.email, identity.password);
-    await context.storageState({ path: AUTH[role] });
-  } finally {
-    await context.dispose();
+    await Promise.all([
+      adminContext.dispose(), ownerContext.dispose(), adminInvitee.dispose(),
+      secondAdminInvitee.dispose(), memberContext.dispose(), applicantContext.dispose(), inviteeContext.dispose(),
+    ]);
   }
 }
 
 function writeState(state: E2EState): void {
   mkdirSync(STATE_PATH.replace(/\/[^/]+$/, ''), { recursive: true });
-  // mode 0600: the file carries the seeded identities' passwords in plaintext
-  // (the specs read them back), so at least keep it owner-only on disk.
-  writeFileSync(STATE_PATH, `${JSON.stringify(state, null, 2)}\n`, {
+  writeFileSync(STATE_PATH, JSON.stringify(state, null, 2) + '\n', {
     encoding: 'utf8',
     mode: 0o600,
   });

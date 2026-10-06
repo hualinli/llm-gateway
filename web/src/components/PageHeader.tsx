@@ -29,21 +29,3 @@ export function PageHeader({
     </div>
   );
 }
-
-/** Honest placeholder for a capability the frozen API does not expose yet. */
-export function ContractGap({
-  title,
-  children,
-}: {
-  title: string;
-  children: ReactNode;
-}): ReactNode {
-  return (
-    <div className="contract-gap">
-      <Typography.Text strong>契约缺口：{title}</Typography.Text>
-      <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-        {children}
-      </Typography.Paragraph>
-    </div>
-  );
-}
