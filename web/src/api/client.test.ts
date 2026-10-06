@@ -240,6 +240,15 @@ describe('error mapping', () => {
     expect(unauthorized).not.toHaveBeenCalled();
   });
 
+  it('does not redirect on a 401 from registration itself', async () => {
+    const { client, unauthorized } = harness(() =>
+      jsonResponse(401, envelope('unauthorized', 'registration request was not accepted')),
+    );
+
+    await expect(client.register('a@b.c', 'pw')).rejects.toMatchObject({ kind: 'unauthorized' });
+    expect(unauthorized).not.toHaveBeenCalled();
+  });
+
   it('maps 404 to not_found (non-member must not learn the org exists)', async () => {
     const { client } = harness(() => jsonResponse(404, envelope('not_found', 'organization not found')));
 

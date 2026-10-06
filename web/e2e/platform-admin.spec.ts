@@ -1,6 +1,6 @@
 import { request } from '@playwright/test';
 
-import { ANONYMOUS, AUTH, button, expect, loadState, requireBackend, test } from './fixtures';
+import { ANONYMOUS, AUTH, button, expect, loadState, requireBackend, selectPlatformAccount, test, visibleSelectOption } from './fixtures';
 
 const state = loadState();
 
@@ -70,8 +70,7 @@ test.describe('platform administrator', () => {
 
     const card = page.getByTestId('platform-adjustment-card');
     const paymentReference = 'web-e2e-payment-' + state.runId;
-    await card.getByLabel('账户').click();
-    await page.locator('.ant-select-dropdown').getByText(state.orgA.name, { exact: false }).click();
+    await selectPlatformAccount(page, card.getByLabel('账户'), state.orgA.name, card.getByRole('button', { name: /加载更多账户/ }));
     await card.getByLabel('金额（元）').fill('12.345678');
     await card.getByLabel('付款凭据').fill(paymentReference);
     await card.getByLabel('操作说明').fill('E2E traceable incoming payment');
@@ -87,12 +86,11 @@ test.describe('platform administrator', () => {
     // dedicated platform read route can inspect its wallet.
     expect((await page.request.get('/api/v1/orgs/' + state.orgA.id + '/billing/account')).status()).toBe(404);
 
-    await card.getByLabel('账户').click();
-    await page.locator('.ant-select-dropdown').getByText(state.orgA.name, { exact: false }).click();
+    await selectPlatformAccount(page, card.getByLabel('账户'), state.orgA.name, card.getByRole('button', { name: /加载更多账户/ }));
     await card.getByLabel('资金变动').click();
-    await page.locator('.ant-select-dropdown').getByText('冲正一笔入账', { exact: true }).click();
+    await visibleSelectOption(page, '冲正一笔入账').click();
     await card.getByLabel('原入账记录').click();
-    await page.locator('.ant-select-dropdown').getByText(new RegExp(paymentReference)).click();
+    await visibleSelectOption(page, paymentReference, false).click();
     await expect(card.getByLabel('金额（元）')).toHaveValue('12.345678');
     await card.getByLabel('操作说明').fill('E2E reverse the same payment');
     await button(card, '确认冲正').click();
@@ -126,8 +124,7 @@ test.describe('platform administrator', () => {
       }
       await route.fulfill({ status: 201, contentType: 'application/json', body: '{}' });
     });
-    await card.getByLabel('账户').click();
-    await page.locator('.ant-select-dropdown').getByText(state.orgA.name, { exact: false }).click();
+    await selectPlatformAccount(page, card.getByLabel('账户'), state.orgA.name, card.getByRole('button', { name: /加载更多账户/ }));
     await card.getByLabel('金额（元）').fill('1.25');
     await card.getByLabel('付款凭据').fill('web-e2e-retry-' + state.runId);
     await card.getByLabel('操作说明').fill('E2E retry key stability');
@@ -179,7 +176,7 @@ test.describe('platform administrator', () => {
 
     const credentialCard = page.getByTestId('platform-provider-credentials');
     await credentialCard.getByLabel('所属接入点').click();
-    await page.locator('.ant-select-dropdown').getByText(providerId, { exact: true }).click();
+    await visibleSelectOption(page, providerId).click();
     await credentialCard.getByLabel('访问密钥').fill(secret);
     await button(credentialCard, '保存访问凭据').click();
     await expect(credentialCard.getByLabel('访问密钥')).toHaveValue('');
@@ -194,7 +191,7 @@ test.describe('platform administrator', () => {
     await button(providerRow, '编辑').click();
     const editDialog = page.getByRole('dialog', { name: '编辑服务接入点' });
     await editDialog.getByLabel('访问凭据').click();
-    await page.locator('.ant-select-dropdown').getByText(credential!.fingerprint, { exact: false }).click();
+    await visibleSelectOption(page, credential!.fingerprint, false).click();
     await button(editDialog, '保存接入点').click();
     await expect(providerRow.getByText(credential!.fingerprint)).toBeVisible();
 
@@ -202,7 +199,7 @@ test.describe('platform administrator', () => {
     await routes.getByLabel('新增模型名称').fill(model);
     await button(routes, '添加模型路由').click();
     await routes.getByLabel(model + ' 的接入顺序').click();
-    await page.locator('.ant-select-dropdown').getByText(providerId, { exact: true }).click();
+    await visibleSelectOption(page, providerId).click();
     await button(routes, '保存转发顺序').click();
     const routeResponse = await page.request.get('/api/v1/admin/routes');
     expect(routeResponse.status()).toBe(200);
@@ -228,8 +225,12 @@ test.describe('platform administrator', () => {
     expect(catalogBody.items).toContainEqual({ model, enabled: true });
 
     const accountModels = page.getByTestId('platform-account-models');
-    await accountModels.getByLabel('选择账户').click();
-    await page.locator('.ant-select-dropdown').getByText(state.orgA.name, { exact: false }).click();
+    await selectPlatformAccount(
+      page,
+      accountModels.getByLabel('选择账户'),
+      state.orgA.name,
+      accountModels.getByRole('button', { name: /加载更多账户/ }),
+    );
     await accountModels.getByLabel('自定义账户范围').check();
     await accountModels.getByLabel(model).check();
     await button(accountModels, '保存此账户范围').click();

@@ -120,6 +120,52 @@ export function button(scope: Page | Locator, label: string): Locator {
   return scope.getByRole('button', { name: new RegExp(pattern) });
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Selects an Ant Design option from the currently visible popup only. */
+export function visibleSelectOption(scope: Page | Locator, label: string, exact = true): Locator {
+  const pattern = exact
+    ? new RegExp(`^\\s*${escapeRegExp(label)}\\s*$`)
+    : new RegExp(escapeRegExp(label));
+  return scope
+    .locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option-content')
+    .filter({ hasText: pattern });
+}
+
+/** Searches and selects one account, loading another bounded server page when needed. */
+export async function selectPlatformAccount(
+  page: Page,
+  field: Locator,
+  accountName: string,
+  loadMore: Locator,
+): Promise<void> {
+  for (let pageIndex = 0; pageIndex < 100; pageIndex += 1) {
+    await field.click();
+    await field.fill(accountName);
+    const match = visibleSelectOption(page, accountName, false);
+    const count = await match.count();
+    if (count === 1) {
+      await match.click();
+      return;
+    }
+    if (count > 1) throw new Error(`账户名称匹配到多个选项：${accountName}`);
+
+    await page.keyboard.press('Escape');
+    if (!(await loadMore.isVisible().catch(() => false))) {
+      throw new Error(`账户列表已加载完毕，未找到：${accountName}`);
+    }
+    const previous = await loadMore.innerText();
+    await loadMore.click();
+    await expect.poll(async () => {
+      if (!(await loadMore.isVisible().catch(() => false))) return '';
+      return loadMore.innerText();
+    }).not.toBe(previous);
+  }
+  throw new Error(`账户列表页数异常，仍未找到：${accountName}`);
+}
+
 /** Logs in through the real login form (cookie + CSRF come from the server). */
 export async function login(page: Page, identity: { email: string; password: string }): Promise<void> {
   await page.goto('/login');

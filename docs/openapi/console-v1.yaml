@@ -340,7 +340,7 @@ paths:
         - { $ref: '#/components/parameters/Limit' }
         - { $ref: '#/components/parameters/Cursor' }
       responses:
-        '200': { description: Member totals without key identifiers or upstream cost, content: { application/json: { schema: { $ref: '#/components/schemas/MemberUsageSummary' } } } }
+        '200': { description: Administrators see organization totals; ordinary members receive only their own row with scope self. No Key identifiers or upstream costs are returned., content: { application/json: { schema: { $ref: '#/components/schemas/MemberUsageSummary' } } } }
         default: { $ref: '#/components/responses/Error' }
   /api/v1/orgs/{org}/audit:
     get:
@@ -1311,7 +1311,7 @@ components:
       required: [month, scope, items]
       properties:
         month: { type: string }
-        scope: { type: string, enum: [organization] }
+        scope: { type: string, enum: [self, organization] }
         items:
           type: array
           items:

@@ -18,10 +18,27 @@ test.describe('member boundaries', () => {
     expect(data.items.every((item) => item.user_id === null || item.user_id === state.member.userId)).toBe(true);
 
     const summary = await page.request.get('/api/v1/orgs/' + state.orgA.id + '/billing/member-summary');
-    expect(summary.status()).toBe(403);
-    expect(((await summary.json()) as ErrorEnvelope).error.code).toBe('forbidden');
+    expect(summary.status()).toBe(200);
+    const memberSummary = (await summary.json()) as {
+      scope: string;
+      items: Array<{ user_id: string; email: string }>;
+    };
+    expect(memberSummary.scope).toBe('self');
+    expect(memberSummary.items).toHaveLength(1);
+    expect(memberSummary.items[0]).toMatchObject({ user_id: state.member.userId, email: state.member.email });
+    expect(JSON.stringify(memberSummary)).not.toMatch(/key_id|provider_cost|api_key/i);
+
     const members = await page.request.get('/api/v1/orgs/' + state.orgA.id + '/members');
-    expect(members.status()).toBe(403);
+    expect(members.status()).toBe(200);
+    const memberPage = (await members.json()) as { items: Array<{ user_id: string; email: string; role: string }> };
+    expect(memberPage.items).toHaveLength(1);
+    expect(memberPage.items[0]).toMatchObject({ user_id: state.member.userId, email: state.member.email, role: 'member' });
+
+    const otherUserUsage = await page.request.get(
+      '/api/v1/orgs/' + state.orgA.id + '/usage?user=' + encodeURIComponent(state.orgAdmin.userId),
+    );
+    expect(otherUserUsage.status()).toBe(403);
+    expect(((await otherUserUsage.json()) as ErrorEnvelope).error.code).toBe('forbidden');
   });
 
   test('cannot change membership or monthly limit, and account data stays isolated across enterprises', async ({ page }) => {
@@ -38,7 +55,19 @@ test.describe('member boundaries', () => {
     expect(role.status()).toBe(403);
 
     const foreign = await page.request.get('/api/v1/orgs/' + state.orgB.id + '/members');
-    expect(foreign.status()).toBe(403);
+    expect(foreign.status()).toBe(200);
+    const ownForeignMembership = (await foreign.json()) as { items: Array<{ user_id: string; email: string }> };
+    expect(ownForeignMembership.items).toHaveLength(1);
+    expect(ownForeignMembership.items[0]).toMatchObject({ user_id: state.member.userId, email: state.member.email });
+    const foreignSummaryResponse = await page.request.get('/api/v1/orgs/' + state.orgB.id + '/billing/member-summary');
+    expect(foreignSummaryResponse.status()).toBe(200);
+    const foreignSummary = (await foreignSummaryResponse.json()) as {
+      scope: string;
+      items: Array<{ user_id: string; email: string }>;
+    };
+    expect(foreignSummary.scope).toBe('self');
+    expect(foreignSummary.items).toHaveLength(1);
+    expect(foreignSummary.items[0]).toMatchObject({ user_id: state.member.userId, email: state.member.email });
     await page.goto('/orgs/' + state.orgB.id + '/overview');
     await expect(page.getByTestId('overview-usage')).toBeVisible();
     const otherUsage = await page.request.get('/api/v1/orgs/' + state.orgB.id + '/usage');

@@ -109,8 +109,8 @@ export interface ConsoleClientOptions {
   fetchImpl?: typeof fetch;
   /**
    * Called before an `unauthorized` error is thrown, so the app can clear the
-   * cached identity and navigate to the login route. Not called for the login
-   * endpoint itself (a wrong password is a form error, not an expired session).
+   * cached identity and navigate to the login route. Not called for public auth
+   * endpoints such as login and registration; their errors belong to the form.
    */
   onUnauthorized?: (error: ApiError) => void;
 }
@@ -123,7 +123,7 @@ interface RequestOptions {
    * `Idempotency-Key`; credentials never travel in a header this client adds.
    */
   headers?: Record<string, string>;
-  /** Skip the `onUnauthorized` callback (login/logout probes). */
+  /** Skip the `onUnauthorized` callback (public auth and logout requests). */
   silentUnauthorized?: boolean;
 }
 

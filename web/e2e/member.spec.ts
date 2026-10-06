@@ -1,4 +1,4 @@
-import { ANONYMOUS, AUTH, expect, gotoOrg, loadState, login, requireBackend, test } from './fixtures';
+import { ANONYMOUS, AUTH, button, expect, gotoOrg, loadState, login, requireBackend, test, visibleSelectOption } from './fixtures';
 import { beijingMonthOf } from '../src/utils/format';
 
 const state = loadState();
@@ -38,7 +38,7 @@ test.describe('account entry', () => {
     await page.goto('/login');
     await page.getByLabel('邮箱').fill(state.member.email);
     await page.getByLabel('密码').fill('incorrect-password-for-e2e');
-    await page.getByRole('button', { name: '登录' }).click();
+    await button(page, '登录').click();
     await expect(page.getByText('邮箱或密码不正确。')).toBeVisible();
     await expect(page).toHaveURL(/\/login$/);
   });
@@ -93,14 +93,14 @@ test.describe('member account', () => {
     expect(personal).toBeTruthy();
 
     await page.getByLabel('切换账户').click();
-    await page.locator('.ant-select-dropdown').getByText(personal!.organization.name, { exact: true }).click();
+    await visibleSelectOption(page, personal!.organization.name, false).click();
     await expect(page).toHaveURL('/orgs/' + state.member.personalAccountId + '/overview');
     await page.goto('/orgs/' + state.member.personalAccountId + '/models');
     await expect(page.getByLabel('我的 API Key')).toHaveValue('');
     await expect(page.getByLabel('试用内容')).toHaveValue('');
 
     await page.getByLabel('切换账户').click();
-    await page.locator('.ant-select-dropdown').getByText(state.orgB.name, { exact: false }).click();
+    await visibleSelectOption(page, state.orgB.name, false).click();
     await expect(page).toHaveURL('/orgs/' + state.orgB.id + '/overview');
     await page.goto('/orgs/' + state.orgB.id + '/models');
     await expect(page.getByLabel('我的 API Key')).toHaveValue('');
