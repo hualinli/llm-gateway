@@ -58,39 +58,40 @@ func integrationDependencies(t *testing.T, legacy ...bool) (*metering.PGLedger, 
 	query := u.Query()
 	query.Set("search_path", schema)
 	u.RawQuery = query.Encode()
+	if len(legacy) > 0 && legacy[0] {
+		// Build the actual pre-event-id schema and seed the original request_id
+		// row before advancing migrations. Downgrading only schema_migrations
+		// after applying all current migrations leaves newer columns in place and
+		// does not model a legacy installation.
+		m, err := migrations.Open(u.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := m.Steps(1); err != nil {
+			t.Fatal(err)
+		}
+		sourceErr, dbErr := m.Close()
+		if sourceErr != nil || dbErr != nil {
+			t.Fatalf("close initial migration: %v %v", sourceErr, dbErr)
+		}
+		legacyDB, err := sql.Open("pgx", u.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, insertErr := legacyDB.Exec(`INSERT INTO metering_events
+  (request_id, tenant_id, model, provider, prompt_tokens, completion_tokens, total_tokens, cost_cents, created_at)
+VALUES ('legacy-event', 'tenant-a', 'm', 'p', 1, 2, 3, 3, $1)`, time.Now().UTC())
+		closeErr := legacyDB.Close()
+		if insertErr != nil || closeErr != nil {
+			t.Fatalf("seed pre-event-id row: insert=%v close=%v", insertErr, closeErr)
+		}
+	}
 	if err := migrations.Up(u.String()); err != nil {
 		t.Fatal(err)
 	}
 	ledger, err := metering.NewPGLedger(u.String())
 	if err != nil {
 		t.Fatal(err)
-	}
-	if len(legacy) > 0 && legacy[0] {
-		event := metering.Event{EventID: "legacy-event", TenantID: "tenant-a", Model: "m", Provider: "p", TotalTokens: 3, CostCents: 3, CreatedAt: time.Now()}
-		if _, err := ledger.Add(event); err != nil {
-			t.Fatal(err)
-		}
-		if err := ledger.Close(); err != nil {
-			t.Fatal(err)
-		}
-		m, err := migrations.Open(u.String())
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := m.Steps(-1); err != nil {
-			t.Fatal(err)
-		}
-		a, b := m.Close()
-		if a != nil || b != nil {
-			t.Fatalf("close: %v %v", a, b)
-		}
-		if err := migrations.Up(u.String()); err != nil {
-			t.Fatal(err)
-		}
-		ledger, err = metering.NewPGLedger(u.String())
-		if err != nil {
-			t.Fatal(err)
-		}
 	}
 	t.Cleanup(func() { _ = ledger.Close() })
 	rdb := redis.NewClient(&redis.Options{Addr: addr, DB: 9})

@@ -172,6 +172,22 @@ func (s *server) getOrgBillingAccount(ctx context.Context, c *app.RequestContext
 		s.writeOrganizationRBACError(c, "authorize billing account read", err)
 		return
 	}
+	s.writeBillingAccount(ctx, c, orgID)
+}
+
+// getAdminBillingAccount exposes the same account projection to platform
+// administrators without granting organization membership or changing the
+// organization-scoped authorization matrix.
+func (s *server) getAdminBillingAccount(ctx context.Context, c *app.RequestContext) {
+	orgID, err := parsePathID(c.Param("org"))
+	if err != nil {
+		s.writeError(c, http.StatusBadRequest, "", err.Error())
+		return
+	}
+	s.writeBillingAccount(ctx, c, orgID)
+}
+
+func (s *server) writeBillingAccount(ctx context.Context, c *app.RequestContext, orgID int64) {
 	account, err := s.accounts.GetAccount(ctx, orgID)
 	if err != nil {
 		s.writeBillingError(c, "get billing account", err)
@@ -198,6 +214,21 @@ func (s *server) listOrgBillingEntries(ctx context.Context, c *app.RequestContex
 		s.writeOrganizationRBACError(c, "authorize billing entries read", err)
 		return
 	}
+	s.writeBillingEntries(ctx, c, orgID)
+}
+
+// listAdminBillingEntries lets platform administrators inspect the same
+// append-only ledger page without needing an organization membership.
+func (s *server) listAdminBillingEntries(ctx context.Context, c *app.RequestContext) {
+	orgID, err := parsePathID(c.Param("org"))
+	if err != nil {
+		s.writeError(c, http.StatusBadRequest, "", err.Error())
+		return
+	}
+	s.writeBillingEntries(ctx, c, orgID)
+}
+
+func (s *server) writeBillingEntries(ctx context.Context, c *app.RequestContext, orgID int64) {
 	limit, err := parseListLimit(c.Query("limit"))
 	if err != nil {
 		s.writeError(c, http.StatusBadRequest, "", err.Error())
