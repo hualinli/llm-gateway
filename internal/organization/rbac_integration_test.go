@@ -74,7 +74,7 @@ func activeOwnerCount(t *testing.T, db *sql.DB, orgID int64) int {
 
 func membershipRole(t *testing.T, db *sql.DB, orgID, userID int64) (role, status string) {
 	t.Helper()
-	if err := db.QueryRow(`SELECT role, status FROM memberships WHERE org_id = $1 AND user_id = $2`, orgID, userID).Scan(&role, &status); err != nil {
+	if err := db.QueryRow(`SELECT role, status FROM memberships WHERE org_id = $1 AND user_id = $2 ORDER BY id DESC LIMIT 1`, orgID, userID).Scan(&role, &status); err != nil {
 		t.Fatal(err)
 	}
 	return role, status
@@ -106,24 +106,23 @@ func TestListMembersVisibilityInTwoEnterprises(t *testing.T) {
 	ownerA := createUser(t, db, "owner-a@example.com")
 	adminA := createUser(t, db, "admin-a@example.com")
 	memberA := createUser(t, db, "member-a@example.com")
-	billingA := createUser(t, db, "billing-a@example.com")
 	outsiderB := createUser(t, db, "owner-b@example.com")
 
-	orgA := seedEnterprise(t, db, svc, "Acme", []int64{ownerA.ID, adminA.ID, memberA.ID, billingA.ID},
-		[]string{"owner", "admin", "member", "billing_viewer"})
+	orgA := seedEnterprise(t, db, svc, "Acme", []int64{ownerA.ID, adminA.ID, memberA.ID},
+		[]string{"owner", "admin", "member"})
 	orgB := seedEnterprise(t, db, svc, "Beta", []int64{outsiderB.ID}, []string{"owner"})
 
-	// owner/admin/billing_viewer 看到完整成员列表（按 user_id ASC）。
+	// owner/admin 看到完整成员列表（按 user_id ASC）。
 	for _, actor := range []struct {
 		name string
 		id   int64
-	}{{"owner", ownerA.ID}, {"admin", adminA.ID}, {"billing_viewer", billingA.ID}} {
+	}{{"owner", ownerA.ID}, {"admin", adminA.ID}} {
 		members, err := svc.ListMembers(ctx, actor.id, orgA.ID)
 		if err != nil {
 			t.Fatalf("%s ListMembers: %v", actor.name, err)
 		}
-		if len(members) != 4 {
-			t.Fatalf("%s sees %d members, want 4: %+v", actor.name, len(members), members)
+		if len(members) != 3 {
+			t.Fatalf("%s sees %d members, want 3: %+v", actor.name, len(members), members)
 		}
 		if members[0].Email != "owner-a@example.com" || members[0].Role != "owner" {
 			t.Fatalf("%s first member = %+v", actor.name, members[0])
@@ -140,7 +139,7 @@ func TestListMembersVisibilityInTwoEnterprises(t *testing.T) {
 	}
 
 	// 跨企业读取一律 not found，不泄露存在性（也不泄露成员身份）。
-	for _, actorID := range []int64{ownerA.ID, memberA.ID, billingA.ID} {
+	for _, actorID := range []int64{ownerA.ID, memberA.ID} {
 		if _, err := svc.ListMembers(ctx, actorID, orgB.ID); !errors.Is(err, organization.ErrNotFound) {
 			t.Fatalf("cross-org ListMembers = %v, want ErrNotFound", err)
 		}
@@ -162,12 +161,6 @@ func TestListMembersVisibilityInTwoEnterprises(t *testing.T) {
 	if _, err := svc.AuthorizeOrgAction(ctx, memberA.ID, orgA.ID, organization.ActionViewOrgUsage); !errors.Is(err, organization.ErrForbidden) {
 		t.Fatalf("member view_org_usage = %v, want ErrForbidden", err)
 	}
-	if _, err := svc.AuthorizeOrgAction(ctx, billingA.ID, orgA.ID, organization.ActionViewOrgUsage); err != nil {
-		t.Fatalf("billing_viewer view_org_usage = %v, want nil", err)
-	}
-	if _, err := svc.AuthorizeOrgAction(ctx, billingA.ID, orgA.ID, organization.ActionManageOwnKeys); !errors.Is(err, organization.ErrForbidden) {
-		t.Fatalf("billing_viewer manage_own_keys = %v, want ErrForbidden", err)
-	}
 	if _, err := svc.AuthorizeOrgAction(ctx, memberA.ID, orgA.ID, organization.ActionUseModel); err != nil {
 		t.Fatalf("member use_model = %v, want nil", err)
 	}
@@ -187,15 +180,16 @@ func TestChangeMemberRoleEnforcesMatrixAndLastOwner(t *testing.T) {
 	org := seedEnterprise(t, db, svc, "Acme", []int64{owner.ID, admin.ID, member.ID},
 		[]string{"owner", "admin", "member"})
 
-	// owner 可以把 member 提升为 admin / billing_viewer。
+	// owner 可以把 member 提升为 admin，再降回 member 时必须显式决定月上限。
 	if err := svc.ChangeMemberRole(ctx, owner.ID, org.ID, member.ID, "admin"); err != nil {
 		t.Fatalf("owner promotes member to admin: %v", err)
 	}
 	if role, status := membershipRole(t, db, org.ID, member.ID); role != "admin" || status != "active" {
 		t.Fatalf("member role = %q/%q, want admin/active", role, status)
 	}
-	if err := svc.ChangeMemberRole(ctx, owner.ID, org.ID, member.ID, "billing_viewer"); err != nil {
-		t.Fatalf("owner demotes admin to billing_viewer: %v", err)
+	limit := int64(0)
+	if err := svc.ChangeMemberRoleWithLimit(ctx, owner.ID, org.ID, member.ID, "member", &limit, true); err != nil {
+		t.Fatalf("owner demotes admin to member with explicit cap: %v", err)
 	}
 
 	// admin 不能创建 admin（create_admin 只有 owner 有）。
@@ -253,17 +247,6 @@ func TestChangeMemberRoleEnforcesMatrixAndLastOwner(t *testing.T) {
 		t.Fatalf("idempotent change bumped revision: %d -> %d", before, after)
 	}
 
-	// 有两个 owner 时，其中一个是 owner 的调用者可以自我降级。
-	second := createUser(t, db, "second-owner@example.com")
-	if _, err := svc.AddMember(ctx, org.ID, second.ID, "owner"); err != nil {
-		t.Fatal(err)
-	}
-	if err := svc.ChangeMemberRole(ctx, owner.ID, org.ID, owner.ID, "admin"); err != nil {
-		t.Fatalf("self-demotion with a second owner: %v", err)
-	}
-	if err := svc.RemoveMember(ctx, second.ID, org.ID, second.ID); !errors.Is(err, organization.ErrLastOwner) {
-		t.Fatalf("last owner self-removal = %v, want ErrLastOwner", err)
-	}
 }
 
 func TestRemoveMemberRefusesOwnerRemovalByAdmin(t *testing.T) {
@@ -286,8 +269,8 @@ func TestRemoveMemberRefusesOwnerRemovalByAdmin(t *testing.T) {
 	if _, err := svc.ListMembers(ctx, admin.ID, org.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.Membership(ctx, member.ID, org.ID); !errors.Is(err, organization.ErrNotMember) {
-		t.Fatalf("removed member Membership = %v, want ErrNotMember", err)
+	if _, err := svc.Membership(ctx, member.ID, org.ID); !errors.Is(err, organization.ErrNotFound) {
+		t.Fatalf("removed member Membership = %v, want ErrNotFound", err)
 	}
 	// 移除会递增 revision 并留下发布记录（数据面据此撤销 Key，见报告）。
 	if orgRevisionOf(t, db, org.ID) != 2 {
@@ -295,30 +278,29 @@ func TestRemoveMemberRefusesOwnerRemovalByAdmin(t *testing.T) {
 	}
 }
 
-// TestConcurrentOwnerRemovalKeepsExactlyOneOwner 是 ADR-0003 §5 的并发用例：
-// 两个 owner 同时试图移除对方（以及 owner 同时移除对方和自己），组织级
-// SELECT ... FOR UPDATE 必须让其中恰好一个成功，另一个看到更新后的 owner 数量
-// 并失败，最终恰好剩一个 owner。
-func TestConcurrentOwnerRemovalKeepsExactlyOneOwner(t *testing.T) {
+// TestConcurrentMemberRemovalKeepsOwner is a concurrent last-owner regression:
+// a member cannot remove the sole owner, and competing member removals serialize
+// at the organization row while the one active owner remains.
+func TestConcurrentMemberRemovalKeepsOwner(t *testing.T) {
 	scenarios := []struct {
 		name string
-		run  func(ctx context.Context, svc *organization.Service, orgID, ownerA, ownerB int64) (int, error)
+		run  func(ctx context.Context, svc *organization.Service, orgID, ownerID, memberID int64) (int, error)
 	}{
 		{
-			name: "each owner removes the other",
-			run: func(ctx context.Context, svc *organization.Service, orgID, ownerA, ownerB int64) (int, error) {
+			name: "owner and member leave at once",
+			run: func(ctx context.Context, svc *organization.Service, orgID, ownerID, memberID int64) (int, error) {
 				return runConcurrently(
-					func() error { return svc.RemoveMember(ctx, ownerA, orgID, ownerB) },
-					func() error { return svc.RemoveMember(ctx, ownerB, orgID, ownerA) },
+					func() error { return svc.RemoveMember(ctx, ownerID, orgID, memberID) },
+					func() error { return svc.RemoveMember(ctx, memberID, orgID, memberID) },
 				)
 			},
 		},
 		{
-			name: "owner removes the other owner and leaves at the same time",
-			run: func(ctx context.Context, svc *organization.Service, orgID, ownerA, ownerB int64) (int, error) {
+			name: "member cannot remove the sole owner",
+			run: func(ctx context.Context, svc *organization.Service, orgID, ownerID, memberID int64) (int, error) {
 				return runConcurrently(
-					func() error { return svc.RemoveMember(ctx, ownerA, orgID, ownerB) },
-					func() error { return svc.RemoveMember(ctx, ownerA, orgID, ownerA) },
+					func() error { return svc.RemoveMember(ctx, ownerID, orgID, memberID) },
+					func() error { return svc.RemoveMember(ctx, memberID, orgID, ownerID) },
 				)
 			},
 		},
@@ -330,14 +312,14 @@ func TestConcurrentOwnerRemovalKeepsExactlyOneOwner(t *testing.T) {
 			svc := organization.NewService(db)
 			ctx := context.Background()
 
-			ownerA := createUser(t, db, "owner-a@example.com")
-			ownerB := createUser(t, db, "owner-b@example.com")
-			org := seedEnterprise(t, db, svc, "Acme", []int64{ownerA.ID, ownerB.ID}, []string{"owner", "owner"})
-			if got := activeOwnerCount(t, db, org.ID); got != 2 {
-				t.Fatalf("owners before = %d, want 2", got)
+			owner := createUser(t, db, "owner-a@example.com")
+			member := createUser(t, db, "member-a@example.com")
+			org := seedEnterprise(t, db, svc, "Acme", []int64{owner.ID, member.ID}, []string{"owner", "member"})
+			if got := activeOwnerCount(t, db, org.ID); got != 1 {
+				t.Fatalf("owners before = %d, want 1", got)
 			}
 
-			successes, err := scenario.run(ctx, svc, org.ID, ownerA.ID, ownerB.ID)
+			successes, err := scenario.run(ctx, svc, org.ID, owner.ID, member.ID)
 			if err != nil {
 				t.Fatalf("concurrent removals: %v", err)
 			}
@@ -382,7 +364,8 @@ func runConcurrently(a, b func() error) (int, error) {
 // isExpectedConcurrentFailure：输掉竞争的一方要么发现目标/自己已不是 active
 // 成员（ErrNotFound），要么被最后 owner 保护拒绝（ErrLastOwner）。
 func isExpectedConcurrentFailure(err error) bool {
-	return errors.Is(err, organization.ErrLastOwner) || errors.Is(err, organization.ErrNotFound)
+	return errors.Is(err, organization.ErrLastOwner) || errors.Is(err, organization.ErrNotFound) ||
+		errors.Is(err, organization.ErrMemberNotFound) || errors.Is(err, organization.ErrForbidden)
 }
 
 // --- owner 转移 ------------------------------------------------------------
@@ -416,6 +399,10 @@ func TestTransferOwnershipPromotesTargetAndBumpsRevision(t *testing.T) {
 	if role, status := membershipRole(t, db, org.ID, member.ID); role != "owner" || status != "active" {
 		t.Fatalf("target after transfer = %q/%q, want owner/active", role, status)
 	}
+	var recordedOwner int64
+	if err := db.QueryRow(`SELECT owner_user_id FROM organizations WHERE id = $1`, org.ID).Scan(&recordedOwner); err != nil || recordedOwner != member.ID {
+		t.Fatalf("organizations.owner_user_id=%d err=%v, want %d", recordedOwner, err, member.ID)
+	}
 	if role, _ := membershipRole(t, db, org.ID, owner.ID); role != "admin" {
 		t.Fatalf("previous owner after transfer = %q, want admin", role)
 	}
@@ -436,13 +423,11 @@ func TestTransferOwnershipPromotesTargetAndBumpsRevision(t *testing.T) {
 	if role, _ := membershipRole(t, db, org.ID, owner.ID); role != "owner" {
 		t.Fatalf("role after transfer back = %q, want owner", role)
 	}
-	// 目标是既有 owner 时拒绝，而不是把调用者静默降级。
-	second := createUser(t, db, "second-owner@example.com")
-	if _, err := svc.AddMember(ctx, org.ID, second.ID, "owner"); err != nil {
+	if err := svc.ChangeMemberStatus(ctx, owner.ID, org.ID, admin.ID, "suspended"); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.TransferOwnership(ctx, owner.ID, org.ID, second.ID); !errors.Is(err, organization.ErrTargetAlreadyOwner) {
-		t.Fatalf("transfer to an existing owner = %v, want ErrTargetAlreadyOwner", err)
+	if err := svc.TransferOwnership(ctx, owner.ID, org.ID, admin.ID); !errors.Is(err, organization.ErrMemberNotFound) {
+		t.Fatalf("transfer to suspended target = %v, want ErrMemberNotFound", err)
 	}
 	if role, _ := membershipRole(t, db, org.ID, owner.ID); role != "owner" {
 		t.Fatalf("caller was demoted by a refused transfer: role = %q", role)
@@ -534,14 +519,14 @@ func TestInvitationLifecycleIsSingleUseWithFixedEmailAndRole(t *testing.T) {
 	}
 
 	revisionBefore := orgRevisionOf(t, db, org.ID)
-	invitation, token, err := svc.CreateInvitation(ctx, owner.ID, org.ID, "  INVITEE@Example.COM ", "billing_viewer", 2*time.Hour)
+	invitation, token, err := svc.CreateInvitation(ctx, owner.ID, org.ID, "  INVITEE@Example.COM ", "member", 2*time.Hour)
 	if err != nil {
 		t.Fatalf("CreateInvitation: %v", err)
 	}
 	if token == "" {
 		t.Fatal("CreateInvitation did not return a raw token")
 	}
-	if invitation.Email != "invitee@example.com" || invitation.Role != "billing_viewer" || invitation.Status != "pending" {
+	if invitation.Email != "invitee@example.com" || invitation.Role != "member" || invitation.Status != "pending" {
 		t.Fatalf("invitation = %+v, want normalized email + fixed role + pending", invitation)
 	}
 	if invitation.CreatedBy == nil || *invitation.CreatedBy != owner.ID {
@@ -579,10 +564,10 @@ func TestInvitationLifecycleIsSingleUseWithFixedEmailAndRole(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AcceptInvitation: %v", err)
 	}
-	if membership.Role != "billing_viewer" || membership.Status != "active" || membership.OrgID != org.ID {
-		t.Fatalf("accepted membership = %+v, want billing_viewer/active in the inviting org", membership)
+	if membership.Role != "member" || membership.Status != "active" || membership.OrgID != org.ID {
+		t.Fatalf("accepted membership = %+v, want member/active in the inviting org", membership)
 	}
-	if role, _ := membershipRole(t, db, org.ID, invitee.ID); role != "billing_viewer" {
+	if role, _ := membershipRole(t, db, org.ID, invitee.ID); role != "member" {
 		t.Fatalf("stored role = %q, want the invitation role", role)
 	}
 	if got := orgRevisionOf(t, db, org.ID); got != revisionBefore+1 {
@@ -631,10 +616,14 @@ func TestInvitationLifecycleIsSingleUseWithFixedEmailAndRole(t *testing.T) {
 		t.Fatalf("revoke accepted = %v, want ErrInvitationUsed", err)
 	}
 
-	// 重新邀请一个已被移除的成员：接受后恢复 active 并使用邀请里的角色，
-	// created_at 保留首次加入时间（upsert 的恢复语义）。
+	// 重新邀请一个已被移除的成员：接受后创建新的 membership incarnation，
+	// created_at 和 membership id 都属于本次新加入记录。
+	var firstMembershipID int64
+	if err := db.QueryRow(`SELECT id FROM memberships WHERE org_id = $1 AND user_id = $2 AND status = 'active'`, org.ID, invitee.ID).Scan(&firstMembershipID); err != nil {
+		t.Fatal(err)
+	}
 	if err := svc.RemoveMember(ctx, owner.ID, org.ID, invitee.ID); err != nil {
-		t.Fatalf("remove billing_viewer before re-inviting: %v", err)
+		t.Fatalf("remove member before re-inviting: %v", err)
 	}
 	if _, err := svc.AcceptInvitation(ctx, token, invitee.ID, invitee.Email); !errors.Is(err, organization.ErrInvitationUsed) {
 		t.Fatalf("removed member reused the old token = %v, want ErrInvitationUsed", err)
@@ -650,19 +639,14 @@ func TestInvitationLifecycleIsSingleUseWithFixedEmailAndRole(t *testing.T) {
 	if reactivated.Role != "member" || reactivated.Status != "active" {
 		t.Fatalf("reactivated membership = %+v, want member/active", reactivated)
 	}
+	if reactivated.ID == firstMembershipID {
+		t.Fatalf("rejoined membership reused old ID %d", firstMembershipID)
+	}
 
-	// owner 可以邀请 owner；接受后成为 owner。
-	ownerInvite, ownerToken, err := svc.CreateInvitation(ctx, owner.ID, org.ID, "other@example.com", "owner", time.Hour)
-	if err != nil {
-		t.Fatalf("owner invites owner: %v", err)
+	// Owner is assigned only by the atomic ownership-transfer workflow.
+	if _, _, err := svc.CreateInvitation(ctx, owner.ID, org.ID, "other@example.com", "owner", time.Hour); !errors.Is(err, organization.ErrOwnerGrant) {
+		t.Fatalf("owner invitation grant = %v, want ErrOwnerGrant", err)
 	}
-	if _, err := svc.AcceptInvitation(ctx, ownerToken, other.ID, other.Email); err != nil {
-		t.Fatalf("accept owner invitation: %v", err)
-	}
-	if role, _ := membershipRole(t, db, org.ID, other.ID); role != "owner" {
-		t.Fatalf("accepted owner invitation role = %q, want owner", role)
-	}
-	_ = ownerInvite
 }
 
 // --- revision 与 policy_publications 的同事务性 ----------------------------

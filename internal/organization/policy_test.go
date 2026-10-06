@@ -26,17 +26,6 @@ func TestAllowedCoversEveryRoleAndAction(t *testing.T) {
 		{roleMember, ActionTransferOwner, false},
 		{roleMember, ActionPlatformAdminOps, false},
 
-		// billing_viewer：独立只读财务角色，只有企业维度的只读视图。
-		{roleBillingViewer, ActionUseModel, false},
-		{roleBillingViewer, ActionManageOwnKeys, false},
-		{roleBillingViewer, ActionViewOwnUsage, false},
-		{roleBillingViewer, ActionViewOrgUsage, true},
-		{roleBillingViewer, ActionManageMembers, false},
-		{roleBillingViewer, ActionChangeMemberPolicy, false},
-		{roleBillingViewer, ActionCreateAdmin, false},
-		{roleBillingViewer, ActionTransferOwner, false},
-		{roleBillingViewer, ActionPlatformAdminOps, false},
-
 		// admin：member 的全部 + 企业视图 + 成员管理；不能创建 admin、不能转移。
 		{roleAdmin, ActionUseModel, true},
 		{roleAdmin, ActionManageOwnKeys, true},
@@ -116,15 +105,12 @@ func TestCheckRoleGrant(t *testing.T) {
 		want  error
 	}{
 		{roleOwner, roleMember, nil},
-		{roleOwner, roleBillingViewer, nil},
 		{roleOwner, roleAdmin, nil},
 		{roleOwner, roleOwner, ErrOwnerGrant},
 		{roleAdmin, roleMember, nil},
-		{roleAdmin, roleBillingViewer, nil},
 		{roleAdmin, roleAdmin, ErrForbidden},
 		{roleAdmin, roleOwner, ErrOwnerGrant},
 		{roleMember, roleMember, ErrForbidden},
-		{roleBillingViewer, roleMember, ErrForbidden},
 		{roleOwner, RolePlatformAdmin, ErrPlatformRole},
 		{roleAdmin, RolePlatformAdmin, ErrPlatformRole},
 		{roleMember, RolePlatformAdmin, ErrPlatformRole},
@@ -148,13 +134,10 @@ func TestCanActOnTarget(t *testing.T) {
 		{roleOwner, roleOwner, true},
 		{roleOwner, roleAdmin, true},
 		{roleOwner, roleMember, true},
-		{roleOwner, roleBillingViewer, true},
 		{roleAdmin, roleMember, true},
-		{roleAdmin, roleBillingViewer, true},
 		{roleAdmin, roleAdmin, false}, // admin 不能动其他 admin
 		{roleAdmin, roleOwner, false}, // admin 不能动 owner
 		{roleMember, roleMember, false},
-		{roleBillingViewer, roleMember, false},
 	}
 	for _, tc := range cases {
 		if got := canActOnTarget(tc.actor, tc.target); got != tc.want {
@@ -178,7 +161,6 @@ func TestCheckLastOwner(t *testing.T) {
 		{roleOwner, "", 2, nil},                  // 还有另一个 owner
 		{roleAdmin, roleMember, 1, nil},          // 与 owner 数量无关
 		{roleAdmin, "", 1, nil},                  //
-		{roleBillingViewer, "", 1, nil},          //
 		{roleMember, "", 0, nil},                 // owner 数为 0 时也只约束 owner
 	}
 	for _, tc := range cases {

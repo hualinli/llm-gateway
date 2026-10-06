@@ -24,6 +24,7 @@ CREATE UNIQUE INDEX idx_memberships_current_org_user
   ON memberships (org_id, user_id) WHERE status IN ('active', 'suspended');
 CREATE UNIQUE INDEX idx_memberships_single_active_owner
   ON memberships (org_id) WHERE role = 'owner' AND status = 'active';
+ALTER TABLE memberships ADD CONSTRAINT memberships_id_org_user_key UNIQUE (id, org_id, user_id);
 
 -- 邀请固定普通成员额度，接受时不能由请求体覆盖。
 ALTER TABLE invitations DROP CONSTRAINT invitations_role_check;
@@ -105,8 +106,11 @@ CREATE INDEX idx_membership_applications_user_created
 -- Control receives the membership id with each new managed Key. Older rows may
 -- remain NULL during development rebuilds; Console never creates an unbound Key.
 ALTER TABLE api_keys ADD COLUMN membership_id BIGINT;
-ALTER TABLE api_keys ADD CONSTRAINT api_keys_membership_id_fkey
-  FOREIGN KEY (membership_id) REFERENCES memberships (id) ON DELETE RESTRICT;
+ALTER TABLE api_keys ADD CONSTRAINT api_keys_membership_owner_required_check
+  CHECK (membership_id IS NULL OR owner_user_id IS NOT NULL);
+ALTER TABLE api_keys ADD CONSTRAINT api_keys_membership_org_user_fkey
+  FOREIGN KEY (membership_id, org_id, owner_user_id)
+  REFERENCES memberships (id, org_id, user_id) ON DELETE RESTRICT;
 CREATE INDEX idx_api_keys_membership_id ON api_keys (membership_id);
 
 COMMIT;

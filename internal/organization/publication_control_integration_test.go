@@ -108,8 +108,8 @@ func TestPublicationWorkerPublishesThroughRealGRPC(t *testing.T) {
 
 	// A membership change bumps org_revision and writes the publication row in
 	// the same transaction.
-	if err := svc.ChangeMemberRole(ctx, owner.ID, org.ID, member.ID, "billing_viewer"); err != nil {
-		t.Fatalf("ChangeMemberRole: %v", err)
+	if err := svc.ChangeMemberStatus(ctx, owner.ID, org.ID, member.ID, "suspended"); err != nil {
+		t.Fatalf("ChangeMemberStatus: %v", err)
 	}
 	revision = orgRevisionOf(t, db, org.ID)
 	rows := listPublications(t, db, org.ID)
@@ -183,12 +183,12 @@ func TestPublicationWorkerDropsSupersededRevisions(t *testing.T) {
 	member := createUser(t, db, "member-super@example.com")
 	org := seedEnterprise(t, db, svc, "publish-super", []int64{owner.ID, member.ID}, []string{"owner", "member"})
 
-	// Two membership changes: revision 2 (member -> billing_viewer) and
-	// revision 3 (billing_viewer -> member).
-	if err := svc.ChangeMemberRole(ctx, owner.ID, org.ID, member.ID, "billing_viewer"); err != nil {
+	// Two membership changes: revision 2 (active -> suspended) and
+	// revision 3 (suspended -> active).
+	if err := svc.ChangeMemberStatus(ctx, owner.ID, org.ID, member.ID, "suspended"); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.ChangeMemberRole(ctx, owner.ID, org.ID, member.ID, "member"); err != nil {
+	if err := svc.ChangeMemberStatus(ctx, owner.ID, org.ID, member.ID, "active"); err != nil {
 		t.Fatal(err)
 	}
 	revision := orgRevisionOf(t, db, org.ID)
@@ -239,7 +239,7 @@ func TestPublicationWorkerRetriesUntilControlRecovers(t *testing.T) {
 	owner := createUser(t, db, "owner-retry@example.com")
 	member := createUser(t, db, "member-retry@example.com")
 	org := seedEnterprise(t, db, svc, "publish-retry", []int64{owner.ID, member.ID}, []string{"owner", "member"})
-	if err := svc.ChangeMemberRole(ctx, owner.ID, org.ID, member.ID, "billing_viewer"); err != nil {
+	if err := svc.ChangeMemberStatus(ctx, owner.ID, org.ID, member.ID, "suspended"); err != nil {
 		t.Fatal(err)
 	}
 	revision := orgRevisionOf(t, db, org.ID)
@@ -302,7 +302,7 @@ func TestControlPublisherAgainstRealAdminServiceFailsOnUnreachableControl(t *tes
 	owner := createUser(t, db, "owner-down@example.com")
 	member := createUser(t, db, "member-down@example.com")
 	org := seedEnterprise(t, db, svc, "publish-down", []int64{owner.ID, member.ID}, []string{"owner", "member"})
-	if err := svc.ChangeMemberRole(ctx, owner.ID, org.ID, member.ID, "billing_viewer"); err != nil {
+	if err := svc.ChangeMemberStatus(ctx, owner.ID, org.ID, member.ID, "suspended"); err != nil {
 		t.Fatal(err)
 	}
 

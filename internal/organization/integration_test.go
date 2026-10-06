@@ -415,8 +415,8 @@ func TestMembershipRemovedIsNotActive(t *testing.T) {
 	if _, err := db.ExecContext(ctx, `UPDATE memberships SET status = 'removed' WHERE org_id = $1 AND user_id = $2`, org.ID, bob.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.Membership(ctx, bob.ID, org.ID); !errors.Is(err, organization.ErrNotMember) {
-		t.Fatalf("removed membership = %v, want ErrNotMember", err)
+	if _, err := svc.Membership(ctx, bob.ID, org.ID); !errors.Is(err, organization.ErrNotFound) {
+		t.Fatalf("removed membership = %v, want ErrNotFound", err)
 	}
 	if _, err := svc.GetForUser(ctx, bob.ID, org.ID); !errors.Is(err, organization.ErrNotFound) {
 		t.Fatalf("removed member GetForUser = %v, want ErrNotFound", err)

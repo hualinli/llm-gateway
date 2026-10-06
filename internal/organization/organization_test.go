@@ -59,7 +59,7 @@ func TestPersonalOrgNameAllowsBlank(t *testing.T) {
 }
 
 func TestValidRole(t *testing.T) {
-	for _, role := range []string{roleOwner, roleAdmin, roleMember, roleBillingViewer} {
+	for _, role := range []string{roleOwner, roleAdmin, roleMember} {
 		if !validRole(role) {
 			t.Errorf("validRole(%q) = false, want true", role)
 		}
@@ -115,8 +115,8 @@ func TestScanOrganizationLegacyTenant(t *testing.T) {
 func TestScanMemberOrgColumnOrder(t *testing.T) {
 	created := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
 	item, err := scanMemberOrg(func(dest ...any) error {
-		if len(dest) != 7 {
-			t.Fatalf("scanMemberOrg asked for %d columns, want 7", len(dest))
+		if len(dest) != 10 {
+			t.Fatalf("scanMemberOrg asked for %d columns, want 10", len(dest))
 		}
 		*(dest[0].(*int64)) = 3
 		*(dest[1].(*string)) = typeEnterprise
@@ -124,13 +124,17 @@ func TestScanMemberOrgColumnOrder(t *testing.T) {
 		*(dest[3].(*string)) = statusActive
 		*(dest[4].(*sql.NullString)) = sql.NullString{}
 		*(dest[5].(*time.Time)) = created
-		*(dest[6].(*string)) = roleAdmin
+		*(dest[6].(*int64)) = 19
+		*(dest[7].(*string)) = roleAdmin
+		*(dest[8].(*string)) = memberActive
+		limit := int64(5000)
+		*(dest[9].(**int64)) = &limit
 		return nil
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if item.Organization.ID != 3 || item.Organization.Name != "Acme" || item.Role != roleAdmin {
+	if item.Organization.ID != 3 || item.Organization.Name != "Acme" || item.Role != roleAdmin || item.MembershipID != 19 || item.Status != memberActive || item.MonthlyLimitMicro == nil || *item.MonthlyLimitMicro != 5000 {
 		t.Fatalf("unexpected member org: %+v", item)
 	}
 }
