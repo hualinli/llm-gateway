@@ -142,10 +142,28 @@ func TestUsageAdminCanFilterByUser(t *testing.T) {
 	}
 }
 
+func TestUsageAdminCanFilterOwnKeysOnlyInSelfScope(t *testing.T) {
+	h := usageHarness(t)
+	admin := h.t03Session(11, "admin@example.com")
+	rec := h.orgReq(http.MethodGet, "/api/v1/orgs/2/usage?user=11&key=key_own", "", admin, false)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("admin own-key usage = %d, want 200 (body=%s)", rec.Code, rec.Body.String())
+	}
+	query := h.usage.lastPaid(t)
+	if query.UserID == nil || *query.UserID != 11 || query.KeyID != "key_own" {
+		t.Fatalf("own-key query=%+v, want user=11 and key=key_own", query)
+	}
+	var body usageBody
+	decodeInto(t, rec, &body)
+	if body.Scope != "self" {
+		t.Fatalf("own-key scope=%q, want self", body.Scope)
+	}
+}
+
 func TestUsageOrganizationViewRejectsKeyFilters(t *testing.T) {
 	h := usageHarness(t)
 	admin := h.t03Session(11, "admin@example.com")
-	for _, query := range []string{"?key=key_other", "?user=10&key=key_other", "?user=11&key=key_own"} {
+	for _, query := range []string{"?key=key_other", "?user=10&key=key_other"} {
 		rec := h.orgReq(http.MethodGet, "/api/v1/orgs/2/usage"+query, "", admin, false)
 		if rec.Code != http.StatusBadRequest {
 			t.Errorf("admin usage%s = %d, want 400 (body=%s)", query, rec.Code, rec.Body.String())

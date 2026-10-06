@@ -79,6 +79,7 @@ type platformBillingSummaryDTO struct {
 	SettledCount             int64  `json:"settled_count"`
 	PendingCount             int64  `json:"pending_count"`
 	ReviewRequiredCount      int64  `json:"review_required_count"`
+	ReleasedCount            int64  `json:"released_count"`
 	PromptTokens             int64  `json:"prompt_tokens"`
 	CompletionTokens         int64  `json:"completion_tokens"`
 	TotalTokens              int64  `json:"total_tokens"`
@@ -164,7 +165,11 @@ func (s *server) listOrgUsage(ctx context.Context, c *app.RequestContext) {
 		s.writeError(c, http.StatusBadRequest, "", "user must be a positive user id")
 		return
 	}
-	if orgScope && keyID != "" {
+	selfScope := !orgScope
+	if orgScope && userFilter != nil && *userFilter == auth.User.ID {
+		selfScope = true
+	}
+	if orgScope && keyID != "" && !selfScope {
 		s.writeError(c, http.StatusBadRequest, "", "key filtering is only available for own usage")
 		return
 	}
@@ -175,6 +180,7 @@ func (s *server) listOrgUsage(ctx context.Context, c *app.RequestContext) {
 		}
 		self := auth.User.ID
 		userFilter = &self
+		selfScope = true
 	}
 	page, err := reports.QueryUsage(ctx, PaidUsageQuery{
 		OrgID: orgID, UserID: userFilter, Month: month, Model: model, KeyID: keyID, Limit: limit, Cursor: cursor,
@@ -189,7 +195,7 @@ func (s *server) listOrgUsage(ctx context.Context, c *app.RequestContext) {
 		Items:  paidUsageEventDTOs(page.Items, auth.User.ID),
 		Totals: toPaidUsageTotalsDTO(page.Totals),
 	}
-	if !orgScope {
+	if selfScope {
 		response.Scope = usageScopeSelf
 	}
 	if page.NextCursor != nil {
@@ -533,7 +539,8 @@ func toPlatformBillingSummaryDTO(s PlatformBillingSummary) platformBillingSummar
 		KnownProviderCostMicro:   billing.FormatMicro(s.KnownProviderCostMicro),
 		UnknownProviderCostCount: s.UnknownProviderCostCount, SettledCount: s.SettledCount,
 		PendingCount: s.PendingCount, ReviewRequiredCount: s.ReviewRequiredCount,
-		PromptTokens: s.PromptTokens, CompletionTokens: s.CompletionTokens, TotalTokens: s.TotalTokens,
+		ReleasedCount: s.ReleasedCount,
+		PromptTokens:  s.PromptTokens, CompletionTokens: s.CompletionTokens, TotalTokens: s.TotalTokens,
 		UnknownUsageCount: s.UnknownUsageCount,
 	}
 }

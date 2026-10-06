@@ -88,6 +88,7 @@ type PlatformBillingSummary struct {
 	SettledCount             int64
 	PendingCount             int64
 	ReviewRequiredCount      int64
+	ReleasedCount            int64
 	PromptTokens             int64
 	CompletionTokens         int64
 	TotalTokens              int64
@@ -131,6 +132,16 @@ JOIN price_versions p ON p.id = e.price_version_id`
 
 const reportScope = `WHERE e.quota_month = $1::date
   AND e.status NOT IN ('failed_no_charge', 'released')
+  AND ($2 = 0 OR e.org_id = $2)
+  AND ($3 = 0 OR e.user_id = $3)
+  AND ($4 = '' OR e.model = $4)
+  AND ($5 = '' OR e.key_id = $5)`
+
+// Platform cost reports retain released executions: an audited release means
+// the platform absorbed uncertain upstream cost, not that provider cost
+// disappeared. Customer-facing sales reports continue to use reportScope.
+const platformReportScope = `WHERE e.quota_month = $1::date
+  AND e.status <> 'failed_no_charge'
   AND ($2 = 0 OR e.org_id = $2)
   AND ($3 = 0 OR e.user_id = $3)
   AND ($4 = '' OR e.model = $4)
@@ -195,7 +206,8 @@ func (s *PGBillingReports) usageTotals(ctx context.Context, query PaidUsageQuery
 	statement := `SELECT
   COALESCE(SUM(CASE WHEN e.status = 'settled' THEN COALESCE(d.amount_micro, 0) ELSE 0 END), 0)::bigint,
   count(*) FILTER (WHERE e.status = 'settled'),
-  count(*) FILTER (WHERE e.status IN ('reserved', 'executing', 'receipt_recorded')),
+  count(*) FILTER (WHERE e.status IN ('reserved', 'executing', 'receipt_recorded')
+    OR r.status IN ('pending_dispatch', 'dispatched')),
   count(*) FILTER (WHERE e.status = 'review_required'),
   COALESCE(SUM(CASE WHEN e.status = 'settled' AND r.execution_id IS NOT NULL AND r.status <> 'exception' THEN r.prompt_tokens ELSE 0 END), 0)::bigint,
   COALESCE(SUM(CASE WHEN e.status = 'settled' AND r.execution_id IS NOT NULL AND r.status <> 'exception' THEN r.output_tokens ELSE 0 END), 0)::bigint,
@@ -336,7 +348,7 @@ func (s *PGBillingReports) PlatformSummary(ctx context.Context, month billing.Bi
 	}
 	ctx, cancel := s.withTimeout(ctx)
 	defer cancel()
-	rows, err := s.DB.QueryContext(ctx, reportSelect+"\n"+reportScope+"\nORDER BY e.org_id, COALESCE(r.occurred_at, e.created_at), e.execution_id",
+	rows, err := s.DB.QueryContext(ctx, reportSelect+"\n"+platformReportScope+"\nORDER BY e.org_id, COALESCE(r.occurred_at, e.created_at), e.execution_id",
 		month.StartDate, int64(0), int64(0), "", "")
 	if err != nil {
 		return PlatformBillingSummary{}, fmt.Errorf("query platform billing summary: %w", err)
@@ -469,6 +481,8 @@ func accumulatePlatformSummary(summary *PlatformBillingSummary, row PaidUsageRow
 		}
 	case "review_required":
 		summary.ReviewRequiredCount++
+	case "released":
+		summary.ReleasedCount++
 	case "reserved", "executing", "receipt_recorded", "pending_dispatch", "dispatched":
 		summary.PendingCount++
 	}
@@ -506,7 +520,8 @@ func accumulatePlatformSummary(summary *PlatformBillingSummary, row PaidUsageRow
 		} else {
 			summary.UnknownProviderCostCount++
 		}
-	} else if row.SettlementStatus == "review_required" || row.SettlementStatus == "manual_settled" || row.SettlementStatus == "settled" {
+	} else if row.SettlementStatus == "review_required" || row.SettlementStatus == "manual_settled" ||
+		row.SettlementStatus == "settled" || row.SettlementStatus == "released" {
 		summary.UnknownUsageCount++
 		summary.UnknownProviderCostCount++
 	}

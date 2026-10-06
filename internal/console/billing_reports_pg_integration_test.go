@@ -102,6 +102,25 @@ VALUES ($1, $2, 'member', 'active', 1000, $3, $3) RETURNING id`, orgID, memberID
 		t.Fatal(err)
 	}
 
+	// A released execution is not customer sales, but the platform absorbed an
+	// unknown upstream cost. Keep it in the platform's unknown-usage/cost counts.
+	reserve("exec_report_released_unknown", ownerID, orgID, "key-owner-released", knownPrice, 20, 0)
+	if _, err := accounts.RecordUsageException(ctx, billing.UsageExceptionParams{
+		ExecutionID: "exec_report_released_unknown", EventID: "evt_report_released_unknown",
+		Reason: "provider usage payload was absent before platform release",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	releaseAt := now.Add(time.Hour)
+	if _, err := accounts.ReleaseExecutionManually(ctx, billing.ManualDispositionParams{
+		ExecutionID: "exec_report_released_unknown", Action: billing.ManualActionRelease,
+		Reason: "operator: platform absorbed unknown provider cost", ActorUserID: ownerID,
+		MinAge: 30 * time.Minute, LivenessLease: time.Minute, ObservedAt: releaseAt,
+		RequestID: "req-report-release", Now: releaseAt,
+	}); err != nil {
+		t.Fatalf("manually release unknown usage execution: %v", err)
+	}
+
 	month := billing.BillingMonthAt(now)
 	reports := NewPGBillingReports(db)
 	page, err := reports.QueryUsage(ctx, PaidUsageQuery{OrgID: orgID, Month: month, Limit: 20})
@@ -153,7 +172,7 @@ VALUES ($1, $2, 'member', 'active', 1000, $3, $3) RETURNING id`, orgID, memberID
 	}
 	if platform.SalesMicro != 14 || platform.SettledCount != 1 || platform.PendingCount != 1 ||
 		platform.ReviewRequiredCount != 1 || platform.KnownProviderCostMicro == 0 ||
-		platform.UnknownProviderCostCount != 1 || platform.UnknownUsageCount != 1 {
+		platform.ReleasedCount != 1 || platform.UnknownProviderCostCount != 2 || platform.UnknownUsageCount != 2 {
 		t.Fatalf("platform summary=%+v", platform)
 	}
 }
