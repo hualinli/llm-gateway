@@ -120,7 +120,7 @@ func (s *Service) ChangeMemberRoleWithLimit(ctx context.Context, actorUserID, or
 			(target.UserID != actorUserID && !canActOnTarget(actorRole, target.Role)) {
 			return ErrForbidden
 		}
-		if target.Role == clean {
+		if target.Role == clean && (!monthlyLimitProvided || sameLimit(target.MonthlyLimitMicro, monthlyLimit)) {
 			return errNoChange
 		}
 		owners, err := countActiveOwnersInTx(ctx, tx, orgID)

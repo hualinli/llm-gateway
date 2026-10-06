@@ -118,6 +118,9 @@ func (s *Service) EnsurePersonalOrganization(ctx context.Context, userID int64, 
 	if _, err := tx.ExecContext(ctx, queryUpsertMembership, org.ID, userID, roleOwner, nil, now); err != nil {
 		return Organization{}, err
 	}
+	if err := ensureZeroBalanceWallet(ctx, tx, org.ID, now); err != nil {
+		return Organization{}, err
+	}
 	if err := tx.Commit(); err != nil {
 		return Organization{}, err
 	}
@@ -147,10 +150,24 @@ func (s *Service) CreateEnterprise(ctx context.Context, ownerUserID int64, name 
 	if _, err := tx.ExecContext(ctx, queryInsertMembership, org.ID, ownerUserID, roleOwner, nil, now); err != nil {
 		return Organization{}, err
 	}
+	if err := ensureZeroBalanceWallet(ctx, tx, org.ID, now); err != nil {
+		return Organization{}, err
+	}
 	if err := tx.Commit(); err != nil {
 		return Organization{}, err
 	}
 	return org, nil
+}
+
+// ensureZeroBalanceWallet makes every newly provisioned organization immediately
+// usable by billing and platform top-ups. It shares the organization creation
+// transaction so a failed wallet insert cannot leave a half-open account.
+func ensureZeroBalanceWallet(ctx context.Context, tx *sql.Tx, orgID int64, now time.Time) error {
+	_, err := tx.ExecContext(ctx, `INSERT INTO billing_accounts
+		(org_id, currency, posted_balance_micro, reserved_micro, status, version, created_at, updated_at)
+		VALUES ($1, 'CNY', 0, 0, 'active', 1, $2, $2)
+		ON CONFLICT (org_id) DO NOTHING`, orgID, now)
+	return err
 }
 
 // ListForUser 按 id ASC 列出调用者的 active 组织，cursor 是上一页最后一个 id。
@@ -248,6 +265,9 @@ func (s *Service) AddMember(ctx context.Context, orgID, userID int64, role strin
 	role = strings.TrimSpace(role)
 	if !validRole(role) {
 		return Membership{}, fmt.Errorf("organization: invalid role %q", role)
+	}
+	if err := ensureEnterprise(ctx, s.db, orgID); err != nil {
+		return Membership{}, err
 	}
 	var m Membership
 	err := scanMembership(s.db.QueryRowContext(ctx, queryUpsertMembership, orgID, userID, role, nil, time.Now().UTC()).Scan, &m)
