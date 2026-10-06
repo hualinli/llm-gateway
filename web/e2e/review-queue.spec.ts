@@ -31,6 +31,7 @@ test.describe('platform review queue', () => {
       });
     });
     await page.route('**/api/v1/admin/billing/review-required/exec_ui_review/settle', async (route) => {
+      expect(route.request().method()).toBe('POST');
       expect(route.request().postDataJSON()).toEqual({ reason: 'provider verified' });
       expect(route.request().headers()['x-csrf-token']).toBeTruthy();
       writes += 1;
@@ -74,8 +75,11 @@ test.describe('platform review queue', () => {
     await dialog.getByLabel('处理原因').fill('provider verified');
     await button(dialog, '确认扣款并结算').click();
     await expect(dialog).toBeHidden();
-    await expect(card.getByText('已按核定金额完成结算。')).toBeVisible();
-    await expect(card.getByText('0.15 元')).toBeVisible();
+    const result = card.getByRole('alert').filter({ hasText: '已完成结算' });
+    await expect(result.getByText('已完成结算', { exact: true })).toBeVisible();
+    await expect(result.getByRole('row', { name: /^实际扣款\s*:\s*0\.15$/ })).toBeVisible();
+    await expect(result.getByRole('row', { name: /^处理后可用余额\s*:\s*9\.85$/ })).toBeVisible();
+    await expect(result.getByRole('row', { name: /^处理后预留金额\s*:\s*0$/ })).toBeVisible();
     expect(writes).toBe(1);
   });
 });
