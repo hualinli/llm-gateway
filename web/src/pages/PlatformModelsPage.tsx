@@ -82,6 +82,10 @@ export function PlatformModelsPage(): ReactNode {
 
   const saveAccountScope = async (): Promise<void> => {
     if (!organizationId) return;
+    if (scopeMode === 'custom' && unavailableAccountModels.length > 0) {
+      message.error('先移除已停用或未开放的模型，再保存自定义范围。');
+      return;
+    }
     try {
       const result = await saveSettings.mutateAsync({ model_allowlist: scopeMode === 'inherit' ? null : accountModels });
       queryClient.setQueryData(queryKeys.accountModelSettings(organizationId), result);
@@ -178,13 +182,18 @@ export function PlatformModelsPage(): ReactNode {
                         type="warning"
                         showIcon
                         style={{ marginBottom: 12 }}
-                        message="部分已授权模型已被平台关闭"
-                        description={<Space wrap>
-                          {unavailableAccountModels.map((model) => <Tag key={model} color="orange">{model}</Tag>)}
-                          <Button size="small" onClick={() => {
-                            setAccountModels((current) => current.filter((model) => enabledModels.includes(model)));
-                            setAccountDraftDirty(true);
-                          }}>从账户范围移除</Button>
+                        message="账户范围含当前不可用的旧授权"
+                        description={<Space direction="vertical" size={8}>
+                          <Typography.Text>
+                            这些模型已停用或移出平台目录，不会生效。保存自定义范围前需移除；移除后不能重新添加，直到平台重新开放该模型。
+                          </Typography.Text>
+                          <Space wrap>
+                            {unavailableAccountModels.map((model) => <Tag key={model} color="orange">{model} · 当前不可用</Tag>)}
+                            <Button size="small" onClick={() => {
+                              setAccountModels((current) => current.filter((model) => enabledModels.includes(model)));
+                              setAccountDraftDirty(true);
+                            }}>移除全部不可用授权</Button>
+                          </Space>
                         </Space>}
                       /> : null}
                       {enabledModels.length === 0 ? <Alert type="warning" message="平台当前没有已保存的开放模型。" /> : <Checkbox.Group value={accountModels.filter((model) => enabledModels.includes(model))} onChange={(values) => {
@@ -198,7 +207,12 @@ export function PlatformModelsPage(): ReactNode {
                       </Checkbox.Group>}
                     </>
                   )}
-                  <Button type="primary" loading={saveSettings.isPending} disabled={!accountDraftDirty} onClick={() => void saveAccountScope()}>保存此账户范围</Button>
+                  <Button
+                    type="primary"
+                    loading={saveSettings.isPending}
+                    disabled={!accountDraftDirty || (scopeMode === 'custom' && unavailableAccountModels.length > 0)}
+                    onClick={() => void saveAccountScope()}
+                  >保存此账户范围</Button>
                   {saveSettings.isError ? <ErrorView error={saveSettings.error} title="账户范围未保存" /> : null}
                   <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
                     当前生效的模型：{data.effective_models.length === 0 ? <Tag>没有开放模型</Tag> : data.effective_models.map((item) => <Tag key={item.model}>{item.model} · 输入 {formatMicroYuan(item.input_price_micro_per_million)} / 输出 {formatMicroYuan(item.output_price_micro_per_million)} 元/百万 Token</Tag>)}
