@@ -14,8 +14,8 @@
 #
 # 断言都在内嵌的 python3 驱动里（只用 curl + 标准库，不读产品源码、不直接改业务表，
 # 只有造压数据与少量 SQL 观测走 psql）。所有 4xx/5xx 都要求 T01A 错误信封，
-# 跨组织一律要求与"不存在的组织"逐字节同形，并扫描全部响应与进程日志里的
-# raw Key/session/CSRF/邀请 token/口令。
+# 跨组织一律要求与"不存在的组织"逐字节同形，并扫描响应、进程日志和落盘证据中的
+# raw credentials；完整驱动配置只在临时 secrets 目录里。
 #
 # 退出码：0 = 全部硬检查通过（允许显式 SKIP）；1 = 存在 FAIL；2 = 用法/环境错误。
 #
@@ -32,6 +32,15 @@ phases="all"
 timeout_seconds=20
 keep_lab=0
 lease_seconds=8
+driver_dir=""
+
+security_matrix_teardown() {
+  t10_teardown
+  if [[ -n "$driver_dir" ]]; then rm -rf -- "$driver_dir"; fi
+  if [[ "$keep_lab" != "1" && -n "${T10_SECRETS_DIR:-}" ]]; then
+    rm -rf -- "$T10_SECRETS_DIR"
+  fi
+}
 
 usage() {
   cat <<'USAGE'
@@ -85,8 +94,9 @@ case ",$phases," in
   *) t10_die "--phases 只支持 security,control,longstream,isolation,all: $phases" ;;
 esac
 
-t10_require docker curl python3 go git
+t10_require docker curl python3 go git shasum
 t10_install_traps
+trap 'security_matrix_teardown' EXIT
 
 # 每个 run 自己的 docker 项目名/容器名，避免与并行任务（含同 worktree 的失败注入任务）冲突。
 prefix="t10sec-$(printf '%s' "$T10_RUN_ID" | tr '[:upper:]' '[:lower:]')"
@@ -345,8 +355,9 @@ print("timeout: %r" % (last,), file=sys.stderr)
 sys.exit(1)
 PY
 
-# 驱动配置：所有 URL/端口/容器名/重启命令都给 python 驱动，断言全在驱动里。
-cat > "$T10_EVIDENCE_DIR/lab.json" <<JSON
+# 驱动配置包含 bearer token、DSN 与重启命令，只放 0700/0600 的临时 secrets 目录。
+private_lab_config="$T10_SECRETS_DIR/lab-private.json"
+cat > "$private_lab_config" <<JSON
 {
   "run_id": "$T10_RUN_ID",
   "root": "$T10_ROOT",
@@ -390,6 +401,34 @@ cat > "$T10_EVIDENCE_DIR/lab.json" <<JSON
   }
 }
 JSON
+chmod 600 "$private_lab_config"
+
+# Evidence carries connection metadata only; it never stores credentials, DSNs,
+# process environments, or command arguments.
+python3 - "$private_lab_config" "$T10_EVIDENCE_DIR/lab.json" <<'PY'
+import json
+import os
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    config = json.load(handle)
+public = {
+    "run_id": config["run_id"],
+    "root": config["root"],
+    "evidence_dir": config["evidence_dir"],
+    "timeout_seconds": config["timeout_seconds"],
+    "lease_seconds": config["lease_seconds"],
+    "phases": config["phases"],
+    "admin_email": config["admin_email"],
+    "containers": config["containers"],
+    "ports": config["ports"],
+    "urls": config["urls"],
+    "secret_material": "temporary private config; removed after teardown unless --keep is used",
+}
+with open(sys.argv[2], "w", encoding="utf-8") as handle:
+    json.dump(public, handle, indent=2)
+os.chmod(sys.argv[2], 0o600)
+PY
 
 # 断言驱动：写在临时目录（它是脚本本体的一部分，不属于证据）。
 driver_dir="$(mktemp -d "${TMPDIR:-/tmp}/t10sec-driver.XXXXXX")"
@@ -593,10 +632,10 @@ CSRF_DEFAULT = object()
 
 
 class Client:
-    def __init__(self, evidence_dir, timeout):
+    def __init__(self, evidence_dir, timeout, scratch_dir=None):
         self.evidence_dir = evidence_dir
         self.timeout = timeout
-        self.scratch = tempfile.mkdtemp(prefix="t10sec-http.")
+        self.scratch = tempfile.mkdtemp(prefix="t10sec-http.", dir=scratch_dir)
         self.records = []
 
     def call(self, check, label, method, path, *, base_url, query=None, body=None, raw_body=None,
@@ -694,7 +733,18 @@ class Client:
         for key, value in response.headers:
             resp_dump.append("%s: %s" % (key, value))
         resp_dump.append("")
-        resp_dump.append(response.body[:MAX_STORED_BODY])
+        response_body = response.body[:MAX_STORED_BODY]
+        # Activation codes are one-time credentials carried as `code`, not
+        # `token`; redact this response before it reaches evidence files.
+        if response.method == "POST" and response.path.split("?", 1)[0] == "/api/v1/admin/activation-codes":
+            try:
+                payload = json.loads(response_body)
+                if isinstance(payload, dict) and isinstance(payload.get("code"), str):
+                    payload["code"] = "<redacted: one-time activation code>"
+                    response_body = json.dumps(payload, ensure_ascii=False)
+            except (TypeError, ValueError):
+                pass
+        resp_dump.append(response_body)
         if len(response.body) > MAX_STORED_BODY:
             resp_dump.append("\n…(%d bytes truncated)" % (len(response.body) - MAX_STORED_BODY))
         with open(os.path.join(self.evidence_dir, stem + ".resp"), "w", encoding="utf-8") as handle:
@@ -2449,6 +2499,9 @@ class Matrix:
         for name, entry in self.fx.opening_codes.items():
             allow(entry["code"], {("POST", "/api/v1/admin/activation-codes")}, "enterprise opening code")
         allow(open(self.lab.cfg["admin_password_file"]).read().strip(), set(), "platform admin password")
+        for name, value in self.lab.cfg.get("tokens", {}).items():
+            allow(value, set(), name + " admin token")
+        allow(self.lab.cfg.get("provider_secret", ""), set(), "provider credential secret")
 
         leaks = []
         allowed_hits = 0
@@ -2476,16 +2529,36 @@ class Matrix:
                 if value and value in text:
                     log_leaks.append("%s 出现在日志 %s" % (kind, os.path.basename(path)))
 
+        evidence_leaks = []
+        evidence_files = 0
+        for directory, _subdirs, filenames in os.walk(self.lab.evidence_dir):
+            for filename in filenames:
+                path = os.path.join(directory, filename)
+                try:
+                    if os.path.getsize(path) > 64 * 1024 * 1024:
+                        continue
+                    with open(path, "rb") as handle:
+                        content = handle.read()
+                except OSError:
+                    continue
+                evidence_files += 1
+                for value, _patterns, kind in provenance:
+                    if value and value.encode("utf-8") in content:
+                        evidence_leaks.append("%s 出现在 evidence %s" % (
+                            kind, os.path.relpath(path, self.lab.evidence_dir)))
+
         check.detail("responses_scanned", len(self.client.records))
         check.detail("logs_scanned", len(log_files))
+        check.detail("evidence_files_scanned", evidence_files)
         check.detail("secret_values_tracked", len(provenance))
         check.detail("allowed_single_occurrences", allowed_hits)
         check.require(not leaks, "响应泄密: " + "; ".join(sorted(set(leaks))[:6]))
         check.require(not log_leaks, "日志泄密: " + "; ".join(sorted(set(log_leaks))[:6]))
+        check.require(not evidence_leaks, "Evidence 泄密: " + "; ".join(sorted(set(evidence_leaks))[:6]))
         check.require(allowed_hits > 0,
                       "没有任何 secret 出现在创建响应里（fixture 可能没跑）")
-        check.note("%d 个响应 + %d 个进程日志：%d 个 secret 值只在其创建响应里出现 %d 次，其余零出现"
-                   % (len(self.client.records), len(log_files), len(provenance), allowed_hits))
+        check.note("%d 个响应、%d 个进程日志、%d 个 evidence 文件：%d 个 secret 值只在其创建响应里出现 %d 次，其余零出现"
+                   % (len(self.client.records), len(log_files), evidence_files, len(provenance), allowed_hits))
 
 
 # ---------------------------------------------------------------------------
@@ -3373,7 +3446,7 @@ def main():
     wanted = {"security", "control", "longstream", "isolation"} if phases == "all" else set(phases.split(","))
 
     lab = Lab(cfg)
-    client = Client(cfg["evidence_dir"], cfg["timeout_seconds"])
+    client = Client(cfg["evidence_dir"], cfg["timeout_seconds"], scratch_dir=cfg["secret_dir"])
     fx = Fixtures(lab, client)  # cid 默认 FIX（与恢复演练的 BFIX 区分）
     matrix = Matrix(lab, fx, client)
     extra = {}
@@ -3478,10 +3551,11 @@ DRIVER_EOF
 
 t10_log "运行断言驱动（phases=${phases}）"
 set +e
-python3 "$driver_path" --lab "$T10_EVIDENCE_DIR/lab.json" 2>&1 | tee "$T10_LOG_DIR/driver.log"
+python3 "$driver_path" --lab "$private_lab_config" 2>&1 | tee "$T10_LOG_DIR/driver.log"
 driver_rc=${PIPESTATUS[0]}
 set -e
-rm -rf "$driver_dir"
+rm -rf -- "$driver_dir"
+driver_dir=""
 
 # 进程日志收尾：把 driver 之外的静态日志也放进 logs/（spawn 时已经直接写进去了）。
 if [[ "$keep_lab" == "1" ]]; then
