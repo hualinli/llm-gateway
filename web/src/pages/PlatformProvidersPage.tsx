@@ -251,7 +251,7 @@ export function PlatformProvidersPage(): ReactNode {
   const routeServerChanged = routeDraftDirty && routeBaseVersion !== null && routes.data !== undefined && routes.data.version !== routeBaseVersion;
 
   return (
-    <Space direction="vertical" size={16} style={{ width: '100%' }}>
+    <Space className="responsive-page-content platform-providers-page" direction="vertical" size={16} style={{ width: '100%', minWidth: 0 }}>
       <PageHeader title="上游接入" description="维护模型服务地址、访问凭据和模型转发顺序。" />
       <Alert
         type="info"
@@ -261,6 +261,7 @@ export function PlatformProvidersPage(): ReactNode {
       />
 
       <Card
+        className="responsive-table-card"
         title="服务接入点"
         extra={<Button type="primary" onClick={openCreate}>添加接入点</Button>}
         data-testid="platform-providers"
@@ -270,15 +271,16 @@ export function PlatformProvidersPage(): ReactNode {
             rowKey="id"
             dataSource={data.items}
             pagination={false}
+            scroll={{ x: 1160 }}
             columns={[
-              { title: '接入点', dataIndex: 'id', render: (value: string) => <Typography.Text strong>{value}</Typography.Text> },
-              { title: '服务地址', dataIndex: 'url', render: (value: string) => <Typography.Text copyable>{value}</Typography.Text> },
-              { title: '默认模型', dataIndex: 'model', render: (value?: string) => value || '使用模型路由' },
-              { title: '访问凭据', dataIndex: 'credential_ref', render: (value?: string) => {
+              { title: '接入点', dataIndex: 'id', width: 190, render: (value: string) => <Typography.Text strong>{value}</Typography.Text> },
+              { title: '服务地址', dataIndex: 'url', width: 360, render: (value: string) => <Typography.Text copyable>{value}</Typography.Text> },
+              { title: '默认模型', dataIndex: 'model', width: 200, render: (value?: string) => value || '使用模型路由' },
+              { title: '访问凭据', dataIndex: 'credential_ref', width: 240, render: (value?: string) => {
                 const item = credentials.data?.items.find((credential) => credential.credential_ref === value);
                 return item ? <Tag color={item.status === 'active' ? 'green' : 'default'}>{item.fingerprint}</Tag> : '未绑定';
               } },
-              { title: '操作', key: 'actions', render: (_, row) => <Space>
+              { title: '操作', key: 'actions', width: 170, render: (_, row) => <Space>
                 <Button size="small" onClick={() => openEdit(row)}>编辑</Button>
                 <Popconfirm title="移除此接入点？" description="有关联的模型路由时，服务会拒绝移除。" okText="移除" cancelText="取消" onConfirm={() => removeProvider.mutate(row.id)}>
                   <Button size="small" danger loading={removeProvider.isPending}>移除</Button>
@@ -290,13 +292,13 @@ export function PlatformProvidersPage(): ReactNode {
         {saveProvider.isError ? <div style={{ marginTop: 12 }}><ErrorView error={saveProvider.error} title="接入点未保存" /></div> : null}
       </Card>
 
-      <Card title="服务访问凭据" data-testid="platform-provider-credentials">
+      <Card className="responsive-table-card" title="服务访问凭据" data-testid="platform-provider-credentials">
         <Form form={credentialForm} layout="vertical" onFinish={() => void submitCredential()}>
           <Space align="start" wrap>
-            <Form.Item name="provider_id" label="所属接入点" rules={[{ required: true, message: '请选择接入点' }]} style={{ minWidth: 240 }}>
+            <Form.Item className="provider-form-field" name="provider_id" label="所属接入点" rules={[{ required: true, message: '请选择接入点' }]} style={{ minWidth: 240 }}>
               <Select options={(providers.data?.items ?? []).map((item) => ({ value: item.id, label: item.id }))} placeholder="选择接入点" />
             </Form.Item>
-            <Form.Item name="secret" label="访问密钥" rules={[{ required: true, whitespace: true, message: '请输入密钥' }, { max: 4096 }]} style={{ minWidth: 320 }}>
+            <Form.Item className="provider-form-field" name="secret" label="访问密钥" rules={[{ required: true, whitespace: true, message: '请输入密钥' }, { max: 4096 }]} style={{ minWidth: 320 }}>
               <Input.Password autoComplete="new-password" placeholder="粘贴服务商提供的密钥" />
             </Form.Item>
             <Button type="primary" htmlType="submit" loading={saveCredential.isPending} style={{ marginTop: 30 }}>保存访问凭据</Button>
@@ -307,13 +309,14 @@ export function PlatformProvidersPage(): ReactNode {
           rowKey="credential_id"
           size="small"
           pagination={false}
+          scroll={{ x: 760 }}
           dataSource={credentials.data?.items ?? []}
           columns={[
-            { title: '接入点', dataIndex: 'provider_id' },
-            { title: '已保存的凭据', dataIndex: 'fingerprint', render: (value: string) => <Typography.Text code>{value}</Typography.Text> },
-            { title: '状态', dataIndex: 'status', render: (value: string) => <Tag color={value === 'active' ? 'green' : 'default'}>{value === 'active' ? '可用' : '已停用'}</Tag> },
-            { title: '添加时间', dataIndex: 'created_at' },
-            { title: '操作', key: 'action', render: (_, row) => row.status === 'active' ? (
+            { title: '接入点', dataIndex: 'provider_id', width: 180 },
+            { title: '已保存的凭据', dataIndex: 'fingerprint', width: 220, render: (value: string) => <Typography.Text code>{value}</Typography.Text> },
+            { title: '状态', dataIndex: 'status', width: 120, render: (value: string) => <Tag color={value === 'active' ? 'green' : 'default'}>{value === 'active' ? '可用' : '已停用'}</Tag> },
+            { title: '添加时间', dataIndex: 'created_at', width: 220 },
+            { title: '操作', key: 'action', width: 120, render: (_, row) => row.status === 'active' ? (
               <Popconfirm title="停用这份凭据？" okText="停用" cancelText="取消" onConfirm={() => removeCredential.mutate(row.credential_id)}>
                 <Button size="small" danger loading={removeCredential.isPending}>停用</Button>
               </Popconfirm>
@@ -323,7 +326,7 @@ export function PlatformProvidersPage(): ReactNode {
         {removeCredential.isError ? <ErrorView error={removeCredential.error} title="访问凭据未停用" /> : null}
       </Card>
 
-      <Card title="模型转发顺序" data-testid="platform-model-routes">
+      <Card className="responsive-table-card" title="模型转发顺序" data-testid="platform-model-routes">
         <Typography.Paragraph type="secondary">每个模型可以配置多个接入点，按所选顺序尝试。列表为空表示该模型当前没有可用上游。</Typography.Paragraph>
         {routeConflict || routeServerChanged ? <Alert
           style={{ marginBottom: 12 }}
@@ -344,10 +347,11 @@ export function PlatformProvidersPage(): ReactNode {
               rowKey="model"
               size="small"
               pagination={false}
+              scroll={{ x: 850 }}
               dataSource={modelNames.map((model) => ({ model, providers: routeDraft[model] ?? [] }))}
               columns={[
-                { title: '模型', dataIndex: 'model', render: (value: string) => <Typography.Text strong>{value}</Typography.Text> },
-                { title: '接入点顺序', dataIndex: 'providers', render: (values: string[], row) => <Select
+                { title: '模型', dataIndex: 'model', width: 240, render: (value: string) => <Typography.Text strong>{value}</Typography.Text> },
+                { title: '接入点顺序', dataIndex: 'providers', width: 430, render: (values: string[], row) => <Select
                   mode="multiple"
                   value={values}
                   options={(providers.data?.items ?? []).map((provider) => ({ value: provider.id, label: provider.id }))}
@@ -359,7 +363,7 @@ export function PlatformProvidersPage(): ReactNode {
                   style={{ width: '100%', minWidth: 280 }}
                   aria-label={row.model + ' 的接入顺序'}
                 /> },
-                { title: '操作', key: 'actions', render: (_, row) => <Button danger size="small" onClick={() => {
+                { title: '操作', key: 'actions', width: 160, render: (_, row) => <Button danger size="small" onClick={() => {
                   setRouteDraft((current) => {
                     const next = { ...current };
                     delete next[row.model];

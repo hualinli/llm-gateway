@@ -212,41 +212,43 @@ export function MembersPage(): ReactNode {
   const usageRows = usage.data?.items ?? [];
   const assignable = assignableRoles(role);
   return (
-    <Space direction="vertical" size={18} style={{ width: '100%' }}>
+    <Space className="responsive-page-content" direction="vertical" size={18} style={{ width: '100%', minWidth: 0 }}>
       <PageHeader title="成员与申请" description="管理加入申请、成员角色和月度额度。每位成员只管理自己的 API Key。" extra={<Button icon={<PlusOutlined />} type="primary" onClick={() => { inviteForm.resetFields(); setInviteOpen(true); }}>邀请成员</Button>} />
       <Alert type="info" showIcon message="额度按北京时间自然月统计" description="降低额度会立即影响新调用；已受理的请求会继续按原规则结算。0 元表示暂停新消费，不限额表示没有成员上限。" />
       {pageError ? <ErrorView error={pageError} title="操作未完成" /> : null}
-      <Card title={`成员消费 · ${month}`} data-testid="member-spend-summary">
+      <Card className="responsive-table-card" title={`成员消费 · ${month}`} data-testid="member-spend-summary">
         <DataState query={usage} emptyDescription="本月还没有成员消费记录。">
           {(summary) => <Table
             rowKey="user_id"
             size="small"
             pagination={false}
+            scroll={{ x: 1050 }}
             dataSource={summary.items}
             columns={[
-              { title: '成员', dataIndex: 'email' },
-              { title: '已结算调用', dataIndex: 'settled_count' },
-              { title: '处理中', dataIndex: 'pending_count' },
-              { title: '需要核对', dataIndex: 'review_required_count' },
-              { title: 'Token 用量', dataIndex: 'total_tokens', render: (value: number) => value.toLocaleString('en-US') },
-              { title: '已结算费用', dataIndex: 'sales_micro', render: (value: string) => <MicroYuan value={value} /> },
-              { title: '用量待确认', dataIndex: 'unknown_usage_count' },
+              { title: '成员', dataIndex: 'email', width: 240 },
+              { title: '已结算调用', dataIndex: 'settled_count', width: 120 },
+              { title: '处理中', dataIndex: 'pending_count', width: 110 },
+              { title: '需要核对', dataIndex: 'review_required_count', width: 120 },
+              { title: 'Token 用量', dataIndex: 'total_tokens', width: 130, render: (value: number) => value.toLocaleString('en-US') },
+              { title: '已结算费用', dataIndex: 'sales_micro', width: 150, render: (value: string) => <MicroYuan value={value} /> },
+              { title: '用量待确认', dataIndex: 'unknown_usage_count', width: 130 },
             ]}
           />}
         </DataState>
       </Card>
-      <Card title="企业成员" data-testid="members-list">
+      <Card className="responsive-table-card" title="企业成员" data-testid="members-list">
         <DataState query={members} emptyDescription="还没有成员。可以发送邀请或审批加入申请。">
           {(page) => <Table<Member>
             rowKey="user_id"
             size="middle"
             pagination={{ pageSize: 10 }}
+            scroll={{ x: 1120 }}
             dataSource={page.items}
             columns={[
-              { title: '成员', dataIndex: 'email', render: (email: string, row) => <Space direction="vertical" size={0}><Typography.Text strong>{email}</Typography.Text><Typography.Text type="secondary">{row.role === 'owner' ? '企业负责人' : ROLE_LABELS[row.role]}</Typography.Text></Space> },
-              { title: '状态', dataIndex: 'status', render: (status: Member['status']) => <Tag color={status === 'active' ? 'green' : 'orange'}>{status === 'active' ? '正常' : '已暂停'}</Tag> },
-              { title: '月度额度', dataIndex: 'monthly_limit_micro', render: (value: string | null | undefined) => quotaLabel(value) },
-              { title: '本月已结算', key: 'spent', render: (_, row) => { const record = usageRows.find((item) => item.user_id === row.user_id); return record ? <MicroYuan value={record.sales_micro} /> : '—'; } },
+              { title: '成员', dataIndex: 'email', width: 280, render: (email: string, row) => <Space direction="vertical" size={0}><Typography.Text strong>{email}</Typography.Text><Typography.Text type="secondary">{row.role === 'owner' ? '企业负责人' : ROLE_LABELS[row.role]}</Typography.Text></Space> },
+              { title: '状态', dataIndex: 'status', width: 120, render: (status: Member['status']) => <Tag color={status === 'active' ? 'green' : 'orange'}>{status === 'active' ? '正常' : '已暂停'}</Tag> },
+              { title: '月度额度', dataIndex: 'monthly_limit_micro', width: 180, render: (value: string | null | undefined) => quotaLabel(value) },
+              { title: '本月已结算', key: 'spent', width: 180, render: (_, row) => { const record = usageRows.find((item) => item.user_id === row.user_id); return record ? <MicroYuan value={record.sales_micro} /> : '—'; } },
               { title: '操作', key: 'actions', render: (_, row) => {
                 const isSelf = row.user_id === me?.user.id;
                 const canManageTarget = role === 'owner' ? row.role !== 'owner' : row.role === 'member' && !isSelf;
@@ -267,12 +269,13 @@ export function MembersPage(): ReactNode {
           />}
         </DataState>
       </Card>
-      <Card title="加入申请" data-testid="join-requests">
+      <Card className="responsive-table-card" title="加入申请" data-testid="join-requests">
         <DataState query={joinRequests} emptyDescription="暂时没有待审批的申请。">
           {(page) => <Table<JoinRequest>
             rowKey="id"
             size="middle"
             pagination={false}
+            scroll={{ x: 820 }}
             dataSource={page.pages.flatMap((item) => item.items)}
             locale={{ emptyText: '暂时没有待审批的申请。' }}
             columns={[
@@ -288,12 +291,13 @@ export function MembersPage(): ReactNode {
           onClick={() => void joinRequests.fetchNextPage()}
         >加载更多待审批申请（已载入 {joinRequests.data.pages.reduce((count, page) => count + page.items.length, 0)} 条）</Button> : null}
       </Card>
-      <Card title="待接受邀请" data-testid="member-invitations">
+      <Card className="responsive-table-card" title="待接受邀请" data-testid="member-invitations">
         <DataState query={invitations} emptyDescription="没有待接受的邀请。">
           {(page) => <Table<Invitation>
             rowKey="id"
             size="small"
             pagination={false}
+            scroll={{ x: 680 }}
             dataSource={page.items.filter((item) => item.status === 'pending')}
             columns={[
               { title: '受邀邮箱', dataIndex: 'email' },

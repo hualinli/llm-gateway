@@ -45,7 +45,7 @@ export function UsagePage(): ReactNode {
   const canReadWallet = CAN.manageBilling(membership);
 
   return (
-    <Space direction="vertical" size={16} style={{ width: '100%' }}>
+    <Space className="responsive-page-content" direction="vertical" size={16} style={{ width: '100%', minWidth: 0 }}>
       <PageHeader
         title={membership?.organization.type === 'personal' ? '我的消费' : '用量与额度'}
         description="查看所选账户在北京时间自然月内的模型调用与实际费用。"
@@ -118,7 +118,7 @@ export function UsagePage(): ReactNode {
       <DataState query={usage} loadingRows={5} showStaleBanner>
         {(data) => (
           <Space direction="vertical" size={16} style={{ width: '100%' }}>
-            <Card title={`${data.month} 消费汇总`} data-testid="usage-summary-card">
+            <Card className="responsive-table-card" title={`${data.month} 消费汇总`} data-testid="usage-summary-card">
               <Row gutter={[16, 16]}>
                 <Col xs={12} md={6}><Statistic title="已结算费用" value={`${formatMicroYuan(data.totals.sales_micro)} 元`} /></Col>
                 <Col xs={12} md={6}><Statistic title="已结算调用" value={data.totals.settled_count} /></Col>
@@ -136,24 +136,24 @@ export function UsagePage(): ReactNode {
               </Typography.Paragraph>
             </Card>
 
-            <Card title="调用明细" data-testid="usage-events-card">
+            <Card className="responsive-table-card" title="调用明细" data-testid="usage-events-card">
               <Table<MonthlyUsageItem>
                 size="small"
                 rowKey="execution_id"
                 dataSource={data.items}
                 pagination={false}
-                scroll={{ x: 1050 }}
+                scroll={{ x: 1350 }}
                 locale={{ emptyText: '这个月还没有模型调用' }}
                 columns={[
-                  { title: '时间', dataIndex: 'occurred_at', render: (value: string) => formatTimestamp(value) },
-                  ...(data.scope === 'organization' ? [{ title: '成员', dataIndex: 'email', render: (value: string | null | undefined) => value || '未知成员' }] : []),
-                  { title: '模型', dataIndex: 'model' },
-                  { title: '服务商', dataIndex: 'provider', render: (value: string | null) => value || '待确认' },
-                  { title: '状态', dataIndex: 'settlement_status', render: (value: MonthlyUsageItem['settlement_status']) => <Tag color={value === 'settled' || value === 'manual_settled' ? 'green' : value === 'review_required' ? 'orange' : 'blue'}>{STATUS_LABELS[value]}</Tag> },
-                  { title: '输入 Token', dataIndex: 'prompt_tokens', render: (value: number | null) => count(value) },
-                  { title: '输出 Token', dataIndex: 'completion_tokens', render: (value: number | null) => count(value) },
-                  { title: '实际费用', dataIndex: 'charge_micro', render: (value: string | null, row) => value === null ? (row.settlement_status === 'review_required' ? '待核对' : '待结算') : `${formatMicroYuan(value)} 元` },
-                  ...(data.scope === 'self' ? [{ title: '我的 Key', dataIndex: 'key_id', render: (value?: string) => value ? <Typography.Text copyable={{ text: value }}>{shortId(value)}</Typography.Text> : '—' }] : []),
+                  { title: '时间', dataIndex: 'occurred_at', width: 190, render: (value: string) => formatTimestamp(value) },
+                  ...(data.scope === 'organization' ? [{ title: '成员', dataIndex: 'email', width: 230, render: (value: string | null | undefined) => value || '未知成员' }] : []),
+                  { title: '模型', dataIndex: 'model', width: 180 },
+                  { title: '服务商', dataIndex: 'provider', width: 180, render: (value: string | null) => value || '待确认' },
+                  { title: '状态', dataIndex: 'settlement_status', width: 150, render: (value: MonthlyUsageItem['settlement_status']) => <Tag color={value === 'settled' || value === 'manual_settled' ? 'green' : value === 'review_required' ? 'orange' : 'blue'}>{STATUS_LABELS[value]}</Tag> },
+                  { title: '输入 Token', dataIndex: 'prompt_tokens', width: 130, render: (value: number | null) => count(value) },
+                  { title: '输出 Token', dataIndex: 'completion_tokens', width: 130, render: (value: number | null) => count(value) },
+                  { title: '实际费用', dataIndex: 'charge_micro', width: 170, render: (value: string | null, row) => value === null ? (row.settlement_status === 'review_required' ? '待核对' : '待结算') : `${formatMicroYuan(value)} 元` },
+                  ...(data.scope === 'self' ? [{ title: '我的 Key', dataIndex: 'key_id', width: 180, render: (value?: string) => value ? <Typography.Text copyable={{ text: value }}>{shortId(value)}</Typography.Text> : '—' }] : []),
                 ]}
               />
               <CursorPagination

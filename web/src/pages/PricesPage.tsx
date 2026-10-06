@@ -89,7 +89,7 @@ export function PricesPage(): ReactNode {
   };
 
   return (
-    <Space direction="vertical" size={16} style={{ width: '100%' }}>
+    <Space className="responsive-page-content" direction="vertical" size={16} style={{ width: '100%', minWidth: 0 }}>
       <PageHeader title="模型价格" description="设置用户实际支付的输入和输出价格，并记录已知上游成本。" />
       <Alert
         type="info"
@@ -143,6 +143,7 @@ export function PricesPage(): ReactNode {
       </Card>
 
       <Card
+        className="responsive-table-card"
         title="已发布的价格"
         data-testid="prices-history-card"
         extra={
@@ -159,7 +160,7 @@ export function PricesPage(): ReactNode {
               size="small"
               pagination={false}
               dataSource={page.items}
-              scroll={{ x: 900 }}
+              scroll={{ x: 1120 }}
               columns={[
                 { title: '模型', dataIndex: 'model' },
                 { title: '输入价 / 百万 Token', dataIndex: 'input_price_micro_per_million', render: (value: string) => `${formatMicroYuan(value)} 元` },
