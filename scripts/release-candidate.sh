@@ -2033,6 +2033,8 @@ rc_e2e() {
   ( cd "$RC_ROOT/web" && \
     E2E_CONSOLE_URL="http://127.0.0.1:$RC_CONSOLE_PORT" \
     E2E_GATEWAY_URL="http://127.0.0.1:$RC_GATEWAY_PORT" \
+    E2E_GATEWAY_MODEL="$RC_PRICE_MODEL" \
+    E2E_REQUIRE_FULL_STACK=1 \
     E2E_ADMIN_EMAIL="$RC_ADMIN_EMAIL" \
     E2E_ADMIN_PASSWORD="$(cat "$RC_WORK_DIR/secrets/admin-password")" \
     CI=1 npm run e2e -- --reporter=list --grep-invert screenshots ) \

@@ -6,6 +6,7 @@ import { AUTH, STATE_PATH } from './fixtures';
 
 const CONSOLE_URL = process.env.E2E_CONSOLE_URL ?? 'http://127.0.0.1:18092';
 const GATEWAY_URL = process.env.E2E_GATEWAY_URL ?? 'http://127.0.0.1:18090';
+const REQUIRE_FULL_STACK = process.env.E2E_REQUIRE_FULL_STACK === '1';
 const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL ?? 't08-admin@example.com';
 const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD ?? 't08-e2e-admin-pw';
 
@@ -21,6 +22,14 @@ interface MembershipResponse {
 
 function csrfHeaders(token: string): Record<string, string> {
   return { 'X-CSRF-Token': token };
+}
+
+function assertLoopbackURL(label: string, value: string): void {
+  const parsed = new URL(value);
+  const hostname = parsed.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  if (!['127.0.0.1', 'localhost', '::1'].includes(hostname)) {
+    throw new Error(`Full-stack E2E ${label} must be loopback; received ${parsed.origin}`);
+  }
 }
 
 async function readSession(response: APIResponse, label: string): Promise<SessionResponse> {
@@ -68,15 +77,23 @@ export default async function globalSetup(_config: FullConfig): Promise<void> {
     usageSeeded: false,
   };
 
+  if (REQUIRE_FULL_STACK) {
+    assertLoopbackURL('Console URL', CONSOLE_URL);
+    assertLoopbackURL('Gateway URL', GATEWAY_URL);
+  }
   const probe = await request.newContext({ baseURL: CONSOLE_URL });
   try {
     const live = await probe.get('/livez', { timeout: 3_000 });
     if (!live.ok()) {
-      writeState({ ...base, backend: false, reason: 'Console /livez 返回 ' + live.status() });
+      const reason = 'Console /livez 返回 ' + live.status();
+      if (REQUIRE_FULL_STACK) throw new Error(reason);
+      writeState({ ...base, backend: false, reason });
       return;
     }
   } catch (cause) {
-    writeState({ ...base, backend: false, reason: cause instanceof Error ? cause.message : String(cause) });
+    const reason = cause instanceof Error ? cause.message : String(cause);
+    if (REQUIRE_FULL_STACK) throw new Error('Full-stack E2E requires a reachable Console: ' + reason);
+    writeState({ ...base, backend: false, reason });
     return;
   } finally {
     await probe.dispose();
@@ -104,6 +121,25 @@ export default async function globalSetup(_config: FullConfig): Promise<void> {
     });
     if (!team.ok()) throw new Error('create E2E enterprise: ' + team.status() + ' ' + await team.text());
     base.orgA.id = ((await team.json()) as MembershipResponse).organization.id;
+
+    if (REQUIRE_FULL_STACK) {
+      const funding = await adminContext.post(
+        '/api/v1/admin/billing/accounts/' + encodeURIComponent(base.orgA.id) + '/adjustments',
+        {
+          headers: {
+            ...csrfHeaders(admin.csrf_token),
+            'Idempotency-Key': 'web-e2e-funding-' + runId,
+          },
+          data: {
+            amount_micro: '100000000',
+            type: 'recharge',
+            payment_reference: 'web-e2e-funding-' + runId,
+            reason: 'Fund the isolated full-stack browser acceptance workspace',
+          },
+        },
+      );
+      if (!funding.ok()) throw new Error('fund E2E enterprise wallet: ' + funding.status() + ' ' + await funding.text());
+    }
 
     const member = await register(memberContext, base.member);
     const memberInvite = await ownerContext.post('/api/v1/orgs/' + encodeURIComponent(base.orgA.id) + '/invitations', {
@@ -175,11 +211,32 @@ export default async function globalSetup(_config: FullConfig): Promise<void> {
       if (!gatewayKey && keyResult.secret) gatewayKey = keyResult.secret;
     }
     base.controlAvailable = createdKeyCount === keyNames.length;
+    if (REQUIRE_FULL_STACK && !base.controlAvailable) {
+      throw new Error('Full-stack E2E requires Control to create every named Key fixture');
+    }
 
     // When the full stack has a configured mock/production-like model, create
     // one real charge through the Gateway. The raw Key stays only in this
     // process; neither it nor a prompt is written to test state.
     const model = process.env.E2E_GATEWAY_MODEL;
+    if (REQUIRE_FULL_STACK && !model) throw new Error('Full-stack E2E requires E2E_GATEWAY_MODEL');
+    if (REQUIRE_FULL_STACK && (!base.controlAvailable || !gatewayKey)) {
+      throw new Error('Full-stack E2E requires a real Key from Control');
+    }
+    if (REQUIRE_FULL_STACK && model) {
+      const accountModels = await adminContext.get(
+        '/api/v1/admin/organizations/' + encodeURIComponent(base.orgA.id) + '/models',
+      );
+      if (!accountModels.ok()) {
+        throw new Error('read E2E account model scope: ' + accountModels.status() + ' ' + await accountModels.text());
+      }
+      const modelScope = (await accountModels.json()) as {
+        effective_models?: Array<{ model: string }>;
+      };
+      if (!modelScope.effective_models?.some((item) => item.model === model)) {
+        throw new Error('E2E enterprise does not inherit the configured Gateway model: ' + model);
+      }
+    }
     if (base.controlAvailable && model && gatewayKey) {
       const gateway = await request.newContext({ baseURL: GATEWAY_URL });
       try {
@@ -218,6 +275,9 @@ export default async function globalSetup(_config: FullConfig): Promise<void> {
         await new Promise((resolve) => setTimeout(resolve, 1_000));
       }
       if (!base.usageSeeded) throw new Error('the real Gateway call did not appear as a settled monthly charge within 45 seconds');
+    }
+    if (REQUIRE_FULL_STACK && !base.usageSeeded) {
+      throw new Error('Full-stack E2E requires a settled monthly usage row from the real Gateway call');
     }
 
     await adminContext.storageState({ path: AUTH.admin });
