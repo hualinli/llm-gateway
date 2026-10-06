@@ -152,9 +152,11 @@ func (c *Client) Close() error {
 // KeyMetadata is the redacted projection of one api_keys row. It never contains
 // the key hash or the raw secret.
 type KeyMetadata struct {
-	KeyID     string
-	KeyPrefix string
-	OrgID     int64
+	KeyID        string
+	Name         string
+	KeyPrefix    string
+	OrgID        int64
+	MembershipID int64
 	// OwnerUserID is nil for a legacy/unknown owner.
 	OwnerUserID *int64
 	CreatedBy   *int64
@@ -185,6 +187,8 @@ type CreateApiKeyRequest struct {
 	ActorOrgID      int64
 	RequestID       string
 	OrgID           int64
+	MembershipID    int64
+	Name            string
 	OwnerUserID     *int64
 	ExpiresAt       *time.Time
 	ModelAllowlist  *[]string
@@ -210,6 +214,7 @@ type RevokeApiKeyRequest struct {
 	RequestID       string
 	KeyID           string
 	OrgID           int64
+	MembershipID    int64
 }
 
 // RevokeApiKeyResult is the redacted result of a revoke (or of its replay).
@@ -230,6 +235,7 @@ type ListApiKeysRequest struct {
 	ActorOrgID      int64
 	RequestID       string
 	OrgID           int64
+	MembershipID    int64
 	OwnerUserID     *int64
 	PageSize        int
 	PageToken       string
@@ -249,6 +255,7 @@ type GetOperationRequest struct {
 	ActorUserID     int64
 	ActorOrgID      int64
 	RequestID       string
+	MembershipID    int64
 }
 
 // OperationResult is the redacted, replayable result of one mutation.
@@ -368,6 +375,8 @@ func (c *Client) CreateApiKey(ctx context.Context, req CreateApiKeyRequest) (Cre
 		ActorOrgId:      req.ActorOrgID,
 		RequestId:       req.RequestID,
 		OrgId:           req.OrgID,
+		MembershipId:    req.MembershipID,
+		Name:            req.Name,
 		OwnerUserId:     req.OwnerUserID,
 		ExpiresAt:       timestampOrNil(req.ExpiresAt),
 		ModelAllowlist:  allowlistToProto(req.ModelAllowlist),
@@ -398,6 +407,7 @@ func (c *Client) RevokeApiKey(ctx context.Context, req RevokeApiKeyRequest) (Rev
 		RequestId:       req.RequestID,
 		KeyId:           req.KeyID,
 		OrgId:           req.OrgID,
+		MembershipId:    req.MembershipID,
 	}
 	var response *pb.RevokeApiKeyResponse
 	if err := c.invoke(ctx, "RevokeApiKey", req.OperationID, func(callCtx context.Context) error {
@@ -433,6 +443,7 @@ func (c *Client) ListApiKeys(ctx context.Context, req ListApiKeysRequest) (ListA
 		ActorOrgId:      req.ActorOrgID,
 		RequestId:       req.RequestID,
 		OrgId:           req.OrgID,
+		MembershipId:    req.MembershipID,
 		OwnerUserId:     req.OwnerUserID,
 		PageSize:        int32(req.PageSize),
 		PageToken:       req.PageToken,
@@ -461,6 +472,7 @@ func (c *Client) GetOperation(ctx context.Context, req GetOperationRequest) (Ope
 		ActorUserId:     req.ActorUserID,
 		ActorOrgId:      req.ActorOrgID,
 		RequestId:       req.RequestID,
+		MembershipId:    req.MembershipID,
 	}
 	var response *pb.GetOperationResponse
 	if err := c.invoke(ctx, "GetOperation", req.OperationID, func(callCtx context.Context) error {
@@ -754,8 +766,10 @@ func keyMetadataFromProto(key *pb.ApiKeyMetadata) KeyMetadata {
 	}
 	metadata := KeyMetadata{
 		KeyID:          key.GetKeyId(),
+		Name:           key.GetName(),
 		KeyPrefix:      key.GetKeyPrefix(),
 		OrgID:          key.GetOrgId(),
+		MembershipID:   key.GetMembershipId(),
 		OwnerUserID:    key.OwnerUserId,
 		CreatedBy:      key.CreatedBy,
 		ModelAllowlist: allowlistFromProto(key.GetModelAllowlist()),

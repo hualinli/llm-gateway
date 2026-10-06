@@ -119,19 +119,39 @@ func writeDigestField(digest hash.Hash, name, value string) {
 // a Console retry with a new request id must still replay the stored result.
 // The raw key and its generated key_id are excluded because they are outputs,
 // not inputs.
-func createAPIKeyDigest(orgID int64, ownerUserID *int64, expiresAt time.Time, hasExpiry bool, allowlist string) string {
+type apiKeyDigestBinding struct {
+	membershipID int64
+	name         string
+}
+
+func createAPIKeyDigest(orgID int64, ownerUserID *int64, expiresAt time.Time, hasExpiry bool, allowlist string, binding ...apiKeyDigestBinding) string {
+	var identity apiKeyDigestBinding
+	if len(binding) > 0 {
+		identity = binding[0]
+	}
 	return operationDigest(operationCreateAPIKey,
 		digestField{"org_id", strconv.FormatInt(orgID, 10)},
 		digestField{"owner_user_id", optionalInt64Digest(ownerUserID)},
+		digestField{"membership_id", strconv.FormatInt(identity.membershipID, 10)},
+		digestField{"name", strings.TrimSpace(identity.name)},
 		digestField{"expires_at", timestampDigest(expiresAt, hasExpiry)},
 		digestField{"model_allowlist", allowlist},
 	)
 }
 
-func revokeAPIKeyDigest(keyID string, orgID int64) string {
+func revokeAPIKeyDigest(keyID string, orgID int64, actor ...int64) string {
+	var actorUserID, membershipID int64
+	if len(actor) > 0 {
+		actorUserID = actor[0]
+	}
+	if len(actor) > 1 {
+		membershipID = actor[1]
+	}
 	return operationDigest(operationRevokeAPIKey,
 		digestField{"key_id", strings.TrimSpace(keyID)},
 		digestField{"org_id", strconv.FormatInt(orgID, 10)},
+		digestField{"actor_user_id", strconv.FormatInt(actorUserID, 10)},
+		digestField{"membership_id", strconv.FormatInt(membershipID, 10)},
 	)
 }
 

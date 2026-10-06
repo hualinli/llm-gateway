@@ -22,6 +22,7 @@ func TestProviderAdminGRPCPostgresConcurrentKeyAndProviderWrites(t *testing.T) {
 		t.Fatal(err)
 	}
 	orgID, userID := seedAdminIdentity(t, db, "provider-admin@example.com", "tenant-provider-admin")
+	_, membershipID := ownerMembership(t, db, orgID)
 	keyStore := newAdminStore(t, db)
 	configStore, err := NewPGStore(dsn)
 	if err != nil {
@@ -86,7 +87,7 @@ func TestProviderAdminGRPCPostgresConcurrentKeyAndProviderWrites(t *testing.T) {
 	keyIDs := make([]string, count)
 	for i := 0; i < count; i++ {
 		created, err := client.CreateApiKey(ctx, &pb.CreateApiKeyRequest{
-			OperationId: "provider-race-create-" + itoa(int64(i)), OrgId: orgID,
+			OperationId: "provider-race-create-" + itoa(int64(i)), Name: "provider race key " + itoa(int64(i)), MembershipId: membershipID, OrgId: orgID,
 			ActorUserId: userID, ActorOrgId: orgID, RequestId: "provider-race-create-request-" + itoa(int64(i)),
 		})
 		if err != nil {
@@ -117,7 +118,8 @@ func TestProviderAdminGRPCPostgresConcurrentKeyAndProviderWrites(t *testing.T) {
 			<-start
 			_, err := client.RevokeApiKey(ctx, &pb.RevokeApiKeyRequest{
 				OperationId: "provider-race-revoke-" + itoa(int64(i)), KeyId: keyIDs[i], OrgId: orgID,
-				ActorUserId: userID, ActorOrgId: orgID, RequestId: "provider-race-revoke-request-" + itoa(int64(i)),
+				MembershipId: membershipID,
+				ActorUserId:  userID, ActorOrgId: orgID, RequestId: "provider-race-revoke-request-" + itoa(int64(i)),
 			})
 			errCh <- err
 		}()

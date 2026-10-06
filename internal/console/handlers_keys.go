@@ -132,6 +132,7 @@ func (s *server) createOrgKey(ctx context.Context, c *app.RequestContext) {
 	}
 
 	created, err := s.keys.CreateKey(ctx, auth.User.ID, orgID, CreateKeyParams{
+		Name:           req.Name,
 		OwnerUserID:    ownerUserID,
 		ExpiresAt:      expiresAt,
 		ModelAllowlist: req.ModelAllowlist,
@@ -139,11 +140,7 @@ func (s *server) createOrgKey(ctx context.Context, c *app.RequestContext) {
 		RequestID:      requestIDFrom(c),
 	})
 	if err != nil {
-		detail := map[string]any{"owner_user_id": formatOptionalID(ownerUserID)}
-		for key, value := range failureDetail(err) {
-			detail[key] = value
-		}
-		s.audit.Record(ctx, s.auditMutation(c, ActionKeyCreate, orgID, TargetAPIKey, "", "failure", err.Error(), detail))
+		s.audit.Record(ctx, s.auditMutation(c, ActionKeyCreate, orgID, TargetAPIKey, "", "failure", "key_create_failed", map[string]any{"failure": "request_rejected"}))
 		s.writeKeyError(c, "create api key", err)
 		return
 	}
@@ -191,8 +188,8 @@ func (s *server) revokeOrgKey(ctx context.Context, c *app.RequestContext) {
 
 	result, err := s.keys.RevokeKey(ctx, auth.User.ID, orgID, keyID)
 	if err != nil {
-		s.audit.Record(ctx, s.auditMutation(c, ActionKeyRevoke, orgID, TargetAPIKey, keyID,
-			"failure", err.Error(), failureDetail(err)))
+		s.audit.Record(ctx, s.auditMutation(c, ActionKeyRevoke, orgID, TargetAPIKey, "",
+			"failure", "key_revoke_failed", map[string]any{"failure": "request_rejected"}))
 		s.writeKeyError(c, "revoke api key", err)
 		return
 	}
@@ -230,8 +227,6 @@ func (s *server) writeKeyError(c *app.RequestContext, operation string, err erro
 		s.writeError(c, http.StatusForbidden, "", "action is not permitted for your organization role")
 	case errors.Is(err, ErrKeyNotFound), errors.Is(err, controlclient.ErrNotFound), errors.Is(err, ErrKeyOperationNotFound):
 		s.writeError(c, http.StatusNotFound, "", "api key not found")
-	case errors.Is(err, ErrKeyOwnerNotMember):
-		s.writeError(c, http.StatusBadRequest, "", "owner_user_id is not an active member of this organization")
 	case errors.Is(err, ErrKeyRequestInvalid), errors.Is(err, controlclient.ErrInvalidArgument):
 		s.writeError(c, http.StatusBadRequest, "", keyErrorMessage(err))
 	case errors.Is(err, controlclient.ErrConflict):

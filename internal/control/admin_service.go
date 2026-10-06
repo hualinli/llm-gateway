@@ -37,6 +37,7 @@ type APIKeyStore interface {
 	RevokeApiKey(ctx context.Context, params RevokeAPIKeyParams) (*APIKeyMutation, error)
 	ListApiKeys(ctx context.Context, params ListAPIKeysParams) ([]*pb.ApiKeyMetadata, string, error)
 	GetOperation(ctx context.Context, operationID string) (*pb.GetOperationResponse, error)
+	GetOperationForActor(ctx context.Context, operationID string, actorUserID, orgID, membershipID int64) (*pb.GetOperationResponse, error)
 	ApplyOrgPolicy(ctx context.Context, params ApplyOrgPolicyParams) (*OrgPolicyMutation, error)
 }
 
@@ -281,7 +282,17 @@ func (s *APIKeyAdminService) CreateApiKey(ctx context.Context, req *pb.CreateApi
 		return nil, status.Error(codes.InvalidArgument, "org_id is required")
 	}
 	if req.OwnerUserId != nil && *req.OwnerUserId <= 0 {
-		return nil, status.Error(codes.InvalidArgument, "owner_user_id must be a positive user id when present")
+		return nil, status.Error(codes.InvalidArgument, "owner_user_id must be positive when present")
+	}
+	if header.ActorUserID == nil || req.GetMembershipId() <= 0 || req.GetOrgId() != header.ActorOrgID {
+		return nil, status.Error(codes.NotFound, "api key not found")
+	}
+	if req.OwnerUserId != nil && *req.OwnerUserId != *header.ActorUserID {
+		return nil, status.Error(codes.NotFound, "api key not found")
+	}
+	name := strings.TrimSpace(req.GetName())
+	if name == "" || len([]rune(name)) > 120 || strings.ContainsAny(name, "\x00\r\n") {
+		return nil, status.Error(codes.InvalidArgument, "name must contain 1 to 120 characters")
 	}
 	allowlistJSON, allowlistModels, err := canonicalModelAllowlist(req.GetModelAllowlist())
 	if err != nil {
@@ -293,7 +304,8 @@ func (s *APIKeyAdminService) CreateApiKey(ctx context.Context, req *pb.CreateApi
 		expiresAt = req.GetExpiresAt().AsTime().UTC()
 		hasExpiry = true
 	}
-	header.PayloadDigest = createAPIKeyDigest(req.GetOrgId(), req.OwnerUserId, expiresAt, hasExpiry, allowlistJSON)
+	ownerUserID := *header.ActorUserID
+	header.PayloadDigest = createAPIKeyDigest(req.GetOrgId(), &ownerUserID, expiresAt, hasExpiry, allowlistJSON, apiKeyDigestBinding{membershipID: req.GetMembershipId(), name: name})
 	rawKey, err := newAdminAPIKey()
 	if err != nil {
 		return nil, status.Error(codes.Internal, "key generation failed")
@@ -309,7 +321,10 @@ func (s *APIKeyAdminService) CreateApiKey(ctx context.Context, req *pb.CreateApi
 		RequestID:       header.RequestID,
 		ExpectedVersion: header.ExpectedVersion,
 		OrgID:           req.GetOrgId(),
-		OwnerUserID:     req.OwnerUserId,
+		ActorUserID:     ownerUserID,
+		MembershipID:    req.GetMembershipId(),
+		Name:            name,
+		OwnerUserID:     &ownerUserID,
 		CreatedBy:       header.ActorUserID,
 		KeyID:           keyID,
 		RawKey:          rawKey,
@@ -361,7 +376,10 @@ func (s *APIKeyAdminService) RevokeApiKey(ctx context.Context, req *pb.RevokeApi
 	if req.GetOrgId() < 0 {
 		return nil, status.Error(codes.InvalidArgument, "org_id must not be negative")
 	}
-	header.PayloadDigest = revokeAPIKeyDigest(keyID, req.GetOrgId())
+	if header.ActorUserID == nil || req.GetOrgId() <= 0 || req.GetOrgId() != header.ActorOrgID || req.GetMembershipId() <= 0 {
+		return nil, status.Error(codes.NotFound, "api key not found")
+	}
+	header.PayloadDigest = revokeAPIKeyDigest(keyID, req.GetOrgId(), *header.ActorUserID, req.GetMembershipId())
 	var mutation *APIKeyMutation
 	err = s.runMutation(func() error {
 		var storeErr error
@@ -373,6 +391,8 @@ func (s *APIKeyAdminService) RevokeApiKey(ctx context.Context, req *pb.RevokeApi
 			ExpectedVersion: header.ExpectedVersion,
 			KeyID:           keyID,
 			OrgID:           req.GetOrgId(),
+			ActorUserID:     *header.ActorUserID,
+			MembershipID:    req.GetMembershipId(),
 			Now:             s.now(),
 		})
 		if storeErr == nil && !mutation.Replayed {
@@ -394,12 +414,13 @@ func (s *APIKeyAdminService) ListApiKeys(ctx context.Context, req *pb.ListApiKey
 	if _, err := s.header(ctx, req.GetOperationId(), req.GetRequestId(), req.GetActorUserId(), req.GetActorOrgId(), req.ExpectedVersion); err != nil {
 		return nil, err
 	}
-	if req.GetOrgId() < 0 {
-		return nil, status.Error(codes.InvalidArgument, "org_id must not be negative")
+	if req.GetOrgId() <= 0 || req.GetOrgId() != req.GetActorOrgId() || req.GetActorUserId() <= 0 || req.GetMembershipId() <= 0 {
+		return nil, status.Error(codes.NotFound, "api key not found")
 	}
-	if req.OwnerUserId != nil && *req.OwnerUserId <= 0 {
-		return nil, status.Error(codes.InvalidArgument, "owner_user_id must be a positive user id when present")
+	if req.OwnerUserId != nil && *req.OwnerUserId != req.GetActorUserId() {
+		return nil, status.Error(codes.NotFound, "api key not found")
 	}
+	owner := req.GetActorUserId()
 	size := int(req.GetPageSize())
 	switch {
 	case size <= 0:
@@ -412,10 +433,11 @@ func (s *APIKeyAdminService) ListApiKeys(ctx context.Context, req *pb.ListApiKey
 		return nil, adminStatusError(err)
 	}
 	keys, next, err := s.store.ListApiKeys(ctx, ListAPIKeysParams{
-		OrgID:       req.GetOrgId(),
-		OwnerUserID: req.OwnerUserId,
-		PageSize:    size,
-		Cursor:      cursor,
+		OrgID:        req.GetOrgId(),
+		OwnerUserID:  &owner,
+		MembershipID: req.GetMembershipId(),
+		PageSize:     size,
+		Cursor:       cursor,
 	})
 	if err != nil {
 		return nil, adminStatusError(err)
@@ -428,7 +450,7 @@ func (s *APIKeyAdminService) GetOperation(ctx context.Context, req *pb.GetOperat
 	if err != nil {
 		return nil, err
 	}
-	operation, err := s.store.GetOperation(ctx, header.OperationID)
+	operation, err := s.store.GetOperationForActor(ctx, header.OperationID, req.GetActorUserId(), req.GetActorOrgId(), req.GetMembershipId())
 	if err != nil {
 		return nil, adminStatusError(err)
 	}

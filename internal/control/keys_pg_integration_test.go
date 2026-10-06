@@ -53,6 +53,9 @@ INSERT INTO organizations (type, name, status, owner_user_id, legacy_tenant_id, 
 VALUES ('enterprise', 'T03 Test Org', 'active', $1, $2, $3, $3) RETURNING id`, userID, legacy, now).Scan(&orgID); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := db.Exec(`INSERT INTO memberships (org_id, user_id, role, status, created_at, updated_at) VALUES ($1,$2,'owner','active',$3,$3)`, orgID, userID, now); err != nil {
+		t.Fatal(err)
+	}
 	return orgID, userID
 }
 
@@ -67,19 +70,53 @@ func newAdminStore(t *testing.T, db *sql.DB) *PGAPIKeyStore {
 
 // createParams builds a well-formed create request. allowlist uses nil for
 // NULL (inherit) and a non-nil slice for the explicit JSONB value.
-func createParams(orgID int64, operationID, rawKey string, allowlist []string) CreateAPIKeyParams {
+func createParams(t *testing.T, db *sql.DB, orgID int64, operationID, rawKey string, allowlist []string) CreateAPIKeyParams {
+	t.Helper()
+	userID, membershipID := ownerMembership(t, db, orgID)
+	name := "Test key " + operationID
 	allowlistJSON, _, _ := canonicalModelAllowlist(protoAllowlist(allowlist))
 	keyID, _ := randomID("key_")
+	actor := userID
 	return CreateAPIKeyParams{
 		OperationID:    operationID,
-		PayloadDigest:  createAPIKeyDigest(orgID, nil, time.Time{}, false, allowlistJSON),
-		ActorScope:     "service=console.test;user=0;org=" + strings.TrimSpace(itoa(orgID)),
+		PayloadDigest:  createAPIKeyDigest(orgID, &actor, time.Time{}, false, allowlistJSON, apiKeyDigestBinding{membershipID: membershipID, name: name}),
+		ActorScope:     "service=console.test;user=" + itoa(userID) + ";org=" + itoa(orgID),
 		RequestID:      "req-" + operationID,
 		OrgID:          orgID,
+		ActorUserID:    userID,
+		MembershipID:   membershipID,
+		Name:           name,
+		OwnerUserID:    &actor,
+		CreatedBy:      &actor,
 		ModelAllowlist: allowlist,
 		KeyID:          keyID,
 		RawKey:         rawKey,
 		Now:            time.Now().UTC(),
+	}
+}
+
+func ownerMembership(t *testing.T, db *sql.DB, orgID int64) (int64, int64) {
+	t.Helper()
+	var userID, membershipID int64
+	if err := db.QueryRow(`SELECT o.owner_user_id, m.id FROM organizations o JOIN memberships m ON m.org_id=o.id AND m.user_id=o.owner_user_id AND m.status='active' WHERE o.id=$1`, orgID).Scan(&userID, &membershipID); err != nil {
+		t.Fatalf("lookup active owner membership for org %d: %v", orgID, err)
+	}
+	return userID, membershipID
+}
+
+func listParams(t *testing.T, db *sql.DB, orgID int64, pageSize int, cursor string) ListAPIKeysParams {
+	t.Helper()
+	userID, membershipID := ownerMembership(t, db, orgID)
+	return ListAPIKeysParams{OrgID: orgID, OwnerUserID: &userID, MembershipID: membershipID, PageSize: pageSize, Cursor: cursor}
+}
+
+func revokeParams(t *testing.T, db *sql.DB, orgID int64, keyID, operationID string) RevokeAPIKeyParams {
+	t.Helper()
+	userID, membershipID := ownerMembership(t, db, orgID)
+	return RevokeAPIKeyParams{
+		OperationID: operationID, PayloadDigest: revokeAPIKeyDigest(keyID, orgID, userID, membershipID),
+		ActorScope: "service=console.test;user=" + itoa(userID) + ";org=" + itoa(orgID),
+		KeyID:      keyID, OrgID: orgID, ActorUserID: userID, MembershipID: membershipID, Now: time.Now().UTC(),
 	}
 }
 
@@ -114,7 +151,7 @@ func TestAPIKeyStoreLifecyclePostgres(t *testing.T) {
 	ctx := context.Background()
 	const rawKey = "sk-lifecycle-secret-value"
 
-	created, err := store.CreateApiKey(ctx, createParams(orgID, "op-create-1", rawKey, nil))
+	created, err := store.CreateApiKey(ctx, createParams(t, db, orgID, "op-create-1", rawKey, nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,24 +164,29 @@ func TestAPIKeyStoreLifecyclePostgres(t *testing.T) {
 	if created.Key.GetPolicyVersion() != 1 || created.ResultingVersion != 1 {
 		t.Fatalf("fresh snapshot versions: policy=%d resulting=%d", created.Key.GetPolicyVersion(), created.ResultingVersion)
 	}
-	if created.Key.OwnerUserId != nil {
-		t.Fatal("absent owner must be persisted as NULL")
+	if created.Key.OwnerUserId == nil || created.Key.GetOwnerUserId() != userID {
+		t.Fatal("created Key must be owned by the actor")
+	}
+	_, membershipID := ownerMembership(t, db, orgID)
+	if created.Key.GetMembershipId() != membershipID || created.Key.GetName() != "Test key op-create-1" {
+		t.Fatalf("name or membership pin missing from metadata: %+v", created.Key)
 	}
 
 	// The hash row and its derived snapshot projection are committed by the
 	// same transaction.
 	var hash, prefix, status string
 	var owner sql.NullInt64
-	var operationID string
-	if err := db.QueryRow(`SELECT key_hash, key_prefix, status, owner_user_id, operation_id FROM api_keys WHERE key_id=$1`,
-		created.Key.GetKeyId()).Scan(&hash, &prefix, &status, &owner, &operationID); err != nil {
+	var operationID, keyName string
+	var storedMembershipID int64
+	if err := db.QueryRow(`SELECT key_hash, key_prefix, status, owner_user_id, operation_id, name, membership_id FROM api_keys WHERE key_id=$1`,
+		created.Key.GetKeyId()).Scan(&hash, &prefix, &status, &owner, &operationID, &keyName, &storedMembershipID); err != nil {
 		t.Fatal(err)
 	}
 	if hash != apiKeyHash(rawKey) || prefix != rawKeyPrefix(rawKey) || status != "active" || operationID != "op-create-1" {
 		t.Fatalf("api_keys row = hash:%s prefix:%s status:%s op:%s", hash, prefix, status, operationID)
 	}
-	if owner.Valid {
-		t.Fatal("owner_user_id should be NULL for an unowned key")
+	if !owner.Valid || owner.Int64 != userID || keyName != created.Key.GetName() || storedMembershipID != membershipID {
+		t.Fatalf("stored key ownership/name/membership mismatch owner=%v name=%q membership=%d", owner, keyName, storedMembershipID)
 	}
 	snapshot := latestSnapshot(t, db)
 	if len(snapshot.KeyRecords) != 1 {
@@ -203,7 +245,7 @@ func TestAPIKeyStoreLifecyclePostgres(t *testing.T) {
 	}
 
 	// List returns redacted metadata only.
-	listed, next, err := store.ListApiKeys(ctx, ListAPIKeysParams{OrgID: orgID, PageSize: 20})
+	listed, next, err := store.ListApiKeys(ctx, listParams(t, db, orgID, 20, ""))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,11 +261,9 @@ func TestAPIKeyStoreLifecyclePostgres(t *testing.T) {
 	}
 
 	// Revoke commits a second snapshot version in the same transaction.
-	revoked, err := store.RevokeApiKey(ctx, RevokeAPIKeyParams{
-		OperationID: "op-revoke-1", PayloadDigest: revokeAPIKeyDigest(created.Key.GetKeyId(), orgID),
-		ActorScope: "service=console.test;user=0;org=" + itoa(orgID), RequestID: "req-revoke-1",
-		KeyID: created.Key.GetKeyId(), OrgID: orgID, Now: time.Now().UTC(),
-	})
+	revoke := revokeParams(t, db, orgID, created.Key.GetKeyId(), "op-revoke-1")
+	revoke.RequestID = "req-revoke-1"
+	revoked, err := store.RevokeApiKey(ctx, revoke)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -244,11 +284,9 @@ func TestAPIKeyStoreLifecyclePostgres(t *testing.T) {
 
 	// Revoking an already revoked key with a new operation id is a no-op that
 	// reports the stored state without allocating another version.
-	again, err := store.RevokeApiKey(ctx, RevokeAPIKeyParams{
-		OperationID: "op-revoke-2", PayloadDigest: revokeAPIKeyDigest(created.Key.GetKeyId(), orgID),
-		ActorScope: "service=console.test;user=0;org=" + itoa(orgID), RequestID: "req-revoke-2",
-		KeyID: created.Key.GetKeyId(), OrgID: orgID, Now: time.Now().UTC(),
-	})
+	againParams := revokeParams(t, db, orgID, created.Key.GetKeyId(), "op-revoke-2")
+	againParams.RequestID = "req-revoke-2"
+	again, err := store.RevokeApiKey(ctx, againParams)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -265,11 +303,9 @@ func TestAPIKeyStoreLifecyclePostgres(t *testing.T) {
 
 	// A scoped revoke naming another organization must not find the key.
 	otherOrg, _ := seedAdminIdentity(t, db, "other@example.com", "")
-	if _, err := store.RevokeApiKey(ctx, RevokeAPIKeyParams{
-		OperationID: "op-revoke-3", PayloadDigest: revokeAPIKeyDigest(created.Key.GetKeyId(), otherOrg),
-		ActorScope: "service=console.test;user=0;org=" + itoa(otherOrg), RequestID: "req-revoke-3",
-		KeyID: created.Key.GetKeyId(), OrgID: otherOrg, Now: time.Now().UTC(),
-	}); !errors.Is(err, ErrAPIKeyNotFound) {
+	wrongScope := revokeParams(t, db, otherOrg, created.Key.GetKeyId(), "op-revoke-3")
+	wrongScope.RequestID = "req-revoke-3"
+	if _, err := store.RevokeApiKey(ctx, wrongScope); !errors.Is(err, ErrAPIKeyNotFound) {
 		t.Fatalf("cross-org revoke err = %v, want ErrAPIKeyNotFound", err)
 	}
 
@@ -290,7 +326,7 @@ func TestAPIKeyStoreLifecyclePostgres(t *testing.T) {
 	}
 
 	// owner_user_id is persisted when the caller names a user.
-	owned, err := store.CreateApiKey(ctx, createParamsWithOwner(orgID, userID, "op-create-2", "sk-owned-secret"))
+	owned, err := store.CreateApiKey(ctx, createParamsWithOwner(t, db, orgID, userID, "op-create-2", "sk-owned-secret"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -299,11 +335,11 @@ func TestAPIKeyStoreLifecyclePostgres(t *testing.T) {
 	}
 }
 
-func createParamsWithOwner(orgID, userID int64, operationID, rawKey string) CreateAPIKeyParams {
-	params := createParams(orgID, operationID, rawKey, nil)
-	params.OwnerUserID = &userID
-	params.CreatedBy = &userID
-	params.PayloadDigest = createAPIKeyDigest(orgID, &userID, time.Time{}, false, "null")
+func createParamsWithOwner(t *testing.T, db *sql.DB, orgID, userID int64, operationID, rawKey string) CreateAPIKeyParams {
+	params := createParams(t, db, orgID, operationID, rawKey, nil)
+	if params.ActorUserID != userID {
+		t.Fatalf("requested owner %d is not active org owner %d", userID, params.ActorUserID)
+	}
 	return params
 }
 
@@ -313,7 +349,7 @@ func TestAPIKeyStoreIdempotencyPostgres(t *testing.T) {
 	store := newAdminStore(t, db)
 	ctx := context.Background()
 
-	params := createParams(orgID, "op-1", "sk-first-secret", nil)
+	params := createParams(t, db, orgID, "op-1", "sk-first-secret", nil)
 	first, err := store.CreateApiKey(ctx, params)
 	if err != nil {
 		t.Fatal(err)
@@ -342,22 +378,26 @@ func TestAPIKeyStoreIdempotencyPostgres(t *testing.T) {
 	}
 
 	// Same id, different payload: a hard conflict instead of a silent overwrite.
-	conflicting := createParams(orgID, "op-1", "sk-second-secret", []string{"gpt-a"})
+	conflicting := createParams(t, db, orgID, "op-1", "sk-second-secret", []string{"gpt-a"})
 	if _, err := store.CreateApiKey(ctx, conflicting); !errors.Is(err, ErrOperationConflict) {
 		t.Fatalf("conflicting digest err = %v, want ErrOperationConflict", err)
 	}
+	differentName := params
+	differentName.Name = "Renamed key"
+	differentName.PayloadDigest = createAPIKeyDigest(params.OrgID, params.OwnerUserID, time.Time{}, false, "null",
+		apiKeyDigestBinding{membershipID: params.MembershipID, name: differentName.Name})
+	if _, err := store.CreateApiKey(ctx, differentName); !errors.Is(err, ErrOperationConflict) {
+		t.Fatalf("same operation with a different name err = %v, want ErrOperationConflict", err)
+	}
 	// Reusing the id for a different RPC kind is also a conflict.
-	if _, err := store.RevokeApiKey(ctx, RevokeAPIKeyParams{
-		OperationID: "op-1", PayloadDigest: revokeAPIKeyDigest(first.Key.GetKeyId(), orgID),
-		ActorScope: "service=console.test;user=0;org=" + itoa(orgID), KeyID: first.Key.GetKeyId(),
-		OrgID: orgID, Now: time.Now().UTC(),
-	}); !errors.Is(err, ErrOperationConflict) {
+	crossKind := revokeParams(t, db, orgID, first.Key.GetKeyId(), "op-1")
+	if _, err := store.RevokeApiKey(ctx, crossKind); !errors.Is(err, ErrOperationConflict) {
 		t.Fatalf("cross-kind operation reuse err = %v, want ErrOperationConflict", err)
 	}
 
 	// expected_version is enforced with the current version in the error.
 	expected := int64(41)
-	stale := createParams(orgID, "op-2", "sk-third-secret", nil)
+	stale := createParams(t, db, orgID, "op-2", "sk-third-secret", nil)
 	stale.ExpectedVersion = &expected
 	_, err = store.CreateApiKey(ctx, stale)
 	var conflict *versionConflictError
@@ -376,7 +416,7 @@ func TestAPIKeyStoreIdempotencyPostgres(t *testing.T) {
 	}
 	// The retry with the correct version succeeds and can still use the id.
 	correct := int64(1)
-	retry := createParams(orgID, "op-2", "sk-third-secret", nil)
+	retry := createParams(t, db, orgID, "op-2", "sk-third-secret", nil)
 	retry.ExpectedVersion = &correct
 	retried, err := store.CreateApiKey(ctx, retry)
 	if err != nil {
@@ -396,21 +436,110 @@ func TestAPIKeyStoreIdempotencyPostgres(t *testing.T) {
 	}
 }
 
+func TestAPIKeyStoreBindsKeysAndRecoveryToMembershipIncarnationPostgres(t *testing.T) {
+	db := isolatedAdminDB(t)
+	orgID, userID := seedAdminIdentity(t, db, "owner@example.com", "")
+	store := newAdminStore(t, db)
+	ctx := context.Background()
+
+	created, err := store.CreateApiKey(ctx, createParams(t, db, orgID, "op-before-rejoin", "sk-before-rejoin", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, oldMembershipID := ownerMembership(t, db, orgID)
+	if created.Key.GetMembershipId() != oldMembershipID {
+		t.Fatalf("created membership = %d, want %d", created.Key.GetMembershipId(), oldMembershipID)
+	}
+	if _, err := store.GetOperationForActor(ctx, "op-before-rejoin", userID, orgID, oldMembershipID); err != nil {
+		t.Fatalf("current membership could not recover its create: %v", err)
+	}
+
+	// Leaving and rejoining creates a new membership incarnation for the same
+	// user. The old operation and key must not become visible or mutable under
+	// that new identity.
+	if _, err := db.Exec(`UPDATE memberships SET status='removed', updated_at=now() WHERE id=$1`, oldMembershipID); err != nil {
+		t.Fatal(err)
+	}
+	var newMembershipID int64
+	if err := db.QueryRow(`INSERT INTO memberships (org_id,user_id,role,status,created_at,updated_at)
+VALUES ($1,$2,'owner','active',now(),now()) RETURNING id`, orgID, userID).Scan(&newMembershipID); err != nil {
+		t.Fatal(err)
+	}
+	if newMembershipID == oldMembershipID {
+		t.Fatal("rejoining reused the old membership id")
+	}
+	if _, err := store.GetOperationForActor(ctx, "op-before-rejoin", userID, orgID, oldMembershipID); !errors.Is(err, ErrOperationNotFound) {
+		t.Fatalf("removed membership recovery err = %v, want ErrOperationNotFound", err)
+	}
+	if _, err := store.GetOperationForActor(ctx, "op-before-rejoin", userID, orgID, newMembershipID); !errors.Is(err, ErrOperationNotFound) {
+		t.Fatalf("new membership recovered the old operation: %v", err)
+	}
+	actor := userID
+	listed, _, err := store.ListApiKeys(ctx, ListAPIKeysParams{OrgID: orgID, OwnerUserID: &actor, MembershipID: newMembershipID, PageSize: 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 0 {
+		t.Fatalf("new membership listed old keys: %+v", listed)
+	}
+	revoke := RevokeAPIKeyParams{
+		OperationID: "op-revoke-old-membership", PayloadDigest: revokeAPIKeyDigest(created.Key.GetKeyId(), orgID, userID, newMembershipID),
+		ActorScope: "service=console.test;user=" + itoa(userID) + ";org=" + itoa(orgID), RequestID: "req-revoke-old",
+		KeyID: created.Key.GetKeyId(), OrgID: orgID, ActorUserID: userID, MembershipID: newMembershipID, Now: time.Now().UTC(),
+	}
+	if _, err := store.RevokeApiKey(ctx, revoke); !errors.Is(err, ErrAPIKeyNotFound) {
+		t.Fatalf("new membership revoked an old key: %v", err)
+	}
+
+	// A direct caller cannot bypass the Console and create a key for the old
+	// membership either.
+	staleCreate := createParams(t, db, orgID, "op-stale-membership", "sk-stale-membership", nil)
+	staleCreate.MembershipID = oldMembershipID
+	staleCreate.PayloadDigest = createAPIKeyDigest(orgID, staleCreate.OwnerUserID, time.Time{}, false, "null",
+		apiKeyDigestBinding{membershipID: oldMembershipID, name: staleCreate.Name})
+	if _, err := store.CreateApiKey(ctx, staleCreate); !errors.Is(err, ErrAPIKeyNotFound) {
+		t.Fatalf("removed membership created a new key: %v", err)
+	}
+
+	// The same actor can create new keys under the new incarnation, and the
+	// snapshot projection carries that membership id for Gateway admission.
+	newKey, err := store.CreateApiKey(ctx, createParams(t, db, orgID, "op-after-rejoin", "sk-after-rejoin", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if newKey.Key.GetMembershipId() != newMembershipID {
+		t.Fatalf("rejoined key membership = %d, want %d", newKey.Key.GetMembershipId(), newMembershipID)
+	}
+	projected := KeyRecordsToAuth(latestSnapshot(t, db).GetKeyRecords())
+	var found bool
+	for _, key := range projected {
+		if key.ID == newKey.Key.GetKeyId() {
+			found = true
+			if key.MembershipID != newMembershipID {
+				t.Fatalf("auth projection membership = %d, want %d", key.MembershipID, newMembershipID)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("new key missing from auth projection: %+v", projected)
+	}
+}
+
 func TestAPIKeyStoreAllowlistAndTenantProjectionPostgres(t *testing.T) {
 	db := isolatedAdminDB(t)
 	orgID, _ := seedAdminIdentity(t, db, "owner@example.com", "tenant-legacy")
 	store := newAdminStore(t, db)
 	ctx := context.Background()
 
-	inherit, err := store.CreateApiKey(ctx, createParams(orgID, "op-inherit", "sk-inherit", nil))
+	inherit, err := store.CreateApiKey(ctx, createParams(t, db, orgID, "op-inherit", "sk-inherit", nil))
 	if err != nil {
 		t.Fatal(err)
 	}
-	denyAll, err := store.CreateApiKey(ctx, createParams(orgID, "op-deny", "sk-deny-all", []string{}))
+	denyAll, err := store.CreateApiKey(ctx, createParams(t, db, orgID, "op-deny", "sk-deny-all", []string{}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	explicit, err := store.CreateApiKey(ctx, createParams(orgID, "op-explicit", "sk-explicit", []string{"gpt-b", "gpt-a", "gpt-b"}))
+	explicit, err := store.CreateApiKey(ctx, createParams(t, db, orgID, "op-explicit", "sk-explicit", []string{"gpt-b", "gpt-a", "gpt-b"}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -462,7 +591,7 @@ func TestAPIKeyStoreAllowlistAndTenantProjectionPostgres(t *testing.T) {
 	}
 
 	// Model allowlists are part of the effect digest.
-	if createParams(orgID, "x", "sk-x", nil).PayloadDigest == createParams(orgID, "x", "sk-x", []string{}).PayloadDigest {
+	if createParams(t, db, orgID, "x", "sk-x", nil).PayloadDigest == createParams(t, db, orgID, "x", "sk-x", []string{}).PayloadDigest {
 		t.Fatal("NULL and deny-all produce the same digest")
 	}
 }
@@ -474,7 +603,9 @@ func TestAPIKeyStoreRejectsUnknownOrganizationPostgres(t *testing.T) {
 	ctx := context.Background()
 
 	const missingOrg = 987654321
-	if _, err := store.CreateApiKey(ctx, createParams(missingOrg, "op-unknown", "sk-unknown", nil)); !errors.Is(err, ErrOrganizationNotFound) {
+	unknownOwner := int64(1)
+	unknown := CreateAPIKeyParams{OperationID: "op-unknown", PayloadDigest: createAPIKeyDigest(missingOrg, &unknownOwner, time.Time{}, false, "null"), OrgID: missingOrg, ActorUserID: 1, MembershipID: 1, Name: "unknown", OwnerUserID: &unknownOwner, CreatedBy: &unknownOwner, KeyID: "key_unknown", RawKey: "sk-unknown", Now: time.Now().UTC()}
+	if _, err := store.CreateApiKey(ctx, unknown); !errors.Is(err, ErrOrganizationNotFound) {
 		t.Fatalf("unknown org create err = %v, want ErrOrganizationNotFound", err)
 	}
 	if _, err := store.ApplyOrgPolicy(ctx, ApplyOrgPolicyParams{
@@ -546,7 +677,7 @@ func TestApplyOrgPolicyPostgres(t *testing.T) {
 	}
 
 	// A key created afterwards inherits the organization policy version.
-	key, err := store.CreateApiKey(ctx, createParams(orgID, "op-after-policy", "sk-after-policy", nil))
+	key, err := store.CreateApiKey(ctx, createParams(t, db, orgID, "op-after-policy", "sk-after-policy", nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -610,16 +741,14 @@ func TestApplyOrgPolicyPostgres(t *testing.T) {
 
 func TestListAPIKeysPagingPostgres(t *testing.T) {
 	db := isolatedAdminDB(t)
-	orgID, userID := seedAdminIdentity(t, db, "owner@example.com", "")
+	orgID, _ := seedAdminIdentity(t, db, "owner@example.com", "")
 	store := newAdminStore(t, db)
 	ctx := context.Background()
 
 	ids := make([]string, 0, 3)
 	for i, operation := range []string{"op-page-1", "op-page-2", "op-page-3"} {
 		raw := "sk-page-secret-" + itoa(int64(i))
-		params := createParams(orgID, operation, raw, nil)
-		params.OwnerUserID = &userID
-		params.PayloadDigest = createAPIKeyDigest(orgID, &userID, time.Time{}, false, "null")
+		params := createParams(t, db, orgID, operation, raw, nil)
 		created, err := store.CreateApiKey(ctx, params)
 		if err != nil {
 			t.Fatal(err)
@@ -628,7 +757,7 @@ func TestListAPIKeysPagingPostgres(t *testing.T) {
 	}
 	sort.Strings(ids)
 
-	first, next, err := store.ListApiKeys(ctx, ListAPIKeysParams{OrgID: orgID, PageSize: 2})
+	first, next, err := store.ListApiKeys(ctx, listParams(t, db, orgID, 2, ""))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -643,7 +772,7 @@ func TestListAPIKeysPagingPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, next2, err := store.ListApiKeys(ctx, ListAPIKeysParams{OrgID: orgID, PageSize: 2, Cursor: cursor})
+	second, next2, err := store.ListApiKeys(ctx, listParams(t, db, orgID, 2, cursor))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -652,36 +781,29 @@ func TestListAPIKeysPagingPostgres(t *testing.T) {
 	}
 	// Owner and organization filters compose.
 	otherOrg, _ := seedAdminIdentity(t, db, "other@example.com", "")
-	unowned, err := store.CreateApiKey(ctx, createParams(otherOrg, "op-page-4", "sk-page-other", nil))
+	otherKey, err := store.CreateApiKey(ctx, createParams(t, db, otherOrg, "op-page-4", "sk-page-other", nil))
 	if err != nil {
 		t.Fatal(err)
 	}
-	filtered, _, err := store.ListApiKeys(ctx, ListAPIKeysParams{OrgID: orgID, OwnerUserID: &userID, PageSize: 10})
+	filtered, _, err := store.ListApiKeys(ctx, listParams(t, db, orgID, 10, ""))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(filtered) != 3 {
 		t.Fatalf("owner-filtered list = %+v", filtered)
 	}
-	orgKeys, _, err := store.ListApiKeys(ctx, ListAPIKeysParams{OrgID: otherOrg, PageSize: 10})
+	orgKeys, _, err := store.ListApiKeys(ctx, listParams(t, db, otherOrg, 10, ""))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(orgKeys) != 1 || orgKeys[0].GetKeyId() != unowned.Key.GetKeyId() {
+	if len(orgKeys) != 1 || orgKeys[0].GetKeyId() != otherKey.Key.GetKeyId() {
 		t.Fatalf("org-filtered list = %+v", orgKeys)
-	}
-	inherited, _, err := store.ListApiKeys(ctx, ListAPIKeysParams{OrgID: otherOrg, PageSize: 10})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if inherited[0].OwnerUserId != nil {
-		t.Fatalf("legacy owner must stay absent: %+v", inherited[0])
 	}
 }
 
 func TestKeyProjectionPreservesLegacyRecordsPostgres(t *testing.T) {
 	db := isolatedAdminDB(t)
-	orgID, _ := seedAdminIdentity(t, db, "owner@example.com", "")
+	orgID, userID := seedAdminIdentity(t, db, "owner@example.com", "")
 	store := newAdminStore(t, db)
 	ctx := context.Background()
 
@@ -691,8 +813,15 @@ func TestKeyProjectionPreservesLegacyRecordsPostgres(t *testing.T) {
 	if err := insertLegacySnapshot(t, db, legacy, provider); err != nil {
 		t.Fatal(err)
 	}
+	// Legacy API-key rows from before membership pinning have a NULL binding.
+	// Every new mutation still needs to project them without failing Scan.
+	if _, err := db.Exec(`INSERT INTO api_keys
+(key_id,key_hash,key_prefix,org_id,owner_user_id,created_by,status,policy_version,created_at,name,membership_id)
+VALUES ('legacy-null-membership', $1, 'sk-legacy...', $2, $3, $3, 'active', 1, now(), '', NULL)`, strings.Repeat("a", 64), orgID, userID); err != nil {
+		t.Fatal(err)
+	}
 
-	created, err := store.CreateApiKey(ctx, createParams(orgID, "op-legacy-merge", "sk-new-key", nil))
+	created, err := store.CreateApiKey(ctx, createParams(t, db, orgID, "op-legacy-merge", "sk-new-key", nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -710,12 +839,15 @@ func TestKeyProjectionPreservesLegacyRecordsPostgres(t *testing.T) {
 	if found[created.Key.GetKeyId()] == nil {
 		t.Fatalf("created key missing from the projection: %+v", snapshot.KeyRecords)
 	}
+	if found["legacy-null-membership"] == nil || found["legacy-null-membership"].GetMembershipId() != 0 {
+		t.Fatalf("legacy NULL membership was not projected as unbound: %+v", found["legacy-null-membership"])
+	}
 	if snapshot.GetProviders()["openai"] == nil {
 		t.Fatal("admin write dropped provider settings")
 	}
 	// Legacy records still resolve through the Gateway mapping.
 	records := KeyRecordsToAuth(snapshot.KeyRecords)
-	if len(records) != 2 {
+	if len(records) != 3 {
 		t.Fatalf("auth records = %+v", records)
 	}
 }
@@ -783,20 +915,16 @@ func TestAPIKeyMutationIsAtomicPostgres(t *testing.T) {
 	store := newAdminStore(t, db)
 	ctx := context.Background()
 
-	if _, err := store.CreateApiKey(ctx, createParams(orgID, "op-atomic-1", "sk-atomic-1", nil)); err != nil {
+	if _, err := store.CreateApiKey(ctx, createParams(t, db, orgID, "op-atomic-1", "sk-atomic-1", nil)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.Exec(`DROP TABLE control_audit_events`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.CreateApiKey(ctx, createParams(orgID, "op-atomic-2", "sk-atomic-2", nil)); err == nil {
+	if _, err := store.CreateApiKey(ctx, createParams(t, db, orgID, "op-atomic-2", "sk-atomic-2", nil)); err == nil {
 		t.Fatal("create succeeded without the audit table")
 	}
-	if _, err := store.RevokeApiKey(ctx, RevokeAPIKeyParams{
-		OperationID: "op-atomic-3", PayloadDigest: revokeAPIKeyDigest("key_missing", orgID),
-		ActorScope: "service=console.test;user=0;org=" + itoa(orgID), KeyID: "key_missing",
-		OrgID: orgID, Now: time.Now().UTC(),
-	}); !errors.Is(err, ErrAPIKeyNotFound) {
+	if _, err := store.RevokeApiKey(ctx, revokeParams(t, db, orgID, "key_missing", "op-atomic-3")); !errors.Is(err, ErrAPIKeyNotFound) {
 		t.Fatalf("revoke without the audit table err = %v", err)
 	}
 	for query, want := range map[string]int{

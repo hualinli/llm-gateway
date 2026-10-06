@@ -345,6 +345,7 @@ func toAuditEventDTOs(items []AuditRecord) []auditEventDTO {
 // non-empty array is an explicit allowlist (ADR-0003 §2.7).
 type keyDTO struct {
 	KeyID          string    `json:"key_id"`
+	Name           string    `json:"name"`
 	Prefix         string    `json:"prefix"`
 	OrganizationID string    `json:"organization_id"`
 	OwnerUserID    *string   `json:"owner_user_id"`
@@ -374,6 +375,7 @@ type keyPage struct {
 // createKeyRequest is the POST body. Absent, null and empty model_allowlist are
 // meaningfully different: absent/null inherit, [] is deny-all.
 type createKeyRequest struct {
+	Name           string    `json:"name"`
 	OwnerUserID    *string   `json:"owner_user_id"`
 	ExpiresAt      *string   `json:"expires_at"`
 	ModelAllowlist *[]string `json:"model_allowlist"`
@@ -414,6 +416,7 @@ type revokeKeyResponse struct {
 func toKeyDTO(key controlclient.KeyMetadata) keyDTO {
 	dto := keyDTO{
 		KeyID:          key.KeyID,
+		Name:           key.Name,
 		Prefix:         key.KeyPrefix,
 		OrganizationID: formatID(key.OrgID),
 		Status:         key.Status,
