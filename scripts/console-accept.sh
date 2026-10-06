@@ -884,9 +884,20 @@ def check08(env, check):
                              session=nonadmin, csrf=nonadmin["csrf"])
     assert_error(check, denied, 403, "forbidden", "非平台管理员 POST /api/v1/admin/users")
 
+    no_side_effect = env.client.call(check, "register-after-admin-denial", "POST", "/api/v1/auth/register",
+                                     body={"email": evil_email, "password": evil_password})
+    check.require(no_side_effect.status == 201,
+                  "后台建用户被拒后，相同邮箱公开注册应成功（证明拒绝无副作用）；实际 status=%d" % no_side_effect.status)
+    after_user = (no_side_effect.json() or {}).get("user") or {}
+    after_personal = [item for item in (no_side_effect.json() or {}).get("organizations", [])
+                      if (item.get("organization") or {}).get("type") == "personal"]
+    check.require(after_user.get("email") == evil_email and len(after_personal) == 1
+                  and after_personal[0].get("role") == "owner",
+                  "拒绝后台创建后，普通公开注册未按预期创建个人 owner 账户")
+
     check.details.update({"victim_user_id": registered_user["id"], "victim_email": victim_email,
-                          "nonadmin_status": denied.status})
-    check.note("公开注册创建了个人 owner 账户；重复邮箱为 409；非平台管理员的后台建用户请求为 403。")
+                          "nonadmin_status": denied.status, "same_email_register_status": no_side_effect.status})
+    check.note("公开注册创建了个人 owner 账户；重复邮箱为 409；后台用户创建被拒后，同邮箱公开注册成功。")
 
 
 def check09(env, check):

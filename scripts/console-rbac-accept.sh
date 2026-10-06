@@ -1009,11 +1009,9 @@ def check04(env, check):
         response = client.call(check, "deny-%s" % name, method, path, body=body, query=query, session=session)
         require_envelope(check, response, status, code, "deny %s" % name)
 
-    observe = client.call(check, "observe-owner-invite-owner", "POST", env.org_path("A", "/invitations"),
-                          body={"email": "t03-%s-owner2@t03.test" % env.run_id, "role": "owner"}, session=owner)
-    check.details["owner_invite_owner_status"] = observe.status
-    check.require(observe.status in (201, 403),
-                  "owner 创建 owner 邀请既不是 201 也不是 403：%d" % observe.status)
+    owner_invite_owner = client.call(check, "deny-owner-invite-owner", "POST", env.org_path("A", "/invitations"),
+                                     body={"email": "t03-%s-owner2@t03.test" % env.run_id, "role": "owner"}, session=owner)
+    require_envelope(check, owner_invite_owner, 403, "forbidden", "owner 不能邀请新的 owner")
     check.note("普通成员不能管理成员、邀请或审计；管理员不能调整自身额度或授予管理员/Owner；平台角色只由平台管理")
 
     # Every active member can manage only personal Keys. The list/revoke privacy boundary is checked in check07.
@@ -1547,21 +1545,48 @@ def check10(env, check):
     require_envelope(check, denied_self, 403, "forbidden", "audit role change failure")
     expected.append(("org.member.role_change", "failure", env.user_id("a-member")))
 
+    member_key_private = []
     if env.control_probe(check):
-        op = "t03-%s-audit-key" % env.pass_id
-        created = client.call(check, "audit-key-create", "POST", env.org_path("A", "/keys"),
-                              body={"name": "t03-audit", "operation_id": op}, session=member)
-        expect_status(check, created, 201, label="audit key create")
-        secret = (created.json() or {}).get("secret", "")
-        if secret:
-            client.red.add(secret)
-            env.secrets_to_scan.append(("audit-key-secret", secret, ["audit-key-create"]))
-        key_id = ((created.json() or {}).get("key") or {}).get("key_id")
-        expected.append(("org.key.create", "success", key_id))
-        revoked = client.call(check, "audit-key-revoke", "POST",
-                              env.org_path("A", "/keys/%s/revoke" % key_id), session=member)
-        expect_status(check, revoked, 200, label="audit key revoke")
-        expected.append(("org.key.revoke", "success", key_id))
+        member_key = client.call(check, "audit-member-key-create", "POST", env.org_path("A", "/keys"),
+                                 body={"name": "t03-member-audit-key", "operation_id": "t03-%s-member-audit-key" % env.pass_id},
+                                 session=member)
+        expect_status(check, member_key, 201, label="audit member key create")
+        member_key_body = member_key.json() or {}
+        member_key_dto = member_key_body.get("key") or {}
+        member_secret = member_key_body.get("secret", "")
+        if member_secret:
+            client.red.add(member_secret)
+            env.secrets_to_scan.append(("audit-member-key-secret", member_secret, ["audit-member-key-create"]))
+        member_key_id = member_key_dto.get("key_id")
+        check.require(isinstance(member_key_id, str) and member_key_id,
+                      "成员 Key 创建响应缺少 key_id")
+        check.require(member_key_dto.get("name") == "t03-member-audit-key",
+                      "成员 Key 创建响应缺少命名元数据")
+        member_key_private.extend(value for value in (member_key_id, member_key_dto.get("name"), member_key_dto.get("prefix"))
+                                  if isinstance(value, str) and value)
+        revoked = client.call(check, "audit-member-key-revoke", "POST",
+                              env.org_path("A", "/keys/%s/revoke" % member_key_id), session=member)
+        expect_status(check, revoked, 200, label="audit member key revoke")
+
+        # A team owner can audit their own Key actions, but cannot inspect another
+        # member's Key events or any of that Key's identifiers or metadata.
+        owner_key = client.call(check, "audit-owner-key-create", "POST", env.org_path("A", "/keys"),
+                                body={"name": "t03-owner-audit-key", "operation_id": "t03-%s-owner-audit-key" % env.pass_id},
+                                session=owner)
+        expect_status(check, owner_key, 201, label="audit owner key create")
+        owner_key_body = owner_key.json() or {}
+        owner_key_id = ((owner_key_body.get("key") or {}).get("key_id"))
+        owner_secret = owner_key_body.get("secret", "")
+        if owner_secret:
+            client.red.add(owner_secret)
+            env.secrets_to_scan.append(("audit-owner-key-secret", owner_secret, ["audit-owner-key-create"]))
+        check.require(isinstance(owner_key_id, str) and owner_key_id,
+                      "owner Key 创建响应缺少 key_id")
+        expected.append(("org.key.create", "success", owner_key_id))
+        owner_revoked = client.call(check, "audit-owner-key-revoke", "POST",
+                                    env.org_path("A", "/keys/%s/revoke" % owner_key_id), session=owner)
+        expect_status(check, owner_revoked, 200, label="audit owner key revoke")
+        expected.append(("org.key.revoke", "success", owner_key_id))
 
     after_a = audit_fetch(check, client, env, "A")
     after_b = audit_fetch(check, client, env, "B")
@@ -1592,8 +1617,16 @@ def check10(env, check):
     check.note("B 的审计里有 %d 条来自 A actor 的 failure 行（跨组织探测按设计记入被探测组织，"
                "ADR-0003 §2.3 的实现注释；不含任何 B 的数据）" % len(cross_failures))
 
-    # 审计内容不得包含任何 secret / token / 口令
+    # 审计内容不得包含任何 secret / token / 口令。Key 审计对 owner 仅保留
+    # owner 自己的动作；成员 Key 的事件及标识、名称、前缀都不可见。
     audit_text = json.dumps(after_a) + json.dumps(after_b)
+    member_key_audit_rows = [row for row in after_a
+                             if row.get("action") in ("org.key.create", "org.key.revoke")
+                             and str(row.get("actor_user_id")) == str(env.user_id("a-member"))]
+    check.require(not member_key_audit_rows,
+                  "owner 审计中出现了成员 Key 事件")
+    for value in member_key_private:
+        check.require(value not in audit_text, "owner 审计泄露了成员 Key 标识或元数据")
     for name, value, _allowed in env.secrets_to_scan:
         check.require(value not in audit_text, "审计里出现了 %s" % name)
     check.require(invitee_email not in json.dumps(after_b), "B 的审计里出现了 A 的成员 email")

@@ -2029,7 +2029,7 @@ rc_e2e() {
   set -e
   mkdir -p "$RC_EVIDENCE_DIR/e2e"
   tail -300 "$RC_WORK_DIR/logs/e2e.log" > "$RC_EVIDENCE_DIR/e2e/playwright.log" 2>/dev/null || true
-  # web/e2e/.state.json 里带 admin/member/viewer 的明文口令（T08 套件的既有设计，
+  # web/e2e/.state.json 里带测试账号的明文口令（套件的既有设计，
   # 文件被 gitignore）。归档到证据前必须把凭据字段抹掉。
   python3 "$RC_WORK_DIR/redact_state.py" "$RC_ROOT/web/e2e/.state.json" \
     "$RC_EVIDENCE_DIR/e2e/state.json" 2>/dev/null || true
