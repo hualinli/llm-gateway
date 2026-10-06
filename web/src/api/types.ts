@@ -502,7 +502,7 @@ export interface MemberUsageSummaryItem {
 
 export interface MemberUsageSummary {
   month: string;
-  scope: 'organization';
+  scope: 'self' | 'organization';
   items: MemberUsageSummaryItem[];
 }
 

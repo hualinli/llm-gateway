@@ -1,4 +1,4 @@
-import { AUTH, button, expect, loadState, requireBackend, test } from './fixtures';
+import { AUTH, button, expect, loadState, requireBackend, test, visibleSelectOption } from './fixtures';
 
 const state = loadState();
 
@@ -38,7 +38,7 @@ test.describe('enterprise owner', () => {
 
       await applicantPage.reload();
       await applicantPage.getByLabel('切换账户').click();
-      await applicantPage.locator('.ant-select-dropdown').getByText(state.orgA.name, { exact: true }).click();
+      await visibleSelectOption(applicantPage, state.orgA.name, false).click();
       await expect(applicantPage).toHaveURL('/orgs/' + state.orgA.id + '/overview');
     } finally {
       await applicantContext.close();
@@ -51,7 +51,7 @@ test.describe('enterprise owner', () => {
     const dialog = page.getByRole('dialog', { name: '邀请成员' });
     await dialog.getByLabel('对方邮箱').fill(state.invitee.email);
     await dialog.getByLabel('加入后的角色').click();
-    await page.locator('.ant-select-dropdown').getByText('成员', { exact: true }).click();
+    await visibleSelectOption(page, '成员').click();
     await dialog.getByRole('radio', { name: '不限额' }).check();
     await button(dialog, '生成邀请链接').click();
     const invitationDialog = page.getByRole('dialog', { name: '邀请链接已生成' });
@@ -205,7 +205,7 @@ test.describe('enterprise administrator', () => {
     expect(selfReport.items.every((item) => item.user_id === undefined || item.user_id === null || item.user_id === state.orgAdmin.userId)).toBe(true);
 
     await page.getByLabel('消费范围').click();
-    await page.locator('.ant-select-dropdown').getByText('本人消费', { exact: true }).click();
+    await visibleSelectOption(page, '本人消费').click();
     await expect(page.getByText('此处只显示你本人的消费')).toBeVisible();
 
     await page.goto('/orgs/' + state.orgA.id + '/billing');

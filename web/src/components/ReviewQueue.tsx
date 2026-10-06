@@ -89,7 +89,7 @@ export function ReviewQueueSection(): ReactNode {
       </> : null}
       <Form form={form} layout="vertical">
         <Form.Item name="reason" label="处理原因" rules={[{ required: true, whitespace: true, message: '请写明处理原因' }, { max: 512 }]}>
-          <Input.TextArea rows={3} maxLength={512} showCount />
+          <Input.TextArea aria-label="处理原因" rows={3} maxLength={512} showCount />
         </Form.Item>
       </Form>
       {disposition.isError ? <ErrorView error={disposition.error} title="处理未完成，请刷新列表确认状态" /> : null}
