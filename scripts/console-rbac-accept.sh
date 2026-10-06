@@ -1499,6 +1499,37 @@ def check09(env, check):
     member = env.session("a-member")
     member_id = env.user_id("a-member")
     owner_id = env.user_id("a-owner")
+
+    # With real billing enabled, Check08's streaming calls may have returned
+    # before their usage receipts finish settlement. Wait on the authoritative
+    # org totals before taking any Check09 snapshots so owner/admin comparisons
+    # cannot race an in-flight debit. Fresh opt-in fixtures must settle the
+    # member, second-member, and admin calls made in Check08.
+    if env.args.seed_local_test_credit:
+        settle_deadline = time.time() + 90
+        settle_attempt = 0
+        while True:
+            settle_attempt += 1
+            settled_usage = client.call(
+                check, "billing-settlement-wait%02d" % settle_attempt, "GET",
+                env.org_path("A", "/usage"), query="limit=1", session=env.session("a-owner"))
+            expect_status(check, settled_usage, 200, label="Check08 usage settlement")
+            settle_payload = settled_usage.json() or {}
+            settle_totals = settle_payload.get("totals") or {}
+            pending_count = settle_totals.get("pending_count")
+            settled_count = settle_totals.get("settled_count")
+            if (not isinstance(pending_count, int) or isinstance(pending_count, bool) or pending_count < 0 or
+                    not isinstance(settled_count, int) or isinstance(settled_count, bool) or settled_count < 0):
+                raise CheckFailure("Check08 usage totals omitted valid pending_count/settled_count")
+            if pending_count == 0 and settled_count >= 3:
+                check.note("Check08 的 3 个 Gateway 消费均已结算；开始读取稳定的 Check09 账单快照")
+                break
+            if time.time() >= settle_deadline:
+                raise CheckFailure(
+                    "等待 Check08 账单结算超时：pending_count=%d settled_count=%d，期望 pending_count=0 且至少 3 个 settled"
+                    % (pending_count, settled_count))
+            time.sleep(2)
+
     org_usage = client.call(check, "owner-usage-org", "GET", env.org_path("A", "/usage"),
                             query="limit=100", session=env.session("a-owner"))
     expect_status(check, org_usage, 200, label="owner usage")
