@@ -249,7 +249,7 @@ func (s *Service) RemoveMember(ctx context.Context, actorUserID, orgID, targetUs
 
 // TransferOwnership 是授予 owner 的唯一路径：目标成员在同一事务里升为 owner，
 // 调用者降为 admin（owner 数量不变，因此不需要“最后 owner”判断）。只有 owner
-// 能调用（transfer_owner）。目标必须是组织的 active 成员，且不能是自己。
+// 能调用（transfer_owner）。目标必须是组织的 active 成员且用户账户 active，且不能是自己。
 //
 // 校验顺序是有约束的：调用者的成员关系与权限矩阵先判（mutateMembership 已完
 // 成），目标合法性后判。非成员必须拿到 ErrNotFound（不泄露组织存在性）、plain
@@ -268,6 +268,17 @@ func (s *Service) TransferOwnership(ctx context.Context, actorUserID, orgID, tar
 			return err
 		}
 		if target.Status != memberActive {
+			return ErrMemberNotFound
+		}
+		var targetAccountStatus string
+		err = tx.QueryRowContext(ctx, queryLockActiveUser, targetUserID).Scan(&targetAccountStatus)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrMemberNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if targetAccountStatus != "active" {
 			return ErrMemberNotFound
 		}
 		if target.Role == roleOwner {
