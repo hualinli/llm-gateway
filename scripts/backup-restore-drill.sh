@@ -18,6 +18,10 @@
 #      （传输丢失），再停 Redis 证明新请求 fail-closed，随后恢复 Redis，证明
 #      PG 驱动的重投（METERING_SETTLEMENT_REDISPATCH）把结算补齐且**不重复扣款**。
 #
+# 隔离约定：只创建带唯一 T10 run id 的容器和随机本地端口；PG 数据目录及 Redis /data
+# 都是 tmpfs，不使用 Compose 项目或持久命名卷。密钥、原始 HTTP scratch 与 pg_dump
+# 保存在 0700 临时 secrets 目录，默认 teardown 删除；仅 --keep 会保留供人工复现。
+#
 # 退出码：0 = 全部硬检查通过；1 = 存在 FAIL；2 = 用法/环境错误。
 #
 # 用法见 --help。
@@ -33,6 +37,15 @@ timeout_seconds=20
 keep_lab=0
 live_requests=12
 flush_requests=8
+driver_dir=""
+
+backup_drill_teardown() {
+  t10_teardown
+  if [[ -n "$driver_dir" ]]; then rm -rf -- "$driver_dir"; fi
+  if [[ "$keep_lab" != "1" && -n "${T10_SECRETS_DIR:-}" ]]; then
+    rm -rf -- "$T10_SECRETS_DIR"
+  fi
+}
 
 usage() {
   cat <<'USAGE'
@@ -80,6 +93,7 @@ case "$flush_requests" in ''|*[!0-9]*) t10_die "--flush-requests 必须是非负
 
 t10_require docker curl python3 go git shasum
 t10_install_traps
+trap 'backup_drill_teardown' EXIT
 
 prefix="t10bk-$(printf '%s' "$T10_RUN_ID" | tr '[:upper:]' '[:lower:]')"
 prefix="${prefix:0:40}"
@@ -289,7 +303,8 @@ console_env_b=(
 
 json_env() { python3 -c 'import json,sys;print(json.dumps(dict(a.split("=",1) for a in sys.argv[1:])))' "$@"; }
 
-cat > "$T10_EVIDENCE_DIR/restore-lab.json" <<JSON
+private_lab_config="$T10_SECRETS_DIR/restore-lab-private.json"
+cat > "$private_lab_config" <<JSON
 {
   "run_id": "$T10_RUN_ID",
   "root": "$T10_ROOT",
@@ -346,6 +361,33 @@ cat > "$T10_EVIDENCE_DIR/restore-lab.json" <<JSON
   }
 }
 JSON
+chmod 600 "$private_lab_config"
+
+# Public run metadata intentionally omits credentials, DSNs, process environments,
+# and command arguments. The full driver configuration stays in the 0700 secret dir.
+python3 - "$private_lab_config" "$T10_EVIDENCE_DIR/restore-lab.json" <<'PY'
+import json
+import os
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    config = json.load(handle)
+public = {
+    "run_id": config["run_id"],
+    "root": config["root"],
+    "evidence_dir": config["evidence_dir"],
+    "timeout_seconds": config["timeout_seconds"],
+    "live_requests": config["live_requests"],
+    "flush_requests": config["flush_requests"],
+    "admin_email": config["admin_email"],
+    "a": {key: config["a"][key] for key in ("ports", "urls", "containers")},
+    "b": {key: config["b"][key] for key in ("ports", "urls", "containers")},
+    "secret_material": "temporary private config; removed after teardown unless --keep is used",
+}
+with open(sys.argv[2], "w", encoding="utf-8") as handle:
+    json.dump(public, handle, indent=2)
+os.chmod(sys.argv[2], 0o600)
+PY
 
 driver_dir="$(mktemp -d "${TMPDIR:-/tmp}/t10bk-driver.XXXXXX")"
 driver_path="$driver_dir/backup_restore_driver.py"
@@ -548,10 +590,10 @@ CSRF_DEFAULT = object()
 
 
 class Client:
-    def __init__(self, evidence_dir, timeout):
+    def __init__(self, evidence_dir, timeout, scratch_dir=None):
         self.evidence_dir = evidence_dir
         self.timeout = timeout
-        self.scratch = tempfile.mkdtemp(prefix="t10sec-http.")
+        self.scratch = tempfile.mkdtemp(prefix="t10sec-http.", dir=scratch_dir)
         self.records = []
 
     def call(self, check, label, method, path, *, base_url, query=None, body=None, raw_body=None,
@@ -649,7 +691,18 @@ class Client:
         for key, value in response.headers:
             resp_dump.append("%s: %s" % (key, value))
         resp_dump.append("")
-        resp_dump.append(response.body[:MAX_STORED_BODY])
+        response_body = response.body[:MAX_STORED_BODY]
+        # Activation codes are one-time credentials carried as `code`, not
+        # `token`; redact this creation response before it reaches evidence.
+        if response.method == "POST" and response.path.split("?", 1)[0] == "/api/v1/admin/activation-codes":
+            try:
+                payload = json.loads(response_body)
+                if isinstance(payload, dict) and isinstance(payload.get("code"), str):
+                    payload["code"] = "<redacted: one-time activation code>"
+                    response_body = json.dumps(payload, ensure_ascii=False)
+            except (TypeError, ValueError):
+                pass
+        resp_dump.append(response_body)
         if len(response.body) > MAX_STORED_BODY:
             resp_dump.append("\n…(%d bytes truncated)" % (len(response.body) - MAX_STORED_BODY))
         with open(os.path.join(self.evidence_dir, stem + ".resp"), "w", encoding="utf-8") as handle:
@@ -976,7 +1029,7 @@ class Actor:
 
 
 class Fixtures:
-    """Two enterprises, four roles each, created through real HTTP."""
+    """Two enterprises and their account actors, created through real HTTP."""
 
     def __init__(self, lab, client, cid="FIX"):
         self.lab = lab
@@ -986,11 +1039,58 @@ class Fixtures:
         self.orgs = {}
         self.keys = {}
         self.invitations = {}
+        self.opening_codes = {}
         self.prices = {}
         self.secrets_path = os.path.join(lab.secret_dir, "fixtures.json")
 
     def url(self, name):
         return self.lab.urls[name]
+
+    def require_personal_wallet(self, check, actor, only_personal=False):
+        response = self.client.call(check, "personal-account-" + actor.name, "GET", "/api/v1/organizations",
+                                    base_url=self.url("console"), session=actor.session)
+        check.require_status(response, 200, label="自助注册用户的账户 " + actor.name)
+        memberships = (response.json() or {}).get("items", [])
+        personal = [item for item in memberships
+                    if ((item.get("organization") or {}).get("type") == "personal")]
+        check.require(len(personal) == 1,
+                      "%s 应保留且仅有一个 personal 账户，实际=%r" % (actor.name, personal))
+        if len(personal) != 1:
+            return
+        check.require(personal[0].get("role") == "owner" and personal[0].get("status") == "active",
+                      "%s 的 personal membership 非 active owner：%r" % (actor.name, personal[0]))
+        if only_personal:
+            check.require(len(memberships) == 1,
+                          "%s 注册后不应自动加入 enterprise：%r" % (actor.name, memberships))
+        if not actor.user_id.isdigit() or int(actor.user_id) <= 0:
+            check.require(False, "%s 注册响应缺少有效 user id：%r" % (actor.name, actor.user_id))
+            return
+        wallets = self.lab.psql_lines(
+            "SELECT count(*) FROM organizations o "
+            "JOIN memberships m ON m.org_id=o.id AND m.user_id=o.owner_user_id "
+            "AND m.role='owner' AND m.status='active' "
+            "JOIN billing_accounts a ON a.org_id=o.id "
+            "WHERE o.type='personal' AND o.owner_user_id=%s AND m.user_id=%s"
+            % (actor.user_id, actor.user_id))
+        check.require(wallets == ["1"],
+                      "%s 的 personal 钱包/owner membership 未原子创建：%r" % (actor.name, wallets))
+
+    def require_own_key_view(self, check, base_url, actor, org, expected_key, forbidden_key=None):
+        response = self.client.call(check, actor.name + "-own-key-view", "GET",
+                                    "/api/v1/orgs/%s/keys" % org, base_url=base_url,
+                                    session=actor.session)
+        check.require_status(response, 200, label=actor.name + " 读取本人 Key")
+        items = (response.json() or {}).get("items", [])
+        key_ids = {item.get("key_id") for item in items}
+        check.require(expected_key in key_ids,
+                      "%s 的 Key 列表缺少本人 Key：%r" % (actor.name, items))
+        check.require(all(item.get("owner_user_id") == actor.user_id and item.get("name")
+                          for item in items),
+                      "%s 的 Key 列表暴露他人 Key 或无名称：%r" % (actor.name, items))
+        if forbidden_key:
+            check.require(forbidden_key not in key_ids,
+                          "%s 的 Key 列表包含其他成员 Key" % actor.name)
+        return items
 
     def login(self, check, actor, console="console", label=None):
         response = self.client.call(check, label or ("login-" + actor.name), "POST", "/api/v1/auth/login",
@@ -1021,56 +1121,87 @@ class Fixtures:
         self.actors["platform-admin"] = admin
         admin_id = admin.session["user_id"]
         admin.user_id = admin_id
+        self.require_personal_wallet(check, admin, only_personal=True)
 
         tag = self.lab.cfg["run_id"][-6:].lower().replace("-", "")[-6:]
         self.tag = tag
 
-        def create_user(name, platform_admin=False):
+        def register_user(name):
             email = "t10-%s-%s@t10.test" % (tag, name)
             password = secrets.token_urlsafe(18)
-            response = self.client.call(check, "create-user-" + name, "POST", "/api/v1/admin/users",
+            response = self.client.call(check, "register-user-" + name, "POST", "/api/v1/auth/register",
                                         base_url=self.url("console"),
-                                        body={"email": email, "password": password,
-                                              "platform_admin": platform_admin},
-                                        session=admin.session)
-            check.require_status(response, 201, label="create user " + email)
+                                        body={"email": email, "password": password}, csrf=None)
+            check.require_status(response, 201, label="self-register " + email)
             RED.add(password)
-            actor = Actor(name, email, password, str((response.json() or {}).get("id", "")), None, platform_admin)
+            registration = response.json() or {}
+            cookies = cookies_of(response)
+            registration_token = cookies.get("gw_session", "")
+            registration_csrf = cookies.get("gw_csrf") or registration.get("csrf_token", "")
+            check.require(bool(registration_token), "注册响应缺少 gw_session cookie")
+            check.require(bool(registration_csrf), "注册响应缺少 CSRF token")
+            RED.add(registration_token)
+            RED.add(registration_csrf)
+            user = registration.get("user") or {}
+            actor = Actor(name, email, password, str(user.get("id", "")), None, False)
             self.actors[name] = actor
+            self.login(check, actor, label="login-registered-" + name)
+            self.require_personal_wallet(check, actor, only_personal=True)
             return actor
 
         # Enterprise A
-        a_owner = create_user("a-owner")
-        a_admin = create_user("a-admin")
-        a_member = create_user("a-member")
-        a_viewer = create_user("a-viewer")
-        a_member2 = create_user("a-member2")     # removed-member-with-live-key case
-        a_disabled = create_user("a-disabled")   # disabled-user-with-live-session case
-        invitee = create_user("a-invitee")       # invitation tamper case
+        a_owner = register_user("a-owner")
+        a_admin = register_user("a-admin")
+        a_member = register_user("a-member")
+        a_member3 = register_user("a-member3")
+        a_member2 = register_user("a-member2")     # removed-member-with-live-key case
+        a_disabled = register_user("a-disabled")   # disabled-user-with-live-session case
+        invitee = register_user("a-invitee")       # invitation tamper case
         # Enterprise B
-        b_owner = create_user("b-owner")
-        b_member = create_user("b-member")
+        b_owner = register_user("b-owner")
+        b_member = register_user("b-member")
 
-        # Organization A: created by its owner (POST /api/v1/organizations).
-        self.login(check, a_owner)
-        response = self.client.call(check, "create-org-acme", "POST", "/api/v1/organizations",
-                                    base_url=self.url("console"), body={"name": "t10-%s-acme" % tag},
-                                    session=a_owner.session)
-        check.require_status(response, 201, label="create org A")
+        # Enterprise A is manually opened by a platform admin for a registered active owner.
+        response = self.client.call(check, "create-org-acme", "POST", "/api/v1/admin/organizations",
+                                    base_url=self.url("console"),
+                                    body={"name": "t10-%s-acme" % tag, "owner_email": a_owner.email},
+                                    session=admin.session)
+        check.require_status(response, 201, label="平台管理员为 owner_email 手动创建 org A")
         self.orgs["A"] = str(response.json()["organization"]["id"])
+        check.require(response.json().get("role") == "owner",
+                      "手动开户的 owner_email 未成为 owner：%r" % response.json())
+        admin_members = self.client.call(check, "platform-admin-not-org-member", "GET",
+                                         "/api/v1/orgs/%s/members" % self.orgs["A"],
+                                         base_url=self.url("console"), session=admin.session)
+        check.require_status(admin_members, 404, "not_found", label="平台管理员未被自动加入企业")
+        self.require_personal_wallet(check, a_owner, only_personal=False)
 
-        # Organization B.
-        self.login(check, b_owner)
-        response = self.client.call(check, "create-org-beta", "POST", "/api/v1/organizations",
-                                    base_url=self.url("console"), body={"name": "t10-%s-beta" % tag},
+        # Enterprise B is provisioned only by a single-use activation code.
+        code_response = self.client.call(check, "create-opening-code-beta", "POST",
+                                         "/api/v1/admin/activation-codes", base_url=self.url("console"),
+                                         body={"enterprise_name": "t10-%s-beta" % tag},
+                                         session=admin.session)
+        check.require_status(code_response, 201, label="平台管理员签发 enterprise 开户码")
+        opening_code = (code_response.json() or {}).get("code", "")
+        check.require(bool(opening_code), "开户码响应缺少一次性 code")
+        RED.add(opening_code)
+        self.opening_codes["B"] = {"code": opening_code, "id": (code_response.json() or {}).get("id", "")}
+        response = self.client.call(check, "activate-org-beta", "POST", "/api/v1/organizations/activate",
+                                    base_url=self.url("console"), body={"code": opening_code},
                                     session=b_owner.session)
-        check.require_status(response, 201, label="create org B")
+        check.require_status(response, 201, label="b-owner 使用开户码创建 org B")
         self.orgs["B"] = str(response.json()["organization"]["id"])
+        check.require(response.json().get("role") == "owner",
+                      "开户码创建的 user 未成为 owner：%r" % response.json())
+        self.require_personal_wallet(check, b_owner, only_personal=False)
 
         def invite_and_accept(owner, actor, org, role):
+            invitation = {"email": actor.email, "role": role}
+            if role == "member":
+                invitation["monthly_limit_micro"] = "100000000"
             response = self.client.call(check, "invite-" + actor.name, "POST",
                                         "/api/v1/orgs/%s/invitations" % org, base_url=self.url("console"),
-                                        body={"email": actor.email, "role": role}, session=owner.session)
+                                        body=invitation, session=owner.session)
             check.require_status(response, 201, label="invite " + actor.name)
             token = (response.json() or {}).get("token", "")
             check.require(bool(token), "邀请响应缺少 token")
@@ -1080,11 +1211,15 @@ class Fixtures:
                                       "/api/v1/invitations/%s/accept" % token, base_url=self.url("console"),
                                       body={}, session=actor.session)
             check.require_status(accept, 200, label="accept " + actor.name)
+            if role == "member":
+                check.require((accept.json() or {}).get("monthly_limit_micro") == "100000000",
+                              "普通 member 接受邀请后额度未保留：%r" % accept.json())
+            self.invitations[actor.name] = {"token": token, "email": actor.email, "user_id": actor.user_id}
             return token
 
         invite_and_accept(a_owner, a_admin, self.orgs["A"], "admin")
         invite_and_accept(a_owner, a_member, self.orgs["A"], "member")
-        invite_and_accept(a_owner, a_viewer, self.orgs["A"], "billing_viewer")
+        invite_and_accept(a_owner, a_member3, self.orgs["A"], "member")
         invite_and_accept(a_owner, a_member2, self.orgs["A"], "member")
         invite_and_accept(a_owner, a_disabled, self.orgs["A"], "member")
         invite_and_accept(b_owner, b_member, self.orgs["B"], "member")
@@ -1095,7 +1230,8 @@ class Fixtures:
         # A pending invitation (used by the tamper/negative cases).
         response = self.client.call(check, "invite-pending", "POST", "/api/v1/orgs/%s/invitations" % self.orgs["A"],
                                     base_url=self.url("console"),
-                                    body={"email": invitee.email, "role": "member"}, session=a_owner.session)
+                                    body={"email": invitee.email, "role": "member",
+                                          "monthly_limit_micro": "100000000"}, session=a_owner.session)
         check.require_status(response, 201, label="invite pending")
         pending_token = (response.json() or {}).get("token", "")
         RED.add(pending_token)
@@ -1103,10 +1239,9 @@ class Fixtures:
                                        "user_id": invitee.user_id}
 
         # Keys: every key is created through the Console → Control AdminService path.
-        def create_key(actor, org, owner_user_id=None, operation_id=None):
-            body = {}
-            if owner_user_id:
-                body["owner_user_id"] = str(owner_user_id)
+        def create_key(actor, org, name=None, operation_id=None):
+            name = name or "t10-%s-key" % actor.name
+            body = {"name": name}
             if operation_id:
                 body["operation_id"] = operation_id
             response = self.client.call(check, "create-key-" + actor.name, "POST",
@@ -1117,15 +1252,36 @@ class Fixtures:
             key = payload.get("secret", "")
             check.require(bool(key), "创建 Key 响应缺少 secret")
             RED.add(key)
-            return {"secret": key, "key_id": payload["key"]["key_id"], "prefix": payload["key"]["prefix"],
-                    "owner_user_id": payload["key"].get("owner_user_id")}
+            metadata = payload["key"]
+            key_id = str(metadata["key_id"])
+            membership = self.lab.psql_lines(
+                "SELECT k.membership_id, m.id, k.owner_user_id, m.user_id, k.name "
+                "FROM api_keys k JOIN memberships m ON m.id=k.membership_id AND m.org_id=k.org_id "
+                "AND m.user_id=k.owner_user_id AND m.status='active' "
+                "WHERE k.key_id='%s'" % key_id.replace("'", "''"))
+            parts = membership[0].split("|") if len(membership) == 1 else []
+            check.require(bool(parts) and parts[0] == parts[1] and parts[2] == actor.user_id and
+                          parts[3] == actor.user_id and parts[4] == name,
+                          "Key 未固定到本人当前 membership / 名称：actor=%s key=%r" % (actor.name, membership))
+            check.require(metadata.get("name") == name and metadata.get("owner_user_id") == actor.user_id and
+                          metadata.get("organization_id") == org,
+                          "Key DTO 的名称/归属与创建者不一致：%r" % metadata)
+            return {"secret": key, "key_id": key_id, "prefix": metadata["prefix"],
+                    "owner_user_id": metadata.get("owner_user_id"), "name": name,
+                    "membership_id": parts[0] if parts else ""}
 
         self.keys["a-member"] = create_key(a_member, self.orgs["A"])
+        self.keys["a-member3"] = create_key(a_member3, self.orgs["A"])
         self.keys["a-member2"] = create_key(a_member2, self.orgs["A"])
         self.keys["a-disabled"] = create_key(a_disabled, self.orgs["A"])
-        self.keys["a-viewer"] = create_key(a_admin, self.orgs["A"], owner_user_id=a_viewer.user_id)
+        self.keys["a-admin"] = create_key(a_admin, self.orgs["A"])
         self.keys["b-member"] = create_key(b_member, self.orgs["B"])
         self.keys["a-owner"] = create_key(a_owner, self.orgs["A"])
+
+        self.require_own_key_view(check, self.url("console"), a_member, self.orgs["A"],
+                                  self.keys["a-member"]["key_id"], self.keys["a-admin"]["key_id"])
+        self.require_own_key_view(check, self.url("console"), a_admin, self.orgs["A"],
+                                  self.keys["a-admin"]["key_id"], self.keys["a-member"]["key_id"])
 
         # Prices: 1 micro per token in both directions for the model the load
         # test uses ("default") and the drill model ("t10-model").
@@ -1143,14 +1299,37 @@ class Fixtures:
 
         # Fund both organizations through the audited platform-admin adjustment.
         for org, amount in ((self.orgs["A"], 50_000_000), (self.orgs["B"], 5_000_000)):
+            funding = {"type": "recharge", "amount_micro": str(amount),
+                       "payment_reference": "t10-fund-%s" % org,
+                       "reason": "t10 security matrix funding"}
+            idempotency_key = "t10-fund-%s" % org
+            path = "/api/v1/admin/billing/accounts/%s/adjustments" % org
             response = self.client.call(check, "fund-" + org, "POST",
-                                        "/api/v1/admin/billing/accounts/%s/adjustments" % org,
+                                        path,
                                         base_url=self.url("console"),
-                                        body={"amount_micro": str(amount), "direction": "credit",
-                                              "reason": "t10 security matrix funding"},
+                                        body=funding,
                                         session=admin.session,
-                                        extra_headers={"Idempotency-Key": "t10-fund-%s" % org})
+                                        extra_headers={"Idempotency-Key": idempotency_key})
             check.require_status(response, 201, label="fund org " + org)
+            first = response.json() or {}
+            replay = self.client.call(check, "fund-replay-" + org, "POST", path,
+                                      base_url=self.url("console"), body=funding, session=admin.session,
+                                      extra_headers={"Idempotency-Key": idempotency_key})
+            check.require_status(replay, 200, label="replay recharge org " + org)
+            replayed = replay.json() or {}
+            check.require(replayed.get("replayed") is True and
+                          (replayed.get("entry") or {}).get("id") == (first.get("entry") or {}).get("id") and
+                          (replayed.get("account") or {}).get("posted_balance_micro") ==
+                          (first.get("account") or {}).get("posted_balance_micro"),
+                          "重复充值没有返回同一流水/账户投影：first=%r replay=%r" % (first, replayed))
+            entry_count = self.lab.psql_lines(
+                "SELECT count(*) FROM billing_entries WHERE org_id=%s AND business_id='%s'"
+                % (org, idempotency_key.replace("'", "''")))
+            check.require(entry_count == ["1"],
+                          "同一 Idempotency-Key 产生多条流水：org=%s count=%r" % (org, entry_count))
+            check.detail("funding_replay_" + org, {"replayed": replayed.get("replayed"),
+                                                    "entry_id": (replayed.get("entry") or {}).get("id"),
+                                                    "business_rows": entry_count})
 
         # Wait for the gateway snapshot to carry the fixture keys (≤5s target).
         deadline = time.time() + 20
@@ -1168,6 +1347,7 @@ class Fixtures:
             "orgs": self.orgs,
             "keys": self.keys,
             "invitations": self.invitations,
+            "opening_codes": self.opening_codes,
             "prices": self.prices,
             "actors": {name: {"email": a.email, "user_id": a.user_id, "password": a.password,
                               "session": a.session, "platform_admin": a.platform_admin}
@@ -1180,11 +1360,14 @@ class Fixtures:
             "orgs": self.orgs,
             "users": {name: {"email": a.email, "user_id": a.user_id, "platform_admin": a.platform_admin}
                       for name, a in self.actors.items()},
-            "keys": {name: {"key_id": k["key_id"], "prefix": k["prefix"], "owner_user_id": k["owner_user_id"]}
+            "keys": {name: {"key_id": k["key_id"], "prefix": k["prefix"],
+                            "owner_user_id": k["owner_user_id"], "name": k["name"],
+                            "membership_id": k["membership_id"]}
                      for name, k in self.keys.items()},
             "prices": self.prices,
             "invitations": {name: {"email": v["email"], "user_id": v["user_id"]}
                             for name, v in self.invitations.items()},
+            "opening_codes": {name: {"id": v["id"]} for name, v in self.opening_codes.items()},
         }
         with open(os.path.join(self.lab.evidence_dir, "fixtures.json"), "w", encoding="utf-8") as handle:
             json.dump(summary, handle, indent=2, ensure_ascii=False)
@@ -1445,8 +1628,19 @@ class Drill:
         return {
             "users": q("SELECT count(*) FROM users"),
             "organizations": lines("SELECT id||'|'||name||'|'||type||'|'||status FROM organizations ORDER BY id"),
-            "memberships": lines("SELECT org_id||'|'||user_id||'|'||role||'|'||status FROM memberships ORDER BY org_id, user_id"),
-            "api_keys": lines("SELECT key_id||'|'||org_id||'|'||coalesce(owner_user_id::text,'')||'|'||status FROM api_keys ORDER BY key_id"),
+            "memberships": lines("SELECT org_id||'|'||user_id||'|'||role||'|'||status||'|'||"
+                                  "coalesce(monthly_limit_micro::text,'') FROM memberships ORDER BY org_id, user_id"),
+            "activation_codes": lines("SELECT id||'|'||enterprise_name||'|'||status||'|'||created_by||'|'||"
+                                       "coalesce(used_by::text,'')||'|'||coalesce(resulting_org_id::text,'') "
+                                       "FROM enterprise_activation_codes ORDER BY id"),
+            "personal_wallets": lines("SELECT o.owner_user_id||'|'||o.id||'|'||a.posted_balance_micro||'|'||a.reserved_micro "
+                                       "FROM organizations o JOIN billing_accounts a ON a.org_id=o.id "
+                                       "JOIN memberships m ON m.org_id=o.id AND m.user_id=o.owner_user_id "
+                                       "AND m.role='owner' AND m.status='active' "
+                                       "WHERE o.type='personal' ORDER BY o.owner_user_id"),
+            "api_keys": lines("SELECT k.key_id||'|'||k.org_id||'|'||coalesce(k.owner_user_id::text,'')||'|'||"
+                              "coalesce(k.membership_id::text,'')||'|'||k.name||'|'||k.status "
+                              "FROM api_keys k ORDER BY k.key_id"),
             "price_versions": lines("SELECT id||'|'||model||'|'||input_price_micro_per_million||'|'||output_price_micro_per_million FROM price_versions ORDER BY id"),
             "executions_by_status": lines("SELECT status||'|'||count(*) FROM billing_executions GROUP BY status ORDER BY status"),
             "receipts_by_status": lines("SELECT status||'|'||count(*)||'|'||sum(charge_micro) FROM usage_receipts GROUP BY status ORDER BY status"),
@@ -1458,6 +1652,26 @@ class Drill:
             "policy_publications": q("SELECT count(*) FROM policy_publications"),
             "schema_version": q("SELECT version FROM schema_migrations"),
         }
+
+    def check_evidence_secrets(self, check):
+        secrets = [value.encode("utf-8") for value in RED.secrets if value]
+        leaks = []
+        scanned = 0
+        for directory, _subdirs, filenames in os.walk(self.lab.evidence_dir):
+            for filename in filenames:
+                path = os.path.join(directory, filename)
+                try:
+                    if os.path.getsize(path) > 64 * 1024 * 1024:
+                        continue
+                    with open(path, "rb") as handle:
+                        content = handle.read()
+                except OSError:
+                    continue
+                scanned += 1
+                if any(secret in content for secret in secrets):
+                    leaks.append(os.path.relpath(path, self.lab.evidence_dir))
+        check.detail("evidence_secret_scan", {"files_scanned": scanned, "leak_files": leaks})
+        check.require(not leaks, "明文 secret 出现在 evidence 文件中：%r" % leaks)
 
     def money_fingerprint(self, env):
         """Order-independent digest of the four durable money layers."""
@@ -1632,11 +1846,13 @@ class Drill:
         check.detail("restore", self.restore_result)
         facts_b = self.facts(self.b)
         check.detail("facts_after_restore", facts_b)
-        for field in ("organizations", "memberships", "api_keys", "price_versions", "accounts",
+        for field in ("users", "organizations", "memberships", "activation_codes", "personal_wallets", "api_keys",
+                      "price_versions", "accounts",
                       "ledger_sum_by_org", "executions_by_status", "receipts_by_status", "entries_by_kind",
                       "control_config", "schema_version", "provider_credentials"):
             check.require(facts_b[field] == self.facts_a[field],
                           "恢复后 %s 与备份前不一致:\n  A=%r\n  B=%r" % (field, self.facts_a[field], facts_b[field]))
+        self.check_evidence_secrets(check)
         self.fingerprint_b = self.money_fingerprint(self.b)
         check.require(self.fingerprint_b == self.fingerprint_a,
                       "恢复后的资金指纹不同: A=%s B=%s" % (self.fingerprint_a, self.fingerprint_b))
@@ -1700,6 +1916,12 @@ class Drill:
         check.require(self.b.wait_tcp(self.b.ports["upstream"], 30), "B 的 upstream 未监听")
         ensure_service(self.b, "metering", self.b.ports["metering"])
         ensure_service(self.b, "console", self.b.ports["console"])
+        self.fx.require_own_key_view(check, self.b.urls["console"], self.fx.actors["a-member"],
+                                     self.fx.orgs["A"], self.fx.keys["a-member"]["key_id"],
+                                     self.fx.keys["a-admin"]["key_id"])
+        self.fx.require_own_key_view(check, self.b.urls["console"], self.fx.actors["a-admin"],
+                                     self.fx.orgs["A"], self.fx.keys["a-admin"]["key_id"],
+                                     self.fx.keys["a-member"]["key_id"])
         gateway = Proc(self.b, "gateway")
         gateway.start()
         check.require(self.b.wait_http(self.b.urls["gateway"] + "/healthz", 60), "B 的 gateway 未就绪")
@@ -2038,9 +2260,23 @@ def main():
     parser.add_argument("--lab", required=True)
     args = parser.parse_args()
     cfg = json.load(open(args.lab, encoding="utf-8"))
+    # Seed the redactor before any evidence scan; these values arrive from shell
+    # setup, before the Python-side fixtures know about the corresponding secret.
+    for value in (cfg.get("provider_secret", ""),
+                  cfg.get("tokens", {}).get("control_admin", ""),
+                  cfg.get("tokens", {}).get("metering_admin", "")):
+        RED.add(value)
+    for path_key in ("admin_password_file", "master_key_file", "wrong_key_file"):
+        secret_path = cfg.get(path_key)
+        if secret_path:
+            try:
+                with open(secret_path, encoding="utf-8") as handle:
+                    RED.add(handle.read().strip())
+            except OSError:
+                pass
     t10.set_logfile(os.path.join(cfg["log_dir"], "drill.log"))
     lab = Lab(cfg)
-    client = Client(cfg["evidence_dir"], cfg["timeout_seconds"])
+    client = Client(cfg["evidence_dir"], cfg["timeout_seconds"], scratch_dir=cfg["secret_dir"])
     drill = Drill(lab, cfg, client)
     os.makedirs(os.path.join(cfg["evidence_dir"], "raw"), exist_ok=True)
 
@@ -2125,10 +2361,11 @@ DRIVER_EOF
 
 t10_log "运行演练驱动"
 set +e
-python3 "$driver_path" --lab "$T10_EVIDENCE_DIR/restore-lab.json" 2>&1 | tee "$T10_LOG_DIR/drill-run.log"
+python3 "$driver_path" --lab "$private_lab_config" 2>&1 | tee "$T10_LOG_DIR/drill-run.log"
 driver_rc=${PIPESTATUS[0]}
 set -e
-rm -rf "$driver_dir"
+rm -rf -- "$driver_dir"
+driver_dir=""
 
 if [[ "$keep_lab" == "1" ]]; then
   t10_log "--keep：保留两套实验台（端口/容器见 restore-lab.json），不执行 teardown"
