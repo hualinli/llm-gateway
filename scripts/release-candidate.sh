@@ -2029,7 +2029,7 @@ rc_e2e() {
   ( cd "$RC_ROOT/web" && npm ci >>"$RC_WORK_DIR/logs/e2e.log" 2>&1 ) \
     || { tail -20 "$RC_WORK_DIR/logs/e2e.log" >&2; rc_die "npm ci 失败"; }
   rc_log "==> Playwright 三角色套件（Console=$RC_CONSOLE_PORT Gateway=${RC_GATEWAY_PORT}）"
-  # 此处只跑功能断言；截图用例可单独运行，输出到 data/verification/web-screenshots。
+  # 一并运行角色流程与桌面/窄屏截图，输出到 data/verification/web-screenshots。
   set +e
   ( cd "$RC_ROOT/web" && \
     E2E_CONSOLE_URL="http://127.0.0.1:$RC_CONSOLE_PORT" \
@@ -2038,7 +2038,7 @@ rc_e2e() {
     E2E_REQUIRE_FULL_STACK=1 \
     E2E_ADMIN_EMAIL="$RC_ADMIN_EMAIL" \
     E2E_ADMIN_PASSWORD="$(cat "$RC_WORK_DIR/secrets/admin-password")" \
-    CI=1 npm run e2e -- --reporter=list --grep-invert screenshots ) \
+    CI=1 npm run e2e -- --reporter=list ) \
     2>&1 | tee -a "$RC_WORK_DIR/logs/e2e.log" | tail -45
   local rc=${PIPESTATUS[0]}
   set -e
