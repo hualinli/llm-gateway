@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Legacy democtl/mock-provider acceptance only: this checks demo proxy failover
+# and ledger reconciliation, not Console identity, enterprise memberships, or
+# account billing. Use scripts/release-candidate.sh for Console acceptance.
+
 cd "$(dirname "$0")/.."
 sha="$(git rev-parse HEAD)"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
