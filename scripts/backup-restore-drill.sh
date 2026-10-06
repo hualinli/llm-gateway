@@ -2229,9 +2229,34 @@ class Drill:
         env = self.b
         org = self.fx.orgs["A"]
         metering = Proc(env, "metering")
+        # RF-02 ends with a successful gateway request whose receipt can still
+        # be pending_dispatch. Drain all pre-existing B receipts before taking
+        # the money baseline, so only this check's requests can settle below.
+        ready = env.wait_http(env.urls["metering"] + "/readyz", 90)
+        check.require(ready, "RF-03 前 metering settlement pipeline 未就绪")
+        preceding_settled, preceding_statuses = self.wait_settled(env, timeout=180)
+        check.detail("pre_rf03_receipt_statuses", preceding_statuses)
+        check.require(preceding_settled,
+                      "RF-03 前 B 仍有未结算收据: %r" % preceding_statuses)
+        quiet_status, quiet_payload = env.metering_json("/receipts/backlog")
+        quiet_backlog = (quiet_payload or {}).get("backlog") if isinstance(quiet_payload, dict) else None
+        quiet_transport = (quiet_payload or {}).get("transport") if isinstance(quiet_payload, dict) else None
+        check.detail("pre_rf03_backlog_status", quiet_status)
+        check.detail("pre_rf03_backlog", quiet_backlog)
+        check.detail("pre_rf03_transport", quiet_transport)
+        check.require(quiet_status == 200 and isinstance(quiet_backlog, dict)
+                      and isinstance(quiet_transport, dict),
+                      "RF-03 前无法读取 durable backlog/transport 状态: %s %r"
+                      % (quiet_status, quiet_payload))
+        quiet_counts = ("pending_dispatch", "dispatched", "exception", "claimed", "unsettled")
+        check.require(all(quiet_backlog.get(key) == 0 for key in quiet_counts)
+                      and quiet_transport.get("pending") == 0,
+                      "RF-03 前 backlog/Redis consumer 尚未归零: backlog=%r transport=%r"
+                      % (quiet_backlog, quiet_transport))
         metering.stop()
         check.require(env.wait_port_closed(env.ports["metering"], 10), "metering 未停止")
         executions = self.drive(check, 3, env=env, label="retry-after-redis")
+        check.require(len(executions) == 3, "RF-03 驱动请求数不是 3 条: %r" % executions)
         posted_before = env.psql("SELECT posted_balance_micro FROM billing_accounts WHERE org_id=%s" % org)
         reserved_before = env.psql("SELECT reserved_micro FROM billing_accounts WHERE org_id=%s" % org)
         expected = env.psql(
