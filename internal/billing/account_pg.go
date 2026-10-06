@@ -88,7 +88,8 @@ const accountColumns = `org_id, currency, posted_balance_micro, reserved_micro,
        status, version, created_at, updated_at`
 
 const entryColumns = `id, org_id, kind, amount_micro, direction, business_id, payload_digest,
-       reason, operator_user_id, request_id, posted_at, created_at`
+       reason, operator_user_id, request_id, posted_at, created_at,
+       COALESCE(manual_operation, ''), payment_reference, reversal_of_entry_id`
 
 const (
 	// ON CONFLICT DO NOTHING makes EnsureAccount idempotent: a second call (or a
@@ -133,8 +134,9 @@ WHERE business_id = $1 AND kind = $2`
 
 	queryInsertEntry = `INSERT INTO billing_entries
   (org_id, kind, amount_micro, direction, business_id, payload_digest, reason,
-   operator_user_id, request_id, posted_at, created_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+   operator_user_id, request_id, posted_at, created_at, manual_operation,
+   payment_reference, reversal_of_entry_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NULLIF($12, ''), $13, $14)
 RETURNING ` + entryColumns
 
 	queryInsertAdjustmentAudit = `INSERT INTO console_audit_events
@@ -377,6 +379,11 @@ func (s *PGAccountStore) adjustTx(ctx context.Context, tx txExecutor, params Adj
 	default:
 		return AdjustmentResult{}, err
 	}
+	if params.ManualOperation == ManualOperationReversal {
+		if err := validateRechargeReversalTx(ctx, tx, params); err != nil {
+			return AdjustmentResult{}, err
+		}
+	}
 
 	signed := params.AmountMicro
 	if params.Direction == DirectionDebit {
@@ -544,7 +551,8 @@ func insertEntryTx(ctx context.Context, tx txExecutor, params AdjustParams) (*En
 	entry, err := scanEntry(tx.QueryRowContext(ctx, queryInsertEntry,
 		params.OrgID, params.Kind, params.AmountMicro, params.Direction, params.BusinessID,
 		params.PayloadDigest, nullableString(params.Reason), nullableID(params.ActorUserID),
-		nullableString(params.RequestID), params.Now, params.Now))
+		nullableString(params.RequestID), params.Now, params.Now, params.ManualOperation,
+		nullableString(params.PaymentReference), nullableIDPointer(params.ReversalOfEntryID)))
 	if err != nil {
 		return nil, mapEntryWriteError(err)
 	}
@@ -574,6 +582,15 @@ func insertAdjustmentAuditTx(ctx context.Context, tx txExecutor, params AdjustPa
 		"reserved_micro":       FormatMicro(account.ReservedMicro),
 		"account_version":      strconv.FormatInt(account.Version, 10),
 	}
+	if params.ManualOperation != "" {
+		detail["manual_operation"] = params.ManualOperation
+	}
+	if params.PaymentReference != "" {
+		detail["payment_reference"] = params.PaymentReference
+	}
+	if params.ReversalOfEntryID != nil {
+		detail["reversal_of_entry_id"] = strconv.FormatInt(*params.ReversalOfEntryID, 10)
+	}
 	encoded, err := json.Marshal(detail)
 	if err != nil {
 		return fmt.Errorf("billing: encode adjustment audit detail: %w", err)
@@ -601,14 +618,16 @@ func scanAccount(row interface{ Scan(...any) error }) (Account, error) {
 
 func scanEntry(row interface{ Scan(...any) error }) (Entry, error) {
 	var (
-		entry     Entry
-		reason    sql.NullString
-		operator  sql.NullInt64
-		requestID sql.NullString
+		entry            Entry
+		reason           sql.NullString
+		operator         sql.NullInt64
+		requestID        sql.NullString
+		paymentReference sql.NullString
+		reversalOf       sql.NullInt64
 	)
 	if err := row.Scan(&entry.ID, &entry.OrgID, &entry.Kind, &entry.AmountMicro, &entry.Direction,
 		&entry.BusinessID, &entry.PayloadDigest, &reason, &operator, &requestID,
-		&entry.PostedAt, &entry.CreatedAt); err != nil {
+		&entry.PostedAt, &entry.CreatedAt, &entry.ManualOperation, &paymentReference, &reversalOf); err != nil {
 		return Entry{}, err
 	}
 	if reason.Valid {
@@ -622,6 +641,14 @@ func scanEntry(row interface{ Scan(...any) error }) (Entry, error) {
 	if requestID.Valid {
 		value := requestID.String
 		entry.RequestID = &value
+	}
+	if paymentReference.Valid {
+		value := paymentReference.String
+		entry.PaymentReference = &value
+	}
+	if reversalOf.Valid {
+		value := reversalOf.Int64
+		entry.ReversalOfEntryID = &value
 	}
 	entry.PostedAt = entry.PostedAt.UTC()
 	entry.CreatedAt = entry.CreatedAt.UTC()
@@ -649,7 +676,7 @@ func mapAccountWriteError(err error) error {
 	}
 }
 
-// mapEntryWriteError maps the two ways an INSERT INTO billing_entries can fail
+// mapEntryWriteError maps the ways an INSERT INTO billing_entries can fail
 // on a constraint this store cares about.
 func mapEntryWriteError(err error) error {
 	var pgErr *pgconn.PgError
@@ -667,6 +694,36 @@ func mapEntryWriteError(err error) error {
 	default:
 		return err
 	}
+}
+
+func validateRechargeReversalTx(ctx context.Context, tx txExecutor, params AdjustParams) error {
+	var orgID, amount int64
+	var operation string
+	err := tx.QueryRowContext(ctx, `SELECT org_id, amount_micro, COALESCE(manual_operation, '')
+FROM billing_entries WHERE id = $1 FOR UPDATE`, *params.ReversalOfEntryID).
+		Scan(&orgID, &amount, &operation)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("%w: original recharge entry not found", ErrEntryNotFound)
+	}
+	if err != nil {
+		return err
+	}
+	if orgID != params.OrgID {
+		return fmt.Errorf("%w: original recharge entry not found", ErrEntryNotFound)
+	}
+	if operation != ManualOperationRecharge || amount != params.AmountMicro {
+		return fmt.Errorf("%w: reversal must match an original recharge amount", ErrInvalidArgument)
+	}
+	var alreadyReversed bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS (
+  SELECT 1 FROM billing_entries WHERE reversal_of_entry_id = $1
+)`, *params.ReversalOfEntryID).Scan(&alreadyReversed); err != nil {
+		return err
+	}
+	if alreadyReversed {
+		return fmt.Errorf("%w: original recharge was already reversed", ErrIdempotencyConflict)
+	}
+	return nil
 }
 
 func nullableString(value string) any {

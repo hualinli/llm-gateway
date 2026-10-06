@@ -114,7 +114,9 @@ func TestRetryRefusesUnknownUsageEncodingAndUnattributedOverrides(t *testing.T) 
 	if _, err := env.accounts.RetryDispatchException(ctx, params); !errors.Is(err, ErrSettlementState) {
 		t.Fatalf("encode retry=%v", err)
 	}
-	if _, err := env.accounts.Reserve(ctx, ReserveParams{ExecutionID: "exec_unknown", OrgID: env.orgID, PriceVersionID: env.price.ID, Model: env.price.Model, InputTokensUpper: 10, OutputTokensUpper: 5}); err != nil {
+	unknownAdmission := reserveFor(env.orgID, env.price.ID, "exec_unknown", env.price.Model, 10)
+	unknownAdmission.OutputTokensUpper = 5
+	if _, err := env.accounts.Reserve(ctx, unknownAdmission); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := env.accounts.RecordUsageException(ctx, UsageExceptionParams{ExecutionID: "exec_unknown", EventID: "evt_unknown", Reason: "missing usage"}); err != nil {

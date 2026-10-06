@@ -116,17 +116,20 @@ type billingAccountDTO struct {
 }
 
 type billingEntryDTO struct {
-	ID             string  `json:"id"`
-	OrganizationID string  `json:"organization_id"`
-	Kind           string  `json:"kind"`
-	Direction      string  `json:"direction"`
-	AmountMicro    string  `json:"amount_micro"`
-	BusinessID     string  `json:"business_id"`
-	Reason         *string `json:"reason"`
-	OperatorUserID *string `json:"operator_user_id"`
-	RequestID      *string `json:"request_id"`
-	PostedAt       string  `json:"posted_at"`
-	CreatedAt      string  `json:"created_at"`
+	ID                string  `json:"id"`
+	OrganizationID    string  `json:"organization_id"`
+	Kind              string  `json:"kind"`
+	Direction         string  `json:"direction"`
+	AmountMicro       string  `json:"amount_micro"`
+	BusinessID        string  `json:"business_id"`
+	Reason            *string `json:"reason"`
+	OperatorUserID    *string `json:"operator_user_id"`
+	RequestID         *string `json:"request_id"`
+	ManualOperation   *string `json:"manual_operation"`
+	PaymentReference  *string `json:"payment_reference"`
+	ReversalOfEntryID *string `json:"reversal_of_entry_id"`
+	PostedAt          string  `json:"posted_at"`
+	CreatedAt         string  `json:"created_at"`
 }
 
 type billingEntryPage struct {
@@ -138,9 +141,11 @@ type billingEntryPage struct {
 // is a header, not a body field, so a client that retries a request cannot
 // accidentally change it while editing the JSON.
 type adjustBillingAccountRequest struct {
-	AmountMicro string `json:"amount_micro"`
-	Direction   string `json:"direction"`
-	Reason      string `json:"reason"`
+	Type             string `json:"type"`
+	AmountMicro      string `json:"amount_micro"`
+	PaymentReference string `json:"payment_reference"`
+	ReverseOf        string `json:"reverse_of"`
+	Reason           string `json:"reason"`
 }
 
 type adjustmentResponse struct {
@@ -225,6 +230,18 @@ func toBillingEntryDTO(entry billing.Entry) billingEntryDTO {
 	if entry.RequestID != nil {
 		value := *entry.RequestID
 		dto.RequestID = &value
+	}
+	if entry.ManualOperation != "" {
+		value := entry.ManualOperation
+		dto.ManualOperation = &value
+	}
+	if entry.PaymentReference != nil {
+		value := *entry.PaymentReference
+		dto.PaymentReference = &value
+	}
+	if entry.ReversalOfEntryID != nil {
+		value := formatID(*entry.ReversalOfEntryID)
+		dto.ReversalOfEntryID = &value
 	}
 	return dto
 }

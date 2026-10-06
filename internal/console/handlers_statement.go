@@ -44,7 +44,7 @@ func (s *server) getOrgBillingStatement(ctx context.Context, c *app.RequestConte
 	}
 	month, err := billing.ParseStatementMonth(c.Query("month"), s.now())
 	if err != nil {
-		s.writeError(c, http.StatusBadRequest, "", "month must be a UTC calendar month in YYYY-MM form")
+		s.writeError(c, http.StatusBadRequest, "", "month must be a Beijing calendar month in YYYY-MM form")
 		return
 	}
 	limit, err := parseListLimit(c.Query("limit"))

@@ -14,6 +14,10 @@ func TestHTTPReviewDispositionPostsOnceAndLeavesAuditedMoney(t *testing.T) {
 	store := billing.NewPGStore(db)
 	org, actor := seedBillingOrg(t, db, "review-http")
 	ctx := context.Background()
+	var membershipID int64
+	if err := db.QueryRow(`SELECT id FROM memberships WHERE org_id=$1 AND user_id=$2`, org, actor).Scan(&membershipID); err != nil {
+		t.Fatal(err)
+	}
 	now := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
 	past := now.Add(-4 * time.Hour)
 	params := billing.AdjustParams{OrgID: org, AmountMicro: 10000, Direction: billing.DirectionCredit, Kind: billing.KindAdjustment, Reason: "fund review", IdempotencyKey: "fund-review", Now: past}
@@ -27,7 +31,11 @@ func TestHTTPReviewDispositionPostsOnceAndLeavesAuditedMoney(t *testing.T) {
 	}
 	for _, action := range []string{"release", "settle"} {
 		id := "exec_http_" + action
-		if _, err := store.Reserve(ctx, billing.ReserveParams{ExecutionID: id, OrgID: org, PriceVersionID: price.ID, Model: price.Model, InputTokensUpper: 100, OutputTokensUpper: 100, Now: past}); err != nil {
+		if _, err := store.Reserve(ctx, billing.ReserveParams{
+			ExecutionID: id, OrgID: org, UserID: actor, MembershipID: membershipID,
+			KeyID: "key-review", GatewayID: "gateway-review", PriceVersionID: price.ID,
+			Model: price.Model, InputTokensUpper: 100, OutputTokensUpper: 100, Now: past,
+		}); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := store.RecordUsageException(ctx, billing.UsageExceptionParams{ExecutionID: id, EventID: "evt_" + id, Reason: "missing usage", Now: past}); err != nil {
@@ -35,7 +43,11 @@ func TestHTTPReviewDispositionPostsOnceAndLeavesAuditedMoney(t *testing.T) {
 		}
 	}
 	youngAt := now.Add(-time.Hour)
-	if _, err := store.Reserve(ctx, billing.ReserveParams{ExecutionID: "exec_http_too_young", OrgID: org, PriceVersionID: price.ID, Model: price.Model, InputTokensUpper: 100, OutputTokensUpper: 100, Now: youngAt}); err != nil {
+	if _, err := store.Reserve(ctx, billing.ReserveParams{
+		ExecutionID: "exec_http_too_young", OrgID: org, UserID: actor, MembershipID: membershipID,
+		KeyID: "key-review", GatewayID: "gateway-review", PriceVersionID: price.ID,
+		Model: price.Model, InputTokensUpper: 100, OutputTokensUpper: 100, Now: youngAt,
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.RecordUsageException(ctx, billing.UsageExceptionParams{ExecutionID: "exec_http_too_young", EventID: "evt_exec_http_too_young", Reason: "missing usage", Now: youngAt}); err != nil {

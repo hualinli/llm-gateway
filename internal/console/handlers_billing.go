@@ -270,9 +270,31 @@ func (s *server) adjustBillingAccount(ctx context.Context, c *app.RequestContext
 		s.writeError(c, http.StatusBadRequest, "", "amount_micro must be a positive integer micro amount as a string")
 		return
 	}
-	direction := strings.TrimSpace(req.Direction)
-	if direction != billing.DirectionCredit && direction != billing.DirectionDebit {
-		s.writeError(c, http.StatusBadRequest, "", `direction must be "credit" or "debit"`)
+	operation := strings.TrimSpace(req.Type)
+	var direction, kind, paymentReference string
+	var reversalOf *int64
+	switch operation {
+	case billing.ManualOperationRecharge:
+		direction, kind = billing.DirectionCredit, billing.KindCredit
+		paymentReference = strings.TrimSpace(req.PaymentReference)
+		if paymentReference == "" || req.ReverseOf != "" || len(paymentReference) > 256 {
+			s.writeError(c, http.StatusBadRequest, "", "recharge requires payment_reference and must not include reverse_of")
+			return
+		}
+	case billing.ManualOperationReversal:
+		direction, kind = billing.DirectionDebit, billing.KindAdjustment
+		if strings.TrimSpace(req.PaymentReference) != "" {
+			s.writeError(c, http.StatusBadRequest, "", "reversal must not include payment_reference")
+			return
+		}
+		entryID, parseErr := parsePathID(req.ReverseOf)
+		if parseErr != nil {
+			s.writeError(c, http.StatusBadRequest, "", "reverse_of must be the original recharge entry id as a string")
+			return
+		}
+		reversalOf = &entryID
+	default:
+		s.writeError(c, http.StatusBadRequest, "", `type must be "recharge" or "reversal"`)
 		return
 	}
 	reason := strings.TrimSpace(req.Reason)
@@ -284,19 +306,26 @@ func (s *server) adjustBillingAccount(ctx context.Context, c *app.RequestContext
 		s.writeError(c, http.StatusBadRequest, "", "reason is too long")
 		return
 	}
+	reversalEntryID := int64(0)
+	if reversalOf != nil {
+		reversalEntryID = *reversalOf
+	}
 
 	result, err := s.accounts.Adjust(ctx, billing.AdjustParams{
-		ActorUserID:    auth.User.ID,
-		OrgID:          orgID,
-		AmountMicro:    amount,
-		Direction:      direction,
-		Kind:           billing.KindAdjustment,
-		Reason:         reason,
-		BusinessID:     idempotencyKey,
-		IdempotencyKey: idempotencyKey,
-		PayloadDigest:  billing.AdjustmentDigest(orgID, amount, direction, billing.KindAdjustment, reason),
-		RequestID:      requestIDFrom(c),
-		Now:            s.now(),
+		ActorUserID:       auth.User.ID,
+		OrgID:             orgID,
+		AmountMicro:       amount,
+		Direction:         direction,
+		Kind:              kind,
+		Reason:            reason,
+		ManualOperation:   operation,
+		PaymentReference:  paymentReference,
+		ReversalOfEntryID: reversalOf,
+		BusinessID:        idempotencyKey,
+		IdempotencyKey:    idempotencyKey,
+		PayloadDigest:     billing.ManualPaymentDigest(orgID, amount, direction, kind, operation, paymentReference, reversalEntryID, reason),
+		RequestID:         requestIDFrom(c),
+		Now:               s.now(),
 	})
 	if err != nil {
 		// A refused adjustment is still audited; the successful one is audited
@@ -305,6 +334,7 @@ func (s *server) adjustBillingAccount(ctx context.Context, c *app.RequestContext
 			"failure", err.Error(), map[string]any{
 				"amount_micro": billing.FormatMicro(amount),
 				"direction":    direction,
+				"type":         operation,
 				"business_id":  idempotencyKey,
 			})
 		s.audit.Record(ctx, event)

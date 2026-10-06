@@ -95,6 +95,23 @@ var (
 	// it does not stop platform adjustments, but it does stop new requests.
 	ErrAccountSuspended = errors.New("billing: the billing account is suspended")
 
+	// ErrMembershipNotFound marks a key whose pinned membership incarnation does
+	// not belong to the organization and user in verified gateway attribution.
+	ErrMembershipNotFound = errors.New("billing: the key membership was not found")
+
+	// ErrMembershipInactive marks a removed or suspended membership. Existing
+	// admitted executions can still settle; this only refuses new admissions.
+	ErrMembershipInactive = errors.New("billing: the key membership is inactive")
+
+	// ErrMemberMonthlyLimit marks a new admission that would exceed the member's
+	// Beijing calendar-month cap after including settled spend and reservations.
+	ErrMemberMonthlyLimit = errors.New("billing: the member monthly limit would be exceeded")
+
+	// ErrQuotaProjectionMismatch means an execution transition found no matching
+	// member/month reservation counter row. The transaction rolls back rather
+	// than moving wallet money while leaving the cap projection divergent.
+	ErrQuotaProjectionMismatch = errors.New("billing: member quota projection does not match the execution")
+
 	// ErrExecutionNotFound marks an unknown execution id. Reads are not
 	// organization scoped: execution ids are unguessable admission identities,
 	// and the caller that holds one already passed admission.

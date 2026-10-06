@@ -93,9 +93,12 @@ func executionTestBase() time.Time {
 // micro-per-token price, so the pinned upper bound is exactly `tokens` micro.
 func reserveFor(orgID, priceVersionID int64, executionID, model string, tokens int64) ReserveParams {
 	return ReserveParams{
-		ExecutionID:      executionID,
-		OrgID:            orgID,
-		UserID:           0,
+		ExecutionID: executionID,
+		OrgID:       orgID,
+		// seedOrg creates one real user and owner membership per organization;
+		// their serial ids intentionally track orgID in these isolated schemas.
+		UserID:           orgID,
+		MembershipID:     orgID,
 		KeyID:            "key-test",
 		GatewayID:        "gateway-test",
 		Model:            model,
