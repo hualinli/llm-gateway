@@ -23,7 +23,10 @@ type Attribution struct {
 	OrgID    int64
 	// UserID is 0 when the key has no owner; metering stores NULL.
 	UserID int64
-	KeyID  string
+	// MembershipID is sourced from authoritative guard facts and pins
+	// billing to the key's membership incarnation.
+	MembershipID int64
+	KeyID        string
 	// ExecutionID identifies one admission independently of the client
 	// correlation ID. It is the identity metering bills under.
 	ExecutionID string
@@ -130,11 +133,12 @@ func Middleware(guard Guard, options Options) func(http.Handler) http.Handler {
 			}
 
 			attribution := Attribution{
-				TenantID:    permit.TenantID,
-				OrgID:       permit.OrgID,
-				UserID:      permit.UserID,
-				KeyID:       permit.KeyID,
-				ExecutionID: newExecutionID(),
+				TenantID:     permit.TenantID,
+				OrgID:        permit.OrgID,
+				UserID:       permit.UserID,
+				MembershipID: permit.MembershipID,
+				KeyID:        permit.KeyID,
+				ExecutionID:  newExecutionID(),
 			}
 			metrics.AccessGuardDecisions.WithLabelValues("allowed").Inc()
 			next.ServeHTTP(w, r.WithContext(WithAttribution(r.Context(), attribution)))

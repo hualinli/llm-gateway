@@ -53,7 +53,7 @@ func newHTTPFixture(t *testing.T, dsn string) *httpFixture {
 
 	// Two enterprises with distinct members.
 	member := s.user(t, "active")     // org A member, key owner
-	viewer := s.user(t, "active")     // org A billing_viewer
+	viewer := s.user(t, "active")     // org A suspended member
 	disabled := s.user(t, "active")   // disabled after the membership was created
 	removed := s.user(t, "active")    // membership removed
 	otherOwner := s.user(t, "active") // org B owner
@@ -63,7 +63,7 @@ func newHTTPFixture(t *testing.T, dsn string) *httpFixture {
 	orgA := s.organization(t, "active", member)
 	orgB := s.organization(t, "active", otherOwner)
 	s.membership(t, orgA, member, "member", "active")
-	s.membership(t, orgA, viewer, "billing_viewer", "active")
+	s.membership(t, orgA, viewer, "member", "suspended")
 	s.membership(t, orgA, disabled, "member", "active")
 	s.membership(t, orgA, removed, "member", "removed")
 	s.membership(t, orgB, otherOwner, "member", "active")
@@ -207,7 +207,7 @@ func TestGatewayChainAccessGuardHTTPIntegration(t *testing.T) {
 		}
 	})
 
-	t.Run("billing viewer is 403", func(t *testing.T) {
+	t.Run("suspended member is 403", func(t *testing.T) {
 		rec := fixture.request(t, fixture.keys["viewer"], chatBody)
 		if rec.Code != http.StatusForbidden || errorCode(t, rec) != httperr.CodeForbidden {
 			t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())

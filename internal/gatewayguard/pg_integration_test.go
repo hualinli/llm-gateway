@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 
 	"net/http"
 	"net/url"
@@ -135,23 +136,26 @@ func (s *seed) organization(t *testing.T, status string, ownerUserID int64) int6
 	return id
 }
 
-func (s *seed) membership(t *testing.T, orgID, userID int64, role, status string) {
+func (s *seed) membership(t *testing.T, orgID, userID int64, role, status string) int64 {
 	t.Helper()
-	_, err := s.db.Exec(`INSERT INTO memberships (org_id, user_id, role, status, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $5)`, orgID, userID, role, status, s.now)
+	var id int64
+	err := s.db.QueryRow(`INSERT INTO memberships (org_id, user_id, role, status, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $5) RETURNING id`, orgID, userID, role, status, s.now).Scan(&id)
 	if err != nil {
 		t.Fatal(err)
 	}
+	return id
 }
 
 type keyParams struct {
-	keyID     string
-	hash      string
-	orgID     int64
-	owner     *int64
-	status    string
-	expiresAt *time.Time
-	allowlist *[]string
+	keyID        string
+	hash         string
+	orgID        int64
+	owner        *int64
+	membershipID *int64
+	status       string
+	expiresAt    *time.Time
+	allowlist    *[]string
 }
 
 func (s *seed) apiKey(t *testing.T, params keyParams) {
@@ -172,11 +176,65 @@ func (s *seed) apiKey(t *testing.T, params keyParams) {
 	if status == "revoked" {
 		revokedAt = s.now
 	}
-	_, err := s.db.Exec(`INSERT INTO api_keys (key_id, key_hash, key_prefix, org_id, owner_user_id, status, expires_at, model_allowlist, policy_version, created_at, revoked_at)
-		VALUES ($1, $2, 'sk-...', $3, $4, $5, $6, $7, 1, $8, $9)`,
-		params.keyID, params.hash, params.orgID, params.owner, status, params.expiresAt, allowlist, s.now, revokedAt)
+	var membershipID int64
+	var membershipValue any
+	if params.membershipID != nil {
+		membershipID = *params.membershipID
+		membershipValue = membershipID
+	} else if params.owner != nil {
+		err := s.db.QueryRow(`SELECT id FROM memberships WHERE org_id = $1 AND user_id = $2
+			AND status IN ('active', 'suspended') ORDER BY id DESC LIMIT 1`, params.orgID, *params.owner).Scan(&membershipID)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			t.Fatal(err)
+		}
+		if err == nil {
+			membershipValue = membershipID
+		}
+	}
+	_, err := s.db.Exec(`INSERT INTO api_keys (key_id, key_hash, key_prefix, org_id, owner_user_id, membership_id, status, expires_at, model_allowlist, policy_version, created_at, revoked_at)
+		VALUES ($1, $2, 'sk-...', $3, $4, $5, $6, $7, $8, 1, $9, $10)`,
+		params.keyID, params.hash, params.orgID, params.owner, membershipValue, status, params.expiresAt, allowlist, s.now, revokedAt)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if membershipValue != nil {
+		var persisted sql.NullInt64
+		if err := s.db.QueryRow(`SELECT membership_id FROM api_keys WHERE key_id=$1`, params.keyID).Scan(&persisted); err != nil {
+			t.Fatal(err)
+		}
+		if !persisted.Valid || persisted.Int64 != membershipID {
+			t.Fatalf("key %s membership_id = %+v, want %d", params.keyID, persisted, membershipID)
+		}
+	}
+}
+
+func TestPGGuardDeniesOldKeyAfterMembershipRejoin(t *testing.T) {
+	dsn := guardSchema(t)
+	s := newSeed(t, dsn)
+	user := s.user(t, "active")
+	org := s.organization(t, "active", user)
+	oldMembershipID := s.membership(t, org, user, "member", "active")
+	s.apiKey(t, keyParams{
+		keyID: "key-old-membership", hash: "hash-old-membership", orgID: org,
+		owner: &user, membershipID: &oldMembershipID,
+	})
+	if _, err := s.db.Exec(`UPDATE memberships SET status='removed' WHERE id=$1`, oldMembershipID); err != nil {
+		t.Fatal(err)
+	}
+	newMembershipID := s.membership(t, org, user, "member", "active")
+	if newMembershipID == oldMembershipID {
+		t.Fatalf("membership rejoin reused id %d", oldMembershipID)
+	}
+	guard := testGuard(t, dsn, gatewayguard.NewPolicySet())
+	permit, denial := guard.Check(context.Background(), auth.KeyRecord{
+		ID: "key-old-membership", Hash: "hash-old-membership", TenantID: "org-a", Status: "active",
+		OrgID: org, OwnerUserID: &user,
+	}, s.now)
+	if denial.Status != http.StatusForbidden || denial.Code != httperr.CodeForbidden {
+		t.Fatalf("old key denial = %+v, want forbidden", denial)
+	}
+	if permit.OrgID != 0 || permit.MembershipID != 0 {
+		t.Fatalf("denied old key produced permit %+v", permit)
 	}
 }
 
@@ -207,7 +265,7 @@ func TestPGGuardIntegrationAdmitsAndDenies(t *testing.T) {
 	disabledOwnerOrg := s.organization(t, "active", disabledUser)
 
 	s.membership(t, org, activeUser, "member", "active")
-	s.membership(t, org, viewerUser, "billing_viewer", "active")
+	s.membership(t, org, viewerUser, "member", "suspended")
 	s.membership(t, org, removedUser, "member", "removed")
 	s.membership(t, otherOrg, otherOrgUser, "member", "active")
 	s.membership(t, suspendedOrg, disabledUser, "admin", "active")
@@ -252,7 +310,7 @@ func TestPGGuardIntegrationAdmitsAndDenies(t *testing.T) {
 			wantUserID: activeUser, wantKeyID: "key-future",
 		},
 		{
-			name:       "billing viewer may not generate",
+			name:       "suspended member may not generate",
 			record:     auth.KeyRecord{ID: "key-viewer", Hash: "hash-viewer", TenantID: "org-a", Status: "active", OrgID: org, OwnerUserID: &viewerUser},
 			wantStatus: http.StatusForbidden, wantCode: httperr.CodeForbidden,
 		},
