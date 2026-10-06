@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -180,13 +181,14 @@ func (s e2eSession) csrfHeader() ut.Header {
 }
 
 // TestConsolePostgresEndToEnd walks the acceptance path over real HTTP:
-// login → me → create enterprise → cross-org 404 → logout.
+// login → demo provisioning → platform enterprise opening → cross-org 404 → logout.
 func TestConsolePostgresEndToEnd(t *testing.T) {
-	engine, _, users, orgs := e2eBoot(t)
+	engine, db, users, orgs := e2eBoot(t)
 	ctx := context.Background()
 
 	if _, err := bootstrap(ctx, users, orgs, bootstrapOptions{
 		adminEmail: e2eAdminEmail, adminPassword: e2eAdminPassword,
+		demoData: true, credentialsFile: filepath.Join(t.TempDir(), "demo-credentials.txt"),
 	}); err != nil {
 		t.Fatalf("bootstrap: %v", err)
 	}
@@ -231,11 +233,73 @@ func TestConsolePostgresEndToEnd(t *testing.T) {
 		t.Fatalf("personal organization missing from /me: %s", rec.Body.String())
 	}
 
-	// create enterprise
-	rec = e2eRequest(engine, http.MethodPost, console.PathOrganizations, `{"name":"acme-e2e"}`,
+	// Every demo user gets a personal organization and zero CNY wallet, plus
+	// the intended enterprise role. The seeded ordinary member is unlimited
+	// only through this trusted bootstrap path.
+	for _, enterprise := range demoEnterprises() {
+		var enterpriseID int64
+		if err := db.QueryRow(`SELECT id FROM organizations WHERE type='enterprise' AND name=$1`, enterprise.name).Scan(&enterpriseID); err != nil {
+			t.Fatal(err)
+		}
+		for _, demo := range enterprise.users {
+			user, err := users.FindUserByEmail(ctx, demo.email)
+			if err != nil {
+				t.Fatal(err)
+			}
+			enterpriseMembership, err := orgs.Membership(ctx, user.ID, enterpriseID)
+			if err != nil || enterpriseMembership.Role != demo.role || enterpriseMembership.Status != "active" || enterpriseMembership.MonthlyLimitMicro != nil {
+				t.Fatalf("%s enterprise membership=%+v err=%v, want active %s with unlimited seed cap", demo.email, enterpriseMembership, err, demo.role)
+			}
+			var personalCount int
+			if err := db.QueryRow(`SELECT count(*) FROM organizations WHERE type='personal' AND owner_user_id=$1`, user.ID).Scan(&personalCount); err != nil {
+				t.Fatalf("%s personal organization count: %v", demo.email, err)
+			}
+			if personalCount != 1 {
+				t.Fatalf("%s personal organizations=%d, want exactly one", demo.email, personalCount)
+			}
+			var personalID int64
+			if err := db.QueryRow(`SELECT id FROM organizations WHERE type='personal' AND owner_user_id=$1`, user.ID).Scan(&personalID); err != nil {
+				t.Fatalf("%s personal organization: %v", demo.email, err)
+			}
+			personalMembership, err := orgs.Membership(ctx, user.ID, personalID)
+			if err != nil || personalMembership.Role != "owner" || personalMembership.Status != "active" {
+				t.Fatalf("%s personal membership=%+v err=%v, want active owner", demo.email, personalMembership, err)
+			}
+			var currency, walletStatus string
+			var posted, reserved, version int64
+			if err := db.QueryRow(`SELECT currency, posted_balance_micro, reserved_micro, status, version FROM billing_accounts WHERE org_id=$1`, personalID).
+				Scan(&currency, &posted, &reserved, &walletStatus, &version); err != nil {
+				t.Fatalf("%s personal wallet: %v", demo.email, err)
+			}
+			if currency != "CNY" || posted != 0 || reserved != 0 || walletStatus != "active" || version != 1 {
+				t.Fatalf("%s personal wallet=%s/%d/%d/%s/v%d, want active zero CNY wallet", demo.email, currency, posted, reserved, walletStatus, version)
+			}
+		}
+	}
+
+	// Enterprise creation is platform-only. The old member-self-service POST
+	// path must stay closed; an explicit active owner is supplied to the admin API.
+	if rec = e2eRequest(engine, http.MethodPost, console.PathOrganizations, `{"name":"legacy-self-create"}`,
+		admin.cookieHeader(), admin.csrfHeader()); rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("legacy POST /organizations status=%d body=%s, want 405", rec.Code, rec.Body.String())
+	}
+	createBody := fmt.Sprintf(`{"name":"acme-e2e","owner_email":%q}`, e2eAdminEmail)
+	if rec = e2eRequest(engine, http.MethodPost, console.PathAdminOrganizations, createBody,
+		admin.cookieHeader()); rec.Code != http.StatusForbidden {
+		t.Fatalf("platform create without CSRF status=%d body=%s, want 403", rec.Code, rec.Body.String())
+	}
+	if _, err := users.CreateUser(ctx, e2eVictimEmail, e2eVictimPass, false); err != nil {
+		t.Fatal(err)
+	}
+	outsider := e2eLogin(t, engine, e2eVictimEmail, e2eVictimPass)
+	if rec = e2eRequest(engine, http.MethodPost, console.PathAdminOrganizations, createBody,
+		outsider.cookieHeader(), outsider.csrfHeader()); rec.Code != http.StatusForbidden {
+		t.Fatalf("ordinary user platform create status=%d body=%s, want 403", rec.Code, rec.Body.String())
+	}
+	rec = e2eRequest(engine, http.MethodPost, console.PathAdminOrganizations, createBody,
 		admin.cookieHeader(), admin.csrfHeader())
 	if rec.Code != http.StatusCreated {
-		t.Fatalf("POST /organizations status=%d body=%s", rec.Code, rec.Body.String())
+		t.Fatalf("POST /admin/organizations status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	var created struct {
 		Organization struct {
@@ -263,23 +327,12 @@ func TestConsolePostgresEndToEnd(t *testing.T) {
 	}
 
 	// Another user must see 404, not 403: existence is not disclosed.
-	if _, err := users.CreateUser(ctx, e2eVictimEmail, e2eVictimPass, false); err != nil {
-		t.Fatal(err)
-	}
-	outsider := e2eLogin(t, engine, e2eVictimEmail, e2eVictimPass)
 	rec = e2eRequest(engine, http.MethodGet, console.PathOrganizations+"/"+created.Organization.ID, "", outsider.cookieHeader())
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("cross-org read status=%d, want 404 (body=%s)", rec.Code, rec.Body.String())
 	}
 	if !strings.Contains(rec.Body.String(), `"code":"not_found"`) {
 		t.Fatalf("cross-org read body=%s", rec.Body.String())
-	}
-
-	// CSRF is enforced on the unsafe method.
-	rec = e2eRequest(engine, http.MethodPost, console.PathOrganizations, `{"name":"no-csrf"}`,
-		admin.cookieHeader())
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("create without CSRF status=%d, want 403", rec.Code)
 	}
 
 	// logout revokes the session server-side

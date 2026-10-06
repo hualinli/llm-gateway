@@ -135,6 +135,39 @@ func (f *fakeOrgs) memberCount(orgName string) int {
 	return len(f.members[org.ID])
 }
 
+func (f *fakeOrgs) personalOrgCountForUser(userID int64) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	count := 0
+	for _, org := range f.byName {
+		if org.Type != "personal" {
+			continue
+		}
+		for _, membership := range f.members[org.ID] {
+			if membership.UserID == userID && membership.Role == "owner" && membership.Status == "active" {
+				count++
+				break
+			}
+		}
+	}
+	return count
+}
+
+func (f *fakeOrgs) memberForUser(orgName string, userID int64) (organization.Membership, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	org, ok := f.byName[orgName]
+	if !ok {
+		return organization.Membership{}, false
+	}
+	for _, membership := range f.members[org.ID] {
+		if membership.UserID == userID {
+			return membership, true
+		}
+	}
+	return organization.Membership{}, false
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -167,7 +200,22 @@ func TestBootstrapDemoDataCreatesTwoEnterprisesWithThreeMembers(t *testing.T) {
 	}
 	for _, name := range []string{demoEnterpriseA, demoEnterpriseB} {
 		if got := orgs.memberCount(name); got != 3 {
-			t.Fatalf("%s has %d members, want 3 (owner + admin + billing_viewer)", name, got)
+			t.Fatalf("%s has %d members, want 3 (owner + admin + member)", name, got)
+		}
+	}
+	for _, enterprise := range demoEnterprises() {
+		for _, demo := range enterprise.users {
+			user, err := users.FindUserByEmail(context.Background(), demo.email)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := orgs.personalOrgCountForUser(user.ID); got != 1 {
+				t.Fatalf("%s has %d active personal organizations, want 1", demo.email, got)
+			}
+			membership, ok := orgs.memberForUser(enterprise.name, user.ID)
+			if !ok || membership.Role != demo.role || membership.Status != "active" || membership.MonthlyLimitMicro != nil {
+				t.Fatalf("%s enterprise membership=%+v exists=%t, want active %s with explicit unlimited cap", demo.email, membership, ok, demo.role)
+			}
 		}
 	}
 
@@ -187,9 +235,9 @@ func TestBootstrapDemoDataCreatesTwoEnterprisesWithThreeMembers(t *testing.T) {
 	content := string(raw)
 	for _, email := range []string{
 		"demo-enterprise-a-admin@example.com",
-		"demo-enterprise-a-billing@example.com",
+		"demo-enterprise-a-member@example.com",
 		"demo-enterprise-b-admin@example.com",
-		"demo-enterprise-b-billing@example.com",
+		"demo-enterprise-b-member@example.com",
 	} {
 		if !strings.Contains(content, email) {
 			t.Fatalf("credentials file does not list %s:\n%s", email, content)
