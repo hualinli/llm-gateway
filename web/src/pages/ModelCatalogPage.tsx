@@ -38,7 +38,7 @@ export function ModelCatalogPage(): ReactNode {
   const canTry = membership?.status === 'active' && membership.organization.status === 'active';
   const abortRef = useRef<AbortController | null>(null);
   const outputRef = useRef<HTMLPreElement | null>(null);
-  const models = useAccountModels(orgId, orgId !== null);
+  const models = useAccountModels(orgId, orgId !== null && membership?.status === 'active');
 
   useEffect(() => {
     if (!handoff.apiKey) return;
@@ -97,6 +97,9 @@ export function ModelCatalogPage(): ReactNode {
   return (
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
       <PageHeader title="可用模型" description="这里显示当前账户已开通的模型和销售价格。个人与企业账户的可用模型可以不同。" />
+      {membership?.status === 'suspended' ? <Card>
+        <Alert type="warning" showIcon message="你在此企业中的成员资格已暂停" description="暂停期间不开放模型目录和试用；你仍可查看本人历史消费与额度。" />
+      </Card> : <>
       <Card title="模型与价格" data-testid="account-models">
         <DataState query={models} emptyDescription="当前账户还没有开通模型，请联系平台管理员。">
           {(catalog) => <Table<EffectiveModel>
@@ -114,7 +117,7 @@ export function ModelCatalogPage(): ReactNode {
         </DataState>
       </Card>
       <Card id="playground-card" title="模型试用" data-testid="playground-card">
-        {!canTry ? <Alert style={{ marginBottom: 16 }} type="warning" showIcon message={membership?.status === 'suspended' ? '你在此企业中的成员资格已暂停' : '此账户当前已暂停'} description="暂停期间不能发起新的模型试用；试用区中的密钥和未提交内容已清除。" /> : <Alert style={{ marginBottom: 16 }} type="info" showIcon message="每个 Key 都绑定创建它的账户" description="试用调用的费用会按此 Key 的创建账户结算。切换账户会清除试用区中的密钥和未提交内容。" />}
+        {!canTry ? <Alert style={{ marginBottom: 16 }} type="warning" showIcon message={membership?.organization.status === 'suspended' ? '此账户当前已暂停' : '当前无法试用'} description="暂停期间不能发起新的模型试用；试用区中的密钥和未提交内容已清除。" /> : <Alert style={{ marginBottom: 16 }} type="info" showIcon message="每个 Key 都绑定创建它的账户" description="试用调用的费用会按此 Key 的创建账户结算。切换账户会清除试用区中的密钥和未提交内容。" />}
         <Space direction="vertical" size={16} style={{ width: '100%' }}>
           <Row gutter={[16, 12]}>
             <Col xs={24} lg={12}>
@@ -160,6 +163,7 @@ export function ModelCatalogPage(): ReactNode {
           {stream.text || stream.running ? <pre ref={outputRef} className="playground-output" aria-live="polite">{stream.text || '正在等待回答…'}</pre> : null}
         </Space>
       </Card>
+      </>}
     </Space>
   );
 }

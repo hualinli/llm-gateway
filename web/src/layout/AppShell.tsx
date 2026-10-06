@@ -67,10 +67,14 @@ export function buildMenuItems(
     const personal = membership.organization.type === 'personal';
     const account: NonNullable<MenuProps['items']> = [
       { key: `${base}/overview`, icon: <DashboardOutlined />, label: '账户概览' },
-      { key: `${base}/models`, icon: <AppstoreOutlined />, label: '可用模型' },
-      { key: `${base}/keys`, icon: <KeyOutlined />, label: '我的 API Key' },
-      { key: `${base}/usage`, icon: <BarChartOutlined />, label: personal ? '我的消费' : '用量与额度' },
     ];
+    if (membership.status !== 'suspended') {
+      account.push(
+        { key: `${base}/models`, icon: <AppstoreOutlined />, label: '可用模型' },
+        { key: `${base}/keys`, icon: <KeyOutlined />, label: '我的 API Key' },
+      );
+    }
+    account.push({ key: `${base}/usage`, icon: <BarChartOutlined />, label: personal ? '我的消费' : '用量与额度' });
     if (CAN.manageBilling(membership)) {
       account.push({ key: `${base}/billing`, icon: <WalletOutlined />, label: personal ? '账户流水' : '企业账单' });
     }
