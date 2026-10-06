@@ -98,7 +98,6 @@ export const queryKeys = {
 export interface KeyListParams {
   limit?: number | undefined;
   cursor?: string | undefined;
-  owner_user_id?: string | undefined;
   operation_id?: string | undefined;
 }
 

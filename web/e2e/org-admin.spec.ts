@@ -168,8 +168,8 @@ test.describe('enterprise administrator', () => {
 
     const ownKeys = await page.request.get('/api/v1/orgs/' + state.orgA.id + '/keys?limit=100');
     expect(ownKeys.status()).toBe(200);
-    const keyPage = (await ownKeys.json()) as { items: Array<{ owner_user_id: string | null; name: string }> };
-    expect(keyPage.items.every((item) => item.owner_user_id === state.orgAdmin.userId)).toBe(true);
+    const keyPage = (await ownKeys.json()) as { items: Array<{ key_id: string; name: string }> };
+    expect(JSON.stringify(keyPage)).not.toMatch(/owner_user_id|membership_id/);
     expect(keyPage.items.map((item) => item.name)).not.toContain('web-e2e first app');
   });
 

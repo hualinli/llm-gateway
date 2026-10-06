@@ -383,17 +383,9 @@ export interface ApiKey {
   name: string;
   /** Display prefix only (`sk-xxxxxxxx...`); useless for authentication. */
   prefix: string;
-  organization_id: string;
-  owner_user_id: string | null;
-  created_by: string | null;
   status: ApiKeyStatus;
-  expires_at: string | null;
-  revoked_at: string | null;
-  /** Tri-state: `null` inherits, `[]` denies all, non-empty is an allowlist. */
-  model_allowlist: string[] | null;
-  policy_version: string;
   created_at: string;
-  tenant_id: string;
+  revoked_at?: string;
 }
 
 export interface ApiKeyPage {
@@ -405,9 +397,6 @@ export interface ApiKeyPage {
 
 export interface CreateApiKeyRequest {
   name: string;
-  owner_user_id?: string;
-  expires_at?: string;
-  model_allowlist?: string[];
   /** Optional client-chosen idempotency key (max 200 chars). */
   operation_id?: string;
 }

@@ -112,17 +112,17 @@ test.describe('member account', () => {
     const response = await page.request.get('/api/v1/orgs/' + state.orgA.id + '/keys?limit=20');
     expect(response.status()).toBe(200);
     const result = (await response.json()) as {
-      items: Array<{ key_id: string; name: string; owner_user_id: string | null }>;
+      items: Array<{ key_id: string; name: string }>;
       next_cursor: string | null;
     };
     expect(result.items.map((item) => item.name)).toEqual(
       expect.arrayContaining(['web-e2e first app', 'web-e2e second app']),
     );
-    expect(result.items.every((item) => item.owner_user_id === state.member.userId)).toBe(true);
+    expect(JSON.stringify(result)).not.toMatch(/owner_user_id|membership_id/);
 
     const otherAccount = await page.request.get('/api/v1/orgs/' + state.orgB.id + '/keys?limit=100');
     expect(otherAccount.status()).toBe(200);
-    const otherKeys = (await otherAccount.json()) as { items: Array<{ organization_id: string; owner_user_id: string | null }> };
+    const otherKeys = (await otherAccount.json()) as { items: Array<{ key_id: string; name: string }> };
     expect(otherKeys.items).toHaveLength(0);
     await gotoOrg(page, state.orgA.id, 'keys');
     await expect(page.getByTestId('keys-list-card').getByText('web-e2e first app')).toBeVisible();

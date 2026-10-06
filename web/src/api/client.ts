@@ -447,7 +447,6 @@ export class ConsoleClient {
     params: {
       limit?: number | undefined;
       cursor?: string | undefined;
-      owner_user_id?: string | undefined;
       operation_id?: string | undefined;
     } = {},
   ): Promise<ApiKeyPage> {

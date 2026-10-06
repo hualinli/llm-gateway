@@ -296,10 +296,8 @@ paths:
               type: object
               required: [name]
               properties:
-                name: { type: string }
-                expires_at: { type: string, format: date-time }
-                model_allowlist: { type: array, items: { type: string } }
-                operation_id: { type: string }
+                name: { type: string, minLength: 1, maxLength: 120, description: Visible only to the Key owner }
+                operation_id: { type: string, maxLength: 200, description: Stable id for retry and recovery of this create operation }
       responses:
         '201': { description: Key created; secret is returned once, content: { application/json: { schema: { $ref: '#/components/schemas/KeyCreated' } } } }
         default: { $ref: '#/components/responses/Error' }
@@ -1029,22 +1027,14 @@ components:
         next_cursor: { type: [string, 'null'] }
     ApiKey:
       type: object
-      required: [key_id, name, prefix, organization_id, owner_user_id, created_by, status, expires_at, revoked_at, model_allowlist, policy_version, created_at, tenant_id]
+      required: [key_id, name, prefix, status, created_at]
       properties:
         key_id: { type: string }
         name: { type: string, description: Visible only to its owner }
-        prefix: { type: string }
-        organization_id: { type: string }
-        owner_user_id: { type: [string, 'null'] }
-        created_by: { type: [string, 'null'] }
+        prefix: { type: string, description: Redacted display prefix; never an authentication credential }
         status: { type: string, enum: [active, revoked] }
-        expires_at: { type: [string, 'null'], format: date-time }
-        revoked_at: { type: [string, 'null'], format: date-time }
-        model_allowlist:
-          oneOf: [{ type: array, items: { type: string } }, { type: 'null' }]
-        policy_version: { type: string }
         created_at: { type: string, format: date-time }
-        tenant_id: { type: string }
+        revoked_at: { type: string, format: date-time }
     NullableMoney:
       oneOf:
         - { type: string, pattern: '^(0|[1-9]\d*)$' }
