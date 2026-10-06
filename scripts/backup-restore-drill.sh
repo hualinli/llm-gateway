@@ -1046,6 +1046,53 @@ class Fixtures:
     def url(self, name):
         return self.lab.urls[name]
 
+    def enable_platform_models(self, check, models):
+        """Merge required fixture models into the complete platform catalog."""
+        admin = self.actors["platform-admin"]
+        path = "/api/v1/admin/models"
+        current = self.client.call(check, "read-platform-model-catalog", "GET", path,
+                                   base_url=self.url("console"), session=admin.session)
+        check.require_status(current, 200, label="读取平台模型目录")
+        current_body = current.json()
+        check.require(isinstance(current_body, dict), "平台模型目录响应不是对象")
+        existing = current_body.get("items")
+        check.require(isinstance(existing, list), "平台模型目录响应缺少 items 数组")
+        catalog = {}
+        for item in existing:
+            check.require(isinstance(item, dict) and isinstance(item.get("model"), str) and
+                          isinstance(item.get("enabled"), bool),
+                          "平台模型目录包含无效条目：%r" % item)
+            check.require(item["model"] not in catalog,
+                          "平台模型目录包含重复条目：%s" % item["model"])
+            catalog[item["model"]] = item["enabled"]
+        for model in models:
+            catalog[model] = True
+        requested = [{"model": model, "enabled": catalog[model]} for model in sorted(catalog)]
+        updated = self.client.call(check, "enable-platform-fixture-models", "PUT", path,
+                                   base_url=self.url("console"), body={"items": requested},
+                                   session=admin.session)
+        check.require_status(updated, 200, label="启用平台测试模型并保留现有目录")
+        updated_body = updated.json()
+        check.require(isinstance(updated_body, dict), "更新平台模型目录响应不是对象")
+        items = updated_body.get("items")
+        check.require(isinstance(items, list), "更新平台模型目录响应缺少 items 数组")
+        updated_catalog = {}
+        for item in items:
+            check.require(isinstance(item, dict) and isinstance(item.get("model"), str) and
+                          isinstance(item.get("enabled"), bool),
+                          "更新后的平台模型目录包含无效条目：%r" % item)
+            check.require(item["model"] not in updated_catalog,
+                          "更新后的平台模型目录包含重复条目：%s" % item["model"])
+            updated_catalog[item["model"]] = item["enabled"]
+        check.require(updated_catalog == catalog,
+                      "更新平台模型目录时有条目被删除或改写：expected=%r actual=%r" %
+                      (catalog, updated_catalog))
+        enabled = {model for model, is_enabled in updated_catalog.items() if is_enabled}
+        check.require(set(models).issubset(enabled),
+                      "测试模型未全部启用：requested=%r enabled=%r" % (models, sorted(enabled)))
+        check.detail("platform_model_catalog_fixture_models", sorted(models))
+        check.detail("platform_model_catalog_preserved_entries", len(existing))
+
     def require_personal_wallet(self, check, actor, only_personal=False):
         response = self.client.call(check, "personal-account-" + actor.name, "GET", "/api/v1/organizations",
                                     base_url=self.url("console"), session=actor.session)
@@ -1121,6 +1168,7 @@ class Fixtures:
         self.actors["platform-admin"] = admin
         admin_id = admin.session["user_id"]
         admin.user_id = admin_id
+        self.enable_platform_models(check, ("default", "t10-model", "t10bk-model"))
         self.require_personal_wallet(check, admin, only_personal=True)
 
         tag = self.lab.cfg["run_id"][-6:].lower().replace("-", "")[-6:]
@@ -1194,6 +1242,14 @@ class Fixtures:
         check.require(response.json().get("role") == "owner",
                       "开户码创建的 user 未成为 owner：%r" % response.json())
         self.require_personal_wallet(check, b_owner, only_personal=False)
+        check.require(self.orgs["A"].isdigit() and self.orgs["B"].isdigit(),
+                      "企业开户响应缺少数字组织 ID，无法验证默认模型范围")
+        inherited_scopes = self.lab.psql_lines(
+            "SELECT count(*) FROM organizations WHERE id IN (%s,%s) AND model_allowlist IS NULL"
+            % (int(self.orgs["A"]), int(self.orgs["B"])))
+        check.require(inherited_scopes == ["2"],
+                      "新建企业应以 NULL 范围继承全局模型目录：%r" % inherited_scopes)
+        check.detail("enterprise_model_scope", "A/B inherit platform catalog")
 
         def invite_and_accept(owner, actor, org, role):
             invitation = {"email": actor.email, "role": role}
@@ -1627,7 +1683,13 @@ class Drill:
         lines = env.psql_lines
         return {
             "users": q("SELECT count(*) FROM users"),
-            "organizations": lines("SELECT id||'|'||name||'|'||type||'|'||status FROM organizations ORDER BY id"),
+            "organizations": lines("SELECT id||'|'||name||'|'||type||'|'||status||'|'||"
+                                    "coalesce(model_allowlist::text,'<inherit>') "
+                                    "FROM organizations ORDER BY id"),
+            "account_model_scopes": lines("SELECT id||'|'||coalesce(model_allowlist::text,'<inherit>') "
+                                           "FROM organizations ORDER BY id"),
+            "platform_model_catalog": lines("SELECT model||'|'||enabled::text "
+                                             "FROM platform_model_catalog ORDER BY model"),
             "memberships": lines("SELECT org_id||'|'||user_id||'|'||role||'|'||status||'|'||"
                                   "coalesce(monthly_limit_micro::text,'') FROM memberships ORDER BY org_id, user_id"),
             "activation_codes": lines("SELECT id||'|'||enterprise_name||'|'||status||'|'||created_by||'|'||"
@@ -1846,8 +1908,8 @@ class Drill:
         check.detail("restore", self.restore_result)
         facts_b = self.facts(self.b)
         check.detail("facts_after_restore", facts_b)
-        for field in ("users", "organizations", "memberships", "activation_codes", "personal_wallets", "api_keys",
-                      "price_versions", "accounts",
+        for field in ("users", "organizations", "account_model_scopes", "platform_model_catalog",
+                      "memberships", "activation_codes", "personal_wallets", "api_keys", "price_versions", "accounts",
                       "ledger_sum_by_org", "executions_by_status", "receipts_by_status", "entries_by_kind",
                       "control_config", "schema_version", "provider_credentials"):
             check.require(facts_b[field] == self.facts_a[field],
@@ -1861,7 +1923,7 @@ class Drill:
         crypto_b = [row for row in facts_b["provider_credentials"] if row.split("|")[3] == "active"]
         check.require(crypto_a == crypto_b and len(crypto_a) >= 1,
                       "provider credential 密文在恢复后不同: A=%r B=%r" % (crypto_a, crypto_b))
-        check.note("身份/成员/Key/价格/账本/账户/收据/control 配置/密文逐项一致；资金指纹 %s"
+        check.note("身份/成员/Key/价格/模型目录/账户模型范围/账本/账户/收据/control 配置/密文逐项一致；资金指纹 %s"
                    % self.fingerprint_b[:16])
 
     # -- BK-03 -------------------------------------------------------------
