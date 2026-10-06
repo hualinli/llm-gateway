@@ -29,7 +29,7 @@ test.describe('platform administrator', () => {
       const email = 'e2e-redeem-' + state.runId + '@example.com';
       const password = 'redeem-' + state.runId + '-pw';
       await person.getByLabel('邮箱').fill(email);
-      await person.getByLabel('密码').fill(password);
+      await person.getByLabel('密码', { exact: true }).fill(password);
       await person.getByLabel('确认密码').fill(password);
       await person.getByRole('button', { name: '创建账号' }).click();
       await expect(person).toHaveURL(/\/orgs\/[^/]+\/overview$/);
@@ -200,12 +200,28 @@ test.describe('platform administrator', () => {
     await button(routes, '添加模型路由').click();
     await routes.getByLabel(model + ' 的接入顺序').click();
     await visibleSelectOption(page, providerId).click();
+    const saveRouteResponsePromise = page.waitForResponse((response) =>
+      response.request().method() === 'PUT' && response.url().includes('/api/v1/admin/routes'));
     await button(routes, '保存转发顺序').click();
-    const routeResponse = await page.request.get('/api/v1/admin/routes');
-    expect(routeResponse.status()).toBe(200);
-    const routePage = (await routeResponse.json()) as { routes: Record<string, string[]>; version: number };
+    const saveRouteResponse = await saveRouteResponsePromise;
+    expect(saveRouteResponse.status()).toBe(200);
+    const savedRoutePage = (await saveRouteResponse.json()) as { routes: Record<string, string[]>; version: number };
+    expect(savedRoutePage.routes[model]).toEqual([providerId]);
+    expect(savedRoutePage.version).toEqual(expect.any(Number));
+
+    const readRoutes = async (): Promise<{ routes: Record<string, string[]>; version: number }> => {
+      const response = await page.request.get('/api/v1/admin/routes');
+      expect(response.status()).toBe(200);
+      return (await response.json()) as { routes: Record<string, string[]>; version: number };
+    };
+    await expect.poll(async () => {
+      const current = await readRoutes();
+      return current.version >= savedRoutePage.version &&
+        JSON.stringify(current.routes[model] ?? null) === JSON.stringify([providerId]);
+    }, { timeout: 10_000 }).toBe(true);
+    const routePage = await readRoutes();
     expect(routePage.routes[model]).toEqual([providerId]);
-    expect(routePage.version).toEqual(expect.any(Number));
+    expect(routePage.version).toBeGreaterThanOrEqual(savedRoutePage.version);
   });
 
   test('adds a model to the platform catalog and narrows one account to it', async ({ page }) => {
