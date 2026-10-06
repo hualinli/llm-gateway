@@ -2,8 +2,8 @@
 #
 # release-candidate.sh — T12 发布候选的一键可复现验收。
 #
-# 一次运行完成：构建镜像 → 空库迁移 → 三角色 bootstrap（平台管理员 / 两家企业
-# 及其成员 / 一个 billing_viewer）→ 受控 Provider 与资金账户 → 全栈启动
+# 一次运行完成：构建镜像 → 空库迁移 → bootstrap 平台管理员 → 通过正式开户与加入流程
+# 建立两家企业及成员 → 受控 Provider 与资金账户 → 全栈启动
 # （Gateway/Control/Console/Metering/mocks/PG/Redis）→ 端到端验收
 # （登录、成员建 Key 并流式调用、企业看到收费、余额不足在上游之前被拒、
 # 撤销与被移除成员的 Key 被拒、平台异常/审计面、Redis 与 Gateway 故障恢复）
@@ -271,7 +271,7 @@ rc_materialize_drivers() {
 "前缀…<redacted:N>" 形式出现，明文只存在于进程内存与 0600 的 identities.json。
 
 phase:
-  seed    价格版本、资金账户、成员与 billing_viewer，写 identities.json
+  seed    价格版本、资金账户、自注册企业成员与加入审批，写 identities.json
   accept  端到端验收（S1–S9），写 steps.jsonl / summary.json / responses/
   demo    5 分钟现场演示（打印真实命令与实际观测）
 
@@ -289,6 +289,7 @@ import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 # ---------------------------------------------------------------------------
@@ -538,28 +539,67 @@ def do_seed(args, rec):
                  ["login %s -> %s" % (args.admin_email, status)], hard=True)
         return rec.finish()
 
-    orgs = {m["organization"]["name"]: m["organization"]["id"] for m in body.get("organizations", [])}
-    missing = [n for n in (args.org_a, args.org_b) if n not in orgs]
-    if missing:
-        rec.step("SEED-0", "两家 demo 企业存在", False,
-                 ["缺少组织 %s；bootstrap 需要用 --demo-data" % missing])
-        return rec.finish()
-    org_a, org_b = orgs[args.org_a], orgs[args.org_b]
-
     identities = read_identities(args.identities)
     if identities is None:
         identities = {
             "run_id": args.run_id,
             "admin": {"email": args.admin_email},
-            "org_a": {"id": org_a, "name": args.org_a},
-            "org_b": {"id": org_b, "name": args.org_b},
+            "org_a": {"id": "", "name": args.org_a},
+            "org_b": {"id": "", "name": args.org_b},
             "effective_at": time.strftime("%Y-%m-%dT%H:%M:%SZ",
                                           time.gmtime(int(time.time() / 60) * 60 - 600)),
             "users": {},
             "keys": {},
         }
-    identities["org_a"]["id"] = org_a
-    identities["org_b"]["id"] = org_b
+    admin_user_id = (body.get("user") or {}).get("id")
+    check_cursor = None
+    platform_accounts = []
+    for _ in range(20):
+        query = "?type=enterprise&limit=100"
+        if check_cursor:
+            query += "&cursor=" + urllib.parse.quote(str(check_cursor))
+        status, _, page = admin.request("GET", "/api/v1/admin/organizations" + query)
+        if status != 200 or not isinstance(page, dict):
+            rec.step("SEED-0", "读取平台企业账户", False,
+                     ["status=%s body=%s" % (status, page)])
+            return rec.finish()
+        platform_accounts.extend(page.get("items") or [])
+        check_cursor = page.get("next_cursor")
+        if not check_cursor:
+            break
+    if check_cursor:
+        rec.step("SEED-0", "平台企业账户目录分页", False,
+                 ["达到 2000 条安全读取上限，尚有后续账户"])
+        return rec.finish()
+
+    org_ids = {}
+    for key, name in (("org_a", args.org_a), ("org_b", args.org_b)):
+        existing = next((item for item in platform_accounts if item.get("name") == name), None)
+        if existing:
+            if existing.get("owner_user_id") != admin_user_id:
+                rec.step("SEED-0", "确认企业负责人 %s" % name, False,
+                         ["已有同名企业由其他用户负责；请使用新的 RC project/run-id 或重建开发库"])
+                return rec.finish()
+            organization_id = existing.get("id")
+        else:
+            status, _, created = admin.request("POST", "/api/v1/admin/organizations",
+                                               {"name": name, "owner_email": args.admin_email})
+            membership = (created or {}).get("organization") if isinstance(created, dict) else None
+            organization_id = membership.get("id") if isinstance(membership, dict) else None
+            if status != 201 or not isinstance(organization_id, str) or not organization_id.isdigit():
+                rec.step("SEED-0", "平台创建企业 %s" % name, False,
+                         ["status=%s body=%s" % (status, created)])
+                return rec.finish()
+            platform_accounts.append({"id": organization_id, "name": name,
+                                      "owner_user_id": admin_user_id, "owner_email": args.admin_email})
+        if not isinstance(organization_id, str) or not organization_id.isdigit():
+            rec.step("SEED-0", "企业编号 %s" % name, False,
+                     ["organization.id=%r 应为 JSON 字符串" % organization_id])
+            return rec.finish()
+        identities[key] = {"id": organization_id, "name": name}
+        org_ids[key] = organization_id
+    org_a, org_b = org_ids["org_a"], org_ids["org_b"]
+    write_identities(args.identities, identities)
 
     # 价格版本（同 (model, effective_at) 幂等：重复得到 409）
     published = []
@@ -577,6 +617,35 @@ def do_seed(args, rec):
             return rec.finish()
     rec.capture("prices", {"models": [args.price_model, args.probe_model]},
                 {"results": published})
+
+    status, _, catalog = admin.request("GET", "/api/v1/admin/models")
+    if status != 200 or not isinstance(catalog, dict):
+        rec.step("SEED-1A", "读取平台模型目录", False,
+                 ["status=%s body=%s" % (status, catalog)])
+        return rec.finish()
+    catalog_items = {item.get("model"): bool(item.get("enabled"))
+                     for item in catalog.get("items", []) if isinstance(item, dict) and item.get("model")}
+    for model in (args.price_model, args.probe_model):
+        catalog_items[model] = True
+    status, _, catalog = admin.request(
+        "PUT", "/api/v1/admin/models",
+        {"items": [{"model": model, "enabled": enabled}
+                   for model, enabled in sorted(catalog_items.items())]})
+    if status != 200:
+        rec.step("SEED-1A", "开放 RC 模型", False,
+                 ["status=%s body=%s" % (status, catalog)])
+        return rec.finish()
+    for organization_id in (org_a, org_b):
+        status, _, settings = admin.request(
+            "PUT", "/api/v1/admin/organizations/%s/models" % organization_id,
+            {"model_allowlist": None})
+        if status != 200:
+            rec.step("SEED-1A", "开放企业模型范围", False,
+                     ["org=%s status=%s body=%s" % (organization_id, status, settings)])
+            return rec.finish()
+    rec.capture("model-catalog", {"models": [args.price_model, args.probe_model]},
+                {"enabled_models": [args.price_model, args.probe_model],
+                 "account_scope": "inherit platform-enabled models"})
 
     # 资金账户：给企业 A 充值（Idempotency-Key 固定 → 重放不重复入账）
     adjust_key = "rc-credit-%s" % identities["run_id"]
@@ -701,12 +770,12 @@ def do_accept(args, rec):
     org_a = identities["org_a"]["id"]
     org_b = identities["org_b"]["id"]
 
-    # ---------------- S1 三个角色登录 ----------------
+    # ---------------- S1 平台管理员/企业负责人/普通成员登录 ----------------
     roles = {}
     logins = []
     ok = True
-    for label, expected_role in (("admin", None), ("member_a", "member"),
-                                 ("member_b", "member"), ("viewer_a", "billing_viewer")):
+    for label, expected_role in (("admin", "owner"), ("member_a", "member"),
+                                 ("member_b", "member"), ("member_c", "member")):
         sess = Session(args.console)
         if label == "admin":
             email, password = args.admin_email, admin_pw
@@ -719,6 +788,13 @@ def do_accept(args, rec):
             entry["platform_admin"] = body.get("user", {}).get("platform_admin")
             entry["organizations"] = [m["organization"]["name"] + ":" + m["role"]
                                       for m in body.get("organizations", [])]
+            org_id = org_a if label in ("admin", "member_a", "member_c") else org_b
+            membership = next((m for m in body.get("organizations", [])
+                               if (m.get("organization") or {}).get("id") == org_id), None)
+            entry["enterprise_role"] = membership.get("role") if membership else None
+            if membership is None or membership.get("role") != expected_role:
+                ok = False
+                entry["role_error"] = "expected %s in %s" % (expected_role, org_id)
             raw_cookies = headers.get("Set-Cookie-All") or headers.get("Set-Cookie") or ""
             entry["set_cookie"] = redact_text(raw_cookies)
             entry["cookie_flags"] = {
@@ -732,17 +808,17 @@ def do_accept(args, rec):
             entry["body"] = body
             roles[label] = sess
         logins.append(entry)
-    rec.capture("login-roles", {"roles": ["admin", "member_a", "member_b", "viewer_a"]},
+    rec.capture("login-roles", {"roles": ["admin", "member_a", "member_b", "member_c"]},
                 {"logins": logins})
     # 负例：错口令必须 401
     bad = Session(args.console)
     bad_status, _, bad_body = bad.login(args.admin_email, "definitely-not-the-password")
     neg_ok = bad_status == 401
-    rec.step("S1", "三角色登录（+ 错误口令 401 负例）", ok and neg_ok, [
+    rec.step("S1", "负责人和普通成员登录（+ 错误口令 401 负例）", ok and neg_ok, [
         "platform_admin=%s" % logins[0].get("status"),
         "member_a/%s -> %s" % (identities["users"]["member_a"]["email"], logins[1].get("status")),
         "member_b -> %s" % logins[2].get("status"),
-        "billing_viewer -> %s (orgA role 应为 billing_viewer)" % logins[3].get("status"),
+        "member_c -> %s (orgA role 应为 member)" % logins[3].get("status"),
         "错误口令 -> %s（应为 401 %s）" % (bad_status, (bad_body or {}).get("error", {}).get("code")
                                           if isinstance(bad_body, dict) else ""),
         "session cookie flags (member_a): %s" % logins[1].get("cookie_flags"),
@@ -751,10 +827,11 @@ def do_accept(args, rec):
     if not ok:
         return rec.finish()
 
-    admin, member_a, member_b, viewer_a = roles["admin"], roles["member_a"], roles["member_b"], roles["viewer_a"]
+    admin, member_a, member_b, member_c = roles["admin"], roles["member_a"], roles["member_b"], roles["member_c"]
 
-    # ---------------- S2 成员建 Key + 流式调用 ----------------
-    status, _, key = member_a.request("POST", "/api/v1/orgs/%s/keys" % org_a, {})
+    # ---------------- S2 成员创建命名 Key + 流式调用 ----------------
+    status, _, key = member_a.request("POST", "/api/v1/orgs/%s/keys" % org_a,
+                                      {"name": "release-candidate member A", "operation_id": "rc-%s-member-a-%s" % (args.run_id, secrets.token_hex(6))})
     if status != 201 or not isinstance(key, dict) or not key.get("secret"):
         rec.capture("member-key", {"org": org_a}, {"status": status, "body": key})
         rec.step("S2", "成员创建 API Key", False, ["status=%s body=%s" % (status, key)])
@@ -766,7 +843,7 @@ def do_accept(args, rec):
                 {"status": status, "key": key.get("key"),
                  "secret_returned_once": key.get("secret_returned_once")})
 
-    _, _, pre_account = viewer_a.request("GET", "/api/v1/orgs/%s/billing/account" % org_a)
+    _, _, pre_account = admin.request("GET", "/api/v1/orgs/%s/billing/account" % org_a)
     accepted, accept_latency = wait_gateway(args.gateway, secret_a, args.price_model, until_ok, timeout=60)
     rec.capture("gateway-call-primary", {"model": args.price_model, "stream": True},
                 {"status": accepted["status"], "done": accepted["done"],
@@ -791,9 +868,9 @@ def do_accept(args, rec):
     status = status2 = status3 = 0
     debit, rows = [], []
     while True:
-        status, _, account = viewer_a.request("GET", "/api/v1/orgs/%s/billing/account" % org_a)
-        status2, _, entries = viewer_a.request("GET", "/api/v1/orgs/%s/billing/entries?limit=20" % org_a)
-        status3, _, usage = viewer_a.request("GET", "/api/v1/orgs/%s/usage?limit=20" % org_a)
+        status, _, account = admin.request("GET", "/api/v1/orgs/%s/billing/account" % org_a)
+        status2, _, entries = admin.request("GET", "/api/v1/orgs/%s/billing/entries?limit=20" % org_a)
+        status3, _, usage = admin.request("GET", "/api/v1/orgs/%s/usage?limit=20" % org_a)
         debit = [e for e in (entries or {}).get("items", [])
                  if e.get("kind") == "debit" and "billing_receipt:debit:" in str(e.get("business_id", ""))]
         rows = [u for u in (usage or {}).get("items", []) if u.get("model") == args.price_model]
@@ -803,7 +880,7 @@ def do_accept(args, rec):
         if time.time() > settle_deadline:
             break
         time.sleep(0.25)
-    rec.capture("org-a-charge", {"org": org_a, "actor": "billing_viewer"},
+    rec.capture("org-a-charge", {"org": org_a, "actor": "enterprise_owner"},
                 {"account": account, "entries": entries, "usage": usage,
                  "settle_visible_after_s": settle_visible_after})
     available = None
@@ -829,15 +906,35 @@ def do_accept(args, rec):
             status3, len(rows), args.price_model,
             rows[0].get("provider") if rows else None,
             rows[0].get("total_tokens") if rows else None),
-        "企业角色=member 读账户会被 403（负例见 responses）",
+        "企业成员只看到自己的用量；组织汇总不包含任何成员 Key 字段。",
     ], observations={"available_micro_before": pre_available, "available_micro_after": available,
                      "settled_entries": len(debit), "usage_rows": len(rows),
                      "settle_visible_after_s": settle_visible_after})
-    status_neg, _, neg = member_a.request("GET", "/api/v1/orgs/%s/billing/account" % org_a)
-    rec.capture("member-billing-forbidden", {"actor": "member_a"}, {"status": status_neg, "body": neg})
+    status_neg, _, member_usage = member_a.request("GET", "/api/v1/orgs/%s/usage?limit=20" % org_a)
+    member_items = (member_usage or {}).get("items", []) if isinstance(member_usage, dict) else []
+    member_user_id = identities["users"]["member_a"]["user_id"]
+    member_item_ids = [item.get("user_id") for item in member_items if item.get("user_id") is not None]
+    member_execution_ids = {item.get("execution_id") for item in member_items}
+    org_execution_ids = {item.get("execution_id") for item in rows}
+    member_scope_ok = (status_neg == 200 and (member_usage or {}).get("scope") == "self"
+                       and all(item_id == member_user_id for item_id in member_item_ids)
+                       and member_execution_ids.issubset(org_execution_ids))
+    org_items = (usage or {}).get("items", []) if isinstance(usage, dict) else []
+    no_key_leak = all("key_id" not in item and "key_name" not in item for item in org_items)
+    rec.capture("member-usage-scope", {"actor": "member_a"},
+                {"status": status_neg, "scope": (member_usage or {}).get("scope"),
+                 "row_count": len(member_items), "organization_rows_contain_key_fields": not no_key_leak})
+    rec.step("S3B", "成员只读取本人消费，企业汇总不含 Key 信息",
+             member_scope_ok and no_key_leak, [
+                 "成员 GET /usage -> %s scope=%s rows=%d；本人 user_id=%s" % (
+                     status_neg, (member_usage or {}).get("scope"), len(member_items), member_user_id),
+                 "成员行 execution_id 均属于企业汇总；企业明细没有 key_id/key_name 字段。",
+             ], observations={"member_usage_scope": (member_usage or {}).get("scope"),
+                             "member_rows": len(member_items), "organization_key_fields": not no_key_leak})
 
     # ---------------- S4 余额不足在上游之前被拒 ----------------
-    status, _, key_b = member_b.request("POST", "/api/v1/orgs/%s/keys" % org_b, {})
+    status, _, key_b = member_b.request("POST", "/api/v1/orgs/%s/keys" % org_b,
+                                        {"name": "release-candidate member B", "operation_id": "rc-%s-member-b-%s" % (args.run_id, secrets.token_hex(6))})
     if status != 201 or not isinstance(key_b, dict):
         rec.step("S4", "企业 B 成员创建 Key", False, ["status=%s body=%s" % (status, key_b)])
         return rec.finish()
@@ -889,7 +986,8 @@ def do_accept(args, rec):
     member_c = Session(args.console)
     user_c = identities["users"]["member_c"]
     member_c.login(user_c["email"], user_c["password"])
-    status, _, key_c = member_c.request("POST", "/api/v1/orgs/%s/keys" % org_a, {})
+    status, _, key_c = member_c.request("POST", "/api/v1/orgs/%s/keys" % org_a,
+                                        {"name": "release-candidate removed member", "operation_id": "rc-%s-member-c-%s" % (args.run_id, secrets.token_hex(6))})
     if status != 201 or not isinstance(key_c, dict):
         rec.step("S6", "成员 C 创建 Key", False, ["status=%s body=%s" % (status, key_c)])
         return rec.finish()
@@ -913,7 +1011,7 @@ def do_accept(args, rec):
     ], observations={"removal_propagation_s": remove_latency,
                      "gateway_status": denied_c["status"]})
 
-    # ---------------- S7 平台管理员的异常与审计面 ----------------
+    # ---------------- S7 企业负责人账单/审计与平台策略面 ----------------
     status, _, exceptions = admin.request("GET", "/api/v1/orgs/%s/billing/exceptions" % org_a)
     status2, _, audit = admin.request("GET", "/api/v1/orgs/%s/audit?limit=50" % org_a)
     status3, _, statement = admin.request("GET", "/api/v1/orgs/%s/billing/statements" % org_a)
@@ -929,7 +1027,7 @@ def do_accept(args, rec):
                    and review_status == 200 and isinstance(review, dict)
                    and review.get("min_age_seconds") == 7800
                    and review.get("sla_seconds") == 7200)
-    rec.step("S7", "平台管理员的资金异常 / 审计 / 月度账单面", surfaces_ok, [
+    rec.step("S7", "负责人查看企业资金异常 / 审计，平台查看策略队列", surfaces_ok, [
         "GET /billing/exceptions -> %s totals=%s（%s）" % (
             status, totals, "空队列也是真实事实" if not (exceptions or {}).get("items") else "有异常行"),
         "GET /audit -> %s %d 条，动作=%s" % (status2, len((audit or {}).get("items", [])),
@@ -944,7 +1042,8 @@ def do_accept(args, rec):
 
     # ---------------- S8 Redis 故障：fail-closed 与恢复 ----------------
     if args.with_failure and args.compose_cmd:
-        status, _, key_f = member_a.request("POST", "/api/v1/orgs/%s/keys" % org_a, {})
+        status, _, key_f = member_a.request("POST", "/api/v1/orgs/%s/keys" % org_a,
+                                            {"name": "release-candidate redis recovery", "operation_id": "rc-%s-redis-%s" % (args.run_id, secrets.token_hex(6))})
         secret_f = key_f.get("secret") if isinstance(key_f, dict) else None
         if secret_f:
             register_secret("key:failure", secret_f)
@@ -1003,7 +1102,8 @@ def do_accept(args, rec):
             if ready:
                 break
             time.sleep(1)
-        status, _, key_g = member_a.request("POST", "/api/v1/orgs/%s/keys" % org_a, {})
+        status, _, key_g = member_a.request("POST", "/api/v1/orgs/%s/keys" % org_a,
+                                        {"name": "release-candidate gateway restart", "operation_id": "rc-%s-restart-%s" % (args.run_id, secrets.token_hex(6))})
         secret_g = key_g.get("secret") if isinstance(key_g, dict) else None
         if secret_g:
             register_secret("key:restart", secret_g)
@@ -1051,18 +1151,20 @@ def do_demo(args, rec):
     print("T12 发布候选 · 5 分钟演示（Console=%s Gateway=%s）" % (args.console, args.gateway))
     print(DEMO_LINE)
 
-    # 1 成员登录 + 建 Key + 流式调用
-    t0 = time.time()
+    # 1 成员登录 + 建命名 Key + 流式调用
     member = Session(args.console)
     member.login(identities["users"]["member_a"]["email"], identities["users"]["member_a"]["password"])
-    status, _, key = member.request("POST", "/api/v1/orgs/%s/keys" % org_a, {})
+    demo_operation = "rc-demo-%s-member-a-%s" % (args.run_id, secrets.token_hex(6))
+    status, _, key = member.request("POST", "/api/v1/orgs/%s/keys" % org_a,
+                                    {"name": "release-candidate demo", "operation_id": demo_operation})
     secret = key["secret"] if isinstance(key, dict) else None
     register_secret("key:demo", secret)
     call = wait_gateway(args.gateway, secret, args.price_model, until_ok, timeout=60)[0]
     demo_print(1, "成员登录 → 创建 Key → 流式调用", """
 curl -s -c jar -X POST %s/api/v1/auth/login -H 'Content-Type: application/json' \\
   -d '{"email":"%s","password":"<来自 identities.json>"}'
-curl -s -b jar -X POST %s/api/v1/orgs/%s/keys -H "X-CSRF-Token: <login.csrf_token>" -d '{}'
+curl -s -b jar -X POST %s/api/v1/orgs/%s/keys -H "X-CSRF-Token: <login.csrf_token>" \
+  -H 'Content-Type: application/json' -d '{"name":"release-candidate demo","operation_id":"<unique-operation-id>"}'
 curl -sN -X POST %s/v1/chat/completions -H "Authorization: Bearer <key.secret>" \\
   -H 'Accept: text/event-stream' -H 'Content-Type: application/json' \\
   -d '{"model":"%s","stream":true,"messages":[{"role":"user","content":"hello"}]}'
@@ -1078,18 +1180,18 @@ curl -sN -X POST %s/v1/chat/completions -H "Authorization: Bearer <key.secret>" 
     except Exception:
         exec_seen = None
 
-    # 2 企业查费
-    viewer = Session(args.console)
-    viewer.login(identities["users"]["viewer_a"]["email"], identities["users"]["viewer_a"]["password"])
-    _, _, account = viewer.request("GET", "/api/v1/orgs/%s/billing/account" % org_a)
+    # 2 企业负责人查费。平台身份本身不授予组织访问；该账号通过 seed 取得真实 owner membership。
+    owner = Session(args.console)
+    owner.login(args.admin_email, admin_pw)
+    _, _, account = owner.request("GET", "/api/v1/orgs/%s/billing/account" % org_a)
     # 结算由 dispatcher 异步完成：有界等待它可见，并记录时延（不要在这之前下结论）。
     settle_started = time.time()
     settle_visible_after = None
     debit = []
     entries = usage = None
     for _ in range(60):
-        _, _, entries = viewer.request("GET", "/api/v1/orgs/%s/billing/entries?limit=5" % org_a)
-        _, _, usage = viewer.request("GET", "/api/v1/orgs/%s/usage?limit=5" % org_a)
+        _, _, entries = owner.request("GET", "/api/v1/orgs/%s/billing/entries?limit=5" % org_a)
+        _, _, usage = owner.request("GET", "/api/v1/orgs/%s/usage?limit=5" % org_a)
         debit = [e for e in (entries or {}).get("items", [])
                  if e.get("kind") == "debit"
                  and "billing_receipt:debit:" in str(e.get("business_id", ""))]
@@ -1097,11 +1199,13 @@ curl -sN -X POST %s/v1/chat/completions -H "Authorization: Bearer <key.secret>" 
             settle_visible_after = round(time.time() - settle_started, 3)
             break
         time.sleep(0.25)
-    demo_print(2, "企业 billing_viewer 看到这笔收费", """
-curl -s -b viewer.jar %s/api/v1/orgs/%s/billing/account
-curl -s -b viewer.jar '%s/api/v1/orgs/%s/billing/entries?limit=5'
-curl -s -b viewer.jar '%s/api/v1/orgs/%s/usage?limit=5'
-""" % (args.console, org_a, args.console, org_a, args.console, org_a),
+    demo_print(2, "企业负责人查看正式账单", """
+curl -s -c owner.jar -X POST %s/api/v1/auth/login -H 'Content-Type: application/json' \
+  -d '{"email":"%s","password":"<来自 secrets/admin-password>"}'
+curl -s -b owner.jar %s/api/v1/orgs/%s/billing/account
+curl -s -b owner.jar '%s/api/v1/orgs/%s/billing/entries?limit=5'
+curl -s -b owner.jar '%s/api/v1/orgs/%s/usage?limit=5'
+""" % (args.console, args.admin_email, args.console, org_a, args.console, org_a, args.console, org_a),
                "available_micro=%s reserved_micro=%s\n结算可见延迟 %s s；debit 条目 %d 条（billing_receipt:debit:<execution> 是结算扣费，release 条目是预占释放）\n用量行：model=%s provider=%s tokens=%s execution=%s"
                % (account.get("available_micro"), account.get("reserved_micro"),
                   settle_visible_after, len(debit),
@@ -1114,7 +1218,8 @@ curl -s -b viewer.jar '%s/api/v1/orgs/%s/usage?limit=5'
     member_b = Session(args.console)
     member_b.login(identities["users"]["member_b"]["email"], identities["users"]["member_b"]["password"])
     org_b = identities["org_b"]["id"]
-    _, _, key_b = member_b.request("POST", "/api/v1/orgs/%s/keys" % org_b, {})
+    _, _, key_b = member_b.request("POST", "/api/v1/orgs/%s/keys" % org_b,
+                                  {"name": "release-candidate demo B", "operation_id": "rc-demo-%s-member-b-%s" % (args.run_id, secrets.token_hex(6))})
     secret_b = key_b["secret"]
     register_secret("key:demo-b", secret_b)
     wait_gateway(args.gateway, secret_b, args.probe_model, until_status(402), timeout=60)
@@ -1145,7 +1250,8 @@ curl -s -o /dev/null -w '%%{http_code}\\n' -X POST %s/v1/chat/completions \\
 
     # 5 故障恢复
     if args.compose_cmd:
-        _, _, key_f = member.request("POST", "/api/v1/orgs/%s/keys" % org_a, {})
+        _, _, key_f = member.request("POST", "/api/v1/orgs/%s/keys" % org_a,
+                                     {"name": "release-candidate demo recovery", "operation_id": "rc-demo-%s-recovery-%s" % (args.run_id, secrets.token_hex(6))})
         secret_f = key_f["secret"]
         register_secret("key:demo-f", secret_f)
         wait_gateway(args.gateway, secret_f, args.price_model, until_ok, timeout=60)
@@ -1174,7 +1280,7 @@ curl -s -o /dev/null -w '%%{http_code}\\n' -X POST %s/v1/chat/completions -H "Au
     _, _, exceptions = admin.request("GET", "/api/v1/orgs/%s/billing/exceptions" % org_a)
     _, _, audit = admin.request("GET", "/api/v1/orgs/%s/audit?limit=20" % org_a)
     actions = sorted({i.get("action") for i in (audit or {}).get("items", [])})
-    demo_print(6, "平台管理员的异常队列与审计", """
+    demo_print(6, "企业负责人的异常队列与审计", """
 curl -s -b admin.jar -X POST %s/api/v1/auth/login -H 'Content-Type: application/json' \\
   -d '{"email":"%s","password":"<来自 secrets/admin-password>"}'
 curl -s -b admin.jar %s/api/v1/orgs/%s/billing/exceptions
@@ -1812,13 +1918,11 @@ with urllib.request.urlopen(req, timeout=30) as resp:
 PY
   rc_log "    desired_version=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("desired_version"))' "$RC_WORK_DIR/logs/control-config.json" 2>/dev/null || echo '?')"
 
-  rc_log "==> bootstrap 平台管理员与两家企业（密码只从 stdin 读，不打印不落盘）"
+  rc_log "==> bootstrap 平台管理员与个人账户（不注入演示企业/旧角色）"
   if ! printf '%s' "$(cat "$RC_WORK_DIR/secrets/admin-password")" | \
       rc_compose_run run --rm -T --no-deps console bootstrap \
         --admin-email "$RC_ADMIN_EMAIL" \
         --admin-password-file /dev/stdin \
-        --demo-data \
-        --demo-credentials-file /tmp/rc-demo-credentials.txt \
         >>"$RC_WORK_DIR/logs/bootstrap.log" 2>&1; then
     tail -30 "$RC_WORK_DIR/logs/bootstrap.log" >&2
     rc_die "console bootstrap 失败"
