@@ -2026,7 +2026,7 @@ rc_evidence_collect() {
 rc_e2e() {
   command -v npm >/dev/null 2>&1 || rc_die "缺少 npm（Playwright 三角色套件需要 Node >= 20.19）"
   rc_log "==> 前端依赖（npm ci）"
-  ( cd "$RC_ROOT/web" && npm ci >>"$RC_WORK_DIR/logs/e2e.log" 2>&1 ) \
+  ( cd "$RC_ROOT/web" && npm ci --no-audit --no-fund >>"$RC_WORK_DIR/logs/e2e.log" 2>&1 ) \
     || { tail -20 "$RC_WORK_DIR/logs/e2e.log" >&2; rc_die "npm ci 失败"; }
   rc_log "==> Playwright 三角色套件（Console=$RC_CONSOLE_PORT Gateway=${RC_GATEWAY_PORT}）"
   # 一并运行角色流程与桌面/窄屏截图，输出到 data/verification/web-screenshots。
