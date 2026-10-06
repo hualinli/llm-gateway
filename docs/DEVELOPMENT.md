@@ -34,7 +34,7 @@ npm run dev
 
 ## 配置上游 Provider
 
-当前 Web 控制台没有 Provider endpoint 和凭据管理页面，开发时通过 `democtl` 操作 Control。基础 Demo 启动时会准备持久化主密钥文件 `data/provider-credential-master-key`；保留它才能在重启后解密已有凭据。先将上游 API 密钥写入本地文件并设为 `0600`，不要放进命令参数或提交仓库，然后创建凭据：
+平台管理员可在 Console 的 Provider 工作台管理 endpoint、上游凭据和路由。需要脚本化操作时，也可用 `democtl` 直接管理本地 Control。基础 Demo 启动时会准备持久化主密钥文件 `data/provider-credential-master-key`；保留它才能在重启后解密已有凭据。先将上游 API 密钥写入本地文件并设为 `0600`，不要放进命令参数或提交仓库，然后创建凭据：
 
 ```bash
 go run ./cmd/democtl credential-create \
@@ -42,7 +42,7 @@ go run ./cmd/democtl credential-create \
   --secret-file data/openai-api-key
 ```
 
-命令输出一个 `credential_ref`。用它应用 Provider 和路由；`--url` 是上游 base URL：
+命令输出一个 `credential_ref`。用它应用 Provider 和路由；`--url` 是上游 base URL。`provider-apply` 直接更新 Control 配置，使用 Console 时优先在 Provider 工作台操作，避免两个入口并行改同一份路由：
 
 ```bash
 go run ./cmd/democtl provider-apply \
@@ -51,7 +51,7 @@ go run ./cmd/democtl provider-apply \
   --credential-ref '粘贴上一步返回的 credential_ref'
 ```
 
-命令等待 Gateway 应用新配置后才返回。轮换时创建新凭据、更新 Provider 引用并确认配置已应用，然后撤销旧凭据：
+命令等待 Gateway 应用新配置后才返回。轮换时创建新凭据、更新 Provider 引用并确认配置已应用，然后撤销旧凭据。撤销凭据不会把流水或审计历史当作可删除数据：
 
 ```bash
 go run ./cmd/democtl credential-revoke --id 旧凭据ID
