@@ -1,6 +1,7 @@
 package console
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -24,7 +25,7 @@ type fakePlatformOrganizations struct {
 	statusOrgID int64
 	status      string
 	statusErr   error
-	updated     organization.Organization
+	updated     organization.PlatformOrganization
 }
 
 func (f *fakePlatformOrganizations) ListPlatformOrganizations(_ context.Context, typeFilter string, limit int, cursor int64) ([]organization.PlatformOrganization, string, error) {
@@ -33,14 +34,14 @@ func (f *fakePlatformOrganizations) ListPlatformOrganizations(_ context.Context,
 	return f.items, f.listNext, f.listErr
 }
 
-func (f *fakePlatformOrganizations) SetOrganizationStatus(_ context.Context, orgID int64, status string) (organization.Organization, error) {
+func (f *fakePlatformOrganizations) SetOrganizationStatus(_ context.Context, orgID int64, status string) (organization.PlatformOrganization, error) {
 	f.statusCalls++
 	f.statusOrgID, f.status = orgID, status
 	if f.statusErr != nil {
-		return organization.Organization{}, f.statusErr
+		return organization.PlatformOrganization{}, f.statusErr
 	}
 	updated := f.updated
-	updated.ID, updated.Status = orgID, status
+	updated.Organization.ID, updated.Organization.Status = orgID, status
 	return updated, nil
 }
 
@@ -131,16 +132,19 @@ func TestPlatformOrganizationStatusRequiresAdminCSRFAndAuditsOnlyOrganization(t 
 		t.Fatal("missing-CSRF request reached status service")
 	}
 
-	service.updated = organization.Organization{ID: 8, Type: "enterprise", Name: "Acme", Status: "active",
-		CreatedAt: time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)}
+	service.updated = organization.PlatformOrganization{Organization: organization.Organization{ID: 8, Type: "enterprise", Name: "Acme", Status: "active",
+		CreatedAt: time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)}, OwnerUserID: 42, OwnerEmail: "owner@example.com"}
 	rec := h.orgReq(http.MethodPost, "/api/v1/admin/organizations/8/status", `{"status":"suspended"}`, admin, true)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status change code=%d body=%s", rec.Code, rec.Body.String())
 	}
-	var body organizationDTO
+	var body platformOrganizationDTO
 	decodeInto(t, rec, &body)
-	if service.statusCalls != 1 || service.statusOrgID != 8 || service.status != "suspended" || body.ID != "8" || body.Status != "suspended" {
+	if service.statusCalls != 1 || service.statusOrgID != 8 || service.status != "suspended" || body.ID != "8" || body.Status != "suspended" || body.OwnerUserID != "42" || body.OwnerEmail != "owner@example.com" || body.ModelAllowlist != nil {
 		t.Fatalf("status result: calls=%d org=%d status=%q body=%+v", service.statusCalls, service.statusOrgID, service.status, body)
+	}
+	if !bytes.Contains(rec.Body.Bytes(), []byte(`"model_allowlist":null`)) {
+		t.Fatalf("null account model scope omitted or changed: %s", rec.Body.String())
 	}
 	events := h.audit.all()
 	if len(events) != 1 || events[0].Action != actionAdminOrganizationStatus || events[0].Outcome != "success" || events[0].OrgID != 8 || events[0].TargetID != "8" {

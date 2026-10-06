@@ -15,7 +15,7 @@ const actionAdminOrganizationStatus = "admin.organization.status"
 
 type platformOrganizationService interface {
 	ListPlatformOrganizations(context.Context, string, int, int64) ([]organization.PlatformOrganization, string, error)
-	SetOrganizationStatus(context.Context, int64, string) (organization.Organization, error)
+	SetOrganizationStatus(context.Context, int64, string) (organization.PlatformOrganization, error)
 }
 
 type platformOrganizationDTO struct {
@@ -134,5 +134,5 @@ func (s *server) setAdminOrganizationStatus(ctx context.Context, c *app.RequestC
 	event := s.auditMutation(c, actionAdminOrganizationStatus, orgID,
 		"organization", formatID(orgID), "success", "", map[string]any{"status": status})
 	s.audit.Record(ctx, event)
-	writeJSON(c, http.StatusOK, toOrganizationDTO(updated))
+	writeJSON(c, http.StatusOK, toPlatformOrganizationDTO(updated))
 }

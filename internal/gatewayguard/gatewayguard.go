@@ -71,11 +71,13 @@ type Guard interface {
 	Check(ctx context.Context, key auth.KeyRecord, now time.Time) (Permit, Denial)
 }
 
-// ModelPolicy is the intersection of the three model allowlist scopes. Every
+// ModelPolicy is the intersection of the global catalog and scoped model
+// allowlists. Every
 // field is tri-state: nil inherits the parent scope, a non-nil slice is
 // explicit, and an explicit empty slice denies every model (ADR-0003 §2.7).
 // A child scope can therefore only narrow, never widen, its parents.
 type ModelPolicy struct {
+	Global *[]string
 	Org    *[]string
 	Member *[]string
 	Key    *[]string
@@ -84,14 +86,14 @@ type ModelPolicy struct {
 // Restricted reports whether any scope constrains the model. When false the
 // request does not need a body read at all.
 func (p ModelPolicy) Restricted() bool {
-	return p.Org != nil || p.Member != nil || p.Key != nil
+	return p.Global != nil || p.Org != nil || p.Member != nil || p.Key != nil
 }
 
 // Allows reports whether model passes every configured scope. Unknown models
 // are the registry's business (404), not this function's: Allows only answers
 // "is the model permitted by policy".
 func (p ModelPolicy) Allows(model string) bool {
-	for _, list := range []*[]string{p.Org, p.Member, p.Key} {
+	for _, list := range []*[]string{p.Global, p.Org, p.Member, p.Key} {
 		if list == nil {
 			continue
 		}

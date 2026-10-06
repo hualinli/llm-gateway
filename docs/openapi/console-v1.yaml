@@ -430,7 +430,7 @@ paths:
           application/json:
             schema: { type: object, required: [status], properties: { status: { type: string, enum: [active, suspended] } } }
       responses:
-        '200': { description: Account status changed, content: { application/json: { schema: { $ref: '#/components/schemas/Organization' } } } }
+        '200': { description: Account status changed, content: { application/json: { schema: { $ref: '#/components/schemas/PlatformOrganization' } } } }
         default: { $ref: '#/components/responses/Error' }
   /api/v1/admin/activation-codes:
     get:
@@ -1084,12 +1084,13 @@ components:
         updated_at: { type: string, format: date-time }
     Organization:
       type: object
-      required: [id, type, name, status, created_at]
+      required: [id, type, name, status, legacy_tenant_id, created_at]
       properties:
         id: { type: string }
         type: { type: string, enum: [personal, enterprise] }
         name: { type: string }
         status: { type: string, enum: [active, suspended] }
+        legacy_tenant_id: { type: [string, 'null'] }
         created_at: { type: string, format: date-time }
     Membership:
       type: object

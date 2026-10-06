@@ -73,7 +73,7 @@ func TestPlatformOrganizationListAndStatusPreserveMemberships(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if updated.ID != first.ID || updated.Status != "suspended" {
+	if updated.ID != first.ID || updated.Status != "suspended" || updated.OwnerUserID != firstOwner.ID || updated.OwnerEmail != firstOwner.Email || updated.ModelAllowlist == nil || len(*updated.ModelAllowlist) != 0 {
 		t.Fatalf("status update = %+v", updated)
 	}
 	membership, err := svc.Membership(ctx, firstOwner.ID, first.ID)

@@ -109,7 +109,13 @@ func newSeed(t *testing.T, dsn string) *seed {
 	if _, err := db.Exec(`SET TIME ZONE 'UTC'`); err != nil {
 		t.Fatal(err)
 	}
-	return &seed{db: db, now: time.Now().UTC().Truncate(time.Microsecond)}
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	for _, model := range []string{"gpt-a", "gpt-b", "gpt-anything", "gpt-allowed", "gpt-other"} {
+		if _, err := db.Exec(`INSERT INTO platform_model_catalog (model, enabled, updated_at) VALUES ($1, true, $2)`, model, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return &seed{db: db, now: now}
 }
 
 func (s *seed) user(t *testing.T, status string) int64 {
@@ -381,7 +387,9 @@ func TestPGGuardIntegrationAdmitsAndDenies(t *testing.T) {
 		})
 	}
 
-	// The key-level tri-state must survive the PostgreSQL round trip:
+	// The key-level tri-state must survive the PostgreSQL round trip. The global
+	// catalog is now a first-class explicit constraint, even when all scopes
+	// below inherit their parent:
 	// deny-all denies every model, an explicit list allows only its members,
 	// NULL stays "inherit" (not restricted), and the snapshot copy of the same
 	// limit can only narrow the authoritative row, never widen it.
@@ -393,7 +401,7 @@ func TestPGGuardIntegrationAdmitsAndDenies(t *testing.T) {
 		allowedModel      string
 		deniedModel       string
 	}{
-		{keyID: "key-member", hash: "hash-member", restricted: false},
+		{keyID: "key-member", hash: "hash-member", restricted: true},
 		{keyID: "key-member", hash: "hash-member", snapshotAllowlist: &[]string{"gpt-a"}, restricted: true, allowedModel: "gpt-a", deniedModel: "gpt-b"},
 		{keyID: "key-deny-all", hash: "hash-deny-all", restricted: true},
 		{keyID: "key-deny-all", hash: "hash-deny-all", snapshotAllowlist: &[]string{"gpt-a"}, restricted: true, deniedModel: "gpt-a"},
@@ -410,8 +418,8 @@ func TestPGGuardIntegrationAdmitsAndDenies(t *testing.T) {
 		if permit.Model.Restricted() != tc.restricted {
 			t.Fatalf("%s: Restricted() = %v, want %v (%+v)", tc.keyID, permit.Model.Restricted(), tc.restricted, permit.Model)
 		}
-		if tc.restricted && permit.Model.Allows("gpt-anything") {
-			t.Fatalf("%s: model allowed outside the explicit list", tc.keyID)
+		if permit.Model.Allows("gpt-not-enabled") {
+			t.Fatalf("%s: model outside the global catalog was allowed", tc.keyID)
 		}
 		if tc.allowedModel != "" && !permit.Model.Allows(tc.allowedModel) {
 			t.Fatalf("%s: model %q must be allowed", tc.keyID, tc.allowedModel)
@@ -429,6 +437,9 @@ func TestPGGuardIntegrationAppliesOrgPolicy(t *testing.T) {
 	org := s.organization(t, "active", user)
 	s.membership(t, org, user, "member", "active")
 	s.apiKey(t, keyParams{keyID: "key-1", hash: "hash-1", orgID: org, owner: &user})
+	if _, err := s.db.Exec(`UPDATE organizations SET model_allowlist = '["gpt-a"]'::jsonb WHERE id=$1`, org); err != nil {
+		t.Fatal(err)
+	}
 
 	policies := gatewayguard.NewPolicySet()
 	rpm, burst := 600, 60
@@ -449,6 +460,61 @@ func TestPGGuardIntegrationAppliesOrgPolicy(t *testing.T) {
 	if gotRPM, gotBurst, ok := policies.OrgRate(org); !ok || gotRPM != rpm || gotBurst != burst {
 		t.Fatalf("org rate = %d/%d/%v", gotRPM, gotBurst, ok)
 	}
+}
+
+func TestPGGuardUsesLiveGlobalAndOrganizationModelScopes(t *testing.T) {
+	dsn := guardSchema(t)
+	// Do not call newSeed: a new installation has no enabled catalog rows and
+	// therefore rejects every configured/provider-known model by default.
+	s := newSeedWithoutCatalog(t, dsn)
+	user := s.user(t, "active")
+	org := s.organization(t, "active", user)
+	s.membership(t, org, user, "member", "active")
+	s.apiKey(t, keyParams{keyID: "catalog-key", hash: "catalog-hash", orgID: org, owner: &user})
+	guard := testGuard(t, dsn, gatewayguard.NewPolicySet())
+	record := auth.KeyRecord{ID: "catalog-key", Hash: "catalog-hash", TenantID: "org-a", Status: "active", OrgID: org, OwnerUserID: &user}
+
+	permit, denial := guard.Check(context.Background(), record, s.now)
+	if denial.Denied() || permit.Model.Allows("gpt-live") || !permit.Model.Restricted() {
+		t.Fatalf("empty global catalog must deny model: permit=%+v denial=%+v", permit, denial)
+	}
+	if _, err := s.db.Exec(`INSERT INTO platform_model_catalog (model, enabled, updated_at) VALUES ('gpt-live', true, $1)`, s.now); err != nil {
+		t.Fatal(err)
+	}
+	permit, denial = guard.Check(context.Background(), record, s.now)
+	if denial.Denied() || !permit.Model.Allows("gpt-live") {
+		t.Fatalf("freshly enabled global model was not admitted: permit=%+v denial=%+v", permit, denial)
+	}
+	if _, err := s.db.Exec(`UPDATE organizations SET model_allowlist = '[]'::jsonb WHERE id=$1`, org); err != nil {
+		t.Fatal(err)
+	}
+	permit, denial = guard.Check(context.Background(), record, s.now)
+	if denial.Denied() || permit.Model.Allows("gpt-live") {
+		t.Fatalf("explicit empty org scope was not authoritative: permit=%+v denial=%+v", permit, denial)
+	}
+	if _, err := s.db.Exec(`UPDATE organizations SET model_allowlist = NULL WHERE id=$1`, org); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`UPDATE platform_model_catalog SET enabled=false WHERE model='gpt-live'`); err != nil {
+		t.Fatal(err)
+	}
+	permit, denial = guard.Check(context.Background(), record, s.now)
+	if denial.Denied() || permit.Model.Allows("gpt-live") {
+		t.Fatalf("live global disable did not close model: permit=%+v denial=%+v", permit, denial)
+	}
+}
+
+func newSeedWithoutCatalog(t *testing.T, dsn string) *seed {
+	t.Helper()
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if _, err := db.Exec(`SET TIME ZONE 'UTC'`); err != nil {
+		t.Fatal(err)
+	}
+	return &seed{db: db, now: time.Now().UTC().Truncate(time.Microsecond)}
 }
 
 // TestPGGuardIntegrationStatementTimeoutFailsClosed holds an ACCESS EXCLUSIVE
