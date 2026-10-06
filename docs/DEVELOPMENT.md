@@ -2,7 +2,7 @@
 
 ## 启动全栈 Demo
 
-要快速得到含 mock Provider 的完整隔离环境，推荐在仓库根目录运行：
+要预览完整业务并验证账户、模型授权和正式计费，使用含 PostgreSQL 访问检查与计费的隔离发布候选环境；它通过 mock Provider 避免依赖真实上游：
 
 ```bash
 bash scripts/release-candidate.sh up --project-name gateway-dev --run-id local-dev
@@ -10,13 +10,13 @@ bash scripts/release-candidate.sh up --project-name gateway-dev --run-id local-d
 
 脚本会启动本次专属的 PostgreSQL、Redis、Control、Metering、Console、Gateway 和 mock Provider，运行迁移并准备演示账户。它会打印 Console、Gateway、Metering 地址和运行目录；若默认端口冲突，以打印的地址为准。之后可在 `web/` 启动前端。
 
-也可使用基础 Compose 开发栈：
+如只调试早期的 HTTP 代理和 mock Provider，可使用基础 Compose：
 
 ```bash
 make demo-up
 ```
 
-它会运行数据库迁移并启动本地服务，但不会配置 Provider。要完成一条 mock 调用，在两个终端分别运行 `make mock-primary` 和 `make mock-backup`，等它们启动后再运行 `make demo-config`。后者会配置路由并将一次性 Gateway Key 写入 `data/demo-api-key`。
+它会运行数据库迁移并启动本地服务，但不会配置 Provider；该基础栈默认关闭 Gateway 访问检查和正式计费，不适合验证新账户、模型授权、额度或账单，也不能作为完整业务预览。生产 preflight 要求 PostgreSQL 检查和正式计费，不接受关闭状态。要完成一条 mock 代理调用，在两个终端分别运行 `make mock-primary` 和 `make mock-backup`，等它们启动后再运行 `make demo-config`。后者会配置路由并将一次性 Gateway Key 写入 `data/demo-api-key`。
 
 首次单独运行 Console 时，先在 `data/console-admin-password` 写入本地管理员密码并将权限设为 `0600`，再运行 `make console-bootstrap`。需要两家演示企业和演示成员时用 `make console-bootstrap-demo`；生成的演示凭据写入被忽略的 `data/console-demo-credentials.txt`，不要提交。
 
@@ -34,7 +34,7 @@ npm run dev
 
 ## 配置上游 Provider
 
-当前 Web 控制台没有 Provider endpoint 和凭据管理页面，开发时通过 `democtl` 操作 Control。基础 Demo 启动时会准备持久化主密钥文件 `data/provider-credential-master-key`；保留它才能在重启后解密已有凭据。先将上游 API 密钥写入本地文件并设为 `0600`，不要放进命令参数或提交仓库，然后创建凭据：
+平台管理员可在 Console 的 Provider 工作台管理 endpoint、上游凭据和路由。需要脚本化操作时，也可用 `democtl` 直接管理本地 Control。基础 Demo 启动时会准备持久化主密钥文件 `data/provider-credential-master-key`；保留它才能在重启后解密已有凭据。先将上游 API 密钥写入本地文件并设为 `0600`，不要放进命令参数或提交仓库，然后创建凭据：
 
 ```bash
 go run ./cmd/democtl credential-create \
@@ -42,7 +42,7 @@ go run ./cmd/democtl credential-create \
   --secret-file data/openai-api-key
 ```
 
-命令输出一个 `credential_ref`。用它应用 Provider 和路由；`--url` 是上游 base URL：
+命令输出一个 `credential_ref`。用它应用 Provider 和路由；`--url` 是上游 base URL。`provider-apply` 直接更新 Control 配置，使用 Console 时优先在 Provider 工作台操作，避免两个入口并行改同一份路由：
 
 ```bash
 go run ./cmd/democtl provider-apply \
@@ -51,7 +51,7 @@ go run ./cmd/democtl provider-apply \
   --credential-ref '粘贴上一步返回的 credential_ref'
 ```
 
-命令等待 Gateway 应用新配置后才返回。轮换时创建新凭据、更新 Provider 引用并确认配置已应用，然后撤销旧凭据：
+命令等待 Gateway 应用新配置后才返回。轮换时创建新凭据、更新 Provider 引用并确认配置已应用，然后撤销旧凭据。撤销凭据不会把流水或审计历史当作可删除数据：
 
 ```bash
 go run ./cmd/democtl credential-revoke --id 旧凭据ID
