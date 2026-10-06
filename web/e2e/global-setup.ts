@@ -242,10 +242,13 @@ export default async function globalSetup(_config: FullConfig): Promise<void> {
       try {
         const completion = await gateway.post('/v1/chat/completions', {
           headers: { Authorization: 'Bearer ' + gatewayKey },
-          data: { model, messages: [{ role: 'user', content: 'Reply with OK.' }], max_tokens: 8 },
+          data: { model, stream: true, messages: [{ role: 'user', content: 'Reply with OK.' }], max_tokens: 8 },
           timeout: 30_000,
         });
         if (!completion.ok()) throw new Error('seed one metered Gateway call: ' + completion.status() + ' ' + await completion.text());
+        const streamBody = await completion.text();
+        const streamCompleted = streamBody.split(/\r?\n/).some((line) => line.trim() === 'data: [DONE]');
+        if (!streamCompleted) throw new Error('the metered Gateway SSE response ended without data: [DONE]');
       } finally {
         await gateway.dispose();
       }
