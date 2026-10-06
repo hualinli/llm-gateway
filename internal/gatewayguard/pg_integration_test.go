@@ -228,7 +228,7 @@ func TestPGGuardDeniesOldKeyAfterMembershipRejoin(t *testing.T) {
 	guard := testGuard(t, dsn, gatewayguard.NewPolicySet())
 	permit, denial := guard.Check(context.Background(), auth.KeyRecord{
 		ID: "key-old-membership", Hash: "hash-old-membership", TenantID: "org-a", Status: "active",
-		OrgID: org, OwnerUserID: &user,
+		OrgID: org, OwnerUserID: &user, MembershipID: oldMembershipID,
 	}, s.now)
 	if denial.Status != http.StatusForbidden || denial.Code != httperr.CodeForbidden {
 		t.Fatalf("old key denial = %+v, want forbidden", denial)

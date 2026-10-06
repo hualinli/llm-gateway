@@ -16,6 +16,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 )
 
 // fakeAdminStore records the params it receives and returns canned results so
@@ -50,7 +51,7 @@ func (f *fakeAdminStore) CreateApiKey(_ context.Context, params CreateAPIKeyPara
 	if f.createResult != nil {
 		return f.createResult, nil
 	}
-	return &APIKeyMutation{Key: &pb.ApiKeyMetadata{KeyId: params.KeyID, OrgId: params.OrgID, Status: "active"}, ResultingVersion: 1}, nil
+	return &APIKeyMutation{Key: &pb.ApiKeyMetadata{KeyId: params.KeyID, Name: params.Name, MembershipId: params.MembershipID, OrgId: params.OrgID, OwnerUserId: params.OwnerUserID, CreatedBy: params.CreatedBy, Status: "active"}, ResultingVersion: 1}, nil
 }
 
 func (f *fakeAdminStore) RevokeApiKey(_ context.Context, params RevokeAPIKeyParams) (*APIKeyMutation, error) {
@@ -77,6 +78,18 @@ func (f *fakeAdminStore) GetOperation(_ context.Context, operationID string) (*p
 		return f.operationResult, nil
 	}
 	return &pb.GetOperationResponse{OperationId: operationID, Kind: operationCreateAPIKey}, nil
+}
+
+func (f *fakeAdminStore) GetOperationForActor(ctx context.Context, operationID string, actorUserID, orgID, membershipID int64) (*pb.GetOperationResponse, error) {
+	response, err := f.GetOperation(ctx, operationID)
+	if err != nil {
+		return nil, err
+	}
+	if f.operationResult == nil {
+		key := &pb.ApiKeyMetadata{OrgId: orgID, MembershipId: membershipID, OwnerUserId: proto.Int64(actorUserID), CreatedBy: proto.Int64(actorUserID)}
+		response.Result = &pb.OperationResult{Kind: operationCreateAPIKey, Key: key}
+	}
+	return response, nil
 }
 
 func (f *fakeAdminStore) ApplyOrgPolicy(_ context.Context, params ApplyOrgPolicyParams) (*OrgPolicyMutation, error) {
@@ -106,10 +119,20 @@ func insecureAdminOptions() AdminServiceOptions {
 	return AdminServiceOptions{AllowInsecure: true, ConsoleServiceName: "console.test"}
 }
 
+func validCreateKeyRequest(operationID string) *pb.CreateApiKeyRequest {
+	return &pb.CreateApiKeyRequest{OperationId: operationID, Name: "Test key", OrgId: 1, ActorUserId: 9, ActorOrgId: 1, MembershipId: 109}
+}
+
+func validListKeyRequest(operationID string) *pb.ListApiKeysRequest {
+	owner := int64(9)
+	return &pb.ListApiKeysRequest{OperationId: operationID, OrgId: 1, ActorUserId: 9, ActorOrgId: 1, MembershipId: 109, OwnerUserId: &owner}
+}
+
 func TestAdminServiceReturnsSecretOnlyOnce(t *testing.T) {
 	store := &fakeAdminStore{}
 	service := newTestAdminService(t, store, insecureAdminOptions())
-	request := &pb.CreateApiKeyRequest{OperationId: "op-1", OrgId: 1, ActorUserId: 9, ActorOrgId: 1, RequestId: "req-1"}
+	request := validCreateKeyRequest("op-1")
+	request.RequestId = "req-1"
 
 	created, err := service.CreateApiKey(context.Background(), request)
 	if err != nil {
@@ -124,8 +147,8 @@ func TestAdminServiceReturnsSecretOnlyOnce(t *testing.T) {
 	if store.createParams == nil || len(store.createParams.RawKey) != len(created.GetSecret()) {
 		t.Fatal("store did not receive the generated raw key")
 	}
-	if store.createParams.OwnerUserID != nil {
-		t.Fatal("absent owner_user_id must stay NULL")
+	if store.createParams.OwnerUserID == nil || *store.createParams.OwnerUserID != 9 || store.createParams.MembershipID != 109 || store.createParams.Name != "Test key" {
+		t.Fatalf("create did not pin the actor/name/membership: %+v", store.createParams)
 	}
 
 	// Same operation replayed: the stored metadata comes back without the
@@ -143,23 +166,37 @@ func TestAdminServiceReturnsSecretOnlyOnce(t *testing.T) {
 	}
 }
 
-func TestAdminServicePayloadDigestIgnoresRequestIDAndActor(t *testing.T) {
+func TestAdminServicePayloadDigestIncludesMembershipAndName(t *testing.T) {
 	store := &fakeAdminStore{}
 	service := newTestAdminService(t, store, insecureAdminOptions())
-	first := &pb.CreateApiKeyRequest{OperationId: "op-1", OrgId: 5, RequestId: "req-1", ActorUserId: 1, ActorOrgId: 5}
+	first := &pb.CreateApiKeyRequest{OperationId: "op-1", Name: "Named key", OrgId: 5, RequestId: "req-1", ActorUserId: 1, ActorOrgId: 5, MembershipId: 501}
 	if _, err := service.CreateApiKey(context.Background(), first); err != nil {
 		t.Fatal(err)
 	}
 	digest := store.createParams.PayloadDigest
-	second := &pb.CreateApiKeyRequest{OperationId: "op-1", OrgId: 5, RequestId: "req-2", ActorUserId: 42, ActorOrgId: 9}
+	second := &pb.CreateApiKeyRequest{OperationId: "op-1", Name: "Named key", OrgId: 5, RequestId: "req-2", ActorUserId: 1, ActorOrgId: 5, MembershipId: 501}
 	if _, err := service.CreateApiKey(context.Background(), second); err != nil {
 		t.Fatal(err)
 	}
 	if store.createParams.PayloadDigest != digest {
-		t.Fatalf("request_id/actor fields changed the payload digest: %s vs %s", digest, store.createParams.PayloadDigest)
+		t.Fatalf("request_id changed the payload digest: %s vs %s", digest, store.createParams.PayloadDigest)
 	}
-	if store.createParams.ActorScope == "" || !strings.Contains(store.createParams.ActorScope, "user=42") {
+	if store.createParams.ActorScope == "" || !strings.Contains(store.createParams.ActorScope, "user=1") {
 		t.Fatalf("actor scope not recorded: %q", store.createParams.ActorScope)
+	}
+	changedMember := &pb.CreateApiKeyRequest{OperationId: "op-1", Name: "Named key", OrgId: 5, RequestId: "req-3", ActorUserId: 42, ActorOrgId: 5, MembershipId: 542}
+	if _, err := service.CreateApiKey(context.Background(), changedMember); err != nil {
+		t.Fatal(err)
+	}
+	if store.createParams.PayloadDigest == digest {
+		t.Fatal("a different actor membership must change the key payload digest")
+	}
+	changedName := &pb.CreateApiKeyRequest{OperationId: "op-1", Name: "Different", OrgId: 5, RequestId: "req-4", ActorUserId: 1, ActorOrgId: 5, MembershipId: 501}
+	if _, err := service.CreateApiKey(context.Background(), changedName); err != nil {
+		t.Fatal(err)
+	}
+	if store.createParams.PayloadDigest == digest {
+		t.Fatal("a different key name must change the payload digest")
 	}
 }
 
@@ -187,11 +224,15 @@ func TestAdminServiceRejectsInvalidRequests(t *testing.T) {
 		}},
 		{"zero owner", func(s pb.AdminServiceServer) error {
 			owner := int64(0)
-			_, err := s.CreateApiKey(context.Background(), &pb.CreateApiKeyRequest{OperationId: "op", OrgId: 1, OwnerUserId: &owner})
+			request := validCreateKeyRequest("op")
+			request.OwnerUserId = &owner
+			_, err := s.CreateApiKey(context.Background(), request)
 			return err
 		}},
 		{"empty allowlist entry", func(s pb.AdminServiceServer) error {
-			_, err := s.CreateApiKey(context.Background(), &pb.CreateApiKeyRequest{OperationId: "op", OrgId: 1, ModelAllowlist: &pb.ModelAllowlist{Models: []string{" "}}})
+			request := validCreateKeyRequest("op")
+			request.ModelAllowlist = &pb.ModelAllowlist{Models: []string{" "}}
+			_, err := s.CreateApiKey(context.Background(), request)
 			return err
 		}},
 		{"missing key id", func(s pb.AdminServiceServer) error {
@@ -199,7 +240,9 @@ func TestAdminServiceRejectsInvalidRequests(t *testing.T) {
 			return err
 		}},
 		{"bad cursor", func(s pb.AdminServiceServer) error {
-			_, err := s.ListApiKeys(context.Background(), &pb.ListApiKeysRequest{OperationId: "op", PageToken: "not-a-cursor!"})
+			request := validListKeyRequest("op")
+			request.PageToken = "not-a-cursor!"
+			_, err := s.ListApiKeys(context.Background(), request)
 			return err
 		}},
 		{"missing policy org", func(s pb.AdminServiceServer) error {
@@ -244,7 +287,7 @@ func TestAdminServiceMapsStoreErrors(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			store := &fakeAdminStore{createErr: tc.err}
 			service := newTestAdminService(t, store, insecureAdminOptions())
-			_, err := service.CreateApiKey(context.Background(), &pb.CreateApiKeyRequest{OperationId: "op", OrgId: 1})
+			_, err := service.CreateApiKey(context.Background(), validCreateKeyRequest("op"))
 			if status.Code(err) != tc.code {
 				t.Fatalf("err = %v, want %s", err, tc.code)
 			}
@@ -261,29 +304,34 @@ func TestAdminServiceMapsStoreErrors(t *testing.T) {
 func TestAdminServiceBoundsListPage(t *testing.T) {
 	store := &fakeAdminStore{}
 	service := newTestAdminService(t, store, insecureAdminOptions())
-	if _, err := service.ListApiKeys(context.Background(), &pb.ListApiKeysRequest{OperationId: "op"}); err != nil {
+	if _, err := service.ListApiKeys(context.Background(), validListKeyRequest("op")); err != nil {
 		t.Fatal(err)
 	}
 	if store.listParams.PageSize != defaultListPageSize {
 		t.Fatalf("default page size = %d, want %d", store.listParams.PageSize, defaultListPageSize)
 	}
-	if _, err := service.ListApiKeys(context.Background(), &pb.ListApiKeysRequest{OperationId: "op", PageSize: 5000}); err != nil {
+	oversized := validListKeyRequest("op")
+	oversized.PageSize = 5000
+	if _, err := service.ListApiKeys(context.Background(), oversized); err != nil {
 		t.Fatal(err)
 	}
 	if store.listParams.PageSize != maxListPageSize {
 		t.Fatalf("oversized page size = %d, want %d", store.listParams.PageSize, maxListPageSize)
 	}
-	if _, err := service.ListApiKeys(context.Background(), &pb.ListApiKeysRequest{OperationId: "op", PageSize: 7}); err != nil {
+	explicit := validListKeyRequest("op")
+	explicit.PageSize = 7
+	if _, err := service.ListApiKeys(context.Background(), explicit); err != nil {
 		t.Fatal(err)
 	}
 	if store.listParams.PageSize != 7 {
 		t.Fatalf("explicit page size = %d, want 7", store.listParams.PageSize)
 	}
-	owner := int64(4)
-	if _, err := service.ListApiKeys(context.Background(), &pb.ListApiKeysRequest{OperationId: "op", OrgId: 2, OwnerUserId: &owner}); err != nil {
+	owner := int64(9)
+	filtered := &pb.ListApiKeysRequest{OperationId: "op", OrgId: 2, ActorUserId: 9, ActorOrgId: 2, MembershipId: 209, OwnerUserId: &owner}
+	if _, err := service.ListApiKeys(context.Background(), filtered); err != nil {
 		t.Fatal(err)
 	}
-	if store.listParams.OrgID != 2 || store.listParams.OwnerUserID == nil || *store.listParams.OwnerUserID != 4 {
+	if store.listParams.OrgID != 2 || store.listParams.OwnerUserID == nil || *store.listParams.OwnerUserID != 9 || store.listParams.MembershipID != 209 {
 		t.Fatalf("list filters = %+v", store.listParams)
 	}
 }

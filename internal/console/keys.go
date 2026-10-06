@@ -21,9 +21,8 @@ import (
 // snapshot. This file is the service layer the HTTP handlers call, and it is
 // where the ADR-0003 §2.3 permission matrix decides visibility:
 //
-//   - a member (manage_own_keys) sees and manages only keys whose
-//     owner_user_id is the caller;
-//   - an admin/owner (manage_members) manages every key of the organization;
+//   - every role sees and manages only keys bound to its own current
+//     membership incarnation and user id;
 //   - a billing_viewer has no key permission at all and gets 403;
 //   - a non-member gets 404, so organization existence never leaks.
 //
@@ -60,9 +59,6 @@ var (
 	// ErrKeyOperationNotFound is returned when an operation id is unknown, does
 	// not describe an API key, or belongs to a scope the caller cannot see.
 	ErrKeyOperationNotFound = errors.New("console: no api key matches that operation id")
-	// ErrKeyOwnerNotMember is returned when an admin names an owner that is not
-	// an active member of the organization.
-	ErrKeyOwnerNotMember = errors.New("console: key owner is not an active member of the organization")
 	// ErrKeyRequestInvalid marks caller-fixable request values (expiry, owner,
 	// operation id, allowlist, key id).
 	ErrKeyRequestInvalid = errors.New("console: invalid api key request")
@@ -78,16 +74,14 @@ const (
 	maxKeyIDLength          = 128
 	maxAllowlistModels      = 256
 	maxModelNameLength      = 128
-	maxKeyScanPages         = 20
-	maxKeyScanPageSize      = 100
 	// operationIDPrefixCreate / Revoke name the generated idempotency keys so
 	// an operator can tell them apart in control_operations.
 	operationIDPrefixCreate = "key-create"
 	operationIDPrefixRevoke = "key-revoke"
 )
 
-// ListKeysParams filters one key page. OwnerUserID is only honored for
-// admin/owner callers; a member is always scoped to their own keys.
+// ListKeysParams filters one key page. OwnerUserID is accepted only when it
+// equals the caller; a different owner is indistinguishable from a missing key.
 type ListKeysParams struct {
 	OwnerUserID *int64
 	Limit       int
@@ -106,9 +100,10 @@ type KeyPage struct {
 
 // CreateKeyParams describes a key creation request as it arrived from HTTP.
 type CreateKeyParams struct {
-	// OwnerUserID is optional. A member may only name themselves (or omit it);
-	// an admin/owner may name any active member. Omitted means the caller.
+	// OwnerUserID is retained for request compatibility but must be omitted or
+	// equal to the caller. Omitted means the caller.
 	OwnerUserID *int64
+	Name        string
 	ExpiresAt   *time.Time
 	// ModelAllowlist is tri-state: nil inherits the organization policy, a
 	// non-nil empty slice is deny-all (ADR-0003 §2.7).
@@ -207,29 +202,21 @@ func (s *ControlKeyService) ListKeys(ctx context.Context, actorUserID, orgID int
 	if err != nil {
 		return KeyPage{}, err
 	}
-	owner := params.OwnerUserID
-	if !orgWideKeys(membership.Role) {
-		// A member may only ever see their own keys. Asking for somebody else's
-		// is an authorization refusal, not an empty page: silently returning []
-		// would look like "that user has no keys".
-		if owner != nil && *owner != actorUserID {
-			return KeyPage{}, organization.ErrForbidden
-		}
-		self := actorUserID
-		owner = &self
-	} else if owner != nil && *owner <= 0 {
-		return KeyPage{}, fmt.Errorf("%w: owner_user_id must be a positive user id", ErrKeyRequestInvalid)
+	if params.OwnerUserID != nil && *params.OwnerUserID != actorUserID {
+		return KeyPage{}, ErrKeyNotFound
 	}
+	owner := actorUserID
 	limit := normalizeKeyLimit(params.Limit)
 	result, err := s.control.ListApiKeys(ctx, controlclient.ListApiKeysRequest{
-		OperationID: params.OperationID,
-		ActorUserID: actorUserID,
-		ActorOrgID:  orgID,
-		RequestID:   params.RequestID,
-		OrgID:       orgID,
-		OwnerUserID: owner,
-		PageSize:    limit,
-		PageToken:   strings.TrimSpace(params.Cursor),
+		OperationID:  params.OperationID,
+		ActorUserID:  actorUserID,
+		ActorOrgID:   orgID,
+		RequestID:    params.RequestID,
+		OrgID:        orgID,
+		OwnerUserID:  &owner,
+		MembershipID: membership.ID,
+		PageSize:     limit,
+		PageToken:    strings.TrimSpace(params.Cursor),
 	})
 	if err != nil {
 		return KeyPage{}, err
@@ -243,9 +230,12 @@ func (s *ControlKeyService) CreateKey(ctx context.Context, actorUserID, orgID in
 	if err != nil {
 		return CreatedKey{}, err
 	}
-	owner, err := s.resolveOwner(ctx, actorUserID, orgID, membership, params.OwnerUserID)
-	if err != nil {
-		return CreatedKey{}, err
+	if params.OwnerUserID != nil && *params.OwnerUserID != actorUserID {
+		return CreatedKey{}, ErrKeyNotFound
+	}
+	name := strings.TrimSpace(params.Name)
+	if name == "" || len([]rune(name)) > 120 || strings.ContainsAny(name, "\x00\r\n") {
+		return CreatedKey{}, fmt.Errorf("%w: name must contain 1 to 120 characters", ErrKeyRequestInvalid)
 	}
 	allowlist, err := canonicalKeyAllowlist(params.ModelAllowlist)
 	if err != nil {
@@ -267,7 +257,9 @@ func (s *ControlKeyService) CreateKey(ctx context.Context, actorUserID, orgID in
 		ActorOrgID:     orgID,
 		RequestID:      params.RequestID,
 		OrgID:          orgID,
-		OwnerUserID:    owner,
+		MembershipID:   membership.ID,
+		Name:           name,
+		OwnerUserID:    &actorUserID,
 		ExpiresAt:      params.ExpiresAt,
 		ModelAllowlist: allowlist,
 	})
@@ -284,11 +276,8 @@ func (s *ControlKeyService) CreateKey(ctx context.Context, actorUserID, orgID in
 
 // RevokeKey implements POST /api/v1/orgs/{org}/keys/{key}/revoke.
 //
-// An admin/owner revokes inside the organization scope (Control answers
-// NOT_FOUND for a key of another organization, so a Console bug cannot revoke
-// across tenants). A member must first prove ownership by finding the key in
-// their own key list, which keeps the 404 semantics identical for "no such key"
-// and "somebody else's key".
+// Every role revokes only a Key bound to its current membership incarnation.
+// Control makes the ownership decision atomically with the status update.
 func (s *ControlKeyService) RevokeKey(ctx context.Context, actorUserID, orgID int64, keyID string) (RevokeKeyResult, error) {
 	membership, err := s.orgs.AuthorizeOrgAction(ctx, actorUserID, orgID, organization.ActionManageOwnKeys)
 	if err != nil {
@@ -298,21 +287,17 @@ func (s *ControlKeyService) RevokeKey(ctx context.Context, actorUserID, orgID in
 	if cleanKeyID == "" || len(cleanKeyID) > maxKeyIDLength || strings.ContainsAny(cleanKeyID, "\x00\r\n") {
 		return RevokeKeyResult{}, fmt.Errorf("%w: key id is invalid", ErrKeyRequestInvalid)
 	}
-	if !orgWideKeys(membership.Role) {
-		if _, err := s.findOwnKey(ctx, actorUserID, orgID, cleanKeyID); err != nil {
-			return RevokeKeyResult{}, err
-		}
-	}
 	operationID, err := s.resolveOperationID("", operationIDPrefixRevoke)
 	if err != nil {
 		return RevokeKeyResult{}, err
 	}
 	result, err := s.control.RevokeApiKey(ctx, controlclient.RevokeApiKeyRequest{
-		OperationID: operationID,
-		ActorUserID: actorUserID,
-		ActorOrgID:  orgID,
-		KeyID:       cleanKeyID,
-		OrgID:       orgID,
+		OperationID:  operationID,
+		ActorUserID:  actorUserID,
+		ActorOrgID:   orgID,
+		KeyID:        cleanKeyID,
+		OrgID:        orgID,
+		MembershipID: membership.ID,
 	})
 	if err != nil {
 		return RevokeKeyResult{}, err
@@ -336,9 +321,10 @@ func (s *ControlKeyService) RecoverKey(ctx context.Context, actorUserID, orgID i
 		return RecoveredKey{}, fmt.Errorf("%w: operation_id is invalid", ErrKeyRequestInvalid)
 	}
 	result, err := s.control.GetOperation(ctx, controlclient.GetOperationRequest{
-		OperationID: cleanOperationID,
-		ActorUserID: actorUserID,
-		ActorOrgID:  orgID,
+		OperationID:  cleanOperationID,
+		ActorUserID:  actorUserID,
+		ActorOrgID:   orgID,
+		MembershipID: membership.ID,
 	})
 	if errors.Is(err, controlclient.ErrNotFound) {
 		return RecoveredKey{}, ErrKeyOperationNotFound
@@ -347,84 +333,16 @@ func (s *ControlKeyService) RecoverKey(ctx context.Context, actorUserID, orgID i
 		return RecoveredKey{}, err
 	}
 	key := result.Key
-	if key == nil || key.OrgID != orgID {
+	if result.Kind != "create_api_key" || key == nil || key.OrgID != orgID || key.MembershipID != membership.ID || key.OwnerUserID == nil || *key.OwnerUserID != actorUserID || key.CreatedBy == nil || *key.CreatedBy != actorUserID {
 		// Wrong organization, wrong kind of operation, or another tenant: one
 		// indistinguishable answer.
 		return RecoveredKey{}, ErrKeyOperationNotFound
-	}
-	if !orgWideKeys(membership.Role) {
-		if key.OwnerUserID == nil || *key.OwnerUserID != actorUserID {
-			return RecoveredKey{}, ErrKeyOperationNotFound
-		}
 	}
 	operation := result.OperationID
 	if strings.TrimSpace(operation) == "" {
 		operation = cleanOperationID
 	}
 	return RecoveredKey{Key: *key, OperationID: operation, ResultingVersion: result.ResultingVersion}, nil
-}
-
-// resolveOwner decides which user owns a new key and refuses a member who tries
-// to create a key for somebody else.
-func (s *ControlKeyService) resolveOwner(ctx context.Context, actorUserID, orgID int64, membership organization.Membership, requested *int64) (*int64, error) {
-	if requested != nil && *requested <= 0 {
-		return nil, fmt.Errorf("%w: owner_user_id must be a positive user id", ErrKeyRequestInvalid)
-	}
-	if !orgWideKeys(membership.Role) {
-		if requested != nil && *requested != actorUserID {
-			return nil, organization.ErrForbidden
-		}
-		self := actorUserID
-		return &self, nil
-	}
-	if requested == nil || *requested == actorUserID {
-		self := actorUserID
-		return &self, nil
-	}
-	// An admin/owner may create a key for another member, but only for an
-	// active member of this organization: Control cannot check that itself.
-	members, err := s.orgs.ListMembers(ctx, actorUserID, orgID)
-	if err != nil {
-		return nil, err
-	}
-	for _, member := range members {
-		if member.UserID == *requested {
-			owner := *requested
-			return &owner, nil
-		}
-	}
-	return nil, ErrKeyOwnerNotMember
-}
-
-// findOwnKey scans the caller's own keys (bounded) so a member cannot revoke a
-// key they do not own. Control has no GetKey RPC; the list is owner-scoped, so
-// the scan only ever sees the caller's keys.
-func (s *ControlKeyService) findOwnKey(ctx context.Context, actorUserID, orgID int64, keyID string) (controlclient.KeyMetadata, error) {
-	self := actorUserID
-	pageToken := ""
-	for page := 0; page < maxKeyScanPages; page++ {
-		result, err := s.control.ListApiKeys(ctx, controlclient.ListApiKeysRequest{
-			ActorUserID: actorUserID,
-			ActorOrgID:  orgID,
-			OrgID:       orgID,
-			OwnerUserID: &self,
-			PageSize:    maxKeyScanPageSize,
-			PageToken:   pageToken,
-		})
-		if err != nil {
-			return controlclient.KeyMetadata{}, err
-		}
-		for _, key := range result.Keys {
-			if key.KeyID == keyID {
-				return key, nil
-			}
-		}
-		pageToken = result.NextPageToken
-		if strings.TrimSpace(pageToken) == "" {
-			break
-		}
-	}
-	return controlclient.KeyMetadata{}, ErrKeyNotFound
 }
 
 // resolveOperationID validates a client-supplied idempotency key or generates
@@ -438,13 +356,6 @@ func (s *ControlKeyService) resolveOperationID(requested, prefix string) (string
 		return "", fmt.Errorf("%w: operation_id must be at most %d bytes and contain no control characters", ErrKeyRequestInvalid, maxKeyOperationIDLength)
 	}
 	return clean, nil
-}
-
-// orgWideKeys reports whether the role manages the whole organization's keys.
-// The matrix is the only source of truth: manage_members is what separates
-// admin/owner from member.
-func orgWideKeys(role string) bool {
-	return organization.Allowed(role, organization.ActionManageMembers)
 }
 
 func normalizeKeyLimit(limit int) int {

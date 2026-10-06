@@ -503,12 +503,13 @@ func KeyRecordsToAuth(records []*pb.KeyRecord) []auth.KeyRecord {
 			continue
 		}
 		projected := auth.KeyRecord{
-			ID:       record.KeyId,
-			Hash:     record.KeyHash,
-			Prefix:   record.KeyPrefix,
-			TenantID: record.TenantId,
-			Status:   record.Status,
-			OrgID:    record.OrgId,
+			ID:           record.KeyId,
+			Hash:         record.KeyHash,
+			Prefix:       record.KeyPrefix,
+			TenantID:     record.TenantId,
+			Status:       record.Status,
+			OrgID:        record.OrgId,
+			MembershipID: record.GetMembershipId(),
 		}
 		if record.OwnerUserId != nil {
 			owner := record.GetOwnerUserId()

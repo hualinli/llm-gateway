@@ -191,14 +191,16 @@ func (f *fakeUsage) paidCount() int {
 func sampleKey(keyID string, orgID int64, owner int64) controlclient.KeyMetadata {
 	ownerUserID := owner
 	return controlclient.KeyMetadata{
-		KeyID:       keyID,
-		KeyPrefix:   "sk-prefix...",
-		OrgID:       orgID,
-		OwnerUserID: &ownerUserID,
-		CreatedBy:   &ownerUserID,
-		Status:      "active",
-		CreatedAt:   time.Date(2026, 10, 1, 11, 0, 0, 0, time.UTC),
-		TenantID:    "org:" + formatID(orgID),
+		KeyID:        keyID,
+		Name:         "Example key",
+		KeyPrefix:    "sk-prefix...",
+		OrgID:        orgID,
+		MembershipID: orgID*100 + owner,
+		OwnerUserID:  &ownerUserID,
+		CreatedBy:    &ownerUserID,
+		Status:       "active",
+		CreatedAt:    time.Date(2026, 10, 1, 11, 0, 0, 0, time.UTC),
+		TenantID:     "org:" + formatID(orgID),
 	}
 }
 

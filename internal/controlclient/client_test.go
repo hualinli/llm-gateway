@@ -159,6 +159,8 @@ func TestCreateApiKeyReturnsSecretOnceAndMapsMetadata(t *testing.T) {
 		return &pb.CreateApiKeyResponse{
 			Key: &pb.ApiKeyMetadata{
 				KeyId:          "key_1",
+				Name:           "production",
+				MembershipId:   77,
 				KeyPrefix:      "sk-abc12...",
 				OrgId:          7,
 				OwnerUserId:    &owner,
@@ -182,6 +184,8 @@ func TestCreateApiKeyReturnsSecretOnceAndMapsMetadata(t *testing.T) {
 		ActorOrgID:     7,
 		RequestID:      "req-1",
 		OrgID:          7,
+		MembershipID:   77,
+		Name:           "production",
 		OwnerUserID:    &owner,
 		ExpiresAt:      &expires,
 		ModelAllowlist: &models,
@@ -194,6 +198,9 @@ func TestCreateApiKeyReturnsSecretOnceAndMapsMetadata(t *testing.T) {
 	}
 	if result.ResultingVersion != 12 || result.Key.KeyID != "key_1" || result.Key.Status != "active" {
 		t.Fatalf("unexpected result %+v", result)
+	}
+	if result.Key.Name != "production" || result.Key.MembershipID != 77 {
+		t.Fatalf("name/membership metadata = %q/%d, want production/77", result.Key.Name, result.Key.MembershipID)
 	}
 	if result.Key.OwnerUserID == nil || *result.Key.OwnerUserID != 42 {
 		t.Fatalf("owner=%v, want 42", result.Key.OwnerUserID)
@@ -215,7 +222,8 @@ func TestCreateApiKeyReturnsSecretOnceAndMapsMetadata(t *testing.T) {
 		t.Fatalf("last request type %T", fs.service.last(t))
 	}
 	if request.GetOperationId() != "key-create-1" || request.GetActorUserId() != 42 ||
-		request.GetActorOrgId() != 7 || request.GetRequestId() != "req-1" || request.GetOrgId() != 7 {
+		request.GetActorOrgId() != 7 || request.GetRequestId() != "req-1" || request.GetOrgId() != 7 ||
+		request.GetMembershipId() != 77 || request.GetName() != "production" {
 		t.Fatalf("wire request lost the admin header: %+v", request)
 	}
 }
@@ -312,13 +320,13 @@ func TestGetOperationRecoversMetadataWithoutSecret(t *testing.T) {
 			CreatedAt:   timestamppb.New(created),
 			Result: &pb.OperationResult{
 				Kind:             "create_api_key",
-				Key:              &pb.ApiKeyMetadata{KeyId: "key_9", OrgId: 7, Status: "active"},
+				Key:              &pb.ApiKeyMetadata{KeyId: "key_9", Name: "production", MembershipId: 77, OrgId: 7, Status: "active"},
 				ResultingVersion: 21,
 			},
 		}, nil
 	}
 	client := dialFake(t, fs, Options{})
-	result, err := client.GetOperation(context.Background(), GetOperationRequest{OperationID: "lost-op"})
+	result, err := client.GetOperation(context.Background(), GetOperationRequest{OperationID: "lost-op", ActorUserID: 42, ActorOrgID: 7, MembershipID: 77})
 	if err != nil {
 		t.Fatalf("GetOperation: %v", err)
 	}
@@ -327,6 +335,13 @@ func TestGetOperationRecoversMetadataWithoutSecret(t *testing.T) {
 	}
 	if result.ResultingVersion != 21 || !result.CreatedAt.Equal(created) {
 		t.Fatalf("unexpected versions/time %+v", result)
+	}
+	if result.Key.Name != "production" || result.Key.MembershipID != 77 {
+		t.Fatalf("recovered name/membership metadata = %q/%d, want production/77", result.Key.Name, result.Key.MembershipID)
+	}
+	request := fs.service.last(t).(*pb.GetOperationRequest)
+	if request.GetActorUserId() != 42 || request.GetActorOrgId() != 7 || request.GetMembershipId() != 77 {
+		t.Fatalf("GetOperation request lost actor membership binding: %+v", request)
 	}
 }
 

@@ -136,6 +136,7 @@ func makeAdminCertificates(t *testing.T) adminCertificates {
 func TestAPIKeyAdminGRPCEndToEndPostgres(t *testing.T) {
 	db := isolatedAdminDB(t)
 	orgID, userID := seedAdminIdentity(t, db, "grpc@example.com", "tenant-grpc")
+	_, membershipID := ownerMembership(t, db, orgID)
 	keyStore := newAdminStore(t, db)
 	certs := makeAdminCertificates(t)
 
@@ -172,7 +173,7 @@ func TestAPIKeyAdminGRPCEndToEndPostgres(t *testing.T) {
 
 	owner := userID
 	created, err := client.CreateApiKey(ctx, &pb.CreateApiKeyRequest{
-		OperationId: "op-e2e-create", OrgId: orgID, OwnerUserId: &owner,
+		OperationId: "op-e2e-create", Name: "gRPC test key", MembershipId: membershipID, OrgId: orgID, OwnerUserId: &owner,
 		ActorUserId: userID, ActorOrgId: orgID, RequestId: "req-e2e-create",
 		ModelAllowlist: &pb.ModelAllowlist{Models: []string{"gpt-b", "gpt-a"}},
 	})
@@ -185,7 +186,8 @@ func TestAPIKeyAdminGRPCEndToEndPostgres(t *testing.T) {
 	if created.GetReplayed() {
 		t.Fatal("first create reported a replay")
 	}
-	if created.GetKey().GetOrgId() != orgID || created.GetKey().GetStatus() != "active" {
+	if created.GetKey().GetOrgId() != orgID || created.GetKey().GetStatus() != "active" ||
+		created.GetKey().GetMembershipId() != membershipID || created.GetKey().GetName() != "gRPC test key" {
 		t.Fatalf("created key metadata = %+v", created.GetKey())
 	}
 	if created.GetKey().GetTenantId() != "tenant-grpc" {
@@ -211,6 +213,9 @@ func TestAPIKeyAdminGRPCEndToEndPostgres(t *testing.T) {
 	if snapshot.GetKeyRecords()[0].GetKeyId() != created.GetKey().GetKeyId() {
 		t.Fatalf("snapshot projection = %+v", snapshot.GetKeyRecords())
 	}
+	if snapshot.GetKeyRecords()[0].GetMembershipId() != membershipID {
+		t.Fatalf("snapshot omitted membership pin: %+v", snapshot.GetKeyRecords()[0])
+	}
 
 	// The raw key resolves through the Gateway-facing mapping and never
 	// appears in the snapshot payload.
@@ -227,13 +232,16 @@ func TestAPIKeyAdminGRPCEndToEndPostgres(t *testing.T) {
 	}
 
 	listed, err := client.ListApiKeys(ctx, &pb.ListApiKeysRequest{
-		OperationId: "op-e2e-list", OrgId: orgID, PageSize: 1, ActorUserId: userID, ActorOrgId: orgID, RequestId: "req-e2e-list",
+		OperationId: "op-e2e-list", OrgId: orgID, MembershipId: membershipID, OwnerUserId: &owner, PageSize: 1, ActorUserId: userID, ActorOrgId: orgID, RequestId: "req-e2e-list",
 	})
 	if err != nil {
 		t.Fatalf("ListApiKeys: %v", err)
 	}
 	if len(listed.GetKeys()) != 1 || listed.GetKeys()[0].GetKeyId() != created.GetKey().GetKeyId() {
 		t.Fatalf("list = %+v", listed.GetKeys())
+	}
+	if listed.GetKeys()[0].GetName() != "gRPC test key" || listed.GetKeys()[0].GetMembershipId() != membershipID {
+		t.Fatalf("list lost the key name/membership binding: %+v", listed.GetKeys()[0])
 	}
 	if listed.GetNextPageToken() != "" {
 		t.Fatalf("unexpected next page token %q", listed.GetNextPageToken())
@@ -248,7 +256,7 @@ func TestAPIKeyAdminGRPCEndToEndPostgres(t *testing.T) {
 
 	// Idempotent replay: same operation id, same payload, no second key.
 	replayed, err := client.CreateApiKey(ctx, &pb.CreateApiKeyRequest{
-		OperationId: "op-e2e-create", OrgId: orgID, OwnerUserId: &owner,
+		OperationId: "op-e2e-create", Name: "gRPC test key", MembershipId: membershipID, OrgId: orgID, OwnerUserId: &owner,
 		ActorUserId: userID, ActorOrgId: orgID, RequestId: "req-e2e-create-retry",
 		ModelAllowlist: &pb.ModelAllowlist{Models: []string{"gpt-a", "gpt-b"}},
 	})
@@ -264,7 +272,7 @@ func TestAPIKeyAdminGRPCEndToEndPostgres(t *testing.T) {
 
 	// ALREADY_EXISTS: same operation id, different business payload.
 	_, err = client.CreateApiKey(ctx, &pb.CreateApiKeyRequest{
-		OperationId: "op-e2e-create", OrgId: orgID, OwnerUserId: &owner,
+		OperationId: "op-e2e-create", Name: "gRPC test key", MembershipId: membershipID, OrgId: orgID, OwnerUserId: &owner,
 		ActorUserId: userID, ActorOrgId: orgID, RequestId: "req-e2e-conflict",
 		ModelAllowlist: &pb.ModelAllowlist{Models: []string{"gpt-z"}},
 	})
@@ -277,7 +285,8 @@ func TestAPIKeyAdminGRPCEndToEndPostgres(t *testing.T) {
 	staleVersion := int64(0)
 	_, err = client.RevokeApiKey(ctx, &pb.RevokeApiKeyRequest{
 		OperationId: "op-e2e-stale", KeyId: created.GetKey().GetKeyId(), OrgId: orgID,
-		ActorUserId: userID, ActorOrgId: orgID, ExpectedVersion: &staleVersion, RequestId: "req-e2e-stale",
+		MembershipId: membershipID,
+		ActorUserId:  userID, ActorOrgId: orgID, ExpectedVersion: &staleVersion, RequestId: "req-e2e-stale",
 	})
 	if status.Code(err) != codes.FailedPrecondition || !strings.Contains(status.Convert(err).Message(), "current 1") {
 		t.Fatalf("stale expected_version err = %v, want FAILED_PRECONDITION with current 1", err)
@@ -286,7 +295,8 @@ func TestAPIKeyAdminGRPCEndToEndPostgres(t *testing.T) {
 
 	revoked, err := client.RevokeApiKey(ctx, &pb.RevokeApiKeyRequest{
 		OperationId: "op-e2e-revoke", KeyId: created.GetKey().GetKeyId(), OrgId: orgID,
-		ActorUserId: userID, ActorOrgId: orgID, RequestId: "req-e2e-revoke",
+		MembershipId: membershipID,
+		ActorUserId:  userID, ActorOrgId: orgID, RequestId: "req-e2e-revoke",
 	})
 	if err != nil {
 		t.Fatalf("RevokeApiKey: %v", err)
@@ -304,13 +314,16 @@ func TestAPIKeyAdminGRPCEndToEndPostgres(t *testing.T) {
 
 	// GetOperation recovers the stored result, never the secret.
 	operation, err := client.GetOperation(ctx, &pb.GetOperationRequest{
-		OperationId: "op-e2e-create", ActorUserId: userID, ActorOrgId: orgID, RequestId: "req-e2e-operation",
+		OperationId: "op-e2e-create", MembershipId: membershipID, ActorUserId: userID, ActorOrgId: orgID, RequestId: "req-e2e-operation",
 	})
 	if err != nil {
 		t.Fatalf("GetOperation: %v", err)
 	}
 	if operation.GetKind() != operationCreateAPIKey || operation.GetResult().GetKey().GetKeyId() != created.GetKey().GetKeyId() {
 		t.Fatalf("operation = %+v", operation)
+	}
+	if operation.GetResult().GetKey().GetName() != "gRPC test key" || operation.GetResult().GetKey().GetMembershipId() != membershipID {
+		t.Fatalf("recovery lost the key name/membership binding: %+v", operation.GetResult().GetKey())
 	}
 	operationJSON := protojson.Format(operation)
 	if strings.Contains(operationJSON, created.GetSecret()) {
@@ -367,13 +380,13 @@ func TestAPIKeyAdminGRPCEndToEndPostgres(t *testing.T) {
 		t.Fatalf("snapshot policy = %+v", policy)
 	}
 	later, err := client.CreateApiKey(ctx, &pb.CreateApiKeyRequest{
-		OperationId: "op-e2e-create-2", OrgId: orgID, ActorUserId: userID, ActorOrgId: orgID,
+		OperationId: "op-e2e-create-2", Name: "later key", MembershipId: membershipID, OrgId: orgID, ActorUserId: userID, ActorOrgId: orgID,
 		RequestId: "req-e2e-create-2",
 	})
 	if err != nil {
 		t.Fatalf("CreateApiKey after policy: %v", err)
 	}
-	if later.GetKey().GetPolicyVersion() != 1 || later.GetKey().OwnerUserId != nil {
+	if later.GetKey().GetPolicyVersion() != 1 || later.GetKey().GetOwnerUserId() != userID || later.GetKey().GetMembershipId() != membershipID || later.GetKey().GetName() != "later key" {
 		t.Fatalf("key after policy = %+v", later.GetKey())
 	}
 }

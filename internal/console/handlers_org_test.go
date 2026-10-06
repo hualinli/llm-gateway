@@ -749,6 +749,59 @@ func TestListOrgAuditRequiresAdminAndPaginates(t *testing.T) {
 	}
 }
 
+func TestListOrgAuditHidesOtherMembersKeyEventsWithoutChangingCursor(t *testing.T) {
+	h := newHarness(t, nil)
+	fx := h.t03Session(42, "admin@example.com")
+	h.orgs.authorizeFn = func(_ context.Context, actorUserID, orgID int64, action organization.Action) (organization.Membership, error) {
+		if actorUserID != 42 || orgID != 2 || action != organization.ActionManageMembers {
+			t.Fatalf("AuthorizeOrgAction(%d, %d, %q), want (42, 2, manage_members)", actorUserID, orgID, action)
+		}
+		return organization.Membership{OrgID: 2, UserID: 42, Role: "admin", Status: "active"}, nil
+	}
+	otherActor := int64(10)
+	currentActor := int64(42)
+	requestID := "req-page"
+	h.auditStore.listFn = func(_ context.Context, orgID int64, limit int, beforeID int64) ([]AuditRecord, string, error) {
+		if orgID != 2 || limit != 5 || beforeID != 0 {
+			t.Fatalf("audit store scope/page = %d/%d/%d", orgID, limit, beforeID)
+		}
+		return []AuditRecord{
+			{ID: 15, ActorUserID: &otherActor, ActorOrgID: &orgID, Action: ActionKeyCreate, TargetType: TargetAPIKey, TargetID: "key_foreign", Outcome: "success", Detail: json.RawMessage(`{"name":"Foreign key","prefix":"sk-foreign","metadata":{"key_id":"key_nested_foreign","secret":"upstream-secret"}}`), RequestID: &requestID},
+			{ID: 14, ActorUserID: &currentActor, ActorOrgID: &orgID, Action: ActionKeyRevoke, TargetType: TargetAPIKey, TargetID: "key_self", Outcome: "success", Detail: json.RawMessage(`{"prefix":"sk-self"}`), RequestID: &requestID},
+			{ID: 13, ActorUserID: nil, ActorOrgID: &orgID, Action: ActionKeyCreate, TargetType: TargetAPIKey, TargetID: "legacy_key", Outcome: "success", Detail: json.RawMessage(`{"prefix":"sk-legacy"}`), RequestID: &requestID},
+			{ID: 12, ActorUserID: &otherActor, ActorOrgID: &orgID, Action: ActionMemberRemove, TargetType: TargetMembership, TargetID: "member-10", Outcome: "success", Detail: json.RawMessage(`{"role":"member"}`), RequestID: &requestID},
+		}, "10", nil
+	}
+
+	rec := h.orgReq(http.MethodGet, "/api/v1/orgs/2/audit?limit=5", "", fx, false)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list audit = %d, want 200 (body=%s)", rec.Code, rec.Body.String())
+	}
+	var page struct {
+		Items      []auditEventDTO `json:"items"`
+		NextCursor *string         `json:"next_cursor"`
+	}
+	decodeInto(t, rec, &page)
+	if len(page.Items) != 2 {
+		t.Fatalf("visible audit page has %d items, want own Key event and ordinary event: %+v", len(page.Items), page.Items)
+	}
+	if page.Items[0].TargetID != "key_self" || page.Items[1].TargetID != "member-10" {
+		t.Fatalf("visible rows = %+v, want own Key then ordinary member event", page.Items)
+	}
+	if page.NextCursor == nil || *page.NextCursor != "10" {
+		t.Fatalf("next_cursor=%v, want original unfiltered page cursor 10", page.NextCursor)
+	}
+	for _, hidden := range []string{"key_foreign", "Foreign key", "sk-foreign", "key_nested_foreign", "upstream-secret", "legacy_key", "sk-legacy"} {
+		if strings.Contains(rec.Body.String(), hidden) {
+			t.Fatalf("other member or legacy Key detail %q leaked in audit response: %s", hidden, rec.Body.String())
+		}
+	}
+	calls := h.auditStore.calls
+	if len(calls) != 1 {
+		t.Fatalf("audit store calls=%+v, want one", calls)
+	}
+}
+
 // TestAuditEndpointWithoutStoreIsInternalError：未配置审计存储时绝不能假装
 // “没有审计记录”，必须是 500。
 func TestAuditEndpointWithoutStoreIsInternalError(t *testing.T) {

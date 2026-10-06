@@ -101,6 +101,13 @@ func TestCreateAPIKeyDigestIsBusinessFieldSensitive(t *testing.T) {
 	if again := createAPIKeyDigest(3, &owner, expiry, true, allowlist); again != base {
 		t.Fatal("digest is not deterministic")
 	}
+	bound := createAPIKeyDigest(3, &owner, expiry, true, allowlist, apiKeyDigestBinding{membershipID: 21, name: "production"})
+	if bound == createAPIKeyDigest(3, &owner, expiry, true, allowlist, apiKeyDigestBinding{membershipID: 21, name: "staging"}) {
+		t.Fatal("key name did not change the create digest")
+	}
+	if bound == createAPIKeyDigest(3, &owner, expiry, true, allowlist, apiKeyDigestBinding{membershipID: 22, name: "production"}) {
+		t.Fatal("membership incarnation did not change the create digest")
+	}
 	// Sub-second precision is normalized away: the expiry effect is per second.
 	nanos := createAPIKeyDigest(3, &owner, expiry.Add(500*time.Millisecond), true, allowlist)
 	if nanos != base {

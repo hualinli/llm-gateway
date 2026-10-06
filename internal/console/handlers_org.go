@@ -338,7 +338,24 @@ func (s *server) listOrgAudit(ctx context.Context, c *app.RequestContext) {
 		s.writeInternal(c, "list audit events", err)
 		return
 	}
-	writeJSON(c, http.StatusOK, auditPage{Items: toAuditEventDTOs(records), NextCursor: optionalCursor(next)})
+	visible := filterOrgAuditRecordsForActor(records, auth.User.ID)
+	writeJSON(c, http.StatusOK, auditPage{Items: toAuditEventDTOs(visible), NextCursor: optionalCursor(next)})
+}
+
+// filterOrgAuditRecordsForActor keeps organization administrators from learning
+// which Key another member created or revoked. Keep the AuditStore cursor
+// unchanged: it is computed from the unfiltered database page, so hiding rows
+// must not make pagination skip or repeat records.
+func filterOrgAuditRecordsForActor(records []AuditRecord, actorUserID int64) []AuditRecord {
+	visible := make([]AuditRecord, 0, len(records))
+	for _, record := range records {
+		keyEvent := record.TargetType == TargetAPIKey || record.Action == ActionKeyCreate || record.Action == ActionKeyRevoke
+		if keyEvent && (record.ActorUserID == nil || *record.ActorUserID != actorUserID) {
+			continue
+		}
+		visible = append(visible, record)
+	}
+	return visible
 }
 
 // resolveInvitationTTL resolves the optional per-request TTL. 0 means "use the

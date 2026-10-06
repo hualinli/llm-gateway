@@ -380,7 +380,7 @@ func (f *fakeOrgs) AuthorizeOrgAction(ctx context.Context, actorUserID, orgID in
 		if !organization.Allowed(role, action) {
 			return organization.Membership{}, organization.ErrForbidden
 		}
-		return organization.Membership{OrgID: orgID, UserID: actorUserID, Role: role, Status: "active"}, nil
+		return organization.Membership{ID: orgID*100 + actorUserID, OrgID: orgID, UserID: actorUserID, Role: role, Status: "active"}, nil
 	}
 	return organization.Membership{}, errors.New("authorizeOrgAction not configured")
 }
