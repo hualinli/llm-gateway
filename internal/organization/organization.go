@@ -48,13 +48,15 @@ type MemberOrg struct {
 }
 
 var (
-	ErrNotFound              = errors.New("organization: not found")
-	ErrNotMember             = errors.New("organization: not an active member")
-	ErrNameInvalid           = errors.New("organization: invalid name")
-	ErrPersonalTeam          = errors.New("organization: personal accounts do not support team membership")
-	ErrLimitRequired         = errors.New("organization: monthly_limit_micro must be explicitly provided")
-	ErrOrganizationSuspended = errors.New("organization: account is suspended")
-	ErrMemberStatusInvalid   = errors.New("organization: member status must be active or suspended")
+	ErrNotFound                    = errors.New("organization: not found")
+	ErrNotMember                   = errors.New("organization: not an active member")
+	ErrNameInvalid                 = errors.New("organization: invalid name")
+	ErrEnterpriseOwnerEmailInvalid = errors.New("organization: enterprise owner email is invalid")
+	ErrEnterpriseOwnerInactive     = errors.New("organization: enterprise owner account is not active")
+	ErrPersonalTeam                = errors.New("organization: personal accounts do not support team membership")
+	ErrLimitRequired               = errors.New("organization: monthly_limit_micro must be explicitly provided")
+	ErrOrganizationSuspended       = errors.New("organization: account is suspended")
+	ErrMemberStatusInvalid         = errors.New("organization: member status must be active or suspended")
 )
 
 const (
@@ -157,6 +159,65 @@ func (s *Service) CreateEnterprise(ctx context.Context, ownerUserID int64, name 
 		return Organization{}, err
 	}
 	return org, nil
+}
+
+// CreateEnterpriseForEmail creates an enterprise for an already-registered,
+// active owner. Organization, owner membership, and wallet are one transaction;
+// the platform operator who calls this service is deliberately not an input and
+// never becomes a member as a side effect.
+func (s *Service) CreateEnterpriseForEmail(ctx context.Context, ownerEmail, name string) (MemberOrg, error) {
+	clean, err := normalizeOrgName(name)
+	if err != nil {
+		return MemberOrg{}, err
+	}
+	normalizedEmail := normalizeInvitationEmail(ownerEmail)
+	if err := validateInvitationEmail(normalizedEmail); err != nil {
+		return MemberOrg{}, ErrEnterpriseOwnerEmailInvalid
+	}
+
+	now := time.Now().UTC()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return MemberOrg{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var ownerUserID int64
+	var ownerStatus string
+	err = tx.QueryRowContext(ctx, queryLockUserByEmail, normalizedEmail).Scan(&ownerUserID, &ownerStatus)
+	if errors.Is(err, sql.ErrNoRows) {
+		return MemberOrg{}, ErrNotFound
+	}
+	if err != nil {
+		return MemberOrg{}, err
+	}
+	if ownerStatus != "active" {
+		return MemberOrg{}, ErrEnterpriseOwnerInactive
+	}
+
+	org, err := scanOrganization(tx.QueryRowContext(ctx, queryInsertOrganization,
+		typeEnterprise, clean, ownerUserID, now).Scan)
+	if err != nil {
+		return MemberOrg{}, err
+	}
+	var owner Membership
+	if err := scanMembership(tx.QueryRowContext(ctx, queryInsertActivationOwnerMembership,
+		org.ID, ownerUserID, roleOwner, nil, now).Scan, &owner); err != nil {
+		return MemberOrg{}, err
+	}
+	if err := ensureZeroBalanceWallet(ctx, tx, org.ID, now); err != nil {
+		return MemberOrg{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return MemberOrg{}, err
+	}
+	return MemberOrg{
+		Organization:      org,
+		MembershipID:      owner.ID,
+		Role:              owner.Role,
+		Status:            owner.Status,
+		MonthlyLimitMicro: cloneLimit(owner.MonthlyLimitMicro),
+	}, nil
 }
 
 // ensureZeroBalanceWallet makes every newly provisioned organization immediately

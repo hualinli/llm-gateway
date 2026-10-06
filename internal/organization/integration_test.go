@@ -238,6 +238,62 @@ func TestCreateEnterpriseAddsOwnerMembership(t *testing.T) {
 	}
 }
 
+func TestCreateEnterpriseForEmailRequiresActiveOwnerAndPreservesPersonalAccount(t *testing.T) {
+	db, _ := isolatedDSN(t)
+	ctx := context.Background()
+	users := iam.NewService(db, iam.Options{BcryptCost: bcrypt.MinCost, LoginRatePerMinute: 600, LoginBurst: 100})
+	owner, _, err := users.Register(ctx, " Owner@Example.com ", "correct horse battery staple", "org-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	disabled, err := users.CreateUser(ctx, "disabled-owner@example.com", "correct horse battery staple", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := users.SetUserStatus(ctx, disabled.ID, "disabled"); err != nil {
+		t.Fatal(err)
+	}
+
+	orgs := organization.NewService(db)
+	if _, err := orgs.CreateEnterpriseForEmail(ctx, "missing@example.com", "Missing Owner Inc"); !errors.Is(err, organization.ErrNotFound) {
+		t.Fatalf("missing owner = %v, want ErrNotFound", err)
+	}
+	if _, err := orgs.CreateEnterpriseForEmail(ctx, disabled.Email, "Disabled Owner Inc"); !errors.Is(err, organization.ErrEnterpriseOwnerInactive) {
+		t.Fatalf("disabled owner = %v, want ErrEnterpriseOwnerInactive", err)
+	}
+	if _, err := orgs.CreateEnterpriseForEmail(ctx, "not an email", "Invalid Owner Inc"); !errors.Is(err, organization.ErrEnterpriseOwnerEmailInvalid) {
+		t.Fatalf("invalid owner email = %v, want ErrEnterpriseOwnerEmailInvalid", err)
+	}
+	var disabledEnterprises, disabledWallets int
+	if err := db.QueryRow(`SELECT count(*) FROM organizations WHERE type='enterprise' AND owner_user_id=$1`, disabled.ID).Scan(&disabledEnterprises); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`SELECT count(*) FROM billing_accounts b JOIN organizations o ON o.id=b.org_id WHERE o.type='enterprise' AND o.owner_user_id=$1`, disabled.ID).Scan(&disabledWallets); err != nil {
+		t.Fatal(err)
+	}
+	if disabledEnterprises != 0 || disabledWallets != 0 {
+		t.Fatalf("disabled owner provisioning left enterprise/wallet rows=%d/%d", disabledEnterprises, disabledWallets)
+	}
+
+	created, err := orgs.CreateEnterpriseForEmail(ctx, " OWNER@EXAMPLE.COM ", "  Acme Email Owner  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.Organization.Type != "enterprise" || created.Organization.Name != "Acme Email Owner" ||
+		created.Organization.Status != "active" || created.Role != "owner" || created.Status != "active" ||
+		created.MonthlyLimitMicro != nil {
+		t.Fatalf("created enterprise membership = %+v", created)
+	}
+	assertZeroBalanceWallet(t, db, created.Organization.ID)
+	if countPersonalOrgs(t, db, owner.ID) != 1 {
+		t.Fatalf("existing personal account was not preserved for owner %d", owner.ID)
+	}
+	if membership, err := orgs.Membership(ctx, owner.ID, created.Organization.ID); err != nil ||
+		membership.Role != "owner" || membership.Status != "active" || membership.MonthlyLimitMicro != nil {
+		t.Fatalf("owner membership = %+v, err=%v", membership, err)
+	}
+}
+
 func TestUserInTwoOrganizationsIsListedCorrectly(t *testing.T) {
 	db, _ := isolatedDSN(t)
 	svc := organization.NewService(db)

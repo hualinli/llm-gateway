@@ -13,6 +13,9 @@ var queryGetPersonalOrganization string
 //go:embed queries/insert_organization.sql
 var queryInsertOrganization string
 
+//go:embed queries/lock_user_by_email.sql
+var queryLockUserByEmail string
+
 //go:embed queries/insert_membership.sql
 var queryInsertMembership string
 
