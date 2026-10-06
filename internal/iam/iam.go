@@ -63,6 +63,8 @@ var (
 	ErrCSRF               = errors.New("iam: csrf token mismatch")
 	ErrRateLimited        = errors.New("iam: too many login attempts")
 	ErrNotFound           = errors.New("iam: not found")
+	ErrPasswordIncorrect  = errors.New("iam: current password is incorrect")
+	ErrInvalidInput       = errors.New("iam: invalid input")
 )
 
 // 服务层输入校验错误。它们没有哨兵值：HTTP 边界必须先做 400 级别的输入校验，
@@ -154,27 +156,27 @@ func normalizeEmail(email string) string {
 // 不做 RFC 5322 全解析，也不发送邮件（ADR-0002 明确无邮件验证）。
 func validateEmail(email string) error {
 	if email == "" {
-		return errEmailRequired
+		return fmt.Errorf("%w: %w", ErrInvalidInput, errEmailRequired)
 	}
 	if len(email) > maxEmailBytes {
-		return errEmailInvalid
+		return fmt.Errorf("%w: %w", ErrInvalidInput, errEmailInvalid)
 	}
 	at := strings.IndexByte(email, '@')
 	if at <= 0 || at == len(email)-1 || strings.IndexByte(email[at+1:], '@') >= 0 {
-		return errEmailInvalid
+		return fmt.Errorf("%w: %w", ErrInvalidInput, errEmailInvalid)
 	}
 	if strings.ContainsAny(email, " \t\r\n") {
-		return errEmailInvalid
+		return fmt.Errorf("%w: %w", ErrInvalidInput, errEmailInvalid)
 	}
 	return nil
 }
 
 func validatePassword(password string) error {
 	if password == "" {
-		return errPasswordRequired
+		return fmt.Errorf("%w: %w", ErrInvalidInput, errPasswordRequired)
 	}
 	if len(password) > maxPasswordBytes {
-		return errPasswordTooLong
+		return fmt.Errorf("%w: %w", ErrInvalidInput, errPasswordTooLong)
 	}
 	return nil
 }

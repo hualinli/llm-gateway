@@ -383,6 +383,13 @@ func TestMembershipCapStatusAndRejoinIncarnation(t *testing.T) {
 	if _, err := svc.AuthorizeOwnBillingHistory(ctx, member.ID, org.ID); err != nil {
 		t.Fatalf("suspended member reads own history: %v", err)
 	}
+	listed, _, err := svc.ListForUser(ctx, member.ID, 0, 0)
+	if err != nil {
+		t.Fatalf("suspended member lists own organization for history: %v", err)
+	}
+	if len(listed) != 1 || listed[0].Organization.ID != org.ID || listed[0].Status != "suspended" {
+		t.Fatalf("suspended member organization list = %+v, want suspended org %d", listed, org.ID)
+	}
 	if _, err := svc.AuthorizeOrgAction(ctx, member.ID, org.ID, organization.ActionUseModel); !errors.Is(err, organization.ErrNotMember) {
 		t.Fatalf("suspended member uses model = %v, want ErrNotMember", err)
 	}

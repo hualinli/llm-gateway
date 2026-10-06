@@ -101,6 +101,10 @@ func (s *server) writeIAMError(c *app.RequestContext, operation string, err erro
 		s.writeError(c, http.StatusNotFound, "", "not found")
 	case errors.Is(err, iam.ErrEmailTaken), isUniqueViolation(err):
 		s.writeError(c, http.StatusConflict, "", "email is already registered")
+	case errors.Is(err, iam.ErrInvalidInput):
+		s.writeError(c, http.StatusBadRequest, "", "invalid email or password")
+	case errors.Is(err, iam.ErrPasswordIncorrect):
+		s.writeError(c, http.StatusForbidden, "", "current password is incorrect")
 	default:
 		s.writeInternal(c, operation, err)
 	}
@@ -115,6 +119,10 @@ func (s *server) writeOrganizationError(c *app.RequestContext, operation string,
 		s.writeError(c, http.StatusNotFound, "", "organization not found")
 	case errors.Is(err, organization.ErrNameInvalid):
 		s.writeError(c, http.StatusBadRequest, "", "organization name is invalid")
+	case errors.Is(err, organization.ErrPersonalTeam):
+		s.writeError(c, http.StatusForbidden, "", "personal accounts do not support team management")
+	case errors.Is(err, organization.ErrOrganizationSuspended):
+		s.writeError(c, http.StatusConflict, "", "organization is suspended")
 	default:
 		s.writeInternal(c, operation, err)
 	}
@@ -142,6 +150,14 @@ func (s *server) writeOrganizationRBACError(c *app.RequestContext, operation str
 		s.writeError(c, http.StatusNotFound, "", "invitation not found")
 	case errors.Is(err, organization.ErrForbidden):
 		s.writeError(c, http.StatusForbidden, "", "action is not permitted for your organization role")
+	case errors.Is(err, organization.ErrPersonalTeam):
+		s.writeError(c, http.StatusForbidden, "", "personal accounts do not support team management")
+	case errors.Is(err, organization.ErrOrganizationSuspended):
+		s.writeError(c, http.StatusConflict, "", "organization is suspended")
+	case errors.Is(err, organization.ErrLimitRequired):
+		s.writeError(c, http.StatusBadRequest, "", "monthly_limit_micro must be provided when changing a member to the member role")
+	case errors.Is(err, organization.ErrMemberStatusInvalid):
+		s.writeError(c, http.StatusBadRequest, "", "status must be active or suspended")
 	case errors.Is(err, organization.ErrOwnerGrant):
 		s.writeError(c, http.StatusForbidden, "", "owner may only be granted through ownership transfer")
 	case errors.Is(err, organization.ErrPlatformRole):
@@ -163,7 +179,7 @@ func (s *server) writeOrganizationRBACError(c *app.RequestContext, operation str
 	case errors.Is(err, organization.ErrTransferTarget):
 		s.writeError(c, http.StatusBadRequest, "", "ownership transfer target is invalid")
 	case errors.Is(err, organization.ErrRoleInvalid):
-		s.writeError(c, http.StatusBadRequest, "", "role must be one of owner, admin, member, billing_viewer")
+		s.writeError(c, http.StatusBadRequest, "", "role must be one of owner, admin, member")
 	case errors.Is(err, organization.ErrInvitationEmailInvalid):
 		s.writeError(c, http.StatusBadRequest, "", "email is invalid")
 	default:
