@@ -130,12 +130,16 @@ func newHTTPFixture(t *testing.T, dsn string) *httpFixture {
 		"gpt-other":   {realProvider()},
 	})
 	producer := &recordingProducer{}
-	handler := proxy.NewHandler(registry, producer)
 	lim := limiter.New(nil, 1000, 1000, 0)
-	chain := observability.Middleware(
-		auth.Middleware(store)(
+	protected := func(next http.Handler) http.Handler {
+		return auth.Middleware(store)(
 			gatewayguard.Middleware(guard, gatewayguard.Options{KnownModel: registry.HasModel})(
-				limiter.Middleware(lim)(handler))))
+				limiter.Middleware(lim)(next)))
+	}
+	router := http.NewServeMux()
+	router.Handle("/v1/chat/completions", protected(proxy.NewHandler(registry, producer)))
+	router.Handle("/v1/models", protected(proxy.NewModelsHandler(registry)))
+	chain := observability.Middleware(router)
 	return &httpFixture{
 		server:   httptest.NewServer(chain),
 		store:    store,
@@ -158,6 +162,37 @@ func (f *httpFixture) request(t *testing.T, key, body string) *httptest.Response
 	rec := httptest.NewRecorder()
 	f.server.Config.Handler.ServeHTTP(rec, req)
 	return rec
+}
+
+func (f *httpFixture) modelsRequest(t *testing.T, key string) *httptest.ResponseRecorder {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, f.server.URL+"/v1/models", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if key != "" {
+		req.Header.Set("Authorization", "Bearer "+key)
+	}
+	rec := httptest.NewRecorder()
+	f.server.Config.Handler.ServeHTTP(rec, req)
+	return rec
+}
+
+func modelIDs(t *testing.T, rec *httptest.ResponseRecorder) []string {
+	t.Helper()
+	var body struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("invalid models response %q: %v", rec.Body.String(), err)
+	}
+	ids := make([]string, 0, len(body.Data))
+	for _, model := range body.Data {
+		ids = append(ids, model.ID)
+	}
+	return ids
 }
 
 func errorCode(t *testing.T, rec *httptest.ResponseRecorder) string {
@@ -336,4 +371,62 @@ func TestGatewayChainAccessGuardHTTPIntegration(t *testing.T) {
 			t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 		}
 	})
+}
+
+func TestGatewayModelsCatalogMatchesPGAdmissionScopes(t *testing.T) {
+	dsn := guardSchema(t)
+	fixture := newHTTPFixture(t, dsn)
+	defer fixture.server.Close()
+
+	member := fixture.modelsRequest(t, fixture.keys["member"])
+	if member.Code != http.StatusOK || strings.Join(modelIDs(t, member), ",") != "gpt-allowed,gpt-other" {
+		t.Fatalf("inherited member catalog status=%d models=%v body=%s", member.Code, modelIDs(t, member), member.Body.String())
+	}
+	keyScoped := fixture.modelsRequest(t, fixture.keys["allowone"])
+	if keyScoped.Code != http.StatusOK || strings.Join(modelIDs(t, keyScoped), ",") != "gpt-allowed" {
+		t.Fatalf("key-scoped catalog status=%d models=%v body=%s", keyScoped.Code, modelIDs(t, keyScoped), keyScoped.Body.String())
+	}
+	keyDenied := fixture.modelsRequest(t, fixture.keys["denyall"])
+	if keyDenied.Code != http.StatusOK || len(modelIDs(t, keyDenied)) != 0 {
+		t.Fatalf("deny-all key catalog status=%d models=%v body=%s", keyDenied.Code, modelIDs(t, keyDenied), keyDenied.Body.String())
+	}
+
+	record, ok := fixture.store.Lookup(fixture.keys["member"])
+	if !ok {
+		t.Fatal("member key missing from auth snapshot")
+	}
+	if _, err := fixture.guard.DB().Exec(`UPDATE organizations SET model_allowlist='["gpt-other"]'::jsonb WHERE id=$1`, record.OrgID); err != nil {
+		t.Fatal(err)
+	}
+	orgScoped := fixture.modelsRequest(t, fixture.keys["member"])
+	if orgScoped.Code != http.StatusOK || strings.Join(modelIDs(t, orgScoped), ",") != "gpt-other" {
+		t.Fatalf("organization-scoped catalog status=%d models=%v body=%s", orgScoped.Code, modelIDs(t, orgScoped), orgScoped.Body.String())
+	}
+	keyAndOrgScoped := fixture.modelsRequest(t, fixture.keys["allowone"])
+	if keyAndOrgScoped.Code != http.StatusOK || len(modelIDs(t, keyAndOrgScoped)) != 0 {
+		t.Fatalf("key/org intersection status=%d models=%v body=%s", keyAndOrgScoped.Code, modelIDs(t, keyAndOrgScoped), keyAndOrgScoped.Body.String())
+	}
+	blocked := fixture.request(t, fixture.keys["member"], `{"model":"gpt-allowed","stream":true,"messages":[]}`)
+	if blocked.Code != http.StatusForbidden {
+		t.Fatalf("POST escaped catalog's organization scope: status=%d body=%s", blocked.Code, blocked.Body.String())
+	}
+	allowed := fixture.request(t, fixture.keys["member"], `{"model":"gpt-other","stream":true,"messages":[]}`)
+	if allowed.Code != http.StatusOK {
+		t.Fatalf("POST rejected a model shown in the catalog: status=%d body=%s", allowed.Code, allowed.Body.String())
+	}
+
+	if _, err := fixture.guard.DB().Exec(`UPDATE organizations SET model_allowlist=NULL WHERE id=$1`, record.OrgID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixture.guard.DB().Exec(`UPDATE platform_model_catalog SET enabled=false WHERE model='gpt-other'`); err != nil {
+		t.Fatal(err)
+	}
+	globallyDisabled := fixture.modelsRequest(t, fixture.keys["member"])
+	if globallyDisabled.Code != http.StatusOK || strings.Join(modelIDs(t, globallyDisabled), ",") != "gpt-allowed" {
+		t.Fatalf("globally disabled catalog status=%d models=%v body=%s", globallyDisabled.Code, modelIDs(t, globallyDisabled), globallyDisabled.Body.String())
+	}
+	blocked = fixture.request(t, fixture.keys["member"], `{"model":"gpt-other","stream":true,"messages":[]}`)
+	if blocked.Code != http.StatusForbidden {
+		t.Fatalf("POST escaped global catalog disable: status=%d body=%s", blocked.Code, blocked.Body.String())
+	}
 }
