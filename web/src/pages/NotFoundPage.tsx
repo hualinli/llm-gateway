@@ -6,9 +6,9 @@ import { Button, Result } from 'antd';
 export function NotFoundPage(): ReactNode {
   return (
     <Result
-      status="404"
+      status="warning"
       title="页面不存在"
-      subTitle="这个路由没有对应的视图。组织相关页面都在 /orgs/{org_id}/… 之下。"
+      subTitle="你访问的页面不存在，或当前账户无法打开它。"
       extra={
         <Link to="/">
           <Button type="primary">回到概览</Button>

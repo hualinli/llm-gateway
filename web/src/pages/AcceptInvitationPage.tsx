@@ -35,7 +35,7 @@ export function AcceptInvitationPage(): ReactNode {
       const record = await consoleApi.acceptInvitation(token);
       setAccepted(record);
       message.success('邀请已接受');
-      refresh();
+      await refresh();
     } catch (cause) {
       setError(cause);
     } finally {
@@ -51,8 +51,7 @@ export function AcceptInvitationPage(): ReactNode {
             接受组织邀请
           </Typography.Title>
           <Typography.Text type="secondary">
-            当前登录：{me?.user.email ?? '—'}。服务端会校验邀请里固定的邮箱与角色：邮箱不一致返回
-            403，token 未知返回 404，已接受/已撤销/已过期返回 409。
+            当前登录：{me?.user.email ?? '—'}。邀请只对指定邮箱有效；如果邮箱不匹配，请切换到正确账号。
           </Typography.Text>
 
           {accepted ? (
@@ -60,15 +59,15 @@ export function AcceptInvitationPage(): ReactNode {
               <Alert
                 type="success"
                 showIcon
-                message={`已加入 org_id=${accepted.organization_id}`}
-                description={`角色：${ROLE_LABELS[accepted.role]} · 状态：${accepted.status}`}
+                message="已加入企业"
+                description={`你的角色：${ROLE_LABELS[accepted.role]}`}
               />
               <Space>
                 <Button
                   type="primary"
                   onClick={() => navigate(`/orgs/${accepted.organization_id}/overview`)}
                 >
-                  进入组织
+                  进入企业
                 </Button>
                 <Link to="/">返回首页</Link>
               </Space>
@@ -83,7 +82,7 @@ export function AcceptInvitationPage(): ReactNode {
                 <Link to="/">返回首页</Link>
               </Space>
               <Typography.Text type="secondary">
-                链接里的 token 是一次性凭据：接受后立即失效，过期或撤销后需要管理员重新发起邀请。
+                此邀请链接只能使用一次；如果已经使用、过期或失效，请联系企业负责人重新邀请。
               </Typography.Text>
             </>
           )}

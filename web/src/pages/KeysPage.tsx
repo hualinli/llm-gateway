@@ -1,490 +1,122 @@
-/**
- * Own API keys (`GET/POST /api/v1/orgs/{org}/keys`, revoke).
- *
- * The raw secret appears exactly once, in the create response, and the dialog
- * says so. It is kept in this component's state only, is never written to
- * localStorage/sessionStorage or the console, and disappears when the dialog is
- * closed — after which only metadata (`prefix`, `key_id`, status) is available,
- * which is exactly what the API can return.
- */
-
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Alert,
-  App as AntdApp,
-  Button,
-  Card,
-  Checkbox,
-  DatePicker,
-  Form,
-  Input,
-  Modal,
-  Popconfirm,
-  Select,
-  Space,
-  Table,
-  Tag,
-  Typography,
-} from 'antd';
-import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
-import dayjs, { type Dayjs } from 'dayjs';
+import { Alert, App as AntdApp, Button, Card, Form, Input, Modal, Space, Table, Tag, Typography } from 'antd';
+import { CopyOutlined, PlusOutlined } from '@ant-design/icons';
 
-import type { ApiKey, CreateApiKeyRequest, CreateApiKeyResponse } from '../api/types';
-import { useCreateKey, useKeys, useMembers, useRevokeKey } from '../api/queries';
-import { DataState, EmptyState, ErrorView, errorSummary } from '../components/states';
+import { useCreateKey, useKeys, useRevokeKey } from '../api/queries';
+import type { ApiKey, CreateApiKeyResponse } from '../api/types';
 import { CursorPagination, useCursorPager } from '../components/CursorPager';
-import { ContractGap, PageHeader } from '../components/PageHeader';
+import { PageHeader } from '../components/PageHeader';
+import { DataState, ErrorView } from '../components/states';
 import { useActiveOrg } from '../session/SessionProvider';
 import { usePlaygroundKey } from '../session/PlaygroundKeyProvider';
 import { formatTimestamp } from '../utils/format';
-import { CAN } from '../utils/permissions';
 
-interface CreateKeyForm {
-  owner_user_id?: string;
-  expires_at?: Dayjs;
-  model_allowlist?: string[];
-  deny_all_models?: boolean;
-}
-
-function newOperationId(): string {
-  const random =
-    typeof crypto !== 'undefined' && 'randomUUID' in crypto
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  return `web-${random}`;
-}
+interface KeyForm { name: string }
 
 export function KeysPage(): ReactNode {
-  const { orgId, role } = useActiveOrg();
-  const { message } = AntdApp.useApp();
+  const { orgId, membership } = useActiveOrg();
+  const { message, modal } = AntdApp.useApp();
   const navigate = useNavigate();
   const playground = usePlaygroundKey();
-  const pager = useCursorPager();
-
-  const keys = useKeys(
-    orgId,
-    { limit: 50, cursor: pager.cursor ?? undefined },
-    orgId !== null,
-  );
-  const members = useMembers(orgId, CAN.manageMembers(role) && orgId !== null);
-  const createKey = useCreateKey(orgId ?? '');
-  const revokeKey = useRevokeKey(orgId ?? '');
-
+  const [form] = Form.useForm<KeyForm>();
   const [createOpen, setCreateOpen] = useState(false);
-  const [form] = Form.useForm<CreateKeyForm>();
-  const [operationId, setOperationId] = useState(() => newOperationId());
   const [created, setCreated] = useState<CreateApiKeyResponse | null>(null);
-  const [savedAcknowledged, setSavedAcknowledged] = useState(false);
+  const pager = useCursorPager();
+  const operationId = useRef<string | null>(null);
+  const keys = useKeys(orgId, { limit: 20, ...(pager.cursor ? { cursor: pager.cursor } : {}) }, orgId !== null);
+  const create = useCreateKey(orgId ?? '');
+  const revoke = useRevokeKey(orgId ?? '');
 
-  const [lookupInput, setLookupInput] = useState('');
-  const [lookupOperation, setLookupOperation] = useState('');
-  const lookup = useKeys(
-    orgId,
-    { operation_id: lookupOperation },
-    orgId !== null && lookupOperation !== '',
-  );
-
-  const openCreate = (): void => {
-    setOperationId(newOperationId());
-    form.resetFields();
-    createKey.reset();
-    setCreateOpen(true);
-  };
-
-  const submitCreate = async (): Promise<void> => {
+  const submit = async (): Promise<void> => {
     const values = await form.validateFields();
-    const body: CreateApiKeyRequest = { operation_id: operationId };
-    if (values.owner_user_id) body.owner_user_id = values.owner_user_id;
-    if (values.expires_at) body.expires_at = values.expires_at.toISOString();
-    if (values.deny_all_models) {
-      body.model_allowlist = [];
-    } else if (values.model_allowlist && values.model_allowlist.length > 0) {
-      body.model_allowlist = values.model_allowlist;
-    }
     try {
-      const response = await createKey.mutateAsync(body);
+      const result = await create.mutateAsync({ name: values.name.trim(), operation_id: operationId.current ??= crypto.randomUUID() });
+      setCreated(result);
       setCreateOpen(false);
-      setSavedAcknowledged(false);
-      setCreated(response);
+      operationId.current = null;
+      pager.reset();
       form.resetFields();
-    } catch {
-      // The dialog renders `createKey.error` inline.
-    }
+      if (!result.secret) message.info('Key 已创建，但本次没有返回可复制的密钥。');
+    } catch { /* The form shows the real response below. */ }
   };
 
-  const revoke = async (record: ApiKey): Promise<void> => {
-    try {
-      const response = await revokeKey.mutateAsync(record.key_id);
-      message.success(
-        response.replayed
-          ? `Key ${record.prefix} 之前已撤销（幂等重放）`
-          : `已撤销 Key ${record.prefix}（快照版本 ${response.resulting_version}）`,
-      );
-    } catch (error) {
-      message.error(`撤销失败 — ${errorSummary(error)}`);
-    }
+  const confirmRevoke = (key: ApiKey): void => {
+    modal.confirm({
+      title: `停用「${key.name ?? '未命名 Key'}」？`,
+      content: '停用后，这个 Key 将不能再调用模型。历史消费记录不会删除。',
+      okText: '停用 Key',
+      okButtonProps: { danger: true },
+      cancelText: '取消',
+      onOk: async () => {
+        await revoke.mutateAsync(key.key_id);
+        message.success('Key 已停用。');
+      },
+    });
   };
 
-  const canManageOthers = CAN.manageMembers(role);
-  const memberOptions = (members.data?.items ?? []).map((member) => ({
-    value: member.user_id,
-    label: `${member.email}（user_id=${member.user_id}）`,
-  }));
+  const canUse = membership !== null;
 
   return (
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
-      <PageHeader
-        title="我的 API Keys"
-        description="Key 事实由 Control 的 api_keys 表持有；Console 只提交命令，raw secret 只在创建响应里出现一次。"
-        extra={
-          <Space>
-            <Button icon={<ReloadOutlined />} onClick={() => void keys.refetch()}>
-              刷新
-            </Button>
-            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-              创建 Key
-            </Button>
-          </Space>
-        }
-      />
-
-      <Alert
-        type="warning"
-        showIcon
-        message="Secret 只显示一次"
-        description="创建成功后 raw secret 只出现在那一次响应里：服务端只保存哈希与前缀，没有接口可以再次取回。丢失时只能撤销该 Key 并重新创建。"
-      />
-
-      <Card size="small" title="Key 列表" data-testid="keys-list-card">
-        <DataState
-          query={keys}
-          loadingRows={4}
-          isEmpty={(page) => page.items.length === 0}
-          emptyDescription="当前组织下没有可见的 Key"
-          emptyAction={
-            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-              创建第一个 Key
-            </Button>
-          }
-        >
-          {(page) => (
-            <>
-              {page.replayed ? (
-                <Alert
-                  type="info"
-                  showIcon
-                  style={{ marginBottom: 12 }}
-                  message="replayed=true：这是已应用操作的元数据回查，不含 secret"
-                />
-              ) : null}
-              <Table<ApiKey>
-                size="small"
-                rowKey="key_id"
-                dataSource={page.items}
-                pagination={false}
-                scroll={{ x: 900 }}
-                columns={[
-                  {
-                    title: 'prefix',
-                    dataIndex: 'prefix',
-                    render: (value: string) => <Typography.Text code>{value}</Typography.Text>,
-                  },
-                  {
-                    title: 'key_id',
-                    dataIndex: 'key_id',
-                    render: (value: string) => (
-                      <Typography.Text copyable={{ text: value }}>{value}</Typography.Text>
-                    ),
-                  },
-                  {
-                    title: '状态',
-                    dataIndex: 'status',
-                    render: (value: string) =>
-                      value === 'active' ? (
-                        <Tag color="green">active</Tag>
-                      ) : (
-                        <Tag color="red">revoked</Tag>
-                      ),
-                  },
-                  {
-                    title: 'owner_user_id',
-                    dataIndex: 'owner_user_id',
-                    render: (value: string | null) => value ?? '—',
-                  },
-                  {
-                    title: '模型白名单',
-                    dataIndex: 'model_allowlist',
-                    render: (value: string[] | null) => {
-                      if (value === null) return <Tag>继承组织策略</Tag>;
-                      if (value.length === 0) return <Tag color="red">deny-all（[]）</Tag>;
-                      return (
-                        <Space size={4} wrap>
-                          {value.map((model) => (
-                            <Tag key={model}>{model}</Tag>
-                          ))}
-                        </Space>
-                      );
-                    },
-                  },
-                  {
-                    title: '有效期',
-                    dataIndex: 'expires_at',
-                    render: (value: string | null) =>
-                      value ? formatTimestamp(value) : <Tag>不过期</Tag>,
-                  },
-                  {
-                    title: '创建时间',
-                    dataIndex: 'created_at',
-                    render: (value: string) => formatTimestamp(value),
-                  },
-                  {
-                    title: '操作',
-                    key: 'action',
-                    fixed: 'right',
-                    render: (_, record) =>
-                      record.status === 'active' ? (
-                        <Popconfirm
-                          title="撤销这个 Key？"
-                          description={
-                            <Space direction="vertical" size={2}>
-                              <span>
-                                prefix：<Typography.Text code>{record.prefix}</Typography.Text>
-                              </span>
-                              <span>key_id：{record.key_id}</span>
-                              <span>
-                                owner_user_id：{record.owner_user_id ?? '—'}
-                              </span>
-                              <span>撤销后该 Key 会在 Gateway 下次快照刷新时停止解析。</span>
-                            </Space>
-                          }
-                          okText="撤销"
-                          okButtonProps={{ danger: true }}
-                          cancelText="取消"
-                          onConfirm={() => revoke(record)}
-                        >
-                          <Button danger size="small">
-                            撤销
-                          </Button>
-                        </Popconfirm>
-                      ) : (
-                        <Typography.Text type="secondary">
-                          {record.revoked_at ? formatTimestamp(record.revoked_at) : '已撤销'}
-                        </Typography.Text>
-                      ),
-                  },
-                ]}
-              />
-              <CursorPagination
-                pager={pager}
-                hasNext={page.next_cursor !== null}
-                loading={keys.isFetching}
-                itemCount={page.items.length}
-                onNext={() => {
-                  if (page.next_cursor) pager.next(page.next_cursor);
-                }}
-              />
-            </>
-          )}
+      <PageHeader title="我的 API Key" description="每个 Key 归属于当前账户和你本人。按 App 或服务命名，创建数量不限。" extra={<Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setCreateOpen(true); }}>新建 Key</Button>} />
+      <Alert type="info" showIcon message="Key 只会完整显示一次" description="请立即复制并保存到你的应用配置中。企业管理员也看不到你的 Key 名称、列表或密钥。切换账户会清除本页试用密钥；Key 的账单归属始终是创建它的账户。" />
+      <Card title="我的 Key" data-testid="keys-list-card">
+        <DataState query={keys} emptyDescription="还没有 API Key。创建一个 Key 后，可在模型页面试用。">
+          {(page) => <Table<ApiKey>
+            rowKey="key_id"
+            size="middle"
+            pagination={false}
+            dataSource={page.items}
+            columns={[
+              { title: '用途', dataIndex: 'name', render: (value: string | undefined) => <Typography.Text strong>{value || '未命名 Key'}</Typography.Text> },
+              { title: 'Key', dataIndex: 'prefix', render: (value: string) => <Typography.Text code>{value}</Typography.Text> },
+              { title: '状态', dataIndex: 'status', render: (value: ApiKey['status']) => <Tag color={value === 'active' ? 'green' : 'default'}>{value === 'active' ? '可用' : '已停用'}</Tag> },
+              { title: '创建时间', dataIndex: 'created_at', render: (value: string) => formatTimestamp(value) },
+              { title: '操作', key: 'action', render: (_, key) => key.status === 'active' ? <Button danger size="small" onClick={() => confirmRevoke(key)}>停用</Button> : '—' },
+            ]}
+          />}
         </DataState>
+        {keys.data ? <CursorPagination
+          pager={pager}
+          hasNext={keys.data.next_cursor !== null}
+          loading={keys.isFetching}
+          itemCount={keys.data.items.length}
+          onNext={() => { if (keys.data?.next_cursor) pager.next(keys.data.next_cursor); }}
+        /> : null}
+        {revoke.isError ? <div style={{ marginTop: 12 }}><ErrorView error={revoke.error} title="Key 未停用" /></div> : null}
       </Card>
-
-      <Card size="small" title="按 operation_id 回查元数据（不含 secret）">
-        <Space wrap size={8}>
-          <Input
-            style={{ width: 320, maxWidth: '100%' }}
-            placeholder="web-…（创建时展示的幂等键）"
-            value={lookupInput}
-            onChange={(event) => setLookupInput(event.target.value.trim())}
-            onPressEnter={() => setLookupOperation(lookupInput)}
-          />
-          <Button
-            onClick={() => setLookupOperation(lookupInput)}
-            disabled={lookupInput === ''}
-            loading={lookup.isFetching}
-          >
-            回查
-          </Button>
-          <Button
-            onClick={() => {
-              setLookupInput('');
-              setLookupOperation('');
-            }}
-            disabled={lookupOperation === ''}
-          >
-            清除
-          </Button>
-        </Space>
-        {lookupOperation !== '' ? (
-          <div style={{ marginTop: 12 }}>
-            <DataState
-              query={lookup}
-              loadingRows={2}
-              isEmpty={(page) => page.items.length === 0}
-              emptyDescription="该 operation_id 没有对应的 Key 元数据（服务端返回 404 或空列表）"
-            >
-              {(page) => (
-                <Space direction="vertical" size={4}>
-                  <Tag color="blue">replayed={String(page.replayed)}</Tag>
-                  {page.items.map((key) => (
-                    <Typography.Text key={key.key_id}>
-                      {key.prefix} · {key.key_id} · {key.status} · owner={key.owner_user_id ?? '—'}
-                    </Typography.Text>
-                  ))}
-                  <Typography.Text type="secondary">
-                    重放永远不会返回 secret，这是 Control 的存储语义，不是界面限制。
-                  </Typography.Text>
-                </Space>
-              )}
-            </DataState>
-          </div>
-        ) : null}
-      </Card>
-
-      <ContractGap title="没有 Key 轮换（rotate）与批量撤销端点">
-        契约只提供创建与撤销：轮换需要先撤销再创建；批量操作需要在客户端循环调用（每次都是独立审计事件）。
-      </ContractGap>
-
-      {/* ------------------------------------------------------ create ---- */}
-      <Modal
-        title="创建 API Key"
-        open={createOpen}
-        onCancel={() => setCreateOpen(false)}
-        onOk={() => {
-          void submitCreate();
-        }}
-        okText="创建"
-        cancelText="取消"
-        confirmLoading={createKey.isPending}
-        destroyOnHidden
-      >
-        <Form<CreateKeyForm> form={form} layout="vertical" initialValues={{ deny_all_models: false }}>
-          {canManageOthers ? (
-            <Form.Item
-              name="owner_user_id"
-              label="归属成员（可留空 = 归自己）"
-              extra="admin/owner 可以为组织内任意成员创建 Key；member 只能为自己创建。"
-            >
-              <Select
-                allowClear
-                placeholder="默认归属当前登录用户"
-                options={memberOptions}
-                showSearch
-                optionFilterProp="label"
-              />
-            </Form.Item>
-          ) : null}
-          <Form.Item name="expires_at" label="过期时间（可留空 = 不过期）">
-            <DatePicker showTime style={{ width: '100%' }} disabledDate={(date) => date.isBefore(dayjs())} />
-          </Form.Item>
-          <Form.Item name="deny_all_models" valuePropName="checked">
-            <Checkbox>显式拒绝所有模型（model_allowlist = []）</Checkbox>
-          </Form.Item>
-          <Form.Item
-            name="model_allowlist"
-            label="模型白名单（留空 = 继承组织策略）"
-            extra="三态语义：留空继承组织策略；勾选上一项表示显式 deny-all；填写则是不超过 256 个模型的显式允许列表。"
-          >
-            <Select mode="tags" placeholder="例如 gpt-4o" tokenSeparators={[',']} />
-          </Form.Item>
-          <Form.Item label="operation_id（幂等键，本次创建固定）">
-            <Input value={operationId} readOnly />
+      <Modal title="新建 API Key" open={createOpen} onCancel={() => { setCreateOpen(false); operationId.current = null; }} onOk={() => void submit()} confirmLoading={create.isPending} okText="创建 Key" cancelText="取消" destroyOnHidden>
+        <Form form={form} layout="vertical" onFinish={() => void submit()} requiredMark={false}>
+          <Form.Item name="name" label="用途 / App 名称" rules={[{ required: true, max: 120, message: '请输入名称，最多 120 个字符' }]}>
+            <Input autoFocus placeholder="例如：客服机器人、数据分析服务" />
           </Form.Item>
         </Form>
-        {createKey.isError ? (
-          <ErrorView error={createKey.error} title="创建失败（POST /orgs/{org}/keys）" />
-        ) : null}
+        {create.isError ? <ErrorView error={create.error} title="Key 未创建" /> : null}
+        {!canUse ? <Alert type="warning" message="请先选择一个账户。" /> : null}
       </Modal>
-
-      {/* -------------------------------------------------- secret once --- */}
       <Modal
-        title="Key 已创建 — 请立即保存 secret"
+        title="Key 已创建"
         open={created !== null}
+        onCancel={() => setCreated(null)}
+        footer={created?.secret ? <Space wrap>
+          <Button onClick={() => setCreated(null)}>稍后使用</Button>
+          <Button type="primary" onClick={() => {
+            if (created.secret) playground.setKey(created.secret, 'created');
+            setCreated(null);
+            navigate(`/orgs/${encodeURIComponent(orgId ?? '')}/models`);
+          }}>打开模型试用</Button>
+        </Space> : <Button type="primary" onClick={() => setCreated(null)}>完成</Button>}
         closable={false}
         maskClosable={false}
-        onCancel={() => undefined}
-        footer={
-          <Space wrap>
-            <Button
-              onClick={() => {
-                setCreated(null);
-                setSavedAcknowledged(false);
-              }}
-              // A replay returns no secret, so there is nothing to acknowledge.
-              disabled={created?.secret !== undefined && !savedAcknowledged}
-            >
-              关闭
-            </Button>
-            {created?.secret ? (
-              <Button
-                type="primary"
-                onClick={() => {
-                  if (created.secret) {
-                    playground.setKey(created.secret, 'created');
-                  }
-                  setCreated(null);
-                  setSavedAcknowledged(false);
-                  navigate(`/orgs/${encodeURIComponent(orgId ?? '')}/models`);
-                }}
-              >
-                在 Playground 中使用（仅内存）
-              </Button>
-            ) : null}
-          </Space>
-        }
+        destroyOnHidden
       >
-        {created ? (
-          <Space direction="vertical" size={12} style={{ width: '100%' }}>
-            <Alert
-              type="warning"
-              showIcon
-              message="这个 secret 无法再次显示"
-              description={created.notice}
-            />
-            {created.secret ? (
-              <div className="secret-block">
-                <Typography.Text copyable={{ text: created.secret }} code>
-                  {created.secret}
-                </Typography.Text>
-              </div>
-            ) : (
-              <Alert
-                type="info"
-                showIcon
-                message="replayed=true：本次没有返回 secret"
-                description={`secret_returned_once=${String(created.secret_returned_once)}。同一 operation_id 的创建被重放，raw secret 只存在于第一次响应。`}
-              />
-            )}
-            <Space direction="vertical" size={2}>
-              <Typography.Text>
-                prefix：<Typography.Text code>{created.key.prefix}</Typography.Text>
-              </Typography.Text>
-              <Typography.Text>key_id：{created.key.key_id}</Typography.Text>
-              <Typography.Text>
-                归属：owner_user_id={created.key.owner_user_id ?? '—'} · tenant_id=
-                {created.key.tenant_id}
-              </Typography.Text>
-              <Typography.Text type="secondary">
-                快照版本：{created.resulting_version} · secret_returned_once=
-                {String(created.secret_returned_once)} · replayed={String(created.replayed)}
-              </Typography.Text>
-            </Space>
-            {created.secret ? (
-              <Checkbox
-                checked={savedAcknowledged}
-                onChange={(event) => setSavedAcknowledged(event.target.checked)}
-              >
-                我已把 secret 保存到安全的地方（密码管理器 / 密钥管理服务）
-              </Checkbox>
-            ) : null}
-            <Typography.Text type="secondary">
-              secret 只保存在本对话框的组件内存中：关闭后即从页面消失，且不会写入
-              localStorage / sessionStorage，也不会出现在 console 日志里。
-            </Typography.Text>
-          </Space>
-        ) : (
-          <EmptyState description="没有创建结果" />
-        )}
+        {created ? created.secret ? <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          <Alert type="warning" showIcon message="请立即复制并妥善保存。关闭后无法再次查看完整密钥。" />
+          <Typography.Text strong>{created.key.name || 'API Key'}</Typography.Text>
+          <Input.Password readOnly value={created.secret} aria-label="新 Key 密钥" />
+          <Button icon={<CopyOutlined />} onClick={async () => { try { await navigator.clipboard.writeText(created.secret ?? ''); message.success('已复制密钥'); } catch { message.error('复制失败，请手动保存密钥。'); } }}>复制密钥</Button>
+        </Space> : <Alert type="info" showIcon message="Key 已创建，但服务器没有再次返回密钥。请在列表中确认状态。" /> : null}
       </Modal>
     </Space>
   );
