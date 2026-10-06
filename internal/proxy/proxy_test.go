@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -445,6 +446,121 @@ func TestModelsListsAuthenticatedRegistry(t *testing.T) {
 	if body.Object != "list" || len(body.Data) != 2 || body.Data[0].ID != "alpha" || body.Data[1].ID != "zeta" {
 		t.Fatalf("body=%s", rec.Body.String())
 	}
+}
+
+func TestModelsHandlerAppliesGuardModelPolicyIntersection(t *testing.T) {
+	reg := provider.NewRegistry(map[string][]provider.Provider{
+		"alpha": {&fakeProvider{name: "a"}},
+		"zeta":  {&fakeProvider{name: "z"}},
+	})
+	h := NewModelsHandler(reg)
+
+	keyScope := []string{"alpha"}
+	policy := gatewayguard.ModelPolicy{
+		Global: &[]string{"alpha", "zeta"},
+		Org:    &[]string{"alpha", "zeta"},
+		Key:    &keyScope,
+	}
+	ctx := gatewayguard.WithModelPolicy(context.Background(), policy)
+	keyScope[0] = "zeta" // attaching a policy must snapshot mutable slices
+	if copied, ok := gatewayguard.ModelPolicyFromContext(ctx); !ok {
+		t.Fatal("model policy missing from guarded context")
+	} else {
+		(*copied.Key)[0] = "zeta" // reading it must not mutate the stored context policy
+	}
+
+	assertModels := func(t *testing.T, ctx context.Context, want []string) {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, "/v1/models", nil).WithContext(ctx)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+		}
+		var body struct {
+			Data []struct {
+				ID string `json:"id"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatal(err)
+		}
+		got := make([]string, 0, len(body.Data))
+		for _, item := range body.Data {
+			got = append(got, item.ID)
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("models=%v, want %v", got, want)
+		}
+	}
+
+	assertModels(t, ctx, []string{"alpha"})
+
+	empty := []string{}
+	denyAll := gatewayguard.WithModelPolicy(context.Background(), gatewayguard.ModelPolicy{Global: &empty})
+	assertModels(t, denyAll, []string{})
+
+	// A guarded nil policy means the scopes inherit; a direct/legacy handler
+	// call has no policy context. Both preserve the registry's normal listing.
+	assertModels(t, gatewayguard.WithModelPolicy(context.Background(), gatewayguard.ModelPolicy{}), []string{"alpha", "zeta"})
+	assertModels(t, context.Background(), []string{"alpha", "zeta"})
+}
+
+func TestModelsHandlerFiltersSnapshotKeyAndOrganizationScopes(t *testing.T) {
+	rawKey := "sk-snapshot-model-scope"
+	keyAllowlist := []string{"alpha", "zeta"}
+	store := auth.NewMemoryStoreFromRecords([]auth.KeyRecord{{
+		ID: "snapshot-key", Hash: auth.HashKey(rawKey), TenantID: "org:7", OrgID: 7,
+		Status: "active", ModelAllowlist: &keyAllowlist,
+	}})
+	orgAllowlist := []string{"alpha"}
+	policies := gatewayguard.NewPolicySet()
+	policies.Replace(map[int64]gatewayguard.OrgPolicy{
+		7: {OrgID: 7, ModelAllowlist: &orgAllowlist},
+	})
+	registry := provider.NewRegistry(map[string][]provider.Provider{
+		"alpha": {&fakeProvider{name: "a"}},
+		"zeta":  {&fakeProvider{name: "z"}},
+	})
+	h := auth.Middleware(store)(gatewayguard.Middleware(gatewayguard.SnapshotGuard{Policies: policies}, gatewayguard.Options{})(NewModelsHandler(registry)))
+
+	request := func() *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+		req.Header.Set("Authorization", "Bearer "+rawKey)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec
+	}
+	first := request()
+	if first.Code != http.StatusOK || strings.Join(modelIDsFromResponse(t, first), ",") != "alpha" {
+		t.Fatalf("snapshot key/org intersection status=%d body=%s", first.Code, first.Body.String())
+	}
+
+	emptyOrgScope := []string{}
+	policies.Replace(map[int64]gatewayguard.OrgPolicy{
+		7: {OrgID: 7, ModelAllowlist: &emptyOrgScope},
+	})
+	second := request()
+	if second.Code != http.StatusOK || len(modelIDsFromResponse(t, second)) != 0 {
+		t.Fatalf("snapshot deny-all organization scope status=%d body=%s", second.Code, second.Body.String())
+	}
+}
+
+func modelIDsFromResponse(t *testing.T, rec *httptest.ResponseRecorder) []string {
+	t.Helper()
+	var body struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("invalid models response %q: %v", rec.Body.String(), err)
+	}
+	ids := make([]string, 0, len(body.Data))
+	for _, item := range body.Data {
+		ids = append(ids, item.ID)
+	}
+	return ids
 }
 
 func TestMaxActiveStreamsRejectsBeforeUpstream(t *testing.T) {
