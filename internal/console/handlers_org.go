@@ -77,6 +77,15 @@ func (s *server) createInvitation(ctx context.Context, c *app.RequestContext) {
 		s.writeError(c, http.StatusBadRequest, "", "email and role are required")
 		return
 	}
+	monthlyLimit, monthlyLimitProvided, err := parseMonthlyLimit(req.MonthlyLimitMicro)
+	if err != nil {
+		s.writeError(c, http.StatusBadRequest, "", "monthly_limit_micro must be a non-negative decimal string or null")
+		return
+	}
+	if role == "member" && !monthlyLimitProvided {
+		s.writeError(c, http.StatusBadRequest, "", "monthly_limit_micro is required for ordinary members")
+		return
+	}
 	ttl, err := s.resolveInvitationTTL(req.ExpiresInSeconds)
 	if err != nil {
 		s.writeError(c, http.StatusBadRequest, "", err.Error())
@@ -85,7 +94,7 @@ func (s *server) createInvitation(ctx context.Context, c *app.RequestContext) {
 
 	// The service enforces manage_members and the owner/admin grant rules with
 	// the acting membership read in the same transaction.
-	invitation, token, err := s.orgs.CreateInvitation(ctx, auth.User.ID, orgID, email, role, ttl)
+	invitation, token, err := s.orgs.CreateInvitationWithLimit(ctx, auth.User.ID, orgID, email, role, monthlyLimit, monthlyLimitProvided, ttl)
 	if err != nil {
 		detail := failureDetail(err)
 		detail["email"] = email
@@ -175,21 +184,53 @@ func (s *server) changeMemberRole(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 	role := strings.TrimSpace(req.Role)
-	if role == "" {
-		s.writeError(c, http.StatusBadRequest, "", "role is required")
+	status := strings.TrimSpace(req.Status)
+	if (role == "" && status == "") || (role != "" && status != "") {
+		s.writeError(c, http.StatusBadRequest, "", "provide exactly one of role or status")
 		return
+	}
+	monthlyLimit, monthlyLimitProvided, err := parseMonthlyLimit(req.MonthlyLimitMicro)
+	if err != nil {
+		s.writeError(c, http.StatusBadRequest, "", "monthly_limit_micro must be a non-negative decimal string or null")
+		return
+	}
+	var changeErr error
+	if status != "" {
+		if status != "active" && status != "suspended" {
+			s.writeError(c, http.StatusBadRequest, "", "status must be active or suspended")
+			return
+		}
+		if monthlyLimitProvided {
+			s.writeError(c, http.StatusBadRequest, "", "monthly_limit_micro is only accepted with a role change")
+			return
+		}
+		changeErr = s.orgs.ChangeMemberStatus(ctx, auth.User.ID, orgID, targetUserID, status)
+	} else {
+		changeErr = s.orgs.ChangeMemberRoleWithLimit(ctx, auth.User.ID, orgID, targetUserID, role, monthlyLimit, monthlyLimitProvided)
 	}
 
-	if err := s.orgs.ChangeMemberRole(ctx, auth.User.ID, orgID, targetUserID, role); err != nil {
-		detail := failureDetail(err)
-		detail["role"] = role
+	if changeErr != nil {
+		detail := failureDetail(changeErr)
+		if role != "" {
+			detail["role"] = role
+		}
+		if status != "" {
+			detail["status"] = status
+		}
 		s.audit.Record(ctx, s.auditMutation(c, ActionMemberRoleChange, orgID, TargetMembership,
-			formatID(targetUserID), "failure", err.Error(), detail))
-		s.writeOrganizationRBACError(c, "change member role", err)
+			formatID(targetUserID), "failure", changeErr.Error(), detail))
+		s.writeOrganizationRBACError(c, "change member role", changeErr)
 		return
 	}
+	data := map[string]any{}
+	if role != "" {
+		data["role"] = role
+	}
+	if status != "" {
+		data["status"] = status
+	}
 	s.audit.Record(ctx, s.auditMutation(c, ActionMemberRoleChange, orgID, TargetMembership,
-		formatID(targetUserID), "success", "", map[string]any{"role": role}))
+		formatID(targetUserID), "success", "", data))
 	c.SetStatusCode(http.StatusNoContent)
 }
 

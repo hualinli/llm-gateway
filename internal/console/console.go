@@ -138,9 +138,11 @@ const (
 // IAMService is the subset of internal/iam.Service consumed by the HTTP layer.
 // It is declared here so handlers can be exercised with fakes.
 type IAMService interface {
+	Register(ctx context.Context, email, password, clientKey string) (iam.User, iam.IssuedSession, error)
 	CreateUser(ctx context.Context, email, password string, platformAdmin bool) (iam.User, error)
 	GetUser(ctx context.Context, id int64) (iam.User, error)
 	SetUserStatus(ctx context.Context, userID int64, status string) (iam.User, error)
+	ChangePassword(ctx context.Context, userID int64, oldPassword, newPassword string) (iam.User, error)
 	Login(ctx context.Context, email, password, clientKey string) (iam.User, iam.IssuedSession, error)
 	ResolveSession(ctx context.Context, rawToken string) (iam.User, iam.Session, error)
 	RevokeSession(ctx context.Context, rawToken string) error
@@ -165,9 +167,14 @@ type OrganizationService interface {
 	// T03 organization surface.
 	ListMembers(ctx context.Context, actorUserID, orgID int64) ([]organization.Member, error)
 	CreateInvitation(ctx context.Context, actorUserID, orgID int64, email, role string, ttl time.Duration) (organization.Invitation, string, error)
+	CreateInvitationWithLimit(ctx context.Context, actorUserID, orgID int64, email, role string, monthlyLimitMicro *int64, monthlyLimitProvided bool, ttl time.Duration) (organization.Invitation, string, error)
 	AcceptInvitation(ctx context.Context, rawToken string, userID int64, userEmail string) (organization.Membership, error)
 	ListInvitations(ctx context.Context, actorUserID, orgID int64) ([]organization.Invitation, error)
 	ChangeMemberRole(ctx context.Context, actorUserID, orgID, targetUserID int64, role string) error
+	ChangeMemberRoleWithLimit(ctx context.Context, actorUserID, orgID, targetUserID int64, role string, monthlyLimitMicro *int64, monthlyLimitProvided bool) error
+	ChangeMemberStatus(ctx context.Context, actorUserID, orgID, targetUserID int64, status string) error
+	ChangeMemberMonthlyLimit(ctx context.Context, actorUserID, orgID, targetUserID int64, limit *int64) (organization.Membership, error)
+	AuthorizeOwnBillingHistory(ctx context.Context, userID, orgID int64) (organization.Membership, error)
 	RemoveMember(ctx context.Context, actorUserID, orgID, targetUserID int64) error
 	TransferOwnership(ctx context.Context, actorUserID, orgID, targetUserID int64) error
 	AuthorizeOrgAction(ctx context.Context, actorUserID, orgID int64, action organization.Action) (organization.Membership, error)
@@ -371,6 +378,7 @@ func Register(engine *route.Engine, opts Options) error {
 	engine.NoMethod(s.methodNotAllowed)
 
 	engine.POST(PathLogin, s.login)
+	registerIAMRoutes(engine, s)
 	engine.GET(PathLivez, s.livez)
 	engine.GET(PathReadyz, s.readyz)
 

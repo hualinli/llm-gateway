@@ -28,6 +28,8 @@ type fakeIAM struct {
 
 	// Behaviour overrides. A nil hook falls back to the default below.
 	loginFn          func(ctx context.Context, email, password, clientKey string) (iam.User, iam.IssuedSession, error)
+	registerFn       func(ctx context.Context, email, password, clientKey string) (iam.User, iam.IssuedSession, error)
+	changePasswordFn func(ctx context.Context, userID int64, oldPassword, newPassword string) (iam.User, error)
 	resolveSessionFn func(ctx context.Context, rawToken string) (iam.User, iam.Session, error)
 	revokeSessionFn  func(ctx context.Context, rawToken string) error
 	verifyCSRFFn     func(ctx context.Context, session iam.Session, csrfToken string) error
@@ -67,6 +69,20 @@ func (f *fakeIAM) Login(ctx context.Context, email, password, clientKey string) 
 		return f.loginFn(ctx, email, password, clientKey)
 	}
 	return iam.User{}, iam.IssuedSession{}, iam.ErrInvalidCredentials
+}
+
+func (f *fakeIAM) Register(ctx context.Context, email, password, clientKey string) (iam.User, iam.IssuedSession, error) {
+	if f.registerFn != nil {
+		return f.registerFn(ctx, email, password, clientKey)
+	}
+	return iam.User{}, iam.IssuedSession{}, errors.New("register not configured")
+}
+
+func (f *fakeIAM) ChangePassword(ctx context.Context, userID int64, oldPassword, newPassword string) (iam.User, error) {
+	if f.changePasswordFn != nil {
+		return f.changePasswordFn(ctx, userID, oldPassword, newPassword)
+	}
+	return iam.User{}, errors.New("changePassword not configured")
 }
 
 func (f *fakeIAM) ResolveSession(ctx context.Context, rawToken string) (iam.User, iam.Session, error) {
@@ -145,14 +161,16 @@ type fakeOrgs struct {
 	// matrix instead of restating it. Nil keeps the "not configured" default.
 	memberships map[int64]map[int64]string
 
-	listCalls    []listCall
-	addCalls     []addMemberCall
-	inviteCalls  []createInvitationCall
-	roleCalls    []memberCall
-	removeCalls  []memberCall
-	transferCall []memberCall
-	acceptCalls  []acceptInvitationCall
-	authzCalls   []authorizeCall
+	listCalls        []listCall
+	addCalls         []addMemberCall
+	inviteCalls      []createInvitationCall
+	inviteLimitCalls []createInvitationLimitCall
+	roleCalls        []memberCall
+	roleLimitCalls   []changeMemberRoleLimitCall
+	removeCalls      []memberCall
+	transferCall     []memberCall
+	acceptCalls      []acceptInvitationCall
+	authzCalls       []authorizeCall
 }
 
 type createInvitationCall struct {
@@ -161,6 +179,20 @@ type createInvitationCall struct {
 	Email       string
 	Role        string
 	TTL         time.Duration
+}
+
+type createInvitationLimitCall struct {
+	Limit    *int64
+	Provided bool
+}
+
+type changeMemberRoleLimitCall struct {
+	ActorUserID  int64
+	OrgID        int64
+	TargetUserID int64
+	Role         string
+	Limit        *int64
+	Provided     bool
 }
 
 type memberCall struct {
@@ -254,6 +286,13 @@ func (f *fakeOrgs) CreateInvitation(ctx context.Context, actorUserID, orgID int6
 	return organization.Invitation{}, "", errors.New("createInvitation not configured")
 }
 
+func (f *fakeOrgs) CreateInvitationWithLimit(ctx context.Context, actorUserID, orgID int64, email, role string, limit *int64, provided bool, ttl time.Duration) (organization.Invitation, string, error) {
+	f.mu.Lock()
+	f.inviteLimitCalls = append(f.inviteLimitCalls, createInvitationLimitCall{Limit: limit, Provided: provided})
+	f.mu.Unlock()
+	return f.CreateInvitation(ctx, actorUserID, orgID, email, role, ttl)
+}
+
 func (f *fakeOrgs) AcceptInvitation(ctx context.Context, rawToken string, userID int64, userEmail string) (organization.Membership, error) {
 	f.mu.Lock()
 	f.acceptCalls = append(f.acceptCalls, acceptInvitationCall{RawToken: rawToken, UserID: userID, UserEmail: userEmail})
@@ -279,6 +318,28 @@ func (f *fakeOrgs) ChangeMemberRole(ctx context.Context, actorUserID, orgID, tar
 		return f.changeMemberRoleFn(ctx, actorUserID, orgID, targetUserID, role)
 	}
 	return errors.New("changeMemberRole not configured")
+}
+
+func (f *fakeOrgs) ChangeMemberRoleWithLimit(ctx context.Context, actorUserID, orgID, targetUserID int64, role string, limit *int64, provided bool) error {
+	f.mu.Lock()
+	f.roleLimitCalls = append(f.roleLimitCalls, changeMemberRoleLimitCall{ActorUserID: actorUserID, OrgID: orgID, TargetUserID: targetUserID, Role: role, Limit: limit, Provided: provided})
+	f.mu.Unlock()
+	return f.ChangeMemberRole(ctx, actorUserID, orgID, targetUserID, role)
+}
+
+func (f *fakeOrgs) ChangeMemberStatus(context.Context, int64, int64, int64, string) error {
+	return errors.New("changeMemberStatus not configured")
+}
+
+func (f *fakeOrgs) ChangeMemberMonthlyLimit(context.Context, int64, int64, int64, *int64) (organization.Membership, error) {
+	return organization.Membership{}, errors.New("changeMemberMonthlyLimit not configured")
+}
+
+func (f *fakeOrgs) AuthorizeOwnBillingHistory(_ context.Context, userID, orgID int64) (organization.Membership, error) {
+	if _, ok := f.memberships[userID][orgID]; !ok {
+		return organization.Membership{}, organization.ErrNotFound
+	}
+	return organization.Membership{OrgID: orgID, UserID: userID, Role: f.memberships[userID][orgID], Status: "active"}, nil
 }
 
 func (f *fakeOrgs) RemoveMember(ctx context.Context, actorUserID, orgID, targetUserID int64) error {
@@ -552,7 +613,9 @@ func sampleMembership(id int64, name, role string) organization.MemberOrg {
 			Status:    "active",
 			CreatedAt: time.Date(2026, 10, 1, 10, 0, 0, 0, time.UTC),
 		},
-		Role: role,
+		MembershipID: id + 1000,
+		Role:         role,
+		Status:       "active",
 	}
 }
 

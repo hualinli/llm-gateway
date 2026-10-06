@@ -12,6 +12,81 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// Register creates the user, personal organization, owner membership, zero
+// balance wallet, and first session in one transaction. A registration failure
+// cannot leave a partially provisioned account behind.
+func (s *Service) Register(ctx context.Context, email, password, clientKey string) (User, IssuedSession, error) {
+	normalized := normalizeEmail(email)
+	if err := validateEmail(normalized); err != nil {
+		return User{}, IssuedSession{}, err
+	}
+	if err := validatePassword(password); err != nil {
+		return User{}, IssuedSession{}, err
+	}
+	throttleKey := normalized
+	if client := strings.TrimSpace(clientKey); client != "" {
+		throttleKey += "|" + client
+	}
+	if !s.throttle.allow("register|" + throttleKey) {
+		return User{}, IssuedSession{}, ErrRateLimited
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), s.opts.BcryptCost)
+	if err != nil {
+		return User{}, IssuedSession{}, fmt.Errorf("iam: hash password: %w", err)
+	}
+	token, err := newToken()
+	if err != nil {
+		return User{}, IssuedSession{}, err
+	}
+	csrfToken, err := newToken()
+	if err != nil {
+		return User{}, IssuedSession{}, err
+	}
+	now := s.now()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return User{}, IssuedSession{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	user, err := scanUser(tx.QueryRowContext(ctx, queryInsertUser, normalized, string(hash), false, now).Scan)
+	if isUniqueViolation(err) {
+		return User{}, IssuedSession{}, ErrEmailTaken
+	}
+	if err != nil {
+		return User{}, IssuedSession{}, err
+	}
+	var orgID int64
+	err = tx.QueryRowContext(ctx, queryRegisterPersonalOrganization, user.ID, now).Scan(&orgID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return User{}, IssuedSession{}, ErrNotFound
+	}
+	if err != nil {
+		return User{}, IssuedSession{}, err
+	}
+	if _, err := tx.ExecContext(ctx, queryRegisterOwnerMembership, orgID, user.ID, now); err != nil {
+		return User{}, IssuedSession{}, err
+	}
+	if _, err := tx.ExecContext(ctx, queryRegisterBillingWallet, orgID, now); err != nil {
+		return User{}, IssuedSession{}, err
+	}
+	session := Session{
+		UserID:      user.ID,
+		TokenHash:   hashToken(token),
+		ExpiresAt:   now.Add(s.opts.SessionTTL),
+		AuthVersion: user.AuthVersion,
+		CreatedAt:   now,
+	}
+	err = tx.QueryRowContext(ctx, queryInsertSession, session.TokenHash, session.UserID, hashToken(csrfToken),
+		session.ExpiresAt, session.AuthVersion, session.CreatedAt).Scan(&session.ID)
+	if err != nil {
+		return User{}, IssuedSession{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return User{}, IssuedSession{}, err
+	}
+	return user, IssuedSession{Session: session, Token: token, CSRFToken: csrfToken}, nil
+}
+
 // CreateUser 创建受控用户（无自助注册）。email 规范化后唯一，冲突返回
 // ErrEmailTaken；密码只存 bcrypt 哈希。
 func (s *Service) CreateUser(ctx context.Context, email, password string, platformAdmin bool) (User, error) {
@@ -72,6 +147,58 @@ func (s *Service) SetUserStatus(ctx context.Context, userID int64, status string
 		return User{}, ErrNotFound
 	}
 	if err != nil {
+		return User{}, err
+	}
+	return user, nil
+}
+
+// ChangePassword replaces one user's bcrypt hash and increments auth_version.
+// It revokes every existing browser session in the same transaction; even a
+// concurrent login based on the old hash receives the previous auth_version
+// and becomes invalid as soon as the password change commits.
+func (s *Service) ChangePassword(ctx context.Context, userID int64, oldPassword, newPassword string) (User, error) {
+	if userID <= 0 {
+		return User{}, ErrNotFound
+	}
+	if err := validatePassword(oldPassword); err != nil {
+		return User{}, err
+	}
+	if err := validatePassword(newPassword); err != nil {
+		return User{}, err
+	}
+	newHash, err := bcrypt.GenerateFromPassword([]byte(newPassword), s.opts.BcryptCost)
+	if err != nil {
+		return User{}, fmt.Errorf("iam: hash password: %w", err)
+	}
+	now := s.now()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return User{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	// Revoke sessions first, matching ResolveSession's sessions-row lock order.
+	if _, err := tx.ExecContext(ctx, queryRevokeUserSessions, userID, now); err != nil {
+		return User{}, err
+	}
+	var currentHash string
+	err = tx.QueryRowContext(ctx, queryLockUserPassword, userID).Scan(&currentHash)
+	if errors.Is(err, sql.ErrNoRows) {
+		return User{}, ErrNotFound
+	}
+	if err != nil {
+		return User{}, err
+	}
+	if bcrypt.CompareHashAndPassword([]byte(currentHash), []byte(oldPassword)) != nil {
+		return User{}, ErrPasswordIncorrect
+	}
+	user, err := scanUser(tx.QueryRowContext(ctx, queryChangePassword, userID, string(newHash), now).Scan)
+	if errors.Is(err, sql.ErrNoRows) {
+		return User{}, ErrNotFound
+	}
+	if err != nil {
+		return User{}, err
+	}
+	if err := tx.Commit(); err != nil {
 		return User{}, err
 	}
 	return user, nil
@@ -295,3 +422,27 @@ var querySessionCSRFHash string
 
 //go:embed queries/count_active_sessions.sql
 var queryCountActiveSessions string
+
+const queryRegisterPersonalOrganization = `
+INSERT INTO organizations (type, name, status, owner_user_id, created_at, updated_at)
+SELECT 'personal', left(split_part(u.email, '@', 1), 80), 'active', u.id, $2, $2
+FROM users u WHERE u.id = $1
+RETURNING id`
+
+const queryRegisterOwnerMembership = `
+INSERT INTO memberships (org_id, user_id, role, status, monthly_limit_micro, created_at, updated_at)
+VALUES ($1, $2, 'owner', 'active', NULL, $3, $3)`
+
+const queryRegisterBillingWallet = `
+INSERT INTO billing_accounts
+	(org_id, currency, posted_balance_micro, reserved_micro, status, version, created_at, updated_at)
+VALUES ($1, 'CNY', 0, 0, 'active', 1, $2, $2)`
+
+//go:embed queries/lock_user_password.sql
+var queryLockUserPassword string
+
+//go:embed queries/revoke_user_sessions.sql
+var queryRevokeUserSessions string
+
+//go:embed queries/change_password.sql
+var queryChangePassword string

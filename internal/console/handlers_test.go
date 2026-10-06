@@ -333,6 +333,9 @@ func TestMeReturnsUserOrganizationsAndCSRFToken(t *testing.T) {
 	if len(body.Organizations) != 2 || body.Organizations[1].Role != "admin" {
 		t.Fatalf("organizations=%+v", body.Organizations)
 	}
+	if body.Organizations[1].MembershipID != "1004" || body.Organizations[1].Status != "active" || body.Organizations[1].MonthlyLimitMicro != nil {
+		t.Fatalf("membership DTO omits current relation state: %+v", body.Organizations[1])
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -701,7 +704,7 @@ func TestRecoveryRendersEnvelope(t *testing.T) {
 // The route label must stay a bounded vocabulary: it is a Prometheus label.
 func TestRouteClassIsBounded(t *testing.T) {
 	known := map[string]bool{
-		RouteAuthLogin: true, RouteAuthLogout: true, RouteMe: true,
+		RouteAuthLogin: true, RouteAuthRegister: true, RouteAuthLogout: true, RouteMe: true, RouteMePassword: true,
 		RouteOrganizationsList: true, RouteOrganizationsGet: true,
 		RouteOrganizationsActivate: true, RouteAdminActivationCodesList: true, RouteAdminActivationCodesCreate: true,
 		RouteMeJoinRequests: true, RouteOrgJoinRequestsList: true, RouteOrgJoinRequestsCreate: true,
@@ -712,10 +715,10 @@ func TestRouteClassIsBounded(t *testing.T) {
 		RouteOrgOwnerTransfer: true, RouteOrgAuditList: true,
 		RouteHealth: true, RouteMetrics: true, RouteOther: true,
 	}
-	if len(known) != 25 {
+	if len(known) != 27 {
 		t.Fatalf("route vocabulary changed: %d members", len(known))
 	}
-	for _, path := range []string{PathLogin, PathLogout, PathMe, PathOrganizations, PathOrganizationsActivate,
+	for _, path := range []string{PathLogin, PathRegister, PathLogout, PathMe, PathMePassword, PathOrganizations, PathOrganizationsActivate,
 		PathAdminActivationCodes, PathMeJoinRequests, PathOrgJoinRequests, PathOrgJoinRequestDecision, PathOrganization,
 		PathAdminUsers, PathAdminUserStatus, PathOrgMembers, PathOrgMember, PathOrgInvitations,
 		PathInvitationAccept, PathOrgOwnerTransfer, PathOrgAudit,

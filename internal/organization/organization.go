@@ -170,7 +170,9 @@ func ensureZeroBalanceWallet(ctx context.Context, tx *sql.Tx, orgID int64, now t
 	return err
 }
 
-// ListForUser 按 id ASC 列出调用者的 active 组织，cursor 是上一页最后一个 id。
+// ListForUser 按 id ASC 列出调用者当前仍保留的 active/suspended 组织，
+// 让暂停成员仍能进入本人历史账单；removed membership 不授予账户访问入口。
+// cursor 是上一页最后一个 id。
 // limit <= 0 取 20，最大 100；返回非 nil 切片，next_cursor 为空表示没有下一页。
 func (s *Service) ListForUser(ctx context.Context, userID int64, limit int, cursor int64) ([]MemberOrg, string, error) {
 	limit = normalizeLimit(limit)

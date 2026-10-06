@@ -17,6 +17,8 @@ import (
 // cardinality. Unknown or unmatched paths collapse into RouteOther.
 const (
 	RouteAuthLogin                  = "auth_login"
+	RouteAuthRegister               = "auth_register"
+	RouteMePassword                 = "me_password"
 	RouteAuthLogout                 = "auth_logout"
 	RouteMe                         = "me"
 	RouteOrganizationsList          = "organizations_list"
@@ -56,10 +58,14 @@ func RouteClass(method, fullPath string) string {
 	switch fullPath {
 	case PathLogin:
 		return RouteAuthLogin
+	case PathRegister:
+		return RouteAuthRegister
 	case PathLogout:
 		return RouteAuthLogout
 	case PathMe:
 		return RouteMe
+	case PathMePassword:
+		return RouteMePassword
 	case PathOrganizations:
 		if method == string(consts.MethodGet) {
 			return RouteOrganizationsList

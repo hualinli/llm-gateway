@@ -37,8 +37,11 @@ type organizationDTO struct {
 // list items, the single-organization response, the create-organization
 // response and the organizations embedded in login/me.
 type membershipDTO struct {
-	Organization organizationDTO `json:"organization"`
-	Role         string          `json:"role"`
+	Organization      organizationDTO `json:"organization"`
+	MembershipID      string          `json:"membership_id"`
+	Role              string          `json:"role"`
+	Status            string          `json:"status"`
+	MonthlyLimitMicro *string         `json:"monthly_limit_micro"`
 }
 
 type loginRequest struct {
@@ -109,7 +112,13 @@ func toOrganizationDTO(o organization.Organization) organizationDTO {
 }
 
 func toMembershipDTO(m organization.MemberOrg) membershipDTO {
-	return membershipDTO{Organization: toOrganizationDTO(m.Organization), Role: m.Role}
+	return membershipDTO{
+		Organization:      toOrganizationDTO(m.Organization),
+		MembershipID:      formatID(m.MembershipID),
+		Role:              m.Role,
+		Status:            m.Status,
+		MonthlyLimitMicro: formatOptionalMicro(m.MonthlyLimitMicro),
+	}
 }
 
 func toMembershipDTOs(items []organization.MemberOrg) []membershipDTO {
@@ -133,19 +142,28 @@ func formatTime(t time.Time) string {
 	return t.UTC().Format(time.RFC3339)
 }
 
+func formatOptionalMicro(value *int64) *string {
+	if value == nil {
+		return nil
+	}
+	formatted := strconv.FormatInt(*value, 10)
+	return &formatted
+}
+
 // ---------------------------------------------------------------------------
 // T03 organization surface (ADR-0003 §2.3–§2.6)
 // ---------------------------------------------------------------------------
 
-// memberDTO describes one active member. The key is the user id, not a
-// membership id: membership rows are an implementation detail and the API never
-// exposes a second identifier for the same person.
+// memberDTO describes one current membership. MembershipID identifies this
+// membership incarnation, while UserID identifies the account it belongs to.
 type memberDTO struct {
-	UserID    string `json:"user_id"`
-	Email     string `json:"email"`
-	Role      string `json:"role"`
-	Status    string `json:"status"`
-	CreatedAt string `json:"created_at"`
+	MembershipID      string  `json:"membership_id"`
+	UserID            string  `json:"user_id"`
+	Email             string  `json:"email"`
+	Role              string  `json:"role"`
+	Status            string  `json:"status"`
+	MonthlyLimitMicro *string `json:"monthly_limit_micro"`
+	CreatedAt         string  `json:"created_at"`
 }
 
 // memberPage follows the frozen list convention. Member lists are not paginated
@@ -158,15 +176,16 @@ type memberPage struct {
 
 // invitationDTO is invitation metadata only: never a token, never a hash.
 type invitationDTO struct {
-	ID             string  `json:"id"`
-	OrganizationID string  `json:"organization_id"`
-	Email          string  `json:"email"`
-	Role           string  `json:"role"`
-	Status         string  `json:"status"`
-	ExpiresAt      string  `json:"expires_at"`
-	AcceptedAt     *string `json:"accepted_at"`
-	CreatedBy      *string `json:"created_by"`
-	CreatedAt      string  `json:"created_at"`
+	ID                string  `json:"id"`
+	OrganizationID    string  `json:"organization_id"`
+	Email             string  `json:"email"`
+	Role              string  `json:"role"`
+	MonthlyLimitMicro *string `json:"monthly_limit_micro"`
+	Status            string  `json:"status"`
+	ExpiresAt         string  `json:"expires_at"`
+	AcceptedAt        *string `json:"accepted_at"`
+	CreatedBy         *string `json:"created_by"`
+	CreatedAt         string  `json:"created_at"`
 }
 
 type invitationPage struct {
@@ -175,8 +194,9 @@ type invitationPage struct {
 }
 
 type createInvitationRequest struct {
-	Email string `json:"email"`
-	Role  string `json:"role"`
+	Email             string          `json:"email"`
+	Role              string          `json:"role"`
+	MonthlyLimitMicro json.RawMessage `json:"monthly_limit_micro"`
 	// ExpiresInSeconds is optional: absent/0 means the configured default
 	// (Options.InvitationTTL, 72h by default). It is clamped to
 	// [MinInvitationTTLSeconds, MaxInvitationTTLSeconds].
@@ -193,15 +213,19 @@ type createInvitationResponse struct {
 // membershipRecordDTO is the accept-invitation result: the membership that was
 // created or reactivated, with the role fixed by the invitation.
 type membershipRecordDTO struct {
-	OrganizationID string `json:"organization_id"`
-	UserID         string `json:"user_id"`
-	Role           string `json:"role"`
-	Status         string `json:"status"`
-	CreatedAt      string `json:"created_at"`
+	MembershipID      string  `json:"membership_id"`
+	OrganizationID    string  `json:"organization_id"`
+	UserID            string  `json:"user_id"`
+	Role              string  `json:"role"`
+	Status            string  `json:"status"`
+	MonthlyLimitMicro *string `json:"monthly_limit_micro"`
+	CreatedAt         string  `json:"created_at"`
 }
 
 type changeMemberRoleRequest struct {
-	Role string `json:"role"`
+	Role              string          `json:"role"`
+	Status            string          `json:"status"`
+	MonthlyLimitMicro json.RawMessage `json:"monthly_limit_micro"`
 }
 
 type ownerTransferRequest struct {
@@ -239,13 +263,19 @@ type auditPage struct {
 }
 
 func toMemberDTO(m organization.Member) memberDTO {
-	return memberDTO{
-		UserID:    formatID(m.UserID),
-		Email:     m.Email,
-		Role:      m.Role,
-		Status:    m.Status,
-		CreatedAt: formatTime(m.CreatedAt),
+	dto := memberDTO{
+		MembershipID: formatID(m.MembershipID),
+		UserID:       formatID(m.UserID),
+		Email:        m.Email,
+		Role:         m.Role,
+		Status:       m.Status,
+		CreatedAt:    formatTime(m.CreatedAt),
 	}
+	if m.MonthlyLimitMicro != nil {
+		value := strconv.FormatInt(*m.MonthlyLimitMicro, 10)
+		dto.MonthlyLimitMicro = &value
+	}
+	return dto
 }
 
 func toMemberDTOs(items []organization.Member) []memberDTO {
@@ -265,6 +295,10 @@ func toInvitationDTO(invitation organization.Invitation) invitationDTO {
 		Status:         invitation.Status,
 		ExpiresAt:      formatTime(invitation.ExpiresAt),
 		CreatedAt:      formatTime(invitation.CreatedAt),
+	}
+	if invitation.MonthlyLimitMicro != nil {
+		value := strconv.FormatInt(*invitation.MonthlyLimitMicro, 10)
+		dto.MonthlyLimitMicro = &value
 	}
 	if invitation.AcceptedAt != nil {
 		value := formatTime(*invitation.AcceptedAt)
@@ -287,11 +321,13 @@ func toInvitationDTOs(items []organization.Invitation) []invitationDTO {
 
 func toMembershipRecordDTO(m organization.Membership) membershipRecordDTO {
 	return membershipRecordDTO{
-		OrganizationID: formatID(m.OrgID),
-		UserID:         formatID(m.UserID),
-		Role:           m.Role,
-		Status:         m.Status,
-		CreatedAt:      formatTime(m.CreatedAt),
+		MembershipID:      formatID(m.ID),
+		OrganizationID:    formatID(m.OrgID),
+		UserID:            formatID(m.UserID),
+		Role:              m.Role,
+		Status:            m.Status,
+		MonthlyLimitMicro: formatOptionalMicro(m.MonthlyLimitMicro),
+		CreatedAt:         formatTime(m.CreatedAt),
 	}
 }
 
