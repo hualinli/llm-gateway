@@ -543,9 +543,10 @@ func TestTransferOwnershipPromotesTargetAndBumpsRevision(t *testing.T) {
 	owner := createUser(t, db, "owner@example.com")
 	admin := createUser(t, db, "admin@example.com")
 	member := createUser(t, db, "member@example.com")
+	disabledTarget := createUser(t, db, "disabled-target@example.com")
 	outsider := createUser(t, db, "outsider@example.com")
-	org := seedEnterprise(t, db, svc, "Acme", []int64{owner.ID, admin.ID, member.ID},
-		[]string{"owner", "admin", "member"})
+	org := seedEnterprise(t, db, svc, "Acme", []int64{owner.ID, admin.ID, member.ID, disabledTarget.ID},
+		[]string{"owner", "admin", "member", "member"})
 
 	if err := svc.TransferOwnership(ctx, admin.ID, org.ID, member.ID); !errors.Is(err, organization.ErrForbidden) {
 		t.Fatalf("admin transfers ownership = %v, want ErrForbidden", err)
@@ -596,6 +597,27 @@ func TestTransferOwnershipPromotesTargetAndBumpsRevision(t *testing.T) {
 	}
 	if role, _ := membershipRole(t, db, org.ID, owner.ID); role != "owner" {
 		t.Fatalf("caller was demoted by a refused transfer: role = %q", role)
+	}
+
+	if _, err := db.Exec(`UPDATE users SET status='disabled' WHERE id=$1`, disabledTarget.ID); err != nil {
+		t.Fatal(err)
+	}
+	beforeDisabledTransfer := orgRevisionOf(t, db, org.ID)
+	if err := svc.TransferOwnership(ctx, owner.ID, org.ID, disabledTarget.ID); !errors.Is(err, organization.ErrMemberNotFound) {
+		t.Fatalf("transfer to disabled-user target = %v, want ErrMemberNotFound", err)
+	}
+	if role, status := membershipRole(t, db, org.ID, owner.ID); role != "owner" || status != "active" {
+		t.Fatalf("actor after disabled-target refusal = %q/%q, want owner/active", role, status)
+	}
+	if role, status := membershipRole(t, db, org.ID, disabledTarget.ID); role != "member" || status != "active" {
+		t.Fatalf("disabled target membership after refusal = %q/%q, want member/active", role, status)
+	}
+	var ownerAfterDisabledRefusal int64
+	if err := db.QueryRow(`SELECT owner_user_id FROM organizations WHERE id=$1`, org.ID).Scan(&ownerAfterDisabledRefusal); err != nil || ownerAfterDisabledRefusal != owner.ID {
+		t.Fatalf("organization owner after disabled-target refusal = %d err=%v, want %d", ownerAfterDisabledRefusal, err, owner.ID)
+	}
+	if after := orgRevisionOf(t, db, org.ID); after != beforeDisabledTransfer {
+		t.Fatalf("revision after disabled-target refusal = %d, want unchanged %d", after, beforeDisabledTransfer)
 	}
 }
 
