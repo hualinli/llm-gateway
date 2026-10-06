@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.2
 // - protoc             v7.36.2
-// source: control.proto
+// source: proto/control.proto
 
 package control
 
@@ -207,7 +207,7 @@ var ConfigService_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
-	Metadata: "control.proto",
+	Metadata: "proto/control.proto",
 }
 
 const (
@@ -322,7 +322,7 @@ var ProviderCredentialResolver_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "control.proto",
+	Metadata: "proto/control.proto",
 }
 
 const (
@@ -892,5 +892,5 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "control.proto",
+	Metadata: "proto/control.proto",
 }

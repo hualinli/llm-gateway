@@ -106,6 +106,11 @@ CREATE INDEX idx_membership_applications_user_created
 -- Control receives the membership id with each new managed Key. Older rows may
 -- remain NULL during development rebuilds; Console never creates an unbound Key.
 ALTER TABLE api_keys ADD COLUMN membership_id BIGINT;
+-- The empty default preserves pre-existing development fixtures; all new API
+-- key mutations require a non-empty, trimmed name in Control.
+ALTER TABLE api_keys ADD COLUMN name VARCHAR(120) NOT NULL DEFAULT '';
+ALTER TABLE api_keys ADD CONSTRAINT api_keys_name_shape_check
+  CHECK (name = btrim(name) AND length(name) <= 120);
 ALTER TABLE api_keys ADD CONSTRAINT api_keys_membership_owner_required_check
   CHECK (membership_id IS NULL OR owner_user_id IS NOT NULL);
 ALTER TABLE api_keys ADD CONSTRAINT api_keys_membership_org_user_fkey
