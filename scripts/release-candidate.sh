@@ -387,6 +387,15 @@ class Session:
             register_secret("csrf:" + email, self.csrf)
         return status, headers, body
 
+    def register(self, email, password):
+        status, headers, body = self.request("POST", "/api/v1/auth/register",
+                                             {"email": email, "password": password})
+        if status == 201 and isinstance(body, dict):
+            self.csrf = body.get("csrf_token")
+            self.email = email
+            register_secret("csrf:" + email, self.csrf)
+        return status, headers, body
+
 
 class Recorder:
     def __init__(self, evidence, run_id, phase):
@@ -571,9 +580,11 @@ def do_seed(args, rec):
 
     # 资金账户：给企业 A 充值（Idempotency-Key 固定 → 重放不重复入账）
     adjust_key = "rc-credit-%s" % identities["run_id"]
+    payment_reference = "rc-%s-initial-funding" % identities["run_id"]
     status, _, resp = admin.request(
         "POST", "/api/v1/admin/billing/accounts/%s/adjustments" % org_a,
-        {"amount_micro": "100000000", "direction": "credit",
+        {"amount_micro": "100000000", "type": "recharge",
+         "payment_reference": payment_reference,
          "reason": "T12 release-candidate seed credit"},
         headers={"Idempotency-Key": adjust_key})
     rec.capture("fund-org-a", {"org": org_a, "amount_micro": "100000000"},
@@ -585,12 +596,11 @@ def do_seed(args, rec):
                              "status": status,
                              "replayed": bool(isinstance(resp, dict) and resp.get("replayed"))}
 
-    # 身份：A 的 member、B 的 member、A 的 member（用于"移除成员"）、A 的 billing_viewer
+    # 身份：经公开注册创建个人账户，再通过企业加入申请由负责人审批成为普通成员。
     wanted = [
         ("member_a", args.org_a, "member"),
         ("member_b", args.org_b, "member"),
         ("member_c", args.org_a, "member"),
-        ("viewer_a", args.org_a, "billing_viewer"),
     ]
     for label, org_name, role in wanted:
         existing = identities["users"].get(label)
@@ -600,35 +610,72 @@ def do_seed(args, rec):
         email = "rc-%s-%s@rc.test" % (label.replace("_", "-"), args.run_id)
         password = "rc-%s-%s" % (label, args.run_id)
         register_secret("pw:" + label, password)
-        status, _, resp = admin.request("POST", "/api/v1/admin/users", {
-            "email": email, "password": password, "platform_admin": False,
-            "organizations": [identities[("org_a" if org_name == args.org_a else "org_b")]["id"]]})
-        if status not in (201, 409):
-            rec.step("SEED-3", "创建用户 %s" % label, False,
+        member = Session(args.console)
+        status, _, resp = member.register(email, password)
+        if status == 409:
+            status, _, resp = member.login(email, password)
+        if status != 201 and status != 200:
+            rec.step("SEED-3", "注册个人账户 %s" % label, False,
                      ["%s -> %s %s" % (email, status, resp)])
             return rec.finish()
-        user_id = resp.get("id") if isinstance(resp, dict) else None
-        if user_id is None:
-            # 409：已存在，从 /admin/users 列表里找不到接口，直接复用旧 identity
-            rec.step("SEED-3", "创建用户 %s" % label, False,
-                     ["用户已存在但 identities.json 无记录，请先执行 down -v 重新开始"])
+        user_id = (resp.get("user") or {}).get("id") if isinstance(resp, dict) else None
+        if not isinstance(user_id, str) or not user_id.isdigit():
+            rec.step("SEED-3", "注册个人账户 %s" % label, False,
+                     ["注册响应缺少字符串 user.id: %s" % resp])
             return rec.finish()
-        if role != "member":
-            status, _, resp2 = admin.request(
-                "PATCH", "/api/v1/orgs/%s/members/%s" % (identities["org_a"]["id"], user_id),
-                {"role": role})
-            if status not in (200, 204):
-                rec.step("SEED-3", "设置 %s 角色 %s" % (label, role), False,
-                         ["status=%s body=%s" % (status, resp2)])
+
+        org_id = identities[("org_a" if org_name == args.org_a else "org_b")]["id"]
+        membership = next((m for m in (resp.get("organizations") or [])
+                           if (m.get("organization") or {}).get("id") == org_id
+                           and m.get("status") == "active"), None)
+        if membership is None:
+            status, _, requests = member.request("GET", "/api/v1/me/join-requests")
+            if status != 200:
+                rec.step("SEED-3", "读取加入申请 %s" % label, False,
+                         ["status=%s body=%s" % (status, requests)])
                 return rec.finish()
+            request = next((item for item in (requests or {}).get("items", [])
+                            if item.get("organization_id") == org_id), None)
+            if request is None or request.get("status") != "pending":
+                status, _, request = member.request(
+                    "POST", "/api/v1/orgs/%s/join-requests" % org_id,
+                    {"display_name": label.replace("_", " ").title()})
+                if status != 201 or not isinstance(request, dict):
+                    rec.step("SEED-3", "提交加入申请 %s" % label, False,
+                             ["status=%s body=%s" % (status, request)])
+                    return rec.finish()
+            request_id = request.get("id")
+            if not isinstance(request_id, str) or not request_id.isdigit():
+                rec.step("SEED-3", "读取加入申请编号 %s" % label, False,
+                         ["申请响应缺少字符串 id: %s" % request])
+                return rec.finish()
+            status, _, decision = admin.request(
+                "POST", "/api/v1/orgs/%s/join-requests/%s/decision" % (org_id, request_id),
+                {"status": "approved", "monthly_limit_micro": "100000000"})
+            if status not in (200, 409):
+                rec.step("SEED-3", "审批加入申请 %s" % label, False,
+                         ["status=%s body=%s" % (status, decision)])
+                return rec.finish()
+            # Keep the one-time member session, then confirm the approved account membership.
+            status, _, resp = member.request("GET", "/api/v1/me")
+            membership = next((m for m in (resp or {}).get("organizations", [])
+                               if (m.get("organization") or {}).get("id") == org_id
+                               and m.get("status") == "active"), None)
+            if status != 200 or membership is None:
+                rec.step("SEED-3", "确认加入企业 %s" % label, False,
+                         ["status=%s body=%s" % (status, resp)])
+                return rec.finish()
+
         identities["users"][label] = {"email": email, "password": password,
-                                      "user_id": user_id, "role": role, "org": org_name}
+                                      "user_id": user_id, "role": "member", "org": org_name}
+        # Persist incrementally so a later seed retry can log these accounts in.
+        write_identities(args.identities, identities)
 
     write_identities(args.identities, identities)
     rec.capture("identities-redacted", {"identities": args.identities},
                 {"users": {k: {"email": v["email"], "user_id": v["user_id"], "role": v["role"]}
                            for k, v in identities["users"].items()}})
-    rec.step("SEED-OK", "seed 完成（价格 / 资金 / 成员 / billing_viewer）", True, [
+    rec.step("SEED-OK", "seed 完成（价格 / 资金 / 自注册成员 / 加入审批）", True, [
         "org_a=%s(%s) org_b=%s(%s)" % (args.org_a, org_a, args.org_b, org_b),
         "prices=%s" % ", ".join("%s:%s" % (p["model"], p["status"]) for p in published),
         "funding=%s micro (status=%s replayed=%s)" % (
