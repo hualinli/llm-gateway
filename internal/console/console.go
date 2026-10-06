@@ -398,6 +398,7 @@ func Register(engine *route.Engine, opts Options) error {
 	engine.POST(PathOrgKeyRevoke, s.withSession, s.withCSRF, s.revokeOrgKey)
 	engine.GET(PathOrgUsage, s.withSession, s.listOrgUsage)
 	s.registerBillingReportRoutes(engine)
+	s.registerProviderAdminRoutes(engine)
 
 	// T05 (ADR-0004): price versions are a platform-admin surface; the account
 	// and its ledger are organization reads (view_org_usage); an adjustment is a
