@@ -11,12 +11,14 @@
 #                  再用**同一个主密钥文件**启动 B 的 control/console/gateway/metering，
 #                  验证身份/价格/账本/收据/密文/对账全部可用。
 #
-# 然后做两件事：
+# 然后演练三项恢复属性：
 #   1. 主密钥依赖：用**错误**主密钥和**完全没有**主密钥分别启动 B 的 control，记录实际行为
 #      （进程拒绝启动还是降级为不可用），并给出确切的日志/退出码。
 #   2. Redis 清空演练：在 PG 里存在"已投递但未结算（dispatched）"收据时 FLUSHALL
 #      （传输丢失），再停 Redis 证明新请求 fail-closed，随后恢复 Redis，证明
 #      PG 驱动的重投（METERING_SETTLEMENT_REDISPATCH）把结算补齐且**不重复扣款**。
+#   3. RF-03：B-only 将兼容配置 METERING_SETTLEMENT_MAX_ATTEMPTS 设为 3，停 Redis 后
+#      验证至少 4 次 publish 失败仍保留 pending_dispatch/资金预占；恢复后自然结算一次。
 #
 # 隔离约定：只创建带唯一 T10 run id 的容器和随机本地端口；PG 数据目录及 Redis /data
 # 都是 tmpfs，不使用 Compose 项目或持久命名卷。密钥、原始 HTTP scratch 与 pg_dump
@@ -69,6 +71,7 @@ usage() {
   BK-05  RPO / RTO 实测数字（并声明单节点 PG 不是 HA）
   RF-01  Redis 清空（传输丢失）+ Redis 停机 fail-closed + PG 驱动重投恢复结算
   RF-02  恢复后恰好一次扣款：receipt/execution/debit 1:1、账户投影==流水、对账一致
+  RF-03  越过兼容重试次数配置的 Redis 故障 + 恢复自动结算一次
 USAGE
 }
 
@@ -289,6 +292,9 @@ metering_env_b=(
   "METERING_SPOOL_DIR=$T10_SECRETS_DIR/spool-b-metering"
   "METERING_ADMIN_TOKEN=$metering_admin_token"
   "METERING_SETTLEMENT_REDISPATCH=3s"
+  # Isolated acceptance fixture: prove transport failures continue beyond the
+  # legacy attempt threshold without waiting through the production default.
+  "METERING_SETTLEMENT_MAX_ATTEMPTS=3"
 )
 console_env_b=(
   "GATEWAY_PROFILE=demo"
@@ -2219,86 +2225,137 @@ class Drill:
 
     # -- RF-03 -------------------------------------------------------------
     def rf03(self, check):
-        """长 Redis 停机边界：超过投递重试预算后，收据进入审计 exception（不再自动重投）。"""
+        """Transport errors keep retrying beyond the compatibility attempt setting."""
         env = self.b
         org = self.fx.orgs["A"]
         metering = Proc(env, "metering")
         metering.stop()
         check.require(env.wait_port_closed(env.ports["metering"], 10), "metering 未停止")
-        executions = self.drive(check, 3, env=env, label="poison")
+        executions = self.drive(check, 3, env=env, label="retry-after-redis")
         posted_before = env.psql("SELECT posted_balance_micro FROM billing_accounts WHERE org_id=%s" % org)
         reserved_before = env.psql("SELECT reserved_micro FROM billing_accounts WHERE org_id=%s" % org)
+        expected = env.psql(
+            "SELECT COALESCE(sum(r.charge_micro),0)||'|'||COALESCE(sum(e.reserved_micro),0) "
+            "FROM usage_receipts r JOIN billing_executions e USING (execution_id) "
+            "WHERE r.execution_id IN (%s)" % ",".join("'%s'" % execution for execution in executions))
+        expected_charge, expected_reservation = [int(value) for value in expected.split("|", 1)]
+        initial = env.psql_lines(
+            "SELECT status||'|'||count(*) FROM usage_receipts WHERE execution_id IN (%s) GROUP BY status"
+            % ",".join("'%s'" % execution for execution in executions))
+        check.require(initial == ["pending_dispatch|%d" % len(executions)],
+                      "Redis 停机前演练收据不是完整的 pending_dispatch 集合: %r" % initial)
         # 让 Redis 在 dispatcher 投递期间一直不可用（先停 metering，保证这些收据还没被投递）。
         env.stop_container(env.containers["redis"])
         check.require(env.wait_port_closed(env.ports["redis"], 20), "Redis 未停止")
         outage_started = time.time()
         Proc(env, "metering").start()
         check.require(env.wait_tcp(env.ports["metering"], 45), "metering 未就绪")
-        poisoned_at = None
+        retried_at = None
         statuses = []
-        deadline = time.time() + 300
+        deadline = time.time() + 60
         while time.time() < deadline:
+            rows = env.psql_lines(
+                "SELECT execution_id||'|'||status||'|'||attempts||'|'||COALESCE(last_error,'') FROM usage_receipts "
+                "WHERE execution_id IN (%s) ORDER BY execution_id"
+                % ",".join("'%s'" % execution for execution in executions))
             statuses = env.psql_lines(
                 "SELECT status||'|'||count(*) FROM usage_receipts WHERE execution_id IN (%s) GROUP BY status"
                 % ",".join("'%s'" % execution for execution in executions))
-            if statuses and all(row.startswith("exception|") for row in statuses):
-                poisoned_at = time.time() - outage_started
+            if (len(rows) == len(executions)
+                    and all(row.split("|", 3)[1] == "pending_dispatch"
+                            and int(row.split("|", 3)[2]) >= 4
+                            and row.split("|", 3)[3].startswith("publish:")
+                            for row in rows)):
+                retried_at = time.time() - outage_started
                 break
             time.sleep(2.0)
-        check.detail("poison_boundary_seconds", poisoned_at)
+        check.detail("transport_retry_observed_seconds", retried_at)
+        check.detail("configured_max_attempts", 3)
+        check.detail("default_compatibility_max_attempts", 8)
+        check.detail("receipt_attempts_while_redis_down", rows)
         check.detail("statuses", statuses)
-        check.require(poisoned_at is not None,
-                      "300s 内收据没有进入 exception（预期长停机后会被投递重试预算判定为终态）: %r" % statuses)
-        rows = env.psql_lines(
-            "SELECT execution_id||'|'||attempts||'|'||coalesce(last_error,'') FROM usage_receipts "
-            "WHERE execution_id IN (%s) ORDER BY execution_id"
-            % ",".join("'%s'" % execution for execution in executions))
-        check.detail("poisoned_receipts", rows)
-        check.require(all(int(row.split("|")[1]) >= 8 for row in rows),
-                      "被 poison 的收据 attempts 不足: %r" % rows)
-        # 资金：没有 debit、预占仍被持有、posted 不变（钱没有丢，也没有重复扣）。
+        check.require(retried_at is not None,
+                      "Redis 停机期间 60s 内没有观察到每条收据至少第 4 次 publish 失败且保持 pending_dispatch: %r"
+                      % rows)
+        check.require(statuses == ["pending_dispatch|%d" % len(executions)],
+                      "传输失败将收据移出 pending_dispatch 或进入终态: %r" % statuses)
+        # PG is the durable backlog while Redis is unavailable: every receipt
+        # stays pending, and its exception endpoint remains empty for these ids.
+        durable_backlog = env.psql_lines(
+            "SELECT status||'|'||count(*) FROM usage_receipts "
+            "WHERE status IN ('pending_dispatch','exception') GROUP BY status ORDER BY status")
+        pending_backlog = sum(int(row.split("|")[1]) for row in durable_backlog
+                              if row.startswith("pending_dispatch|"))
+        check.detail("durable_receipt_backlog_while_redis_down", durable_backlog)
+        check.require(pending_backlog >= len(executions),
+                      "PostgreSQL durable pending_dispatch backlog 未包含演练收据: %r" % durable_backlog)
+        status, exceptions = env.metering_json("/receipts/exceptions")
+        exception_ids = {item.get("execution_id") for item in (exceptions or {}).get("receipts", [])
+                         if isinstance(item, dict)} if isinstance(exceptions, dict) else set()
+        check.detail("receipts_exceptions_endpoint_status", status)
+        check.detail("exception_ids_for_test_receipts", sorted(set(executions) & exception_ids))
+        check.require(status == 200, "Redis 停机期间 exception 查询端点不可用: HTTP %s" % status)
+        check.require(not (set(executions) & exception_ids),
+                      "仅因 Redis 传输失败的收据被错误列为 exception: %r" % sorted(set(executions) & exception_ids))
+        # 资金：没有 debit、预占精确保留、posted 不变。
         debits = env.psql_lines(
             "SELECT count(*) FROM billing_entries WHERE kind='debit' AND business_id IN (%s)"
             % ",".join("'billing_receipt:debit:%s'" % execution for execution in executions))
-        check.detail("debits_for_poisoned", debits)
-        check.require(debits and int(debits[0]) == 0, "被 poison 的执行产生了 debit: %r" % debits)
+        check.detail("debits_while_redis_down", debits)
+        check.require(debits and int(debits[0]) == 0, "Redis 停机期间演练执行产生了 debit: %r" % debits)
         posted_after = env.psql("SELECT posted_balance_micro FROM billing_accounts WHERE org_id=%s" % org)
         reserved_after = env.psql("SELECT reserved_micro FROM billing_accounts WHERE org_id=%s" % org)
         check.require(posted_before == posted_after,
-                      "长停机期间 posted 余额变化: %s -> %s" % (posted_before, posted_after))
-        check.require(int(reserved_after) >= int(reserved_before),
-                      "预占没有被保留: %s -> %s" % (reserved_before, reserved_after))
+                      "Redis 停机期间 posted 余额变化: %s -> %s" % (posted_before, posted_after))
+        check.require(int(reserved_after) == int(reserved_before),
+                      "Redis 停机期间预占发生变化: %s -> %s" % (reserved_before, reserved_after))
         check.detail("account", {"posted_before": posted_before, "posted_after": posted_after,
-                                 "reserved_before": reserved_before, "reserved_after": reserved_after})
-        # 恢复 Redis：这些收据**不会**自动复活（需要人工/后续版本处理）。
+                                 "reserved_before": reserved_before, "reserved_after": reserved_after,
+                                 "expected_charge_micro": expected_charge,
+                                 "expected_reservation_micro": expected_reservation})
+        # Recover transport and allow the normal dispatcher loop/backoff to
+        # publish these durable receipts. No DB edits or manual retry endpoint.
+        redis_recovery_started = time.monotonic()
         env.start_container(env.containers["redis"])
         check.require(env.wait_tcp(env.ports["redis"], 30), "Redis 未恢复")
         check.require(env.wait_http(env.urls["metering"] + "/readyz", 90), "metering 未恢复就绪")
-        time.sleep(20)
-        after = env.psql_lines(
-            "SELECT status||'|'||count(*) FROM usage_receipts WHERE execution_id IN (%s) GROUP BY status"
-            % ",".join("'%s'" % execution for execution in executions))
+        recovery_remaining = max(0, 60 - (time.monotonic() - redis_recovery_started))
+        recovered, after = self.wait_settled(env, timeout=recovery_remaining, executions=executions)
+        recovery_seconds = time.monotonic() - redis_recovery_started
+        check.detail("recovery_seconds", round(recovery_seconds, 3))
         check.detail("statuses_after_redis_back", after)
-        check.require(all(row.startswith("exception|") for row in after),
-                      "Redis 恢复后 exception 收据被自动处理了（预期仍需人工）: %r" % after)
-        # 可见性：审计 exception 队列与对账 backlog 必须能看到它们（不是静默丢失）。
-        status, exceptions = env.metering_json("/receipts/exceptions")
-        check.detail("receipts_exceptions_endpoint_status", status)
-        status2, report = env.metering_json("/reconcile?window=24h")
-        backlog = ((report or {}).get("report") or {}).get("backlog") or {}
-        check.detail("reconcile_after_poison", {"status": status2, "consistent": (report or {}).get("consistent"),
-                                                "complete": (report or {}).get("complete"), "backlog": backlog})
-        check.require(status2 == 200 and (report or {}).get("consistent"),
-                      "长停机后四层对账不一致: %s" % json.dumps(report)[:300])
-        check.require(backlog.get("receipt_exceptions", 0) >= len(executions),
-                      "异常收据没有出现在 backlog: %r" % backlog)
-        self.finding("长 Redis 停机（>%.0fs）会让 receipt dispatcher 用尽投递重试预算"
-                     "（max_attempts=8，退避 1s..5m）：%d 条收据进入终态 exception（日志「receipt poisoned」），"
-                     "预占资金仍被持有、没有 debit、posted 不变、对账仍 consistent，但**不会**在 Redis 恢复后自动重投，"
-                     "需要人工/后续机制处理（F08/§6.2 的 30s 故障仍在预算内，本边界是更长的停机）。"
-                     % (poisoned_at, len(executions)))
-        check.note("边界：Redis 停机 %.0fs 后 %d 条收据被 poison（attempts=8、last_error=publish 连接拒绝）；"
-                   "资金未动，异常在 backlog 可见，恢复 Redis 后不自动复活" % (poisoned_at, len(executions)))
+        check.require(recovered and recovery_seconds <= 60,
+                      "Redis 恢复后 60s 内未自然结算全部收据: %.3fs %r" % (recovery_seconds, after))
+        rows = env.psql_lines(
+            "SELECT r.execution_id||'|'||r.status||'|'||r.charge_micro||'|'||count(d.id)||'|'||"
+            "COALESCE(sum(d.amount_micro),0) FROM usage_receipts r LEFT JOIN billing_entries d "
+            "ON d.business_id='billing_receipt:debit:'||r.execution_id WHERE r.execution_id IN (%s) "
+            "GROUP BY r.execution_id,r.status,r.charge_micro ORDER BY r.execution_id"
+            % ",".join("'%s'" % execution for execution in executions))
+        check.detail("settled_receipt_debits", rows)
+        check.require(len(rows) == len(executions), "结算后收据行数不符: %r" % rows)
+        for row in rows:
+            parts = row.split("|")
+            check.require(parts[1] == "settled" and parts[3] == "1",
+                          "恢复后的执行 %s: status=%s debit_count=%s" % (parts[0], parts[1], parts[3]))
+            check.require(parts[2] == parts[4],
+                          "恢复后的执行 %s 扣款 %s != receipt 金额 %s" % (parts[0], parts[4], parts[2]))
+        posted_settled = env.psql("SELECT posted_balance_micro FROM billing_accounts WHERE org_id=%s" % org)
+        reserved_settled = env.psql("SELECT reserved_micro FROM billing_accounts WHERE org_id=%s" % org)
+        check.require(int(posted_settled) == int(posted_before) - expected_charge,
+                      "恢复后的 posted 余额与 receipt charge 总额不符: before=%s after=%s charge=%s"
+                      % (posted_before, posted_settled, expected_charge))
+        check.require(int(reserved_settled) == int(reserved_before) - expected_reservation,
+                      "恢复后的 reserved 余额未释放本批预占: before=%s after=%s reservation=%s"
+                      % (reserved_before, reserved_settled, expected_reservation))
+        status, report = env.metering_json("/reconcile?window=24h")
+        check.detail("reconcile_after_retry_recovery", {"status": status,
+                     "consistent": (report or {}).get("consistent"), "complete": (report or {}).get("complete"),
+                     "backlog": ((report or {}).get("report") or {}).get("backlog")})
+        check.require(status == 200 and (report or {}).get("consistent") and (report or {}).get("complete"),
+                      "Redis 恢复并结算后四层对账不完整/不一致: %s" % json.dumps(report)[:300])
+        check.note("隔离 B 显式设置 max_attempts=3（兼容配置；默认兼容值为 8）：Redis 停机时每条收据至少失败 4 次仍留在 pending_dispatch，"
+                   "预占精确保留且没有 debit；Redis 恢复后在 60s 内自然结算，每条恰好一笔与 receipt 金额一致的 debit，余额与四层对账正确")
 
 
 def write_summary(lab, checks, findings, extra):
@@ -2382,7 +2439,7 @@ def main():
     drill.run("BK-05", "RPO / RTO 实测（并声明单节点 PG 不是 HA）", drill.bk05)
     drill.run("RF-01", "Redis 清空（传输丢失）+ 停机 fail-closed + PG 驱动重投", drill.rf01)
     drill.run("RF-02", "恰好一次扣款与对账一致（清空演练之后）", drill.rf02)
-    drill.run("RF-03", "长 Redis 停机的边界：收据进入审计 exception 且资金不动", drill.rf03)
+    drill.run("RF-03", "越过兼容重试次数配置的 Redis 故障 + 恢复自动结算一次", drill.rf03)
 
     extra = {
         "static_dump": getattr(drill, "dump_static", None),
