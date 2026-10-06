@@ -34,6 +34,7 @@ RC_EVIDENCE_DIR="${RC_EVIDENCE_DIR:-}"
 RC_KEEP=0
 RC_SKIP_BUILD=0
 RC_WITH_E2E=0
+RC_E2E_FAILED=0
 RC_WITH_FAILURE=1
 RC_GOPROXY="${RC_GOPROXY-}"
 RC_PULL=0
@@ -2246,10 +2247,12 @@ PY
 
 rc_summary() {
   python3 - "$RC_EVIDENCE_DIR" "$RC_RUN_ID" "$RC_PROJECT" "$RC_SECURITY_OK" \
-    "$RC_WORK_DIR/logs/accept-accept.exit.json" "$RC_WITH_FAILURE" <<'PY'
+    "$RC_WORK_DIR/logs/accept-accept.exit.json" "$RC_WITH_FAILURE" \
+    "$1" "$2" "$3" "$4" <<'PY'
 import json, pathlib, sys
 
-evidence, run_id, project, security, driver_path, with_failure = sys.argv[1:7]
+(evidence, run_id, project, security, driver_path, with_failure,
+ final_failed, with_e2e, e2e_failed, isolation_failed) = sys.argv[1:11]
 base = pathlib.Path(evidence)
 def read_json(path, default=None):
     p = pathlib.Path(path)
@@ -2280,6 +2283,10 @@ scan = read_json(scan_path)
 sec = read_json(sec_path)
 scan_valid = scan_path.is_file() and isinstance(scan.get("leaks"), list) and scan.get("leaks_ok") is True
 security_valid = security == "pass" and sec_path.is_file() and sec.get("ok") is True
+e2e_requested = with_e2e == "1"
+e2e_failure_observed = e2e_failed == "1"
+isolation_failure_observed = isolation_failed == "1"
+overall_failure_observed = final_failed == "1"
 required_steps = ["S1", "S2", "S3", "S3B", "S4", "S5", "S6", "S7"]
 if with_failure == "1":
     required_steps += ["S8", "S9"]
@@ -2295,6 +2302,15 @@ acceptance_valid = (
     and accept.get("run_id") == run_id
     and accept.get("ok") is True
     and not missing_steps
+)
+overall_ok = (
+    not overall_failure_observed
+    and acceptance_valid
+    and security_valid
+    and scan_valid
+    and not scan.get("leaks")
+    and (not e2e_requested or not e2e_failure_observed)
+    and not isolation_failure_observed
 )
 summary = {
     "run_id": run_id,
@@ -2315,7 +2331,15 @@ summary = {
     "security_failed": sec.get("failed", []),
     "secret_scan_leaks": len(scan.get("leaks", [])),
     "secret_scan_known_defaults": len(scan.get("known_defaults", [])),
-    "ok": acceptance_valid and security_valid and scan_valid and not scan.get("leaks"),
+    "e2e_requested": e2e_requested,
+    "e2e_status": ("not_requested" if not e2e_requested else
+                    ("failed" if e2e_failure_observed else "passed")),
+    "e2e_failed": e2e_failure_observed if e2e_requested else False,
+    "isolation_status": "failed" if isolation_failure_observed else "passed",
+    "isolation_failed": isolation_failure_observed,
+    "overall_failure_observed_before_summary": overall_failure_observed,
+    "overall_failed": not overall_ok,
+    "ok": overall_ok,
 }
 (base / "release-candidate-summary.json").write_text(
     json.dumps(summary, indent=2, ensure_ascii=False) + "\n")
@@ -2345,6 +2369,7 @@ rc_cmd_run() {
   [[ "$RC_KEEP" == "1" ]] || RC_TEARDOWN=1
   trap rc_trap EXIT
   local failed=0
+  local isolation_failed=0
   # 栈本身起不来是环境问题，直接 die；验收/安全/E2E 的失败一律记录下来，
   # 保证证据一定被收集，最后再以非零码退出。
   rc_build
@@ -2373,10 +2398,10 @@ rc_cmd_run() {
     || { rc_warn "秘密扫描发现泄漏"; failed=1; }
   rc_isolation_snapshot "$RC_WORK_DIR/logs/isolation-after.txt" || true
   rc_isolation_diff "$RC_WORK_DIR/logs/isolation-before.txt" "$RC_WORK_DIR/logs/isolation-after.txt" \
-    || { rc_warn "隔离校验失败：其它 compose project 的容器/卷集合发生变化"; failed=1; }
+    || { rc_warn "隔离校验失败：其它 compose project 的容器/卷集合发生变化"; isolation_failed=1; failed=1; }
   cp "$RC_WORK_DIR/logs/isolation-before.txt" "$RC_EVIDENCE_DIR/stack/isolation-before.txt" 2>/dev/null || true
   cp "$RC_WORK_DIR/logs/isolation-after.txt" "$RC_EVIDENCE_DIR/stack/isolation-after.txt" 2>/dev/null || true
-  rc_summary
+  rc_summary "$failed" "$RC_WITH_E2E" "$RC_E2E_FAILED" "$isolation_failed"
   local summary_ok
   summary_ok="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("ok") is True)' \
     "$RC_EVIDENCE_DIR/release-candidate-summary.json" 2>/dev/null || printf false)"
