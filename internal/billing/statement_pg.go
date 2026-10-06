@@ -12,7 +12,7 @@ import (
 //
 // Every query is index-driven:
 //
-//   - the page and the totals filter `org_id = $1` and a `[from, cutoff)` range
+//   - the page and the totals filter `org_id = $1` and a Beijing `[from, cutoff)` range
 //     on `posted_at`, which is exactly the prefix of
 //     idx_billing_entries_org_posted (org_id, posted_at DESC, id DESC), so the
 //     sort is provided by the index and LIMIT stops at the page boundary;
@@ -46,6 +46,7 @@ const statementDebitPrefixLiteral = "billing_receipt:debit:"
 // receipt lookup.
 const statementLineColumns = `SELECT b.id, b.org_id, b.kind, b.direction, b.amount_micro, b.business_id,
        b.reason, b.operator_user_id, b.request_id, b.posted_at, b.created_at,
+       COALESCE(b.manual_operation, ''), b.payment_reference, b.reversal_of_entry_id,
        CASE
          WHEN b.kind = 'debit' AND b.business_id LIKE '` + statementDebitPrefixLiteral + `%'
            THEN (SELECT r.occurred_at FROM usage_receipts r
@@ -182,16 +183,26 @@ func (s *PGStatementStore) totals(ctx context.Context, params StatementParams) (
 
 func scanStatementLine(rows *sql.Rows, month StatementMonth) (StatementLine, error) {
 	var (
-		line       StatementLine
-		occurredAt sql.NullTime
+		line             StatementLine
+		occurredAt       sql.NullTime
+		paymentReference sql.NullString
+		reversalOf       sql.NullInt64
 	)
 	if err := rows.Scan(&line.ID, &line.OrgID, &line.Kind, &line.Direction, &line.AmountMicro,
 		&line.BusinessID, &line.Reason, &line.OperatorUserID, &line.RequestID,
-		&line.PostedAt, &line.CreatedAt, &occurredAt); err != nil {
+		&line.PostedAt, &line.CreatedAt, &line.ManualOperation, &paymentReference, &reversalOf, &occurredAt); err != nil {
 		return StatementLine{}, err
 	}
 	line.PostedAt = line.PostedAt.UTC()
 	line.CreatedAt = line.CreatedAt.UTC()
+	if paymentReference.Valid {
+		value := paymentReference.String
+		line.PaymentReference = &value
+	}
+	if reversalOf.Valid {
+		value := reversalOf.Int64
+		line.ReversalOfEntryID = &value
+	}
 	if occurredAt.Valid {
 		at := occurredAt.Time.UTC()
 		line.OccurredAt = &at

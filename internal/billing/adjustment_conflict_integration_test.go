@@ -109,6 +109,8 @@ func TestReservationConflictSameExecutionIDDifferentPayload(t *testing.T) {
 	base := ReserveParams{
 		ExecutionID:       "exec_t10_f13_conflict",
 		OrgID:             orgID,
+		UserID:            orgID,
+		MembershipID:      orgID,
 		KeyID:             "key-t10-f13",
 		GatewayID:         "gw-t10-f13",
 		Model:             "t10-f13-model",

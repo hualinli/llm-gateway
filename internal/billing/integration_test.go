@@ -93,6 +93,11 @@ VALUES ($1, 'hash', 'active', true, 1, $2, $2) RETURNING id`, name+"@example.com
 VALUES ('enterprise', $1, 'active', $2, $3, $3) RETURNING id`, name, userID, now).Scan(&orgID); err != nil {
 		t.Fatalf("seed organization: %v", err)
 	}
+	if _, err := db.Exec(`INSERT INTO memberships
+  (org_id, user_id, role, status, created_at, updated_at)
+VALUES ($1, $2, 'owner', 'active', $3, $3)`, orgID, userID, now); err != nil {
+		t.Fatalf("seed owner membership: %v", err)
+	}
 	return orgID
 }
 

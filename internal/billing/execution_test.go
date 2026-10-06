@@ -20,6 +20,8 @@ func TestReserveValidationIsStrict(t *testing.T) {
 	valid := ReserveParams{
 		ExecutionID:      "exec_0123456789abcdef0123456789abcdef",
 		OrgID:            7,
+		UserID:           12,
+		MembershipID:     9,
 		PriceVersionID:   3,
 		Model:            "gpt-4o",
 		InputTokensUpper: 100,
@@ -37,7 +39,9 @@ func TestReserveValidationIsStrict(t *testing.T) {
 		{"padded execution id", func(p *ReserveParams) { p.ExecutionID = " exec_1 " }, ErrInvalidArgument},
 		{"over-long execution id", func(p *ReserveParams) { p.ExecutionID = strings.Repeat("e", MaxExecutionIDLength+1) }, ErrInvalidArgument},
 		{"missing org", func(p *ReserveParams) { p.OrgID = 0 }, ErrInvalidArgument},
+		{"missing user", func(p *ReserveParams) { p.UserID = 0 }, ErrInvalidArgument},
 		{"negative user", func(p *ReserveParams) { p.UserID = -1 }, ErrInvalidArgument},
+		{"missing membership", func(p *ReserveParams) { p.MembershipID = 0 }, ErrInvalidArgument},
 		{"missing price version", func(p *ReserveParams) { p.PriceVersionID = 0 }, ErrInvalidArgument},
 		{"empty model", func(p *ReserveParams) { p.Model = "" }, ErrInvalidArgument},
 		{"over-long model", func(p *ReserveParams) { p.Model = strings.Repeat("m", MaxModelNameLength+1) }, ErrInvalidArgument},
@@ -63,7 +67,7 @@ func TestReserveValidationIsStrict(t *testing.T) {
 	// the join with metering_events and usage_receipts.
 	normalized := NormalizeReserve(ReserveParams{
 		ExecutionID: "  exec_padded  ", Model: "  gpt-4o  ", KeyID: " key-1 ",
-		OrgID: 1, PriceVersionID: 1, InputTokensUpper: 1,
+		OrgID: 1, UserID: 1, MembershipID: 1, PriceVersionID: 1, InputTokensUpper: 1,
 	})
 	if normalized.ExecutionID != "  exec_padded  " || normalized.Model != "gpt-4o" ||
 		normalized.KeyID != "key-1" || normalized.Now.IsZero() {
@@ -150,7 +154,7 @@ func TestExecutionStatusVocabularyMatchesMigration000009(t *testing.T) {
 
 func TestReservationDigestIsStableAndIdentitySensitive(t *testing.T) {
 	params := ReserveParams{
-		ExecutionID: "exec_1", OrgID: 3, UserID: 9, KeyID: "key-1", GatewayID: "gw-1",
+		ExecutionID: "exec_1", OrgID: 3, UserID: 9, MembershipID: 7, KeyID: "key-1", GatewayID: "gw-1",
 		Model: "gpt-4o", PriceVersionID: 5, InputTokensUpper: 100, OutputTokensUpper: 50,
 	}
 	base := ReservationDigest(params)
@@ -166,6 +170,7 @@ func TestReservationDigestIsStableAndIdentitySensitive(t *testing.T) {
 	for name, mutate := range map[string]func(*ReserveParams){
 		"execution_id":       func(p *ReserveParams) { p.ExecutionID = "exec_2" },
 		"org_id":             func(p *ReserveParams) { p.OrgID = 4 },
+		"membership_id":      func(p *ReserveParams) { p.MembershipID = 8 },
 		"user_id":            func(p *ReserveParams) { p.UserID = 10 },
 		"key_id":             func(p *ReserveParams) { p.KeyID = "key-2" },
 		"gateway_id":         func(p *ReserveParams) { p.GatewayID = "gw-2" },
@@ -265,14 +270,16 @@ func TestValidateTerminalReason(t *testing.T) {
 
 func TestExecutionMatchesOnlyTheSameAdmission(t *testing.T) {
 	params := ReserveParams{
-		ExecutionID: "exec_1", OrgID: 1, UserID: 2, KeyID: "key-1", GatewayID: "gw-1",
+		ExecutionID: "exec_1", OrgID: 1, UserID: 2, MembershipID: 3, KeyID: "key-1", GatewayID: "gw-1",
 		Model: "gpt-4o", PriceVersionID: 3, InputTokensUpper: 10, OutputTokensUpper: 20,
 	}
 	user, key, gateway := int64(2), "key-1", "gw-1"
 	in, out := int64(10), int64(20)
+	membershipID := int64(3)
 	stored := Execution{
 		ExecutionID: "exec_1", OrgID: 1, UserID: &user, KeyID: &key, GatewayID: &gateway,
-		Model: "gpt-4o", PriceVersionID: 3, InputTokensUpper: &in, OutputTokensUpper: &out,
+		MembershipID: &membershipID,
+		Model:        "gpt-4o", PriceVersionID: 3, InputTokensUpper: &in, OutputTokensUpper: &out,
 	}
 	if !executionMatches(stored, params) {
 		t.Fatal("the same admission payload must match")

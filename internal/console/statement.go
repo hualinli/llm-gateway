@@ -93,17 +93,20 @@ type statementTotalsDTO struct {
 }
 
 type statementLineDTO struct {
-	ID             string  `json:"id"`
-	OrganizationID string  `json:"organization_id"`
-	Kind           string  `json:"kind"`
-	Direction      string  `json:"direction"`
-	AmountMicro    string  `json:"amount_micro"`
-	BusinessID     string  `json:"business_id"`
-	Reason         *string `json:"reason"`
-	OperatorUserID *string `json:"operator_user_id"`
-	RequestID      *string `json:"request_id"`
-	PostedAt       string  `json:"posted_at"`
-	CreatedAt      string  `json:"created_at"`
+	ID                string  `json:"id"`
+	OrganizationID    string  `json:"organization_id"`
+	Kind              string  `json:"kind"`
+	Direction         string  `json:"direction"`
+	AmountMicro       string  `json:"amount_micro"`
+	BusinessID        string  `json:"business_id"`
+	Reason            *string `json:"reason"`
+	OperatorUserID    *string `json:"operator_user_id"`
+	RequestID         *string `json:"request_id"`
+	ManualOperation   *string `json:"manual_operation"`
+	PaymentReference  *string `json:"payment_reference"`
+	ReversalOfEntryID *string `json:"reversal_of_entry_id"`
+	PostedAt          string  `json:"posted_at"`
+	CreatedAt         string  `json:"created_at"`
 	// OccurredAt is the usage instant this entry settles; null for entries that
 	// settle no usage.
 	OccurredAt *string `json:"occurred_at"`
@@ -118,7 +121,7 @@ type statementDTO struct {
 	Timezone       string `json:"timezone"`
 	// Basis names the time axis the totals use. It is always "posted_at".
 	Basis string `json:"basis"`
-	// CutoffAt is the exclusive end of the statement month (UTC): the first
+	// CutoffAt is the exclusive end of the statement month (Beijing time): the first
 	// instant of the next month. It is a *period* boundary, not a close.
 	CutoffAt    string             `json:"cutoff_at"`
 	GeneratedAt string             `json:"generated_at"`
@@ -166,6 +169,18 @@ func toStatementLineDTO(line billing.StatementLine) statementLineDTO {
 		value := *line.RequestID
 		dto.RequestID = &value
 	}
+	if line.ManualOperation != "" {
+		value := line.ManualOperation
+		dto.ManualOperation = &value
+	}
+	if line.PaymentReference != nil {
+		value := *line.PaymentReference
+		dto.PaymentReference = &value
+	}
+	if line.ReversalOfEntryID != nil {
+		value := formatID(*line.ReversalOfEntryID)
+		dto.ReversalOfEntryID = &value
+	}
 	return dto
 }
 
@@ -196,7 +211,7 @@ func toStatementDTO(page billing.StatementPage) statementDTO {
 		OrganizationID: "",
 		Month:          page.Month.Label,
 		Currency:       page.Currency,
-		Timezone:       "UTC",
+		Timezone:       "Asia/Shanghai",
 		Basis:          billing.StatementBasis,
 		CutoffAt:       formatTime(page.Month.CutoffAt),
 		GeneratedAt:    formatTime(page.GeneratedAt),

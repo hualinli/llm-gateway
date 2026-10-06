@@ -32,15 +32,16 @@ const (
 // Invitation 是 invitations 表的对外视图：**不含** token 与 token_hash，
 // 元数据里只有固定下来的 email/role 与生命周期时间。
 type Invitation struct {
-	ID         int64
-	OrgID      int64
-	Email      string
-	Role       string
-	Status     string
-	ExpiresAt  time.Time
-	AcceptedAt *time.Time
-	CreatedBy  *int64
-	CreatedAt  time.Time
+	ID                int64
+	OrgID             int64
+	Email             string
+	Role              string
+	MonthlyLimitMicro *int64
+	Status            string
+	ExpiresAt         time.Time
+	AcceptedAt        *time.Time
+	CreatedBy         *int64
+	CreatedAt         time.Time
 }
 
 var (
@@ -66,7 +67,14 @@ var (
 // 不能被邀请（它不是组织角色）。
 //
 // email 与 role 在创建时固定：接受路径不接受任何来自请求的覆盖值。
+// CreateInvitation keeps the internal fixture/bootstrap call shape. The legacy
+// path makes the unlimited choice explicit; public HTTP uses
+// CreateInvitationWithLimit and requires the request field for ordinary members.
 func (s *Service) CreateInvitation(ctx context.Context, actorUserID, orgID int64, email, role string, ttl time.Duration) (Invitation, string, error) {
+	return s.CreateInvitationWithLimit(ctx, actorUserID, orgID, email, role, nil, true, ttl)
+}
+
+func (s *Service) CreateInvitationWithLimit(ctx context.Context, actorUserID, orgID int64, email, role string, monthlyLimitMicro *int64, monthlyLimitProvided bool, ttl time.Duration) (Invitation, string, error) {
 	normalized := normalizeInvitationEmail(email)
 	if err := validateInvitationEmail(normalized); err != nil {
 		return Invitation{}, "", err
@@ -77,6 +85,15 @@ func (s *Service) CreateInvitation(ctx context.Context, actorUserID, orgID int64
 	}
 	if !validRole(cleanRole) {
 		return Invitation{}, "", ErrRoleInvalid
+	}
+	if cleanRole == roleOwner {
+		return Invitation{}, "", ErrOwnerGrant
+	}
+	if cleanRole == roleMember && !monthlyLimitProvided {
+		return Invitation{}, "", ErrLimitRequired
+	}
+	if monthlyLimitMicro != nil && *monthlyLimitMicro < 0 {
+		return Invitation{}, "", errors.New("organization: monthly limit must not be negative")
 	}
 	switch ttl {
 	case 0:
@@ -102,6 +119,14 @@ func (s *Service) CreateInvitation(ctx context.Context, actorUserID, orgID int64
 		return Invitation{}, "", err
 	}
 	defer func() { _ = tx.Rollback() }()
+	var lockedOrgID int64
+	err = tx.QueryRowContext(ctx, queryLockOrganization, orgID).Scan(&lockedOrgID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Invitation{}, "", ErrNotFound
+	}
+	if err != nil {
+		return Invitation{}, "", err
+	}
 
 	// 同一事务里读取调用者的成员关系并执行矩阵检查（ADR-0003 §2.3）。
 	actor, err := actorMembershipInTx(ctx, tx, orgID, actorUserID)
@@ -111,12 +136,15 @@ func (s *Service) CreateInvitation(ctx context.Context, actorUserID, orgID int64
 	if !Allowed(actor.Role, ActionManageMembers) {
 		return Invitation{}, "", ErrForbidden
 	}
+	if err := ensureEnterpriseInTx(ctx, tx, orgID); err != nil {
+		return Invitation{}, "", err
+	}
 	if err := checkInvitationGrant(actor.Role, cleanRole); err != nil {
 		return Invitation{}, "", err
 	}
 
 	invitation, err := scanInvitation(tx.QueryRowContext(ctx, queryInsertInvitation,
-		orgID, normalized, cleanRole, tokenHash, expiresAt, actorUserID, now).Scan)
+		orgID, normalized, cleanRole, monthlyLimitMicro, tokenHash, expiresAt, actorUserID, now).Scan)
 	if err != nil {
 		return Invitation{}, "", err
 	}
@@ -150,6 +178,23 @@ func (s *Service) AcceptInvitation(ctx context.Context, rawToken string, userID 
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	// The organization id is looked up without a row lock first so all flows
+	// acquire locks in the same order: organization, then invitation.
+	var orgID int64
+	err = tx.QueryRowContext(ctx, queryGetInvitationOrg, tokenHash).Scan(&orgID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Membership{}, ErrInvitationNotFound
+	}
+	if err != nil {
+		return Membership{}, err
+	}
+	var lockedOrgID int64
+	if err := tx.QueryRowContext(ctx, queryLockOrganization, orgID).Scan(&lockedOrgID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Membership{}, ErrInvitationNotFound
+		}
+		return Membership{}, err
+	}
 	invitation, err := scanInvitation(tx.QueryRowContext(ctx, queryLockInvitation, tokenHash).Scan)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Membership{}, ErrInvitationNotFound
@@ -160,11 +205,7 @@ func (s *Service) AcceptInvitation(ctx context.Context, rawToken string, userID 
 	if err := checkInvitationUsable(invitation, userEmail, now); err != nil {
 		return Membership{}, err
 	}
-
-	// Serialize with role changes/removals and other invitation acceptances.
-	// An invitation grants membership, never a role change for an active member.
-	var lockedID int64
-	if err := tx.QueryRowContext(ctx, queryLockOrganization, invitation.OrgID).Scan(&lockedID); err != nil {
+	if err := ensureEnterpriseInTx(ctx, tx, invitation.OrgID); err != nil {
 		return Membership{}, err
 	}
 	// Lock waits may cross the expiry boundary; validate against the write time.
@@ -190,8 +231,8 @@ func (s *Service) AcceptInvitation(ctx context.Context, rawToken string, userID 
 	// The conditional upsert also prevents older, unconsumed grants from
 	// overwriting a membership established by a newer invitation.
 	var m Membership
-	err = tx.QueryRowContext(ctx, queryAcceptMembership, invitation.OrgID, userID, invitation.Role, now, invitation.CreatedAt).
-		Scan(&m.OrgID, &m.UserID, &m.Role, &m.Status, &m.CreatedAt)
+	err = scanMembership(tx.QueryRowContext(ctx, queryAcceptMembership, invitation.OrgID,
+		userID, invitation.Role, invitation.MonthlyLimitMicro, now, invitation.CreatedAt).Scan, &m)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Membership{}, ErrInvitationConflict
 	}
@@ -229,12 +270,32 @@ func (s *Service) RevokeInvitation(ctx context.Context, actorUserID, orgID, invi
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	var lockedOrgID int64
+	if err := tx.QueryRowContext(ctx, queryLockOrganization, orgID).Scan(&lockedOrgID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		return err
+	}
 
 	actor, err := actorMembershipInTx(ctx, tx, orgID, actorUserID)
 	if err != nil {
 		return err
 	}
 	if !Allowed(actor.Role, ActionManageMembers) {
+		return ErrForbidden
+	}
+	if err := ensureEnterpriseInTx(ctx, tx, orgID); err != nil {
+		return err
+	}
+	invitation, err := scanInvitation(tx.QueryRowContext(ctx, queryLockInvitationByID, invitationID, orgID).Scan)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrInvitationNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if err := checkInvitationGrant(actor.Role, invitation.Role); err != nil {
 		return ErrForbidden
 	}
 
@@ -278,6 +339,9 @@ func (s *Service) ListInvitations(ctx context.Context, actorUserID, orgID int64)
 	if !Allowed(actor.Role, ActionManageMembers) {
 		return nil, ErrForbidden
 	}
+	if err := ensureEnterprise(ctx, s.db, orgID); err != nil {
+		return nil, err
+	}
 	rows, err := s.db.QueryContext(ctx, queryListInvitations, orgID)
 	if err != nil {
 		return nil, err
@@ -299,13 +363,10 @@ func (s *Service) ListInvitations(ctx context.Context, actorUserID, orgID int64)
 }
 
 // checkInvitationGrant 复用在成员角色变更上的同一套授予规则，唯一的区别是
-// owner 可以被 owner 邀请（受邀者接受后才成为 owner，仍然走专用语义）。
+// owner can only be assigned by the ownership-transfer transaction.
 func checkInvitationGrant(actorRole, inviteRole string) error {
 	if inviteRole == roleOwner {
-		if actorRole != roleOwner {
-			return ErrOwnerGrant
-		}
-		return nil
+		return ErrOwnerGrant
 	}
 	return checkRoleGrant(actorRole, inviteRole)
 }
@@ -385,13 +446,18 @@ func bumpOrgRevisionInTx(ctx context.Context, tx *sql.Tx, orgID int64, now time.
 
 func scanInvitation(scan func(dest ...any) error) (Invitation, error) {
 	var (
-		invitation Invitation
-		acceptedAt sql.NullTime
-		createdBy  sql.NullInt64
+		invitation   Invitation
+		monthlyLimit sql.NullInt64
+		acceptedAt   sql.NullTime
+		createdBy    sql.NullInt64
 	)
 	if err := scan(&invitation.ID, &invitation.OrgID, &invitation.Email, &invitation.Role,
-		&invitation.Status, &invitation.ExpiresAt, &acceptedAt, &createdBy, &invitation.CreatedAt); err != nil {
+		&monthlyLimit, &invitation.Status, &invitation.ExpiresAt, &acceptedAt, &createdBy, &invitation.CreatedAt); err != nil {
 		return Invitation{}, err
+	}
+	if monthlyLimit.Valid {
+		value := monthlyLimit.Int64
+		invitation.MonthlyLimitMicro = &value
 	}
 	if acceptedAt.Valid {
 		value := acceptedAt.Time

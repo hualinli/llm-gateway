@@ -25,6 +25,10 @@ type KeyRecord struct {
 	// OwnerUserID is nil for legacy or organization-scoped keys that have no
 	// user owner. A nil owner keeps the metering user_id NULL.
 	OwnerUserID *int64
+	// MembershipID is the membership incarnation bound to this key. It is
+	// advisory snapshot data; the PostgreSQL guard revalidates the same id
+	// against the key's organization and owner before admission.
+	MembershipID int64
 	// ExpiresAt is nil when the key has no expiry. The value is always UTC.
 	ExpiresAt *time.Time
 	// ModelAllowlist is the tri-state key-level model restriction from

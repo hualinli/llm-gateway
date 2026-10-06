@@ -84,6 +84,19 @@ func countPersonalOrgs(t *testing.T, db *sql.DB, userID int64) int {
 	return count
 }
 
+func assertZeroBalanceWallet(t *testing.T, db *sql.DB, orgID int64) {
+	t.Helper()
+	var currency, status string
+	var posted, reserved, version int64
+	if err := db.QueryRow(`SELECT currency, posted_balance_micro, reserved_micro, status, version
+		FROM billing_accounts WHERE org_id = $1`, orgID).Scan(&currency, &posted, &reserved, &status, &version); err != nil {
+		t.Fatal(err)
+	}
+	if currency != "CNY" || posted != 0 || reserved != 0 || status != "active" || version != 1 {
+		t.Fatalf("wallet = %s/%d/%d/%s/v%d, want active zero CNY wallet", currency, posted, reserved, status, version)
+	}
+}
+
 func TestEnsurePersonalOrganizationIsIdempotentAndConcurrencySafe(t *testing.T) {
 	db, _ := isolatedDSN(t)
 	svc := organization.NewService(db)
@@ -129,6 +142,7 @@ func TestEnsurePersonalOrganizationIsIdempotentAndConcurrencySafe(t *testing.T) 
 		t.Fatalf("personal organizations = %d, want exactly 1 row", got)
 	}
 	first := results[0]
+	assertZeroBalanceWallet(t, db, first.ID)
 	if first.Type != "personal" || first.Status != "active" || first.Name != "Alice" {
 		t.Fatalf("unexpected personal organization: %+v", first)
 	}
@@ -154,6 +168,10 @@ func TestEnsurePersonalOrganizationIsIdempotentAndConcurrencySafe(t *testing.T) 
 	}
 	if got := countPersonalOrgs(t, db, user.ID); got != 1 {
 		t.Fatalf("personal organizations after repeat = %d, want 1", got)
+	}
+	var wallets int
+	if err := db.QueryRow(`SELECT count(*) FROM billing_accounts WHERE org_id = $1`, first.ID).Scan(&wallets); err != nil || wallets != 1 {
+		t.Fatalf("wallet rows after repeat = %d, err=%v; want one", wallets, err)
 	}
 
 	// 空 displayName 用 email local part 兜底。
@@ -191,6 +209,7 @@ func TestCreateEnterpriseAddsOwnerMembership(t *testing.T) {
 	if org.Type != "enterprise" || org.Name != "Acme" || org.Status != "active" || org.LegacyTenantID != nil {
 		t.Fatalf("unexpected enterprise organization: %+v", org)
 	}
+	assertZeroBalanceWallet(t, db, org.ID)
 
 	membership, err := svc.Membership(ctx, owner.ID, org.ID)
 	if err != nil {
@@ -415,8 +434,8 @@ func TestMembershipRemovedIsNotActive(t *testing.T) {
 	if _, err := db.ExecContext(ctx, `UPDATE memberships SET status = 'removed' WHERE org_id = $1 AND user_id = $2`, org.ID, bob.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.Membership(ctx, bob.ID, org.ID); !errors.Is(err, organization.ErrNotMember) {
-		t.Fatalf("removed membership = %v, want ErrNotMember", err)
+	if _, err := svc.Membership(ctx, bob.ID, org.ID); !errors.Is(err, organization.ErrNotFound) {
+		t.Fatalf("removed membership = %v, want ErrNotFound", err)
 	}
 	if _, err := svc.GetForUser(ctx, bob.ID, org.ID); !errors.Is(err, organization.ErrNotFound) {
 		t.Fatalf("removed member GetForUser = %v, want ErrNotFound", err)

@@ -9,27 +9,18 @@ import (
 
 // Monthly statement (T07C).
 //
-// The statement is an *internal consumption report*, not a legal invoice and not
-// a closed billing period. Two different time axes appear in this package and
-// they must never be mixed:
-//
-//   - `occurred_at` (usage_receipts) is when the usage happened: the axis of
-//     usage analysis, capacity planning and model cost review;
-//   - `posted_at` (billing_entries) is when the money moved: the only axis a
-//     statement may total.
-//
-// A settlement that lands late (usage in August, settlement posted in
-// September) therefore belongs to September's statement, because September is
-// when the money moved. The statement reports that explicitly (`late_entries`,
-// `late_micro`, and each line's `occurred_at`/`late_posted`) so a reader can
-// reconcile the two axes without the report silently choosing one.
+// The statement is a complete ledger cash-movement report, not a legal invoice
+// or a closed billing period. It groups every credit/debit/adjustment and
+// reservation/release by posted_at in Asia/Shanghai. Actual consumption reports
+// use the execution's quota_month instead, so late settlement cannot make
+// member quota usage and monthly sales disagree.
 //
 // The statement is computed live from `billing_entries`. There is no
 // billing_periods table and no automatic close: a re-read after new postings
 // returns a larger statement, and `cutoff_at` is the *period* boundary (the
-// first instant of the next UTC month), not a "frozen at" instant.
+// first instant of the next Beijing month), not a "frozen at" instant.
 const (
-	// StatementMonthLayout is the wire format of a statement month: UTC,
+	// StatementMonthLayout is the wire format of a statement month: Beijing,
 	// calendar month, no day or time component.
 	StatementMonthLayout = "2006-01"
 
@@ -44,48 +35,47 @@ const (
 	StatementBasis = "posted_at"
 
 	// StatementDisclaimer is the frozen wording of what this report is not.
-	StatementDisclaimer = "internal consumption report over billing_entries.posted_at " +
-		"(UTC month). It is not a legal invoice and not a closed billing period: " +
+	StatementDisclaimer = "internal ledger cash-movement report over billing_entries.posted_at " +
+		"(Asia/Shanghai month). It is not a legal invoice and not a closed billing period: " +
 		"late settlements appear in the month they were posted, and a later read " +
 		"of the same month may contain more entries."
 )
 
-// StatementMonth is one resolved UTC calendar month.
+// StatementMonth is one resolved Asia/Shanghai calendar month.
 type StatementMonth struct {
 	// Label is the canonical "YYYY-MM".
 	Label string
-	// From is the inclusive first instant of the month (UTC).
+	// From is the inclusive first instant of the month (Asia/Shanghai).
 	From time.Time
-	// CutoffAt is the exclusive end of the month (UTC): the first instant of the
+	// CutoffAt is the exclusive end of the month (Asia/Shanghai): the first instant of the
 	// next month. It is the statement cutoff the API returns.
 	CutoffAt time.Time
 }
 
-// ParseStatementMonth resolves an "YYYY-MM" label into a UTC month. An empty
-// label means "the UTC month containing now". A malformed label is refused
+// ParseStatementMonth resolves an "YYYY-MM" label into a Beijing month. An empty
+// label means "the Beijing month containing now". A malformed label is refused
 // rather than silently reinterpreted in another timezone.
 func ParseStatementMonth(raw string, now time.Time) (StatementMonth, error) {
 	if now.IsZero() {
-		now = time.Now().UTC()
+		now = time.Now()
 	}
-	now = now.UTC()
 	label := strings.TrimSpace(raw)
 	if label == "" {
-		label = now.Format(StatementMonthLayout)
+		label = now.In(beijingLocation).Format(StatementMonthLayout)
 	}
-	from, err := time.ParseInLocation(StatementMonthLayout, label, time.UTC)
+	from, err := time.ParseInLocation(StatementMonthLayout, label, beijingLocation)
 	if err != nil {
-		return StatementMonth{}, fmt.Errorf("%w: month must be YYYY-MM in UTC", ErrInvalidArgument)
+		return StatementMonth{}, fmt.Errorf("%w: month must be YYYY-MM in Asia/Shanghai", ErrInvalidArgument)
 	}
 	if from.Format(StatementMonthLayout) != label {
 		// time.Parse is lenient about "2026-1"; the canonical form is required so
 		// two spellings cannot name the same month.
-		return StatementMonth{}, fmt.Errorf("%w: month must be YYYY-MM in UTC", ErrInvalidArgument)
+		return StatementMonth{}, fmt.Errorf("%w: month must be YYYY-MM in Asia/Shanghai", ErrInvalidArgument)
 	}
 	return StatementMonth{
 		Label:    label,
-		From:     from.UTC(),
-		CutoffAt: from.AddDate(0, 1, 0).UTC(),
+		From:     from,
+		CutoffAt: from.AddDate(0, 1, 0),
 	}, nil
 }
 

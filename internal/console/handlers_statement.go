@@ -44,7 +44,7 @@ func (s *server) getOrgBillingStatement(ctx context.Context, c *app.RequestConte
 	}
 	month, err := billing.ParseStatementMonth(c.Query("month"), s.now())
 	if err != nil {
-		s.writeError(c, http.StatusBadRequest, "", "month must be a UTC calendar month in YYYY-MM form")
+		s.writeError(c, http.StatusBadRequest, "", "month must be a Beijing calendar month in YYYY-MM form")
 		return
 	}
 	limit, err := parseListLimit(c.Query("limit"))
@@ -96,6 +96,22 @@ func (s *server) listOrgBillingExceptions(ctx context.Context, c *app.RequestCon
 		s.writeOrganizationRBACError(c, "authorize billing exception read", err)
 		return
 	}
+	s.writeBillingExceptions(ctx, c, orgID)
+}
+
+// listAdminBillingExceptions is the platform-only read of a tenant's durable
+// exception queue. It shares the organization handler's bounded filters and
+// DTOs while keeping platform authority out of the member policy service.
+func (s *server) listAdminBillingExceptions(ctx context.Context, c *app.RequestContext) {
+	orgID, err := parsePathID(c.Param("org"))
+	if err != nil {
+		s.writeError(c, http.StatusBadRequest, "", err.Error())
+		return
+	}
+	s.writeBillingExceptions(ctx, c, orgID)
+}
+
+func (s *server) writeBillingExceptions(ctx context.Context, c *app.RequestContext, orgID int64) {
 	limit, err := parseListLimit(c.Query("limit"))
 	if err != nil {
 		s.writeError(c, http.StatusBadRequest, "", err.Error())
@@ -170,6 +186,26 @@ func (s *server) getOrgBillingException(ctx context.Context, c *app.RequestConte
 		s.writeOrganizationRBACError(c, "authorize billing exception read", err)
 		return
 	}
+	s.writeBillingException(ctx, c, orgID, exceptionID)
+}
+
+// getAdminBillingException reads a single exception under the pair
+// (organization, exception), so a mismatched organization remains not-found.
+func (s *server) getAdminBillingException(ctx context.Context, c *app.RequestContext) {
+	orgID, err := parsePathID(c.Param("org"))
+	if err != nil {
+		s.writeError(c, http.StatusBadRequest, "", err.Error())
+		return
+	}
+	exceptionID, err := parsePathID(c.Param("exception"))
+	if err != nil {
+		s.writeError(c, http.StatusBadRequest, "", err.Error())
+		return
+	}
+	s.writeBillingException(ctx, c, orgID, exceptionID)
+}
+
+func (s *server) writeBillingException(ctx context.Context, c *app.RequestContext, orgID, exceptionID int64) {
 	exception, err := s.exceptions.GetException(ctx, orgID, exceptionID)
 	if err != nil {
 		s.writeBillingError(c, "get billing exception", err)

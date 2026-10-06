@@ -6,18 +6,22 @@ import (
 	"time"
 )
 
-func TestParseStatementMonthIsUTCCanonical(t *testing.T) {
+func TestParseStatementMonthIsBeijingCanonical(t *testing.T) {
 	now := time.Date(2026, 10, 1, 23, 30, 0, 0, time.UTC)
+	beijing, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
 	cases := []struct {
 		raw       string
 		wantLabel string
 		wantFrom  time.Time
 		wantTo    time.Time
 	}{
-		{"", "2026-10", time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)},
-		{"2026-09", "2026-09", time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)},
-		{"2026-02", "2026-02", time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)},
-		{"2024-02", "2024-02", time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC), time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC)},
+		{"", "2026-10", time.Date(2026, 10, 1, 0, 0, 0, 0, beijing), time.Date(2026, 11, 1, 0, 0, 0, 0, beijing)},
+		{"2026-09", "2026-09", time.Date(2026, 9, 1, 0, 0, 0, 0, beijing), time.Date(2026, 10, 1, 0, 0, 0, 0, beijing)},
+		{"2026-02", "2026-02", time.Date(2026, 2, 1, 0, 0, 0, 0, beijing), time.Date(2026, 3, 1, 0, 0, 0, 0, beijing)},
+		{"2024-02", "2024-02", time.Date(2024, 2, 1, 0, 0, 0, 0, beijing), time.Date(2024, 3, 1, 0, 0, 0, 0, beijing)},
 	}
 	for _, tc := range cases {
 		month, err := ParseStatementMonth(tc.raw, now)

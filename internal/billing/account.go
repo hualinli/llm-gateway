@@ -63,18 +63,21 @@ func (a Account) AvailableMicro() int64 {
 
 // Entry is one append-only ledger row.
 type Entry struct {
-	ID             int64
-	OrgID          int64
-	Kind           string
-	AmountMicro    int64
-	Direction      string
-	BusinessID     string
-	PayloadDigest  string
-	Reason         *string
-	OperatorUserID *int64
-	RequestID      *string
-	PostedAt       time.Time
-	CreatedAt      time.Time
+	ID                int64
+	OrgID             int64
+	Kind              string
+	AmountMicro       int64
+	Direction         string
+	BusinessID        string
+	PayloadDigest     string
+	Reason            *string
+	OperatorUserID    *int64
+	RequestID         *string
+	ManualOperation   string
+	PaymentReference  *string
+	ReversalOfEntryID *int64
+	PostedAt          time.Time
+	CreatedAt         time.Time
 }
 
 // SignedMicro is the amount this entry contributes to whichever bucket its kind

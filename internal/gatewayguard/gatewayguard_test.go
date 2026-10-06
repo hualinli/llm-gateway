@@ -382,7 +382,7 @@ func TestMiddlewareMapsDenialsToEnvelope(t *testing.T) {
 }
 
 func TestMiddlewareInjectsAttributionAndExecutionID(t *testing.T) {
-	guard := &fakeGuard{permit: Permit{TenantID: "org:7", OrgID: 7, UserID: 42, KeyID: "key-1"}}
+	guard := &fakeGuard{permit: Permit{TenantID: "org:7", OrgID: 7, UserID: 42, MembershipID: 27, KeyID: "key-1"}}
 	record := auth.KeyRecord{ID: "key-1", Hash: "h", TenantID: "org:7", Status: "active", OrgID: 7}
 	rec, captured := guardRequest(t, Middleware(guard, Options{}), &record, `{"model":"m","stream":true}`)
 	if rec.Code != http.StatusOK || captured == nil {
@@ -392,7 +392,7 @@ func TestMiddlewareInjectsAttributionAndExecutionID(t *testing.T) {
 	if !ok {
 		t.Fatal("no attribution in context")
 	}
-	if attribution.OrgID != 7 || attribution.UserID != 42 || attribution.KeyID != "key-1" || attribution.TenantID != "org:7" {
+	if attribution.OrgID != 7 || attribution.UserID != 42 || attribution.MembershipID != 27 || attribution.KeyID != "key-1" || attribution.TenantID != "org:7" {
 		t.Fatalf("attribution = %+v", attribution)
 	}
 	if !strings.HasPrefix(attribution.ExecutionID, "exec_") || len(attribution.ExecutionID) != len("exec_")+32 {
@@ -502,7 +502,7 @@ func TestPGGuardEvaluateDecisionTable(t *testing.T) {
 	base := func() Facts {
 		return Facts{
 			Found: true, KeyID: "key-1", KeyStatus: "active", OrgID: 7, OrgStatus: "active",
-			UserID: 42, UserKnown: true, UserStatus: "active", MemberRole: "member", MemberStatus: "active",
+			UserID: 42, UserKnown: true, UserStatus: "active", MembershipID: 27, MemberRole: "member", MemberStatus: "active",
 		}
 	}
 	cases := []struct {
@@ -514,6 +514,7 @@ func TestPGGuardEvaluateDecisionTable(t *testing.T) {
 	}{
 		{name: "active member is admitted", mutate: func(*Facts) {}},
 		{name: "key row missing is 401", mutate: func(f *Facts) { f.Found = false }, wantStatus: 401, wantCode: httperr.CodeUnauthorized},
+		{name: "missing membership incarnation is 403", mutate: func(f *Facts) { f.MembershipID = 0 }, wantStatus: 403, wantCode: httperr.CodeForbidden},
 		{name: "key revoked in pg is 401", mutate: func(f *Facts) { f.KeyStatus = "revoked" }, wantStatus: 401, wantCode: httperr.CodeUnauthorized},
 		{name: "key expired in pg is 401", mutate: func(f *Facts) { f.KeyExpiresAt = &expired }, wantStatus: 401, wantCode: httperr.CodeUnauthorized},
 		{name: "key expiring later is admitted", mutate: func(f *Facts) { f.KeyExpiresAt = &future }},
@@ -545,7 +546,7 @@ func TestPGGuardEvaluateDecisionTable(t *testing.T) {
 				if denial.Denied() {
 					t.Fatalf("unexpected denial %+v", denial)
 				}
-				if permit.OrgID != 7 || permit.KeyID != "key-1" {
+				if permit.OrgID != 7 || permit.MembershipID != 27 || permit.KeyID != "key-1" {
 					t.Fatalf("permit = %+v", permit)
 				}
 				return

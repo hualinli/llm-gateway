@@ -10,7 +10,7 @@ import (
 )
 
 func TestInvitationCannotChangeActiveMembership(t *testing.T) {
-	for _, targetRole := range []string{"owner", "admin", "member", "billing_viewer"} {
+	for _, targetRole := range []string{"owner", "admin", "member"} {
 		t.Run(targetRole, func(t *testing.T) {
 			db, _ := isolatedDSN(t)
 			svc := organization.NewService(db)
@@ -79,18 +79,18 @@ func TestOldInvitationCannotRestorePrivilegesOrRemovedMembership(t *testing.T) {
 	if role != "member" || status != "removed" || orgRevisionOf(t, db, org.ID) != revision {
 		t.Fatal("stale invitation changed membership")
 	}
-	_, freshToken, err := svc.CreateInvitation(ctx, owner.ID, org.ID, target.Email, "billing_viewer", time.Hour)
+	_, freshToken, err := svc.CreateInvitation(ctx, owner.ID, org.ID, target.Email, "member", time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
 	member, err := svc.AcceptInvitation(ctx, freshToken, target.ID, target.Email)
-	if err != nil || member.Role != "billing_viewer" || member.Status != "active" {
+	if err != nil || member.Role != "member" || member.Status != "active" {
 		t.Fatalf("fresh rejoin=%+v err=%v", member, err)
 	}
 }
 
 func TestInvitationRequiresInviterCurrentGrantPermission(t *testing.T) {
-	for _, change := range []string{"demote", "remove", "lose owner grant"} {
+	for _, change := range []string{"demote", "remove"} {
 		t.Run(change, func(t *testing.T) {
 			db, _ := isolatedDSN(t)
 			svc := organization.NewService(db)
@@ -99,9 +99,6 @@ func TestInvitationRequiresInviterCurrentGrantPermission(t *testing.T) {
 			inviter := createUser(t, db, "inviter@example.com")
 			target := createUser(t, db, "target@example.com")
 			inviterRole, grantRole := "admin", "member"
-			if change == "lose owner grant" {
-				inviterRole, grantRole = "owner", "owner"
-			}
 			org := seedEnterprise(t, db, svc, "Inviter safety", []int64{owner.ID, inviter.ID}, []string{"owner", inviterRole})
 			_, token, err := svc.CreateInvitation(ctx, inviter.ID, org.ID, target.Email, grantRole, time.Hour)
 			if err != nil {
@@ -110,11 +107,8 @@ func TestInvitationRequiresInviterCurrentGrantPermission(t *testing.T) {
 			if change == "remove" {
 				err = svc.RemoveMember(ctx, owner.ID, org.ID, inviter.ID)
 			} else {
-				role := "member"
-				if change == "lose owner grant" {
-					role = "admin"
-				}
-				err = svc.ChangeMemberRole(ctx, owner.ID, org.ID, inviter.ID, role)
+				limit := int64(0)
+				err = svc.ChangeMemberRoleWithLimit(ctx, owner.ID, org.ID, inviter.ID, "member", &limit, true)
 			}
 			if err != nil {
 				t.Fatal(err)
@@ -127,6 +121,26 @@ func TestInvitationRequiresInviterCurrentGrantPermission(t *testing.T) {
 				t.Fatal("obsolete invitation changed organization state")
 			}
 		})
+	}
+}
+
+func TestFormerOwnerCannotAcceptPreviouslyIssuedAdminInvitation(t *testing.T) {
+	db, _ := isolatedDSN(t)
+	svc := organization.NewService(db)
+	ctx := context.Background()
+	owner := createUser(t, db, "former-owner@example.com")
+	successor := createUser(t, db, "successor@example.com")
+	target := createUser(t, db, "admin-target@example.com")
+	org := seedEnterprise(t, db, svc, "Former owner invitation", []int64{owner.ID, successor.ID}, []string{"owner", "member"})
+	_, token, err := svc.CreateInvitation(ctx, owner.ID, org.ID, target.Email, "admin", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.TransferOwnership(ctx, owner.ID, org.ID, successor.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.AcceptInvitation(ctx, token, target.ID, target.Email); !errors.Is(err, organization.ErrInvitationRevoked) {
+		t.Fatalf("former owner's admin invitation accepted: %v", err)
 	}
 }
 

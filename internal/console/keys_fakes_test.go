@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"llm-gateway/internal/billing"
 	"llm-gateway/internal/controlclient"
 )
 
@@ -103,9 +104,14 @@ func (f *fakeControl) lastRevoke(t interface{ Fatalf(string, ...any) }) controlc
 // fakeUsage records the resolved usage query so scoping assertions are made on
 // what the store was actually asked for.
 type fakeUsage struct {
-	mu      sync.Mutex
-	queries []UsageQuery
-	queryFn func(ctx context.Context, query UsageQuery) (UsagePage, error)
+	mu                sync.Mutex
+	queries           []UsageQuery
+	queryFn           func(ctx context.Context, query UsageQuery) (UsagePage, error)
+	paidQueries       []PaidUsageQuery
+	paidQueryFn       func(ctx context.Context, query PaidUsageQuery) (PaidUsagePage, error)
+	quotaFn           func(ctx context.Context, orgID, userID int64, month billing.BillingMonth) (billing.MemberQuota, error)
+	memberSummaryFn   func(ctx context.Context, orgID int64, month billing.BillingMonth) ([]MemberBillingSummary, error)
+	platformSummaryFn func(ctx context.Context, month billing.BillingMonth) (PlatformBillingSummary, error)
 }
 
 func (f *fakeUsage) Query(ctx context.Context, query UsageQuery) (UsagePage, error) {
@@ -131,6 +137,53 @@ func (f *fakeUsage) count() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return len(f.queries)
+}
+
+func (f *fakeUsage) QueryUsage(ctx context.Context, query PaidUsageQuery) (PaidUsagePage, error) {
+	f.mu.Lock()
+	f.paidQueries = append(f.paidQueries, query)
+	fn := f.paidQueryFn
+	f.mu.Unlock()
+	if fn != nil {
+		return fn(ctx, query)
+	}
+	return PaidUsagePage{Items: []PaidUsageRow{}}, nil
+}
+
+func (f *fakeUsage) GetMemberQuota(ctx context.Context, orgID, userID int64, month billing.BillingMonth) (billing.MemberQuota, error) {
+	if f.quotaFn != nil {
+		return f.quotaFn(ctx, orgID, userID, month)
+	}
+	return billing.MemberQuota{OrgID: orgID, UserID: userID, Month: month}, nil
+}
+
+func (f *fakeUsage) MemberSummary(ctx context.Context, orgID int64, month billing.BillingMonth) ([]MemberBillingSummary, error) {
+	if f.memberSummaryFn != nil {
+		return f.memberSummaryFn(ctx, orgID, month)
+	}
+	return []MemberBillingSummary{}, nil
+}
+
+func (f *fakeUsage) PlatformSummary(ctx context.Context, month billing.BillingMonth) (PlatformBillingSummary, error) {
+	if f.platformSummaryFn != nil {
+		return f.platformSummaryFn(ctx, month)
+	}
+	return PlatformBillingSummary{Month: month}, nil
+}
+
+func (f *fakeUsage) lastPaid(t interface{ Fatalf(string, ...any) }) PaidUsageQuery {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.paidQueries) == 0 {
+		t.Fatalf("no paid usage query reached the report store")
+	}
+	return f.paidQueries[len(f.paidQueries)-1]
+}
+
+func (f *fakeUsage) paidCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.paidQueries)
 }
 
 // sampleKey is the metadata shape Control returns; tests only override the

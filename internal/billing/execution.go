@@ -107,8 +107,14 @@ func IsKnownExecutionStatus(status string) bool {
 // only exists once something ended the execution. A zero value in the database
 // would be a fabricated fact.
 type Execution struct {
-	ExecutionID       string
-	OrgID             int64
+	ExecutionID string
+	OrgID       int64
+	// MembershipID pins the exact relationship incarnation that owned the Key
+	// at admission. It remains stable even if the user later leaves and rejoins.
+	MembershipID *int64
+	// QuotaMonth is the Beijing month in which admission reserved the request.
+	// Late settlement stays in this month even when occurred_at is in the next.
+	QuotaMonth        *string
 	UserID            *int64
 	KeyID             *string
 	GatewayID         *string
@@ -145,8 +151,11 @@ type ReserveParams struct {
 	// same id is a replay, never a second reservation.
 	ExecutionID string
 	OrgID       int64
-	// UserID is 0 when the key has no owner (legacy or organization-scoped
-	// key); it is stored as SQL NULL, never as user 0.
+	// MembershipID comes from a Key bound by the gateway guard. Reserve checks
+	// it again against org/user/status/cap under a row lock.
+	MembershipID int64
+	// UserID is the owner of the Key. A request without an owner cannot be
+	// attributed to a member and cannot pass the production gateway guard.
 	UserID    int64
 	KeyID     string
 	GatewayID string
@@ -306,8 +315,10 @@ func ValidateReserve(params ReserveParams) error {
 		return fmt.Errorf("%w: execution_id must be 1..%d non-padded bytes", ErrInvalidArgument, MaxExecutionIDLength)
 	case params.OrgID <= 0:
 		return fmt.Errorf("%w: org_id is required", ErrInvalidArgument)
-	case params.UserID < 0:
-		return fmt.Errorf("%w: user_id must not be negative", ErrInvalidArgument)
+	case params.UserID <= 0:
+		return fmt.Errorf("%w: a member user_id is required", ErrInvalidArgument)
+	case params.MembershipID <= 0:
+		return fmt.Errorf("%w: a bound membership_id is required", ErrInvalidArgument)
 	case params.PriceVersionID <= 0:
 		return fmt.Errorf("%w: price_version_id is required", ErrInvalidArgument)
 	case params.Model == "" || len(params.Model) > MaxModelNameLength ||
@@ -402,6 +413,7 @@ func executionDigest(kind string, params ReserveParams, businessID string) strin
 	writeDigestField(digest, "business_id", businessID)
 	writeDigestField(digest, "execution_id", params.ExecutionID)
 	writeDigestField(digest, "org_id", FormatMicro(params.OrgID))
+	writeDigestField(digest, "membership_id", FormatMicro(params.MembershipID))
 	writeDigestField(digest, "user_id", FormatMicro(params.UserID))
 	writeDigestField(digest, "key_id", params.KeyID)
 	writeDigestField(digest, "gateway_id", params.GatewayID)
@@ -418,6 +430,7 @@ func executionDigest(kind string, params ReserveParams, businessID string) strin
 // upper bound is a conflict (ErrIdempotencyConflict), never a replay.
 func executionMatches(execution Execution, params ReserveParams) bool {
 	if execution.OrgID != params.OrgID ||
+		valueOrZero(execution.MembershipID) != params.MembershipID ||
 		execution.PriceVersionID != params.PriceVersionID ||
 		execution.Model != params.Model ||
 		nilString(execution.KeyID) != params.KeyID ||
@@ -436,6 +449,13 @@ func executionMatches(execution Execution, params ReserveParams) bool {
 	}
 	return *execution.InputTokensUpper == params.InputTokensUpper &&
 		*execution.OutputTokensUpper == params.OutputTokensUpper
+}
+
+func valueOrZero(value *int64) int64 {
+	if value == nil {
+		return 0
+	}
+	return *value
 }
 
 // nilString renders an optional string column as the "" a comparison uses for
