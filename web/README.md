@@ -58,8 +58,8 @@ npm run e2e
 npm run e2e:report
 ```
 
-手动启动的 Console 默认没有连接 Control，上游凭据、模型路由及完整 Key 流程需要全栈环境。若 `E2E_GATEWAY_MODEL` 指向已开放、已定价且可调用的模型，验收会额外发出一次真实 Gateway 请求并等待结算；未设置时不伪造消费记录。
+手动启动的 Console 默认没有连接 Control，上游凭据、模型路由及完整 Key 流程需要全栈环境。若 `E2E_GATEWAY_MODEL` 指向已开放、已定价且可调用的模型，验收会额外发出一次真实 Gateway 请求并等待结算；未设置时不伪造消费记录。全栈 RC 会打开 `E2E_REQUIRE_FULL_STACK=1`：Console 和 Gateway 必须是 loopback，Control 必须能创建全部 Key，测试企业必须实际继承指定模型并产生已结算用量，否则 setup 失败，不会把这些用例静默跳过。此模式只给本次创建的随机测试企业入账。
 
-Playwright 默认连接 Console `http://127.0.0.1:18092`、Gateway `http://127.0.0.1:18090` 和 Vite `http://127.0.0.1:5199`。可用 `E2E_CONSOLE_URL`、`E2E_GATEWAY_URL`、`E2E_BASE_URL`、`E2E_DEV_PORT` 覆盖地址；前两个变量也会作为 Vite 代理目标。开发模式会复用已有的 5199 服务，运行前确认它连接的是当前测试后端。
+Playwright 默认连接 Console `http://127.0.0.1:18092`、Gateway `http://127.0.0.1:18090` 和 Vite `http://127.0.0.1:5199`。可用 `E2E_CONSOLE_URL`、`E2E_GATEWAY_URL`、`E2E_BASE_URL`、`E2E_DEV_PORT` 覆盖地址；前两个变量也会作为 Vite 代理目标。开发模式会复用已有的 5199 服务，运行前确认它连接的是当前测试后端。浏览器默认使用 Playwright 自带 Chromium；也可传 `E2E_BROWSER_EXECUTABLE_PATH` 指定已安装的 Chromium 二进制，或用 `E2E_BROWSER_CHANNEL=msedge` 选择 Edge，两者不能同时设置。
 
 角色用例共享登录会话，注销用例最后运行。主动截图保存在 `data/verification/web-screenshots/`；失败截图和 trace 保存在 `web/test-results/`，HTML 报告保存在 `web/playwright-report/`。测试登录状态保存在忽略提交的本地文件中，不要提交这些文件。
