@@ -42,6 +42,8 @@ message ApiKeyMetadata {
   google.protobuf.Timestamp created_at = 10;
   google.protobuf.Timestamp revoked_at = 11; // absent while active
   string tenant_id = 12;                     // legacy tenant projection for the Gateway
+  string name = 13;                          // user-assigned label; never a secret
+  int64 membership_id = 14;                  // pinned membership incarnation
 }
 
 // ConfigService 控制面配置下发契约，与 internal/control/control.go 的 Go 结构体等价。
@@ -80,6 +82,7 @@ message KeyRecord {
   optional int64 owner_user_id = 7;
   google.protobuf.Timestamp expires_at = 8;
   ModelAllowlist model_allowlist = 9;
+  int64 membership_id = 10;
 }
 
 // ProviderConfig contains non-secret provider settings. Secrets are referred
@@ -182,6 +185,8 @@ message CreateApiKeyRequest {
   optional int64 owner_user_id = 7;
   google.protobuf.Timestamp expires_at = 8;
   ModelAllowlist model_allowlist = 9;
+  int64 membership_id = 10;                  // resolved from the authenticated actor
+  string name = 11;
 }
 
 // CreateApiKeyResponse carries the raw key exactly once. An idempotent replay
@@ -205,6 +210,7 @@ message RevokeApiKeyRequest {
   string request_id = 5;
   string key_id = 6;
   int64 org_id = 7;
+  int64 membership_id = 8;
 }
 
 message RevokeApiKeyResponse {
@@ -227,6 +233,7 @@ message ListApiKeysRequest {
   optional int64 owner_user_id = 7;
   int32 page_size = 8;
   string page_token = 9;
+  int64 membership_id = 10;
 }
 
 message ListApiKeysResponse {
@@ -243,6 +250,7 @@ message GetOperationRequest {
   int64 actor_user_id = 3;
   int64 actor_org_id = 4;
   string request_id = 5;
+  int64 membership_id = 6;
 }
 
 message GetOperationResponse {
