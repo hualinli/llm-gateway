@@ -281,6 +281,7 @@ paths:
         - { $ref: '#/components/parameters/Org' }
         - { $ref: '#/components/parameters/Limit' }
         - { $ref: '#/components/parameters/Cursor' }
+        - { name: owner_user_id, in: query, description: Filter for the signed-in user's own Key owner id; another user's id is not accessible, schema: { type: string } }
         - { name: operation_id, in: query, schema: { type: string } }
       responses:
         '200': { description: The signed-in user's keys only, content: { application/json: { schema: { $ref: '#/components/schemas/KeyList' } } } }
@@ -297,6 +298,9 @@ paths:
               required: [name]
               properties:
                 name: { type: string, minLength: 1, maxLength: 120, description: Visible only to the Key owner }
+                owner_user_id: { type: string, description: Must identify the signed-in user; cannot create a Key for another user }
+                expires_at: { type: string, format: date-time }
+                model_allowlist: { type: array, items: { type: string }, description: Key-level model restriction }
                 operation_id: { type: string, maxLength: 200, description: Stable id for retry and recovery of this create operation }
       responses:
         '201': { description: Key created; secret is returned once, content: { application/json: { schema: { $ref: '#/components/schemas/KeyCreated' } } } }
@@ -1027,14 +1031,22 @@ components:
         next_cursor: { type: [string, 'null'] }
     ApiKey:
       type: object
-      required: [key_id, name, prefix, status, created_at]
+      required: [key_id, name, prefix, organization_id, owner_user_id, created_by, status, expires_at, revoked_at, model_allowlist, policy_version, created_at, tenant_id]
       properties:
         key_id: { type: string }
         name: { type: string, description: Visible only to its owner }
         prefix: { type: string, description: Redacted display prefix; never an authentication credential }
+        organization_id: { type: string }
+        owner_user_id: { type: [string, 'null'] }
+        created_by: { type: [string, 'null'] }
         status: { type: string, enum: [active, revoked] }
+        expires_at: { type: [string, 'null'], format: date-time }
+        revoked_at: { type: [string, 'null'], format: date-time }
+        model_allowlist:
+          oneOf: [{ type: array, items: { type: string } }, { type: 'null' }]
+        policy_version: { type: string }
         created_at: { type: string, format: date-time }
-        revoked_at: { type: string, format: date-time }
+        tenant_id: { type: string }
     NullableMoney:
       oneOf:
         - { type: string, pattern: '^(0|[1-9]\d*)$' }

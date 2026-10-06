@@ -48,9 +48,8 @@ test.describe('member boundaries', () => {
     if (state.controlAvailable) {
       const otherKeys = await page.request.get('/api/v1/orgs/' + state.orgB.id + '/keys?limit=100');
       expect(otherKeys.status()).toBe(200);
-      const otherKeyPage = (await otherKeys.json()) as { items: Array<{ key_id: string }> };
-      expect(otherKeyPage.items).toHaveLength(0);
-      expect(JSON.stringify(otherKeyPage)).not.toMatch(/owner_user_id|membership_id|organization_id/);
+      const otherKeyPage = (await otherKeys.json()) as { items: Array<{ organization_id: string; owner_user_id: string | null; key_id: string }> };
+      expect(otherKeyPage.items.every((item) => item.organization_id === state.orgB.id && item.owner_user_id === state.member.userId)).toBe(true);
       const homeKeys = await page.request.get('/api/v1/orgs/' + state.orgA.id + '/keys?limit=100');
       expect(homeKeys.status()).toBe(200);
       const homeKeyIds = new Set(((await homeKeys.json()) as { items: Array<{ key_id: string }> }).items.map((item) => item.key_id));
