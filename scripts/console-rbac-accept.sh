@@ -33,6 +33,7 @@ run_id=""
 timeout_seconds=15
 gateway_url=""
 gateway_model="gpt-4o-mini"
+seed_local_test_credit=0
 
 usage() {
   cat <<'USAGE'
@@ -55,9 +56,13 @@ usage() {
   --gateway-url URL              Gateway 地址（例如 http://127.0.0.1:18090）。提供后启用
                                  check08（GATEWAY_ACCESS_GUARD=pg：成员自己的 Key 放行、
                                  撤销后 401、成功请求写入带归属的计量行）；
-                                 不提供则 check08 记为 SKIP，不做任何猜测。
+                                 不提供则 check08 记为 SKIP，不做任何猜测。余额不足时，
+                                 需另显式启用下方受限的本地测试充值选项。
   --gateway-model MODEL          check08 使用的模型名，默认 gpt-4o-mini（必须已在 Control
                                  的 routes 里配置，否则 Gateway 返回 404 unknown model）
+  --seed-local-test-credit      显式为本次新建的随机测试企业 A 充值 100000000 微元；仅当
+                                 Console/Gateway 都是 loopback 且 state file 不存在时可用。
+                                 默认不充值；不能配合既有 state file 或显式 --run-id。
   -h, --help                     显示本帮助
 
 检查项（ADR-0003 §5 验收映射）:
@@ -114,6 +119,7 @@ while [[ $# -gt 0 ]]; do
     --gateway-url=*) gateway_url="${1#*=}"; shift ;;
     --gateway-model) gateway_model="${2:-}"; shift 2 ;;
     --gateway-model=*) gateway_model="${1#*=}"; shift ;;
+    --seed-local-test-credit) seed_local_test_credit=1; shift ;;
     -h|--help) usage; exit 0 ;;
     --) shift; break ;;
     -*) die_usage "未知参数 $1" ;;
@@ -160,6 +166,7 @@ fi
   printf 'timeout_seconds=%s\n' "$timeout_seconds"
   printf 'gateway_url=%s\n' "${gateway_url:-<none>}"
   printf 'gateway_model=%s\n' "$gateway_model"
+  printf 'seed_local_test_credit=%s\n' "$seed_local_test_credit"
   printf 'script_sha256=%s\n' "$(shasum -a 256 "$script_dir/$script_name" 2>/dev/null | awk '{print $1}')"
 } > "$evidence_dir/run.env"
 
@@ -183,6 +190,8 @@ only. Nothing here reads the database or the product source tree.
 """
 
 import argparse
+import hashlib
+import ipaddress
 import json
 import os
 import re
@@ -230,6 +239,23 @@ def utcnow():
 
 def slugify(text):
     return re.sub(r"[^a-z0-9]+", "-", str(text).lower()).strip("-")[:48] or "call"
+
+
+def is_loopback_http_url(raw):
+    try:
+        parsed = urllib.parse.urlsplit(raw)
+        host = parsed.hostname
+        _ = parsed.port
+    except (TypeError, ValueError):
+        return False
+    if parsed.scheme not in ("http", "https") or not host or parsed.username or parsed.password:
+        return False
+    if host.lower() == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
 
 
 class Redactor:
@@ -557,8 +583,12 @@ class Env:
         self.client = client
         self.state_path = args.state_file
         self.evidence_dir = args.evidence_dir
+        self.state_file_existed = os.path.lexists(args.state_file)
+        if args.seed_local_test_credit and self.state_file_existed:
+            raise InfraFailure("--seed-local-test-credit 不能复用已存在的 state file")
         self.state = self._load_state()
-        self.run_id = self.state.get("run_id") or args.run_id or secrets.token_hex(3)
+        self.run_id = (self.state.get("run_id") or args.run_id or
+                       secrets.token_hex(16 if args.seed_local_test_credit else 3))
         self.password = self.state.get("password") or secrets.token_urlsafe(15)
         self.sessions = {}
         self.bugs = []
@@ -570,6 +600,7 @@ class Env:
         self.users = self.state.setdefault("users", {})
         self.keys = self.state.setdefault("keys", {})
         self.invitations = self.state.setdefault("invitations", {})
+        self.created_orgs = set()
         self.pass_id = "%s-%s" % (utcnow().replace(":", "").replace("-", ""), secrets.token_hex(2))
 
     # -- state -------------------------------------------------------------
@@ -689,7 +720,16 @@ class Env:
                 if str(payload.get("role")) != "owner":
                     raise CheckFailure("create-org-%s: 指定 owner 的角色应为 owner，实际 %r"
                                        % (label, payload.get("role")))
-                self.orgs[label] = {"id": str(org.get("id", "")), "name": org.get("name", name)}
+                org_id = str(org.get("id", ""))
+                if not org_id:
+                    raise CheckFailure("create-org-%s: response missing organization.id" % label)
+                if self.args.seed_local_test_credit and org.get("type") != "enterprise":
+                    raise CheckFailure("--seed-local-test-credit target is not a newly created enterprise")
+                if (self.args.seed_local_test_credit and label == "A" and
+                        ("model_allowlist" not in org or org.get("model_allowlist") is not None)):
+                    raise CheckFailure("--seed-local-test-credit requires the new enterprise to inherit platform models")
+                self.orgs[label] = {"id": org_id, "name": org.get("name", name)}
+                self.created_orgs.add(label)
                 created_any = True
                 self.save_state()
 
@@ -733,6 +773,8 @@ class Env:
                 self.run_id, self.orgs["A"]["id"], self.orgs["B"]["id"], len(self.users)))
         else:
             log("fixtures: 复用 state file 中的既有 fixture（run_id=%s）" % self.run_id)
+        if self.args.seed_local_test_credit and "A" not in self.created_orgs:
+            raise InfraFailure("--seed-local-test-credit 仅允许给本次新建的测试企业 A 充值")
         self.write_redacted_fixtures()
         self.actor_sessions_check(check)
 
@@ -1328,6 +1370,34 @@ def check08(env, check):
 
     ready = client.call(check, "gateway-readyz", "GET", "/readyz", base_url=gateway, csrf=None)
     expect_status(check, ready, 200, label="gateway readyz")
+
+    if env.args.seed_local_test_credit:
+        if "A" not in env.created_orgs:
+            raise InfraFailure("--seed-local-test-credit 仅允许给本次新建的测试企业 A 充值")
+        # This explicit opt-in is limited to a fresh, loopback-only fixture.
+        # The stable operation/reference pair makes a same-run retry idempotent.
+        funding_suffix = hashlib.sha256(env.run_id.encode("utf-8")).hexdigest()[:24]
+        funding_key = "t03-check08-funding-" + funding_suffix
+        payment_reference = "t03-check08-" + funding_suffix
+        funded = client.call(
+            check, "gateway-fund-org-a", "POST",
+            "/api/v1/admin/billing/accounts/%s/adjustments" % env.org_id("A"),
+            body={"type": "recharge", "amount_micro": "100000000",
+                  "payment_reference": payment_reference,
+                  "reason": "T03 Check08 Gateway access guard acceptance funding"},
+            session=env.session("admin"),
+            extra_headers={"Idempotency-Key": funding_key})
+        if funded.status not in (200, 201):
+            raise CheckFailure("POST fund organization A for Check08: expected HTTP 200 or 201, "
+                               "got %d code=%s message=%s" % (funded.status, funded.code(), funded.message()))
+        entry = (funded.json() or {}).get("entry") or {}
+        if (entry.get("manual_operation") != "recharge" or
+                entry.get("amount_micro") != "100000000" or
+                entry.get("payment_reference") != payment_reference or
+                entry.get("business_id") != funding_key):
+            raise CheckFailure("Check08 funding response did not match its idempotent recharge request")
+        check.note("仅为本次新建的 loopback 测试企业 A 充值 100000000 微元；平台默认模型范围保持继承")
+
     request_body = {"model": model, "messages": [{"role": "user", "content": "t03 acceptance"}], "stream": True}
 
     op = "t03-%s-gateway-member" % env.pass_id
@@ -1700,10 +1770,24 @@ def main():
     parser.add_argument("--timeout-seconds", type=int, default=15)
     parser.add_argument("--gateway-url", default="")
     parser.add_argument("--gateway-model", default="gpt-4o-mini")
+    parser.add_argument("--seed-local-test-credit", action="store_true")
     args, unknown = parser.parse_known_args()
     if unknown:
         print("console-rbac-accept: 未知内部参数 %s" % unknown, file=sys.stderr)
         return 2
+    if args.seed_local_test_credit:
+        if not args.gateway_url:
+            print("console-rbac-accept: --seed-local-test-credit requires --gateway-url", file=sys.stderr)
+            return 2
+        if args.run_id:
+            print("console-rbac-accept: --seed-local-test-credit requires a fresh random run_id", file=sys.stderr)
+            return 2
+        if os.path.lexists(args.state_file):
+            print("console-rbac-accept: --seed-local-test-credit cannot reuse an existing state file", file=sys.stderr)
+            return 2
+        if not is_loopback_http_url(args.base_url) or not is_loopback_http_url(args.gateway_url):
+            print("console-rbac-accept: --seed-local-test-credit requires loopback Console and Gateway URLs", file=sys.stderr)
+            return 2
 
     global _RED
     _RED = Redactor()
@@ -1823,6 +1907,9 @@ python_args=(
   --gateway-url "$gateway_url"
   --gateway-model "$gateway_model"
 )
+if [[ "$seed_local_test_credit" == "1" ]]; then
+  python_args+=(--seed-local-test-credit)
+fi
 if [[ -n "$run_id" ]]; then
   python_args+=(--run-id "$run_id")
 fi

@@ -90,6 +90,8 @@ bash scripts/release-candidate.sh run --project-name gateway-check --run-id loca
 
 这条路径会启动隔离测试栈并运行浏览器用例，结束时删除该 project 的卷。验收使用独立的 project/run 名，避免删掉仍在运行的开发环境。不要把生产或共享开发数据指向测试环境。只运行 Go + PG/Redis 集成测试时，`make integration-test` 会先启动专用测试依赖；运行完成后用 `make test-down` 清理。
 
+单独运行 `scripts/console-rbac-accept.sh` 时，Check08 默认不充值。只有对本机隔离栈、使用全新的 state file 且不指定 `--run-id` 时，才可显式传 `--seed-local-test-credit`；它会为本次新建的随机企业 A 入账 100000000 微元，并以幂等键避免同一次操作重复入账。该选项要求 Console 和 Gateway URL 都是 loopback，并拒绝复用已有 state file。
+
 只需要单独运行 Playwright 时，可分别执行 `web/e2e/scripts/prepare-backend.sh` 和 `web/e2e/scripts/start-console.sh`，然后在 `web/` 下运行 `npm ci`、`npm run e2e:install`、`npm run e2e`。这套手动 Console 没有 Control 管理通道，Key 操作会返回 `503`；完整 Key 流程请用发布候选全栈环境。
 
 Playwright 默认 Console 为 `http://127.0.0.1:18092`，Gateway 为 `http://127.0.0.1:18090`，Vite 为 `http://127.0.0.1:5199`。可设置 `E2E_CONSOLE_URL`、`E2E_GATEWAY_URL`、`E2E_BASE_URL` 和 `E2E_DEV_PORT` 覆盖。配置会把前两个目标同时传给 Vite 的 `CONSOLE_PROXY_TARGET` 和 `GATEWAY_PROXY_TARGET`。开发模式会复用已存在的 5199 服务；运行前确认它代理到同一测试 Console。
