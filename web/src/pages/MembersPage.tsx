@@ -34,6 +34,7 @@ import {
   useTransferOwnership,
 } from '../api/queries';
 import { MicroYuan } from '../components/Money';
+import { PageHelp } from '../components/PageHelp';
 import { PageHeader } from '../components/PageHeader';
 import { DataState, ErrorView } from '../components/states';
 import { useActiveOrg, useSession } from '../session/SessionProvider';
@@ -214,7 +215,7 @@ export function MembersPage(): ReactNode {
   return (
     <Space className="responsive-page-content" direction="vertical" size={18} style={{ width: '100%', minWidth: 0 }}>
       <PageHeader title="成员与申请" description="管理加入申请、成员角色和月度额度。每位成员只管理自己的 API Key。" extra={<Button icon={<PlusOutlined />} type="primary" onClick={() => { inviteForm.resetFields(); setInviteOpen(true); }}>邀请成员</Button>} />
-      <Alert type="info" showIcon message="额度按北京时间自然月统计" description="降低额度会立即影响新调用；已受理的请求会继续按原规则结算。0 元表示暂停新消费，不限额表示没有成员上限。" />
+      <PageHelp title="成员额度如何计算？">降低额度会影响新的调用，已开始的请求继续结算。0 元表示禁止新消费；不限额表示直接使用企业余额。额度按北京时间自然月重新计算。</PageHelp>
       {pageError ? <ErrorView error={pageError} title="操作未完成" /> : null}
       <Card className="responsive-table-card" title={`成员消费 · ${month}`} data-testid="member-spend-summary">
         <DataState query={usage} emptyDescription="本月还没有成员消费记录。">

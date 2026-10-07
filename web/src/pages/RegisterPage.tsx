@@ -3,6 +3,7 @@ import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { Alert, Button, Card, Form, Input, Space, Typography } from 'antd';
 import { LockOutlined, UserOutlined } from '@ant-design/icons';
 
+import { AuthLayout } from '../components/AuthLayout';
 import { asApiError, ErrorView } from '../components/states';
 import { useSession } from '../session/SessionProvider';
 
@@ -35,7 +36,7 @@ export function RegisterPage(): ReactNode {
   };
 
   return (
-    <div className="app-centered">
+    <AuthLayout>
       <Card style={{ width: '100%', maxWidth: 440 }}>
         <Space direction="vertical" size={4} style={{ width: '100%' }}>
           <Typography.Title level={3} style={{ marginBottom: 0 }}>创建账号</Typography.Title>
@@ -82,6 +83,6 @@ export function RegisterPage(): ReactNode {
           已有账号？<Link to="/login">登录</Link>
         </Typography.Paragraph>
       </Card>
-    </div>
+    </AuthLayout>
   );
 }

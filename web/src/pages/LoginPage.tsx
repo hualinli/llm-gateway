@@ -3,6 +3,7 @@ import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Alert, Button, Card, Form, Input, Space, Typography } from 'antd';
 import { LockOutlined, UserOutlined } from '@ant-design/icons';
 
+import { AuthLayout } from '../components/AuthLayout';
 import { asApiError, ErrorView } from '../components/states';
 import { useSession } from '../session/SessionProvider';
 
@@ -37,11 +38,11 @@ export function LoginPage(): ReactNode {
 
   const apiError = asApiError(error);
   return (
-    <div className="app-centered">
+    <AuthLayout>
       <Card style={{ width: '100%', maxWidth: 440 }}>
         <Space direction="vertical" size={4} style={{ width: '100%' }}>
-          <Typography.Title level={3} style={{ marginBottom: 0 }}>LLM Gateway</Typography.Title>
-          <Typography.Text type="secondary">管理你的模型调用、账户和团队。</Typography.Text>
+          <Typography.Title level={3} style={{ marginBottom: 0 }}>欢迎回来</Typography.Title>
+          <Typography.Text type="secondary">登录后即可查看模型、Key 和账户消费。</Typography.Text>
         </Space>
         {passwordChanged ? <Alert style={{ marginTop: 16 }} type="success" showIcon message="密码已更新，请重新登录。" /> : null}
         <Form<LoginForm>
@@ -66,6 +67,6 @@ export function LoginPage(): ReactNode {
           还没有账号？<Link to="/register">创建个人账户</Link>
         </Typography.Paragraph>
       </Card>
-    </div>
+    </AuthLayout>
   );
 }

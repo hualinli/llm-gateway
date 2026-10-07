@@ -7,6 +7,7 @@ import { CopyOutlined, PlusOutlined } from '@ant-design/icons';
 import { useCreateKey, useKeys, useRevokeKey } from '../api/queries';
 import type { ApiKey, CreateApiKeyResponse } from '../api/types';
 import { CursorPagination, useCursorPager } from '../components/CursorPager';
+import { ConnectionGuide } from '../components/ConnectionGuide';
 import { PageHeader } from '../components/PageHeader';
 import { DataState, ErrorView } from '../components/states';
 import { useActiveOrg } from '../session/SessionProvider';
@@ -77,7 +78,7 @@ export function KeysPage(): ReactNode {
   return (
     <Space className="responsive-page-content" direction="vertical" size={16} style={{ width: '100%', minWidth: 0 }}>
       <PageHeader title="我的 API Key" description="每个 Key 归属于当前账户和你本人。按 App 或服务命名，创建数量不限。" extra={canCreate ? <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setCreateOpen(true); }}>新建 Key</Button> : null} />
-      <Alert type="info" showIcon message="Key 只会完整显示一次" description="请立即复制并保存到你的应用配置中。企业管理员也看不到你的 Key 名称、列表或密钥。切换账户会清除本页试用密钥；Key 的账单归属始终是创建它的账户。" />
+      {canCreate ? <ConnectionGuide /> : null}
       {membership?.status === 'suspended' ? <Alert type="warning" showIcon message="你在此企业中的成员资格已暂停" description="暂停期间不开放 Key 管理和模型试用；你仍可查看本人历史消费与额度。" /> : null}
       {membership?.organization.status === 'suspended' ? <Alert type="warning" showIcon message="此账户已暂停" description="暂停期间不能创建 Key 或发起模型试用。" /> : null}
       <Card className="responsive-table-card" title="我的 Key" data-testid="keys-list-card">

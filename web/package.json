@@ -13,7 +13,8 @@
     "e2e": "playwright test --config e2e/playwright.config.ts",
     "e2e:ui": "playwright test --config e2e/playwright.config.ts --ui",
     "e2e:report": "playwright show-report playwright-report",
-    "e2e:install": "playwright install chromium"
+    "e2e:install": "playwright install chromium",
+    "test:ui": "playwright test --config ui-tests/playwright.config.ts"
   },
   "dependencies": {
     "@ant-design/icons": "6.3.4",

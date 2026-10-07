@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Button, Select, Space, Tag } from 'antd';
+import { Select, Space, Tag } from 'antd';
 
 import type { Membership } from '../api/types';
 import { useActiveOrg, useSession } from '../session/SessionProvider';
@@ -9,15 +8,15 @@ import { ORG_TYPE_LABELS, ROLE_LABELS } from '../utils/permissions';
 export function OrgSwitcher(): ReactNode {
   const { memberships, switchOrg } = useSession();
   const { orgId } = useActiveOrg();
-  const navigate = useNavigate();
   const options = memberships.map((membership: Membership) => ({
     value: membership.organization.id,
-    label: `${membership.organization.name} · ${ORG_TYPE_LABELS[membership.organization.type] ?? '账户'} · ${ROLE_LABELS[membership.role]}`,
+    label: membership.organization.type === 'personal' ? '我的个人账户' : membership.organization.name,
     title: membership.organization.name,
   }));
 
   return (
     <Space size={8} wrap>
+      <div className="account-selector"><span className="account-selector-label">当前使用账户</span>
       <Select
         aria-label="切换账户"
         style={{ minWidth: 230, maxWidth: 'min(72vw, 360px)' }}
@@ -37,8 +36,7 @@ export function OrgSwitcher(): ReactNode {
         }}
         notFoundContent="暂无可用账户"
       />
-      <Button size="small" onClick={() => navigate('/join')}>加入企业</Button>
-      <Button size="small" onClick={() => navigate('/activate')}>兑换开户码</Button>
+      </div>
     </Space>
   );
 }

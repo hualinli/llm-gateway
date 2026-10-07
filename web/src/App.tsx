@@ -19,6 +19,7 @@ import { MembersPage } from './pages/MembersPage';
 import { ModelCatalogPage } from './pages/ModelCatalogPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { OverviewPage } from './pages/OverviewPage';
+import { PlatformOverviewPage } from './pages/PlatformOverviewPage';
 import { PlatformAdminPage } from './pages/PlatformAdminPage';
 import { PlatformBillingPage } from './pages/PlatformBillingPage';
 import { PlatformModelsPage } from './pages/PlatformModelsPage';
@@ -53,7 +54,8 @@ export function App(): ReactNode {
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/activate" element={<ActivateEnterprisePage />} />
         <Route path="/join" element={<JoinEnterprisePage />} />
-        <Route path="/platform" element={<Navigate to="/platform/organizations" replace />} />
+        <Route path="/platform" element={<Navigate to="/platform/overview" replace />} />
+        <Route path="/platform/overview" element={<PlatformOverviewPage />} />
         <Route path="/platform/organizations" element={<PlatformAdminPage />} />
         <Route path="/platform/providers" element={<PlatformProvidersPage />} />
         <Route path="/platform/models" element={<PlatformModelsPage />} />

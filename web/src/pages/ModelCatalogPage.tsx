@@ -95,7 +95,7 @@ export function ModelCatalogPage(): ReactNode {
 
   const modelRows: EffectiveModel[] = models.data?.effective_models ?? [];
   return (
-    <Space direction="vertical" size={16} style={{ width: '100%' }}>
+    <Space className="responsive-page-content" direction="vertical" size={16} style={{ width: '100%' }}>
       <PageHeader title="可用模型" description="这里显示当前账户已开通的模型和销售价格。个人与企业账户的可用模型可以不同。" />
       {membership?.status === 'suspended' ? <Card>
         <Alert type="warning" showIcon message="你在此企业中的成员资格已暂停" description="暂停期间不开放模型目录和试用；你仍可查看本人历史消费与额度。" />
@@ -106,22 +106,24 @@ export function ModelCatalogPage(): ReactNode {
             rowKey="model"
             size="middle"
             pagination={false}
+            scroll={{ x: 720 }}
             dataSource={catalog.effective_models}
             columns={[
-              { title: '模型', dataIndex: 'model', render: (value: string) => <Typography.Text strong>{value}</Typography.Text> },
-              { title: '输入价格', dataIndex: 'input_price_micro_per_million', render: (value: string) => `${formatMicroYuan(value)} 元 / 百万 tokens` },
-              { title: '输出价格', dataIndex: 'output_price_micro_per_million', render: (value: string) => `${formatMicroYuan(value)} 元 / 百万 tokens` },
-              { title: '试用', key: 'use', render: (_, row) => <Button size="small" disabled={!canTry} onClick={() => { setModel(row.model); document.getElementById('playground-card')?.scrollIntoView({ behavior: 'smooth' }); }}>在下方试用</Button> },
+              { title: '模型', dataIndex: 'model', width: 180, render: (value: string) => <Typography.Text strong>{value}</Typography.Text> },
+              { title: '输入价格', width: 200, dataIndex: 'input_price_micro_per_million', render: (value: string) => `${formatMicroYuan(value)} 元 / 百万 tokens` },
+              { title: '输出价格', width: 200, dataIndex: 'output_price_micro_per_million', render: (value: string) => `${formatMicroYuan(value)} 元 / 百万 tokens` },
+              { title: '试用', width: 140, key: 'use', render: (_, row) => <Button size="small" disabled={!canTry} onClick={() => { setModel(row.model); document.getElementById('playground-card')?.scrollIntoView({ behavior: 'smooth' }); }}>在下方试用</Button> },
             ]}
           />}
         </DataState>
       </Card>
       <Card id="playground-card" title="模型试用" data-testid="playground-card">
-        {!canTry ? <Alert style={{ marginBottom: 16 }} type="warning" showIcon message={membership?.organization.status === 'suspended' ? '此账户当前已暂停' : '当前无法试用'} description="暂停期间不能发起新的模型试用；试用区中的密钥和未提交内容已清除。" /> : <Alert style={{ marginBottom: 16 }} type="info" showIcon message="每个 Key 都绑定创建它的账户" description="试用调用的费用会按此 Key 的创建账户结算。切换账户会清除试用区中的密钥和未提交内容。" />}
+        {!canTry ? <Alert style={{ marginBottom: 16 }} type="warning" showIcon message={membership?.organization.status === 'suspended' ? '此账户当前已暂停' : '当前无法试用'} description="暂停期间不能发起新的模型试用；试用区中的密钥和未提交内容已清除。" /> : <Typography.Paragraph type="secondary">本次试用按 Key 所属账户计费。切换账户会清除这里的密钥和未提交内容。</Typography.Paragraph>}
         <Space direction="vertical" size={16} style={{ width: '100%' }}>
           <Row gutter={[16, 12]}>
-            <Col xs={24} lg={12}>
-              <Input.Password
+            <Col xs={24} lg={10}>
+              <label className="input-label" htmlFor="playground-key">我的 API Key</label>
+              <Input.Password id="playground-key"
                 value={apiKey}
                 disabled={!canTry}
                 aria-label="我的 API Key"
@@ -130,8 +132,9 @@ export function ModelCatalogPage(): ReactNode {
                 onChange={(event) => setApiKey(event.target.value)}
               />
             </Col>
-            <Col xs={24} lg={7}>
-              <Select
+            <Col xs={24} lg={6}>
+              <label className="input-label" htmlFor="playground-model">选择模型</label>
+              <Select id="playground-model"
                 style={{ width: '100%' }}
                 placeholder="选择模型"
                 aria-label="选择模型"
@@ -142,19 +145,21 @@ export function ModelCatalogPage(): ReactNode {
                 notFoundContent="当前账户没有已开通的模型"
               />
             </Col>
-            <Col xs={12} lg={3}>
-              <InputNumber min={1} max={8192} value={maxTokens} disabled={!canTry} onChange={(value) => setMaxTokens(value ?? 512)} style={{ width: '100%' }} aria-label="回答长度上限" />
+            <Col xs={12} lg={4}>
+              <label className="input-label" htmlFor="playground-tokens">回答上限（Token）</label>
+              <InputNumber id="playground-tokens" min={1} max={8192} value={maxTokens} disabled={!canTry} onChange={(value) => setMaxTokens(value ?? 512)} style={{ width: '100%' }} aria-label="回答长度上限" />
             </Col>
-            <Col xs={12} lg={2}>
+            <Col xs={12} lg={4}>
+              <div className="input-label" aria-hidden="true">&nbsp;</div>
               <Space>
-                <Button onClick={() => setActiveKey(apiKey.trim())} disabled={!canTry || !apiKey.trim() || apiKey.trim() === activeKey}>使用</Button>
+                <Button onClick={() => setActiveKey(apiKey.trim())} disabled={!canTry || !apiKey.trim() || apiKey.trim() === activeKey}>启用 Key</Button>
                 {activeKey ? <Button icon={<ClearOutlined />} aria-label="清除Key" onClick={clearKey} /> : null}
               </Space>
             </Col>
           </Row>
           <Input.TextArea rows={4} value={prompt} disabled={!canTry} onChange={(event) => setPrompt(event.target.value)} placeholder="输入你想试用的问题" aria-label="试用内容" />
           <Space>
-            <Button type="primary" icon={<SendOutlined />} onClick={() => void send()} loading={stream.running} disabled={!canTry || !activeKey || !model || prompt.trim() === ''}>发送</Button>
+            <Button type="primary" aria-label="发送" icon={<SendOutlined />} onClick={() => void send()} loading={stream.running} disabled={!canTry || !activeKey || !model || prompt.trim() === ''}>发送</Button>
             {stream.running ? <Button danger icon={<StopOutlined />} onClick={() => abortRef.current?.abort()}>停止</Button> : null}
             {stream.cancelled ? <Typography.Text type="secondary">已停止生成</Typography.Text> : null}
             {stream.finished ? <Typography.Text type="secondary">回答完成</Typography.Text> : null}

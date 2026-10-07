@@ -14,7 +14,7 @@ export function PageHeader({
   return (
     <div className="page-header">
       <div className="page-header-text">
-        <Typography.Title level={4} style={{ marginBottom: 4 }}>
+        <Typography.Title level={2} style={{ margin: 0, marginBottom: 8 }}>
           {title}
         </Typography.Title>
         {description ? (

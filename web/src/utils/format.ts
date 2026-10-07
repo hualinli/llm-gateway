@@ -7,12 +7,13 @@
  * a JavaScript `number` and no precision is lost on the way to the DOM.
  */
 
-/** RFC 3339 UTC -> `2026-10-01 12:00:00Z`. Returns the raw string if unparsable. */
+/** Display business timestamps in Beijing time, matching billing months. */
 export function formatTimestamp(value: string | null | undefined): string {
   if (!value) return '—';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return `${date.toISOString().slice(0, 19).replace('T', ' ')}Z`;
+  const display = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).format(date);
+  return `${display}（北京时间）`;
 }
 
 /** Short local-time rendering for table cells and stale banners. */

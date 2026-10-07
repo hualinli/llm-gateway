@@ -8,8 +8,8 @@ export function HomeRedirect(): ReactNode {
   const { memberships, me } = useSession();
   const navigate = useNavigate();
   const first = memberships.find((item) => item.organization.type === 'personal') ?? memberships[0];
+  if (me?.user.platform_admin) return <Navigate to="/platform/overview" replace />;
   if (first) return <Navigate to={`/orgs/${encodeURIComponent(first.organization.id)}/overview`} replace />;
-  if (me?.user.platform_admin) return <Navigate to="/platform/organizations" replace />;
 
   return (
     <div className="app-centered">

@@ -32,6 +32,8 @@ npm test
 npm run build
 ```
 
+独立界面验证使用 `npm run test:ui`：仅启动临时前端，接口使用模拟数据，覆盖平台／企业／成员工作区、暂停状态、Key 接入引导和手机布局；不启动业务后端或修改数据。与连接真实后端的 `npm run e2e` 分开运行。截图保存在本地 `data/verification/ui-refactor/`。
+
 生产构建输出到 `web/dist/`。`nginx.conf` 提供前端路由回退和 API 代理；模型流式响应保持实时传输。
 
 ## 浏览器验收
