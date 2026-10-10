@@ -215,7 +215,9 @@ func (s *Service) ChangePassword(ctx context.Context, userID int64, oldPassword,
 //  3. 密码正确但与 status != active：返回 ErrUserDisabled（密码先于状态校验，
 //     否则不知道密码的人也能探测被禁用账号）。
 //
-// 失败与成功都会消耗节流令牌：突发的 5 次/分钟包含成功登录，符合 ADR §5。
+// 失败与成功都会消耗节流令牌：突发的 5 次/分钟包含成功登录，所以节流计量的是
+// 「同一账号+客户端来源的请求速率」，而不是失败次数（登录节流随 ADR-0002 的身份
+// 与账户边界，不再有单独编号）。
 func (s *Service) Login(ctx context.Context, email, password, clientKey string) (User, IssuedSession, error) {
 	normalized := normalizeEmail(email)
 	key := normalized

@@ -106,8 +106,9 @@ WHERE action = $1 AND target_id = $2`, action, executionID).Scan(&actor); err !=
 	return actor
 }
 
-// TestManualReleaseReturnsFundsExactlyOnceAndIsIdempotent is §6.5's "人工释放也走
-// 同一状态机" on the review_required queue: the automatic path may not touch the
+// TestManualReleaseReturnsFundsExactlyOnceAndIsIdempotent is the manual-release
+// state machine of docs/decisions.md「流式调用与结算」 ("人工释放也走同一状态机")
+// on the review_required queue: the automatic path may not touch the
 // execution (its owner has no liveness record, and unknown is never dead), an
 // operator releases it through the same transaction with the platform-absorbs
 // policy, the funds come back exactly once, and a second call is refused

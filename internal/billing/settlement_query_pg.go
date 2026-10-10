@@ -12,7 +12,8 @@ import (
 // T07A's durable, queryable side: the anomalies that must never create money,
 // the exceptions a human owns, and the backlog an operator watches.
 //
-// The roadmap's rule is that a Redis DLQ is a bounded diagnostic cache while
+// The money-settlement constraints in docs/decisions.md「流式调用与结算」 rule
+// that a Redis DLQ is a bounded diagnostic cache while
 // "正式资金异常保存在 PG": every anomaly below is a PostgreSQL row, so it
 // survives a Redis restart, a stream trim and a process kill, and it is queryable
 // by organization. The DLQ copy is a debugging aid, never the record.

@@ -12,7 +12,8 @@ import (
 // Receipt lifecycle (migration 000010's CHECK, docs/ARCHITECTURE.md). `pending_dispatch` is where a durable receipt is born: the
 // execution is receipt_recorded, the reservation is still held, and T07A's
 // dispatcher will claim it. `dispatched` says the event was handed to the
-// transport at least once, which is *not* "done" (the roadmap: 投递后标记不是
+// transport at least once, which is *not* "done" (docs/decisions.md「流式调用与结算」
+// keeps dispatch retryable and settlement idempotent: 投递后标记不是
 // "永远不需要重投"). `settled` is terminal and owned by T07: the debit was
 // posted and the reservation released. `exception` records a terminal boundary
 // whose usage cannot back a charge (missing/invalid): the execution goes to

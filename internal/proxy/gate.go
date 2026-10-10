@@ -49,7 +49,8 @@ const (
 // terminal boundary whose usage cannot back a charge, so the execution keeps a
 // durable PostgreSQL state (T06C: usage_receipts.status='exception' and
 // billing_executions.status='review_required', reservation still held) instead
-// of only a Redis DLQ entry (roadmap §6.4: usage_unknown → review_required).
+// of only a Redis DLQ entry (docs/decisions.md「已知限制与决策索引」§6.4:
+// usage_unknown → review_required).
 //
 // It is deliberately separate from Finalizer. ADR-0005 §2.4 freezes "unknown or
 // invalid usage is a veto, and the vetoed boundary is never finalized as a

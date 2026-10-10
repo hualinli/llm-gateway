@@ -28,10 +28,10 @@ import (
 // ListReviewRequiredExecutions and the metering HTTP surface) but never
 // *decided*, which is exactly the 24h human SLA gap this file closes.
 //
-// Two decisions are offered, because §6.4/§6.5 name exactly two money-relevant
-// outcomes for the queue ("review_required → settled / adjusted / released"; the
-// adjustment is a separate, already-implemented ledger operation and is not a
-// disposition of the execution):
+// Two decisions are offered, because docs/decisions.md「流式调用与结算」 names
+// exactly two money-relevant outcomes for the queue ("review_required → settled /
+// adjusted / released"; the adjustment is a separate, already-implemented ledger
+// operation and is not a disposition of the execution):
 //
 //   - **release** (ReleaseExecutionManually): the platform-absorbs policy. The
 //     reservation goes back and the customer is not charged. It runs through

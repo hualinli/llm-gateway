@@ -17,8 +17,8 @@ import (
 // never reserves funds and never writes a billing row. Billing sits last among
 // the gates, so its PostgreSQL writes track requests that can reach a provider.
 // The global per-instance stream cap still lives inside the proxy, after billing
-// (see KNOWN-LIMITS C5). A nil billing adapter (GATEWAY_BILLING=off) passes
-// through unchanged.
+// (see docs/decisions.md「已知限制与决策索引」C5). A nil billing adapter
+// (GATEWAY_BILLING=off) passes through unchanged.
 //
 // main.go and the billing HTTP integration tests both call this function, so
 // the tests exercise the production order rather than a copy of it.

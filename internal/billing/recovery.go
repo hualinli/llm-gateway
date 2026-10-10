@@ -89,8 +89,10 @@ const (
 	// per-candidate decision is a single, short, single-row transaction).
 	DefaultRecoveryTimeout = 10 * time.Second
 	// DefaultHumanReviewSLA is the human handling target for an execution that
-	// needs a decision (review_required): 24 hours, as the roadmap states. It is
-	// a target, not an automatic action: nothing is released because 24h passed.
+	// needs a decision (review_required): 24 hours, which is the human-review
+	// target docs/decisions.md「流式调用与结算」 states for the review queue. It
+	// is a target, not an automatic action: nothing is released because 24h
+	// passed.
 	DefaultHumanReviewSLA = 24 * time.Hour
 	// MaxHumanReviewSLA bounds the configurable SLA so a typo cannot make the
 	// breach metric meaningless.
@@ -338,11 +340,12 @@ type RecoveryParams struct {
 	// "system" (the automated reaper) and is stored as SQL NULL, never user 0.
 	ActorUserID int64
 	// Manual marks an operator decision rather than the automatic janitor.
-	// §6.5 requires manual releases to go through the same state machine (never
-	// a direct UPDATE of reserved funds), so a manual release still requires the
-	// window, the absence of a chargeable receipt and the recorded check; what it
-	// may do is proceed when the owner's liveness cannot be established (no
-	// heartbeat record) or when the owner is still alive (for example a
+	// docs/decisions.md「流式调用与结算」 requires manual releases to go through
+	// the same state machine (never a direct UPDATE of reserved funds), so a
+	// manual release still requires the window, the absence of a chargeable
+	// receipt and the recorded check; what it may do is proceed when the owner's
+	// liveness cannot be established (no heartbeat record) or when the owner is
+	// still alive (for example a
 	// review_required execution whose gateway is healthy). The audit row records
 	// which of the two happened. A manual release requires a stated actor: an
 	// unattributed override is not an audit trail.
@@ -913,11 +916,12 @@ func (r *ExecutionRecovery) logf(format string, args ...any) {
 // ---------------------------------------------------------------------------
 // The human queue: executions stuck in review_required.
 //
-// The 24h SLA is a *surfacing* contract, not an automatic action. The roadmap
-// requires a human to handle "usage unknown / over-reserve / unknown upstream
-// cost" within 24 hours; this task therefore provides a paged, age-sorted queue
-// plus the oldest-age and breach metrics, and deliberately provides no path that
-// releases a review_required execution because 24h elapsed.
+// The 24h SLA is a *surfacing* contract, not an automatic action.
+// docs/decisions.md「流式调用与结算」 requires a human to handle "usage unknown /
+// over-reserve / unknown upstream cost" within 24 hours; this task therefore
+// provides a paged, age-sorted queue plus the oldest-age and breach metrics, and
+// deliberately provides no path that releases a review_required execution
+// because 24h elapsed.
 // ---------------------------------------------------------------------------
 
 // MaxReviewQueuePageSize bounds one page of the human queue.

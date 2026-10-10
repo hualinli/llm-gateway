@@ -109,7 +109,7 @@ const executionColumnsAliased = `e.execution_id, e.org_id, e.user_id, e.key_id, 
        to_char(e.quota_month, 'YYYY-MM')`
 
 // recoverySourceStatuses is the state guard of an audited recovery release.
-// review_required is included on purpose (the roadmap allows
+// review_required is included on purpose (docs/decisions.md「流式调用与结算」 allows
 // review_required -> released, and an operator must be able to decide that
 // through the same transaction), while receipt_recorded and settled are
 // excluded: the first owns a chargeable receipt, the second is terminal money.

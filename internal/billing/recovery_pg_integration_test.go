@@ -590,8 +590,9 @@ FROM billing_executions WHERE execution_id = $1`, executionID); err != nil {
 	}
 }
 
-// TestManualRecoveryRequiresAnActorAndRecordsTheOverride is §6.5's "人工释放也走
-// 同一状态机" at the store level: an operator may release an execution whose owner
+// TestManualRecoveryRequiresAnActorAndRecordsTheOverride is the manual-release
+// state machine of docs/decisions.md「流式调用与结算」 ("人工释放也走同一状态机")
+// at the store level: an operator may release an execution whose owner
 // is alive or unknown, but only with a stated actor, and the audit row says that
 // the liveness check was overridden. The automatic path (no actor) must still
 // refuse exactly the same execution.
@@ -646,11 +647,12 @@ WHERE action = $1 AND target_id = $2`, ActionExecutionRecovered, execution.Execu
 	}
 }
 
-// TestLateReceiptAndLateUsageAfterRecoveryAreRejectedAndAudited is §6.5's
-// "released 不能再提交可收费 receipt 或发 DONE，迟到 usage 进入异常审计" at the
-// billing layer: the state guards refuse both writes, and the late usage event
-// becomes a durable, queryable anomaly (what cmd/gateway's adapter does when the
-// gate's finalize is refused).
+// TestLateReceiptAndLateUsageAfterRecoveryAreRejectedAndAudited is the
+// "released 不能再提交可收费 receipt 或发 DONE，迟到 usage 进入异常审计" rule of
+// docs/decisions.md「流式调用与结算」 at the billing layer: the state guards
+// refuse both writes, and the late usage event becomes a durable, queryable
+// anomaly (what cmd/gateway's adapter does when the gate's finalize is
+// refused).
 func TestLateReceiptAndLateUsageAfterRecoveryAreRejectedAndAudited(t *testing.T) {
 	env := newRecoveryEnv(t, "recovery-late")
 	ctx := context.Background()

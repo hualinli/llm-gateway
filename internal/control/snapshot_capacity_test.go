@@ -13,9 +13,9 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// T09 capacity measurement for the full-key snapshot architecture. The roadmap
-// (§11, AGENT-PROMPTS T09) asks for the 1k/10k numbers *before* anyone
-// redesigns the snapshot into an incremental protocol, so this file measures
+// T09 capacity measurement for the full-key snapshot architecture. The T09
+// capacity target asks for the 1k/10k numbers *before* anyone redesigns the
+// snapshot into an incremental protocol, so this file measures
 // instead of guessing:
 //
 //   - snapshot size: the binary proto the Watch stream carries and the
