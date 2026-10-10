@@ -188,7 +188,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// 当前仅支持流式：非流响应不在 SSE 契约内，与其伪装成 SSE 静默返回，
 	// 不如明确拒掉。缺省/非法 JSON 均按非流处理（OpenAI 的 stream 默认也是 false）。
 	if !stream {
-		metrics.RequestsTotal.WithLabelValues(tenant, model, "400").Inc()
+		metrics.RequestsTotal.WithLabelValues(tenant, h.metricModel(model), "400").Inc()
 		httperr.WriteStatus(w, r, http.StatusBadRequest, `only streaming requests are supported (set "stream": true)`)
 		return
 	}
@@ -199,7 +199,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !h.registry.HasModel(model) {
-		metrics.RequestsTotal.WithLabelValues(tenant, model, "404").Inc()
+		metrics.RequestsTotal.WithLabelValues(tenant, unknownModelLabel, "404").Inc()
 		httperr.WriteStatus(w, r, http.StatusNotFound, fmt.Sprintf("unknown model %q; see GET /v1/models", model))
 		return
 	}
@@ -396,6 +396,20 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// 上游错误详情（可能包含上游响应体/凭据域信息）只进日志，不写进客户端
 	// message：这里已按 provider 逐次记录了 request_id/provider/err。
 	httperr.WriteStatus(w, r, status, "upstream request failed")
+}
+
+// unknownModelLabel is the model label for requests the registry does not serve.
+// A client-chosen name must never become a label value: each distinct string
+// creates a series that stays in memory for the life of the process.
+const unknownModelLabel = "unknown"
+
+// metricModel returns the model as a metric label only when the registry serves
+// it, which keeps the label set bounded by the configured models.
+func (h *Handler) metricModel(model string) string {
+	if h.registry.HasModel(model) {
+		return model
+	}
+	return unknownModelLabel
 }
 
 // --- helpers ---
