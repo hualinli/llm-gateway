@@ -28,6 +28,10 @@ import (
 
 const defaultMeteringAddr = ":8091"
 
+// ledgerRequestTimeout bounds one /ledger/* read so a stalled database cannot
+// hold the HTTP handler (and its goroutine) for as long as the database stalls.
+const ledgerRequestTimeout = 5 * time.Second
+
 func main() {
 	profile, err := appenv.FromEnv()
 	if err != nil {
@@ -116,13 +120,15 @@ func main() {
 			redisErr = fmt.Errorf("redis: %w", err)
 		}
 		var ledgerErr error
-		if _, err := ledger.Count(); err != nil {
+		if _, err := ledger.Count(ctx); err != nil {
 			ledgerErr = fmt.Errorf("ledger: %w", err)
 		}
 		ready.Write(w, ready.Dependencies(redisErr, ledgerErr, settlementReadiness()))
 	})
 	mux.Handle("/ledger/count", requireBearer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		count, err := ledger.Count()
+		ctx, cancel := context.WithTimeout(r.Context(), ledgerRequestTimeout)
+		defer cancel()
+		count, err := ledger.Count(ctx)
 		if err != nil {
 			http.Error(w, "ledger unavailable", http.StatusServiceUnavailable)
 			return
@@ -134,7 +140,9 @@ func main() {
 		if tenant == "" {
 			tenant = "tenant-demo"
 		}
-		balance, err := ledger.Balance(tenant)
+		ctx, cancel := context.WithTimeout(r.Context(), ledgerRequestTimeout)
+		defer cancel()
+		balance, err := ledger.Balance(ctx, tenant)
 		if err != nil {
 			http.Error(w, "ledger unavailable", http.StatusServiceUnavailable)
 			return

@@ -60,11 +60,22 @@ type PGStore struct {
 	db *sql.DB
 }
 
+// Pool bounds for the control plane's PostgreSQL connection. database/sql's
+// default is unlimited; these match the Console's pool (cmd/console/db.go).
+const (
+	pgMaxOpenConns    = 10
+	pgMaxIdleConns    = 5
+	pgConnMaxLifetime = 30 * time.Minute
+)
+
 func NewPGStore(dsn string) (*PGStore, error) {
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		return nil, err
 	}
+	db.SetMaxOpenConns(pgMaxOpenConns)
+	db.SetMaxIdleConns(pgMaxIdleConns)
+	db.SetConnMaxLifetime(pgConnMaxLifetime)
 	if err := db.Ping(); err != nil {
 		_ = db.Close()
 		return nil, err

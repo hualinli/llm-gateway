@@ -163,16 +163,16 @@ func TestRepeatedClientRequestIDCreatesDistinctBillingEvents(t *testing.T) {
 		if event.ClientRequestID != "same-client-id" || event.EventID == "" {
 			t.Fatalf("missing execution/correlation identity: %+v", event)
 		}
-		if _, err := ledger.Add(event); err != nil {
+		if _, err := ledger.Add(context.Background(), event); err != nil {
 			t.Fatal(err)
 		}
 	}
-	count, _ := ledger.Count()
-	balance, _ := ledger.Balance("tenant-a")
+	count, _ := ledger.Count(context.Background())
+	balance, _ := ledger.Balance(context.Background(), "tenant-a")
 	if count != 2 || balance != 6 {
 		t.Fatalf("two real upstream calls: ledger_rows=%d charge=%d, want rows=2 charge=6", count, balance)
 	}
-	if added, err := ledger.Add(producer.events[0]); err != nil || added {
+	if added, err := ledger.Add(context.Background(), producer.events[0]); err != nil || added {
 		t.Fatalf("redelivery must remain idempotent: added=%v err=%v", added, err)
 	}
 }

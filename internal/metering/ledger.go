@@ -1,6 +1,7 @@
 package metering
 
 import (
+	"context"
 	"database/sql"
 	_ "embed"
 	"errors"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 
@@ -16,12 +18,25 @@ import (
 )
 
 // Ledger 台账接口，内存和 PG 实现通用
+// Every method takes the caller's context. A stalled database must not hold a
+// caller that has already given up (shutdown, request timeout), and each caller
+// picks the deadline that fits it: the consumer per message, the HTTP endpoints
+// per request.
 type Ledger interface {
-	Add(e Event) (bool, error)
-	Count() (int, error)
-	Balance(tenantID string) (int64, error)
-	Snapshot() (map[string]Event, error)
+	Add(ctx context.Context, e Event) (bool, error)
+	Count(ctx context.Context) (int, error)
+	Balance(ctx context.Context, tenantID string) (int64, error)
+	Snapshot(ctx context.Context) (map[string]Event, error)
 }
+
+// Connection bounds for the PostgreSQL pool. database/sql's default pool is
+// unlimited, so a stalled database would turn into unbounded connections and
+// goroutines. The values match the Console's pool (cmd/console/db.go).
+const (
+	pgMaxOpenConns    = 10
+	pgMaxIdleConns    = 5
+	pgConnMaxLifetime = 30 * time.Minute
+)
 
 // MemoryLedger 演示用内存版
 type MemoryLedger struct {
@@ -34,7 +49,10 @@ func NewMemoryLedger() *MemoryLedger {
 	return &MemoryLedger{events: make(map[string]Event), balance: make(map[string]int64)}
 }
 
-func (l *MemoryLedger) Add(e Event) (bool, error) {
+func (l *MemoryLedger) Add(ctx context.Context, e Event) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	key := eventKey(e)
@@ -45,12 +63,18 @@ func (l *MemoryLedger) Add(e Event) (bool, error) {
 	l.balance[e.TenantID] += e.CostCents
 	return true, nil
 }
-func (l *MemoryLedger) Count() (int, error) {
+func (l *MemoryLedger) Count(ctx context.Context) (int, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return len(l.events), nil
 }
-func (l *MemoryLedger) Balance(t string) (int64, error) {
+func (l *MemoryLedger) Balance(ctx context.Context, t string) (int64, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.balance[t], nil
@@ -58,7 +82,10 @@ func (l *MemoryLedger) Balance(t string) (int64, error) {
 
 // Lookup is the per-event read the bounded transport check uses. The in-memory
 // ledger is only the demo fallback; the PG ledger is the production one.
-func (l *MemoryLedger) Lookup(tenantID, eventID string) (Event, bool, error) {
+func (l *MemoryLedger) Lookup(ctx context.Context, tenantID, eventID string) (Event, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return Event{}, false, err
+	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	event, ok := l.events[eventKey(Event{TenantID: tenantID, EventID: eventID})]
@@ -68,7 +95,10 @@ func (l *MemoryLedger) Lookup(tenantID, eventID string) (Event, bool, error) {
 	return event, true, nil
 }
 
-func (l *MemoryLedger) Snapshot() (map[string]Event, error) {
+func (l *MemoryLedger) Snapshot(ctx context.Context) (map[string]Event, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	out := make(map[string]Event, len(l.events))
@@ -88,6 +118,9 @@ func NewPGLedger(dsn string) (*PGLedger, error) {
 	if err != nil {
 		return nil, err
 	}
+	db.SetMaxOpenConns(pgMaxOpenConns)
+	db.SetMaxIdleConns(pgMaxIdleConns)
+	db.SetConnMaxLifetime(pgConnMaxLifetime)
 	if err := db.Ping(); err != nil {
 		_ = db.Close()
 		return nil, err
@@ -106,8 +139,8 @@ func (p *PGLedger) Close() error { return p.db.Close() }
 // (legacy key without owner, unguarded gateway, pre-000007 event): a zero
 // user_id must never become a real user 0, and an empty key/execution id must
 // never become an empty-string identity.
-func (p *PGLedger) Add(e Event) (bool, error) {
-	res, err := p.db.Exec(queryInsertEvent,
+func (p *PGLedger) Add(ctx context.Context, e Event) (bool, error) {
+	res, err := p.db.ExecContext(ctx, queryInsertEvent,
 		e.EventID, e.TenantID,
 		nullableInt64(e.OrgID), nullableInt64(e.UserID), nullableString(e.KeyID), nullableString(e.ExecutionID),
 		e.Model, e.Provider, e.PromptTokens, e.CompletionTokens, e.TotalTokens, e.CostCents, e.CreatedAt)
@@ -117,16 +150,16 @@ func (p *PGLedger) Add(e Event) (bool, error) {
 	n, _ := res.RowsAffected()
 	return n == 1, nil
 }
-func (p *PGLedger) Count() (int, error) {
+func (p *PGLedger) Count(ctx context.Context) (int, error) {
 	var n int
-	if err := p.db.QueryRow(queryCountEvents).Scan(&n); err != nil {
+	if err := p.db.QueryRowContext(ctx, queryCountEvents).Scan(&n); err != nil {
 		return 0, err
 	}
 	return n, nil
 }
 
-func (p *PGLedger) Snapshot() (map[string]Event, error) {
-	rows, err := p.db.Query(querySnapshotEvents)
+func (p *PGLedger) Snapshot(ctx context.Context) (map[string]Event, error) {
+	rows, err := p.db.QueryContext(ctx, querySnapshotEvents)
 	if err != nil {
 		return nil, err
 	}
@@ -160,9 +193,9 @@ func (p *PGLedger) Snapshot() (map[string]Event, error) {
 	}
 	return out, nil
 }
-func (p *PGLedger) Balance(tenantID string) (int64, error) {
+func (p *PGLedger) Balance(ctx context.Context, tenantID string) (int64, error) {
 	var v int64
-	if err := p.db.QueryRow(queryTenantBalance, tenantID).Scan(&v); err != nil {
+	if err := p.db.QueryRowContext(ctx, queryTenantBalance, tenantID).Scan(&v); err != nil {
 		return 0, err
 	}
 	return v, nil
@@ -178,7 +211,7 @@ func (p *PGLedger) DB() *sql.DB { return p.db }
 // one primary-key probe. It is the per-event read the bounded transport check
 // uses; the pre-T07C reconciliation instead materialized the whole table with
 // Snapshot(), which is exactly what T07C removes.
-func (p *PGLedger) Lookup(tenantID, eventID string) (Event, bool, error) {
+func (p *PGLedger) Lookup(ctx context.Context, tenantID, eventID string) (Event, bool, error) {
 	if eventID == "" {
 		return Event{}, false, nil
 	}
@@ -192,7 +225,7 @@ func (p *PGLedger) Lookup(tenantID, eventID string) (Event, bool, error) {
 	// The column list is exactly querySnapshotEvents': metering_events has no
 	// usage_missing / usage_invalid columns (those two flags exist only on the
 	// Stream payload), so a read that claimed them would be a lie.
-	err := p.db.QueryRow(`SELECT event_id, tenant_id, org_id, user_id, key_id, execution_id,
+	err := p.db.QueryRowContext(ctx, `SELECT event_id, tenant_id, org_id, user_id, key_id, execution_id,
        model, provider, prompt_tokens, completion_tokens, total_tokens, cost_cents, created_at
 FROM metering_events WHERE event_id = $1`, eventID).
 		Scan(&e.EventID, &e.TenantID, &orgID, &userID, &keyID, &executionID,

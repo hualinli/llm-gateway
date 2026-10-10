@@ -62,7 +62,7 @@ func TestTwoNamedConsumersSplitAGroup(t *testing.T) {
 		}
 	}
 	waitFor(t, 3*time.Second, func() bool {
-		count, err := ledger.Count()
+		count, err := ledger.Count(context.Background())
 		return err == nil && count == 2
 	})
 }
@@ -117,7 +117,7 @@ func TestRedisReconcileRejectsConflictingDuplicatePayload(t *testing.T) {
 	defer resetMeteringStreams(t, rdb)
 	event := integrationEvent("same-event", "tenant-a", 7)
 	ledger := NewMemoryLedger()
-	if _, err := ledger.Add(event); err != nil {
+	if _, err := ledger.Add(context.Background(), event); err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; i < 2; i++ {
@@ -183,7 +183,7 @@ func TestRedisMeteringDeliveryAndReconcile(t *testing.T) {
 		}
 	}
 	waitFor(t, time.Second, func() bool {
-		count, _ := ledger.Count()
+		count, _ := ledger.Count(context.Background())
 		return count == 1
 	})
 
@@ -230,7 +230,7 @@ func TestRedisMeteringPendingIsReclaimed(t *testing.T) {
 		return err == nil && pending.Count == 1
 	})
 	waitFor(t, time.Second, func() bool {
-		count, _ := ledger.Count()
+		count, _ := ledger.Count(context.Background())
 		return count == 1
 	})
 
@@ -289,7 +289,7 @@ func TestConsumerRecoversWhenRedisStartsLater(t *testing.T) {
 		}
 	}()
 	appendIntegrationEvent(t, rdb, "redis-recovered")
-	waitFor(t, 3*time.Second, func() bool { count, _ := ledger.Count(); return count == 1 })
+	waitFor(t, 3*time.Second, func() bool { count, _ := ledger.Count(context.Background()); return count == 1 })
 }
 
 func TestConsumerRecreatesDeletedGroup(t *testing.T) {
@@ -307,7 +307,7 @@ func TestConsumerRecreatesDeletedGroup(t *testing.T) {
 		t.Fatal(err)
 	}
 	appendIntegrationEvent(t, rdb, "group-recreated")
-	waitFor(t, 3*time.Second, func() bool { count, _ := ledger.Count(); return count == 1 })
+	waitFor(t, 3*time.Second, func() bool { count, _ := ledger.Count(context.Background()); return count == 1 })
 }
 
 func TestReclaimPaginatesPastPoisonPending(t *testing.T) {
@@ -330,7 +330,7 @@ func TestReclaimPaginatesPastPoisonPending(t *testing.T) {
 	}
 	time.Sleep(10 * time.Millisecond)
 	consumer.reclaimPending(ctx)
-	count, _ := ledger.Count()
+	count, _ := ledger.Count(context.Background())
 	if count != 2 {
 		t.Fatalf("reclaimed ledger count=%d, want 2", count)
 	}
@@ -356,15 +356,19 @@ func appendIntegrationEvent(t *testing.T, rdb *redis.Client, id string) {
 
 type poisonLedger struct{ inner *MemoryLedger }
 
-func (l *poisonLedger) Add(e Event) (bool, error) {
+func (l *poisonLedger) Add(ctx context.Context, e Event) (bool, error) {
 	if e.EventID == "poison" {
 		return false, errors.New("poison")
 	}
-	return l.inner.Add(e)
+	return l.inner.Add(ctx, e)
 }
-func (l *poisonLedger) Count() (int, error)                  { return l.inner.Count() }
-func (l *poisonLedger) Balance(tenant string) (int64, error) { return l.inner.Balance(tenant) }
-func (l *poisonLedger) Snapshot() (map[string]Event, error)  { return l.inner.Snapshot() }
+func (l *poisonLedger) Count(ctx context.Context) (int, error) { return l.inner.Count(ctx) }
+func (l *poisonLedger) Balance(ctx context.Context, tenant string) (int64, error) {
+	return l.inner.Balance(ctx, tenant)
+}
+func (l *poisonLedger) Snapshot(ctx context.Context) (map[string]Event, error) {
+	return l.inner.Snapshot(ctx)
+}
 
 func newRedisIntegrationClient(t *testing.T) *redis.Client {
 	t.Helper()
@@ -417,12 +421,16 @@ type failOnceLedger struct {
 	failed atomic.Bool
 }
 
-func (l *failOnceLedger) Add(e Event) (bool, error) {
+func (l *failOnceLedger) Add(ctx context.Context, e Event) (bool, error) {
 	if l.failed.CompareAndSwap(false, true) {
 		return false, errors.New("injected ledger failure")
 	}
-	return l.inner.Add(e)
+	return l.inner.Add(ctx, e)
 }
-func (l *failOnceLedger) Count() (int, error)                  { return l.inner.Count() }
-func (l *failOnceLedger) Balance(tenant string) (int64, error) { return l.inner.Balance(tenant) }
-func (l *failOnceLedger) Snapshot() (map[string]Event, error)  { return l.inner.Snapshot() }
+func (l *failOnceLedger) Count(ctx context.Context) (int, error) { return l.inner.Count(ctx) }
+func (l *failOnceLedger) Balance(ctx context.Context, tenant string) (int64, error) {
+	return l.inner.Balance(ctx, tenant)
+}
+func (l *failOnceLedger) Snapshot(ctx context.Context) (map[string]Event, error) {
+	return l.inner.Snapshot(ctx)
+}

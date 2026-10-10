@@ -59,6 +59,9 @@ func TestPostgresMigratesLegacyControlPayload(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.db.Close()
+	if stats := store.db.Stats(); stats.MaxOpenConnections <= 0 || stats.MaxOpenConnections > 16 {
+		t.Fatalf("control PostgreSQL pool is not bounded: MaxOpenConnections=%d", stats.MaxOpenConnections)
+	}
 	cfg, err := store.LoadLatest(ctx)
 	if err != nil {
 		t.Fatal(err)

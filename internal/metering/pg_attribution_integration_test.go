@@ -1,6 +1,7 @@
 package metering
 
 import (
+	"context"
 	"database/sql"
 	"net/url"
 	"os"
@@ -79,7 +80,7 @@ func TestPGLedgerAttributionIntegration(t *testing.T) {
 		Model: "m", Provider: "p", TotalTokens: 1, CostCents: 1, CreatedAt: createdAt,
 	}
 	for _, event := range []Event{attributed, ownerless} {
-		added, err := ledger.Add(event)
+		added, err := ledger.Add(context.Background(), event)
 		if err != nil || !added {
 			t.Fatalf("insert %s: added=%v err=%v", event.EventID, added, err)
 		}
@@ -132,7 +133,7 @@ func TestPGLedgerAttributionIntegration(t *testing.T) {
 	}
 
 	// The snapshot query must scan both shapes back.
-	snapshot, err := ledger.Snapshot()
+	snapshot, err := ledger.Snapshot(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,10 +154,10 @@ func TestPGLedgerAttributionIntegration(t *testing.T) {
 	}
 
 	// Replay is still idempotent with attribution present.
-	if added, err := ledger.Add(attributed); err != nil || added {
+	if added, err := ledger.Add(context.Background(), attributed); err != nil || added {
 		t.Fatalf("redelivery with attribution: added=%v err=%v", added, err)
 	}
-	if balance, err := ledger.Balance("org:7"); err != nil || balance != 3 {
+	if balance, err := ledger.Balance(context.Background(), "org:7"); err != nil || balance != 3 {
 		t.Fatalf("balance=%d err=%v", balance, err)
 	}
 }

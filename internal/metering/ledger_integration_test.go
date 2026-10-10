@@ -67,7 +67,7 @@ func integrationDependencies(t *testing.T, legacy ...bool) (*metering.PGLedger, 
 	}
 	if len(legacy) > 0 && legacy[0] {
 		event := metering.Event{EventID: "legacy-event", TenantID: "tenant-a", Model: "m", Provider: "p", TotalTokens: 3, CostCents: 3, CreatedAt: time.Now()}
-		if _, err := ledger.Add(event); err != nil {
+		if _, err := ledger.Add(context.Background(), event); err != nil {
 			t.Fatal(err)
 		}
 		if err := ledger.Close(); err != nil {
@@ -123,10 +123,10 @@ func TestPostgresLedgerRoundTripReconcile(t *testing.T) {
 	if err := rdb.XAdd(ctx, &redis.XAddArgs{Stream: metering.StreamName, Values: map[string]any{"data": string(payload)}}).Err(); err != nil {
 		t.Fatal(err)
 	}
-	if added, err := ledger.Add(event); err != nil || !added {
+	if added, err := ledger.Add(context.Background(), event); err != nil || !added {
 		t.Fatalf("insert: added=%v err=%v", added, err)
 	}
-	if added, err := ledger.Add(event); err != nil || added {
+	if added, err := ledger.Add(context.Background(), event); err != nil || added {
 		t.Fatalf("redelivery: added=%v err=%v", added, err)
 	}
 	report := transportReconcile(t, ctx, rdb, ledger)
@@ -196,7 +196,7 @@ func TestGatewayRedisPostgresRepeatedIDAndRedelivery(t *testing.T) {
 	defer func() { cancel(); <-finished }()
 	deadline := time.Now().Add(3 * time.Second)
 	for {
-		count, countErr := ledger.Count()
+		count, countErr := ledger.Count(context.Background())
 		report := transportReconcile(t, ctx, rdb, ledger)
 		if countErr == nil && count == 2 && report.Transport.PendingCount == 0 {
 			break
@@ -206,7 +206,7 @@ func TestGatewayRedisPostgresRepeatedIDAndRedelivery(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	balance, err := ledger.Balance("tenant-a")
+	balance, err := ledger.Balance(context.Background(), "tenant-a")
 	if err != nil || balance != 6 || upstreamCalls.Load() != 2 {
 		t.Fatalf("calls=%d balance=%d err=%v", upstreamCalls.Load(), balance, err)
 	}
@@ -220,15 +220,15 @@ func TestGatewayRedisPostgresRepeatedIDAndRedelivery(t *testing.T) {
 
 func TestPostgresLegacyEventIDMigrationPreservesDedup(t *testing.T) {
 	ledger, _ := integrationDependencies(t, true)
-	added, err := ledger.Add(metering.Event{EventID: "legacy-event", TenantID: "tenant-a", Model: "m", Provider: "p", CreatedAt: time.Now(), CostCents: 3})
+	added, err := ledger.Add(context.Background(), metering.Event{EventID: "legacy-event", TenantID: "tenant-a", Model: "m", Provider: "p", CreatedAt: time.Now(), CostCents: 3})
 	if err != nil || added {
 		t.Fatalf("legacy event billed again: added=%v err=%v", added, err)
 	}
-	rows, err := ledger.Snapshot()
+	rows, err := ledger.Snapshot(context.Background())
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("migrated rows=%v err=%v", rows, err)
 	}
-	balance, err := ledger.Balance("tenant-a")
+	balance, err := ledger.Balance(context.Background(), "tenant-a")
 	if err != nil || balance != 3 {
 		t.Fatalf("balance=%d err=%v", balance, err)
 	}

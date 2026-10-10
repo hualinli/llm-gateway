@@ -21,17 +21,22 @@ const (
 	ConsumerName         = "consumer-1"
 	DLQStreamName        = StreamName + ":dlq"
 	consumerErrorBackoff = 100 * time.Millisecond
+	// DefaultLedgerTimeout bounds one ledger write. A stalled database must not
+	// hold the consumer loop: the message stays pending and the reclaim loop
+	// retries it.
+	DefaultLedgerTimeout = 5 * time.Second
 )
 
 // Consumer 从 Stream 拉事件，幂等落台账，成功后 XACK
 type Consumer struct {
-	rdb    *redis.Client
-	ledger Ledger
-	name   string
-	block  time.Duration
-	count  int64
-	claim  time.Duration
-	idle   time.Duration
+	rdb           *redis.Client
+	ledger        Ledger
+	name          string
+	block         time.Duration
+	count         int64
+	claim         time.Duration
+	idle          time.Duration
+	ledgerTimeout time.Duration
 }
 
 type ConsumerOptions struct {
@@ -42,6 +47,8 @@ type ConsumerOptions struct {
 	ReadCount      int64
 	ReclaimEvery   time.Duration
 	PendingMinIdle time.Duration
+	// LedgerTimeout bounds one ledger write; zero uses DefaultLedgerTimeout.
+	LedgerTimeout time.Duration
 }
 
 func NewConsumer(rdb *redis.Client, ledger Ledger) *Consumer {
@@ -61,18 +68,22 @@ func NewConsumerWithOptions(rdb *redis.Client, ledger Ledger, options ConsumerOp
 	if options.PendingMinIdle <= 0 {
 		options.PendingMinIdle = 30 * time.Second
 	}
+	if options.LedgerTimeout <= 0 {
+		options.LedgerTimeout = DefaultLedgerTimeout
+	}
 	name := strings.TrimSpace(options.Name)
 	if name == "" {
 		name = InstanceConsumerName()
 	}
 	return &Consumer{
-		rdb:    rdb,
-		ledger: ledger,
-		name:   name,
-		block:  options.ReadBlock,
-		count:  options.ReadCount,
-		claim:  options.ReclaimEvery,
-		idle:   options.PendingMinIdle,
+		rdb:           rdb,
+		ledger:        ledger,
+		name:          name,
+		block:         options.ReadBlock,
+		count:         options.ReadCount,
+		claim:         options.ReclaimEvery,
+		idle:          options.PendingMinIdle,
+		ledgerTimeout: options.LedgerTimeout,
 	}
 }
 
@@ -207,7 +218,9 @@ func (c *Consumer) handle(ctx context.Context, m redis.XMessage) {
 		return
 	}
 
-	added, err := c.ledger.Add(e)
+	writeCtx, cancel := context.WithTimeout(ctx, c.ledgerTimeout)
+	added, err := c.ledger.Add(writeCtx, e)
+	cancel()
 	if err != nil {
 		// 写入失败:不 ack,保留在 PEL 等待重投
 		metrics.MeteringLedgerAddFailedTotal.Inc()

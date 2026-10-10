@@ -845,7 +845,7 @@ WHERE created_at >= $1 AND created_at < $2`, from, params.Until).Scan(&count)
 	}
 	// The in-memory ledger has no time-windowed count; the total is the closest
 	// honest answer and is still informational only.
-	count, err := params.Ledger.Count()
+	count, err := params.Ledger.Count(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -1013,7 +1013,7 @@ func lookupBilledEvents(ctx context.Context, params ReconcileParams, events []Ev
 		return billed, ledgerRows, nil
 	}
 	for _, candidate := range events {
-		event, found, err := lookup.Lookup(candidate.TenantID, candidate.EventID)
+		event, found, err := lookup.Lookup(ctx, candidate.TenantID, candidate.EventID)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -1030,7 +1030,7 @@ func lookupBilledEvents(ctx context.Context, params ReconcileParams, events []Ev
 // transport check unable to prove that an entry was billed, which it reports
 // rather than guessing.
 type EventLookup interface {
-	Lookup(tenantID, eventID string) (Event, bool, error)
+	Lookup(ctx context.Context, tenantID, eventID string) (Event, bool, error)
 }
 
 // billingFactLookup resolves the per-event read the transport check uses:
