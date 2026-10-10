@@ -1,5 +1,5 @@
 /**
- * The five data-view states required by the roadmap §7.4:
+ * The five data-view states the Console contract requires:
  * loading, empty, error, stale and forbidden — plus the not-found variant that
  * the Console contract uses instead of 403 for invisible organizations.
  *

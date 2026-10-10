@@ -38,6 +38,31 @@
 
 资金路径 failpoint 只在显式 `failpoint` 构建标签下编译；生产 profile 会拒绝启用。默认构建不包含可暂停、杀死或中断资金事务的运行时开关。
 
+## 已知限制与决策索引
+
+代码注释里还引用过一份带编号的历史路线图文档，以及一组 `KNOWN-LIMITS` 限制编号。那份文档不在仓库里（全仓既没有 roadmap 文件，也没有 `AGENT-PROMPTS`），所以下面把注释中仍然出现的编号固定映射到当前可核实的主题：写这些编号的人无法再回头查原文，后来的人也不该据此以为存在一份可以推翻当前实现的旧文档。引用这些编号时以本节为准。
+
+| 引用 | 当前主题 |
+|---|---|
+| roadmap §4.3 | 组织并发上限是**每实例**保护：两个 Gateway 实例时一个组织实际可达的上限是配置值的 2 倍，跨实例共享的只有 Redis 里的 org RPM 令牌桶，不做分布式并发租约。相关配置：`GATEWAY_MAX_ACTIVE_STREAMS`（实例内全局活跃流）、`GATEWAY_MAX_ACTIVE_STREAMS_PER_ORG`（实例内每组织活跃流）。 |
+| roadmap §6.4 | 终态 usage 缺失或非法 → `review_required`：执行保留预占并进入人工队列，绝不按零费用成功结算。相关位置：`[DONE]` 之前的终态门、`usage_receipts.status='exception'`。 |
+| `KNOWN-LIMITS` C1~C5 | 见下面的 `KNOWN-LIMITS` 列表。这些编号只在注释里出现，没有对应的实现清单。 |
+
+还有一批注释不写编号、只写「roadmap」，指向的同样是那份已不存在的文档：
+
+| 位置 | 仍然成立的主题 |
+|---|---|
+| `internal/billing/receipt.go` | `dispatched` 只表示事件至少投递过一次，不等于完成（投递后标记不是「永远不需要重投」）；`exception` 记录无法支撑扣款的终态边界，执行转 `review_required` 且预占继续持有。 |
+| `internal/billing/settlement_query_pg.go` | Redis DLQ 只是有界的诊断缓存，正式资金异常保存在 PostgreSQL：每条异常都是可按组织查询的 PG 行，能挺过 Redis 重启、流裁剪和进程被杀。 |
+| `internal/billing/recovery.go` | `review_required` 的人工处理目标是 24 小时，但这是**暴露目标**而不是动作：不会因为时间到了就释放预占，只提供分页人工队列与超期指标。 |
+| `internal/billing/recovery_pg.go` | 恢复路径允许 `review_required → released`，操作员通过同一个事务留下审计；`receipt_recorded` 和 `settled` 不在来源状态里。 |
+| `internal/control/snapshot_capacity_test.go` | 全量 Key 快照先测容量（1k/10k 的快照体积、Apply/广播开销、留存堆）再决定是否改成增量协议。 |
+
+### KNOWN-LIMITS
+
+- **C5**：Gateway 内部的**全局**活跃流上限位于计费准入**之后**（在 proxy 内，见 `cmd/gateway/chain.go` 的链序注释），因此这类 503 仍会留下 execution 行、预占与释放记录。对照：限流 429 与组织并发 429 在资金预占**之前**，不写 execution、不预占。依据见[架构说明](ARCHITECTURE.md)的「模型请求与额度结算」小节。
+- **C1~C4**：无法确认。仓库里没有任何现存代码或文档说明这四条限制的内容，因此不写；需要保留编号的场景请先用实现和测试证明，再在上一张表里补主题。
+
 ## 旧决策编号索引
 
 代码注释中仍可能使用旧 ADR 编号；对应主题如下：

@@ -184,7 +184,8 @@ services:
   # What is NOT shared: active-stream caps. GATEWAY_MAX_ACTIVE_STREAMS and
   # GATEWAY_MAX_ACTIVE_STREAMS_PER_ORG are per instance, so running this service
   # doubles an organization's reachable ceiling. They are not a cross-instance
-  # hard quota (roadmap §4.3) and must never be reported as one.
+  # hard quota (docs/decisions.md「已知限制与决策索引」§ 组织并发上限是每实例保护)
+  # and must never be reported as one.
   #
   #   docker compose --profile multi-instance up -d --build --wait
   gateway-b:
