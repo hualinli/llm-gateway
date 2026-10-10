@@ -85,6 +85,8 @@ func main() {
 	limiterRate := intEnv("GATEWAY_LIMITER_RATE", 20)
 	limiterBurst := intEnv("GATEWAY_LIMITER_BURST", 40)
 	lim := limiter.New(rdb, limiterRate, limiterBurst, 500*time.Millisecond)
+	limiterMaxWaiters := intEnv("GATEWAY_LIMITER_MAX_WAITERS", 256)
+	lim.SetMaxWaiters(limiterMaxWaiters)
 	limiterPolicy := os.Getenv("LIMITER_ON_REDIS_ERROR")
 	if limiterPolicy == "" {
 		limiterPolicy = "open"
@@ -92,7 +94,7 @@ func main() {
 	if err := lim.SetOnRedisError(limiterPolicy); err != nil {
 		log.Fatalf("limiter: %v", err)
 	}
-	log.Printf("limiter: redis=%s rate=%d burst=%d queue=500ms on-redis-error=%s", redisAddr, limiterRate, limiterBurst, limiterPolicy)
+	log.Printf("limiter: redis=%s rate=%d burst=%d queue=500ms max-waiters=%d on-redis-error=%s", redisAddr, limiterRate, limiterBurst, limiterMaxWaiters, limiterPolicy)
 
 	// 计量生产：批量 XADD，不阻塞热路径；Redis 故障时落本地 JSONL spool。
 	spoolDir := os.Getenv("METERING_SPOOL_DIR")

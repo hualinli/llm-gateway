@@ -179,6 +179,7 @@ eval "$(scripts/dev-certs.sh | grep '^export ')"
 | `GATEWAY_ACCESS_GUARD` | 空 | `pg` 时对每个请求做权威 user/member/org 校验（PG 错误 fail-closed 503） |
 | `GATEWAY_MAX_ACTIVE_STREAMS(_PER_ORG)` | 代码默认 0/0（= 不限） | **单实例**上限（全局 503 / 组织 429）；Compose demo 设 256 / 0（`gateway-b` 为 256/32）；prod 必须显式 >0；**不是跨实例硬配额** |
 | `GATEWAY_LIMITER_RATE/BURST`、`LIMITER_ON_REDIS_ERROR` | 20/40、`open` | Redis 令牌桶；prod 必须显式设置且 `closed` |
+| `GATEWAY_LIMITER_MAX_WAITERS` | 256 | 同一实例同时排队等令牌的请求上限，超出立即 429，不排队；0 = 关闭排队。每个排队请求每 50ms 查一次 Redis，因此上限同时约束 Redis 压力 |
 | `CONTROL_ADDR` | 空 | Console→Control 管理通道；空 = Key 接口 503、不启动发布 loop（prod 必填） |
 | `CONTROL_HTTP_TLS_CERT_FILE` + `CONTROL_HTTP_TLS_KEY_FILE` | 空 | Control HTTP 管理口（`/config`、`/keys`、`/provider-credentials`，Bearer 令牌）的证书对；设置后用 TLS 提供，prod 必须同时设置，否则拒绝启动 |
 | `CONTROL_ADMIN_SERVICE_ENABLED` + `CONTROL_CONSOLE_SERVICE_NAME` + `CONTROL_TLS_*` | 关 | Control 内部管理面（生产必须 mTLS） |

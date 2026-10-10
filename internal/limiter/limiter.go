@@ -60,6 +60,11 @@ type Limiter struct {
 	orgRates OrgRateSource
 	// 等待上限：Burst 内超限时最多等多久，0 表示直接 429（蓝图里的有界排队）
 	queueTimeout time.Duration
+	// waitSlots bounds how many requests may queue for a token at once. Each
+	// queued request polls Redis every 50 ms, so an unbounded queue turns a burst
+	// into a Redis request storm. A request that finds no free slot is refused at
+	// once. A nil channel means queueing is disabled.
+	waitSlots chan struct{}
 	// onRedisError is "open" or "closed". Open keeps Demo available when Redis
 	// is down; closed rejects the request so a production gateway cannot exceed
 	// its configured rate while the limiter is blind.
@@ -89,7 +94,44 @@ func New(rdb *redis.Client, rate, burst int, queueTimeout time.Duration) *Limite
 	if queueTimeout < 0 {
 		queueTimeout = 0
 	}
-	return &Limiter{rdb: rdb, rate: float64(rate), burst: burst, queueTimeout: queueTimeout, onRedisError: redisFailOpen}
+	return &Limiter{
+		rdb:          rdb,
+		rate:         float64(rate),
+		burst:        burst,
+		queueTimeout: queueTimeout,
+		onRedisError: redisFailOpen,
+		waitSlots:    make(chan struct{}, defaultMaxWaiters),
+	}
+}
+
+// defaultMaxWaiters is the default number of requests that may queue for a token
+// at the same time on one instance.
+const defaultMaxWaiters = 256
+
+// SetMaxWaiters bounds how many requests may queue for a token at the same time.
+// A request over the bound is refused at once. Zero disables queueing. Call it
+// before the limiter serves traffic.
+func (l *Limiter) SetMaxWaiters(n int) {
+	if n <= 0 {
+		l.waitSlots = nil
+		return
+	}
+	l.waitSlots = make(chan struct{}, n)
+}
+
+// acquireWaiter takes one queue slot without blocking. A nil channel never has
+// room, so disabled queueing refuses every waiter.
+func (l *Limiter) acquireWaiter() bool {
+	select {
+	case l.waitSlots <- struct{}{}:
+		return true
+	default:
+		return false
+	}
+}
+
+func (l *Limiter) releaseWaiter() {
+	<-l.waitSlots
 }
 
 // SetOrgRates installs the snapshot's per-organization policy source. Passing
@@ -309,6 +351,10 @@ func (l *Limiter) decide(ctx context.Context, key string, rate float64, burst in
 	if d != decisionLimit || l.queueTimeout == 0 {
 		return d
 	}
+	if !l.acquireWaiter() {
+		return decisionLimit
+	}
+	defer l.releaseWaiter()
 	deadline := time.Now().Add(l.queueTimeout)
 	for time.Now().Before(deadline) {
 		timer := time.NewTimer(50 * time.Millisecond)
