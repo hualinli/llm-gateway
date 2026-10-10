@@ -6,7 +6,11 @@
 
 - `demo`/`test` 可用于本地开发；生产 profile 对必要配置执行启动检查，配置不完整时拒绝启动。生产账务和身份数据必须使用 PostgreSQL。
 - 业务监听与诊断监听可分离；生产环境不得把诊断端点暴露在公网业务入口。
+- Control 的 HTTP 管理口（`/config`、`/keys`、`/provider-credentials`）以 Bearer 令牌鉴权，生产必须配置 `CONTROL_HTTP_TLS_CERT_FILE` 与 `CONTROL_HTTP_TLS_KEY_FILE` 并以 TLS 提供；明文监听只属于本地演示。
+- 仓库自带的演示凭据（`demo-control-token`、`demo-policy-read-token`）在生产按值拒绝，即使长度满足要求。生产必须换成随机令牌。
 - Control 与 Gateway 之间的生产管理和凭据解析通道使用 mTLS。Provider 密钥保存在 PostgreSQL 加密仓库，配置中只传引用；解析后的明文仅用于受保护的凭据解析和上游调用，不进入普通配置快照、Console 响应、审计详情或日志。
+- 限流排队有上限（默认每实例 256，`GATEWAY_LIMITER_MAX_WAITERS`）：超出立即 429，不排队。每个排队请求每 50ms 查一次 Redis，因此该上限同时约束排队规模与 Redis 压力；上限是单实例的，跨实例需自行换算。
+- Metering 与 Control 的 PostgreSQL 调用必须带 context 超时，连接池必须有上限（当前 10/5，寿命 30 分钟）。数据库变慢时，消费循环与 HTTP 请求要能放弃等待，而不是无限占用连接与goroutine。
 
 ## 身份与账户边界
 

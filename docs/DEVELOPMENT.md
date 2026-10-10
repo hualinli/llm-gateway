@@ -178,6 +178,15 @@ Playwright 默认 Console 为 `http://127.0.0.1:18092`，Gateway 为 `http://127
 
 角色用例共享登录会话，注销用例必须最后运行；默认 Playwright 配置已按此顺序安排。认证状态保存在本地忽略文件中，不要提交或归档。主动截图用例输出到 `data/verification/web-screenshots/`；失败截图和 trace 在 `web/test-results/`，HTML 报告在 `web/playwright-report/`。
 
+## 新增配置项
+
+合并业务重构后新增的运行配置，约束说明见[技术决策](decisions.md)：
+
+| 变量 | 默认 | 作用 |
+|---|---|---|
+| `GATEWAY_LIMITER_MAX_WAITERS` | 256 | 单实例同时排队等限流令牌的请求上限，超出立即 429；`0` 关闭排队 |
+| `CONTROL_HTTP_TLS_CERT_FILE` + `CONTROL_HTTP_TLS_KEY_FILE` | 空 | Control HTTP 管理口的证书对；设置后以 TLS 提供，生产必须配置否则拒绝启动 |
+
 ## 常用检查
 
 ```bash
