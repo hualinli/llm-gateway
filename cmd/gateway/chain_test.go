@@ -119,6 +119,9 @@ func newChainFixture(lim *limiter.Limiter, orgID int64) *chainFixture {
 	record.OrgID = orgID
 	ownerID := orgID
 	record.OwnerUserID = &ownerID
+	// A key belongs to the membership incarnation that created it; billing
+	// admission refuses a key that is not bound to one.
+	record.MembershipID = orgID
 	chain := chatChain(
 		auth.NewMemoryStoreFromRecords([]auth.KeyRecord{record}),
 		gatewayguard.SnapshotGuard{Policies: gatewayguard.NewPolicySet()},
@@ -154,6 +157,8 @@ func TestOrgStreamCapRefusesBeforeBillingReservesFunds(t *testing.T) {
 	go func() { first <- f.post() }()
 	select {
 	case <-f.upstream.entered:
+	case rec := <-first:
+		t.Fatalf("the first request was refused before the upstream: status=%d body=%s", rec.Code, rec.Body.String())
 	case <-time.After(5 * time.Second):
 		t.Fatal("the first request never reached the upstream")
 	}
