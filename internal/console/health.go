@@ -21,7 +21,10 @@ func (s *server) livez(_ context.Context, c *app.RequestContext) {
 
 // readyz implements GET /readyz: the process can serve the request path, which
 // for the Console means PostgreSQL is reachable. It is mounted on the business
-// listener, never on the diagnostics listener.
+// listener, never on the diagnostics listener, and it is unauthenticated — the
+// same reason it keeps the driver's error text ("dial tcp 10.0.0.7:5432: ...")
+// in the log instead of the body: an anonymous caller must not learn the
+// database host. The status code stays the contract; only the body changed.
 func (s *server) readyz(ctx context.Context, c *app.RequestContext) {
 	if s.ready == nil {
 		writeText(c, http.StatusOK, "ok\n")
@@ -30,7 +33,8 @@ func (s *server) readyz(ctx context.Context, c *app.RequestContext) {
 	probeCtx, cancel := context.WithTimeout(ctx, readyzProbeTimeout)
 	defer cancel()
 	if err := s.ready(probeCtx); err != nil {
-		writeText(c, http.StatusServiceUnavailable, "postgres: "+err.Error()+"\n")
+		s.logger.Printf("console readyz: postgres probe failed err=%v", err)
+		writeText(c, http.StatusServiceUnavailable, "not ready\n")
 		return
 	}
 	writeText(c, http.StatusOK, "ok\n")

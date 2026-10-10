@@ -123,7 +123,17 @@ func main() {
 		if _, err := ledger.Count(ctx); err != nil {
 			ledgerErr = fmt.Errorf("ledger: %w", err)
 		}
-		ready.Write(w, ready.Dependencies(redisErr, ledgerErr, settlementReadiness()))
+		st := ready.Dependencies(redisErr, ledgerErr, settlementReadiness())
+		// ready.Write 只渲染无敏感信息的摘要（依赖原文含内部地址/端口，
+		// 而 /readyz 无需鉴权），所以详情必须在这里落日志，否则依赖故障
+		// 在响应里被抹掉之后就再也查不到了。只在未就绪时记：健康探针
+		// 每次被 nginx / docker healthcheck 打到，不该刷日志。
+		if !st.Ready {
+			for _, msg := range st.Messages {
+				log.Printf("metering readyz: not ready: %s", msg)
+			}
+		}
+		ready.Write(w, st)
 	})
 	mux.Handle("/ledger/count", requireBearer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), ledgerRequestTimeout)

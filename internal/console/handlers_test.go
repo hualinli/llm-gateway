@@ -665,13 +665,14 @@ func TestProbes(t *testing.T) {
 		t.Fatalf("readyz status=%d, want 200", rec.Code)
 	}
 
-	probeErr = errors.New("connection refused")
+	probeErr = errors.New("dial tcp 10.0.0.7:5432: connect: connection refused")
 	rec = h.serve(http.MethodGet, PathReadyz, nil)
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("readyz status=%d, want 503", rec.Code)
 	}
-	if !strings.Contains(rec.Body.String(), "postgres") {
-		t.Fatalf("readyz body=%q, want the failing dependency", rec.Body.String())
+	// 正文不含依赖原文（探测端点无需鉴权），错误只进日志。
+	if body := rec.Body.String(); body != "not ready\n" {
+		t.Fatalf("readyz body=%q, want %q", body, "not ready\n")
 	}
 }
 
