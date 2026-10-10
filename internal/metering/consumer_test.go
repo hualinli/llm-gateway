@@ -234,6 +234,15 @@ func TestRedisMeteringPendingIsReclaimed(t *testing.T) {
 		return count == 1
 	})
 
+	// The entry is counted before the consumer's XACK lands, and the reclaim that
+	// clears XPending runs on its own ReclaimEvery/PendingMinIdle timer. Reading
+	// XPending straight after count==1 therefore races the background goroutine
+	// and flakes whenever the machine is loaded (full -race suite, busy runner).
+	// Poll for the terminal state like every other assertion in this test.
+	waitFor(t, time.Second, func() bool {
+		pending, err := rdb.XPending(ctx, StreamName, GroupName).Result()
+		return err == nil && pending.Count == 0
+	})
 	pending, err := rdb.XPending(ctx, StreamName, GroupName).Result()
 	if err != nil {
 		t.Fatal(err)
