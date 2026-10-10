@@ -29,6 +29,7 @@ import { DataState, ErrorView, errorSummary } from '../components/states';
 import { PageHeader } from '../components/PageHeader';
 import { useSession } from '../session/SessionProvider';
 import { beijingMonthOf, formatMicroYuan, formatTimestamp, microToYuanInput, yuanToMicro } from '../utils/format';
+import { newUUID } from '../utils/ids';
 
 interface PaymentFormValues {
   organization_id: string;
@@ -40,7 +41,7 @@ interface PaymentFormValues {
 }
 
 function freshIdempotencyKey(): string {
-  return `payment-${crypto.randomUUID()}`;
+  return `payment-${newUUID()}`;
 }
 
 function hasPositiveAmount(value: string): boolean {

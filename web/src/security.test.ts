@@ -52,3 +52,16 @@ describe('no browser persistence', () => {
     expect(gateway).not.toMatch(/[?&]api_?key=/i);
   });
 });
+
+describe('identifiers', () => {
+  it('only calls crypto.randomUUID through the CSPRNG helper', () => {
+    // crypto.randomUUID() exists only in secure contexts (HTTPS or localhost).
+    // A console served over plain HTTP would throw on every key creation or
+    // adjustment, so every call must go through utils/ids.ts, which falls back
+    // to crypto.getRandomValues.
+    const offenders = ENTRIES.filter(
+      ([path, source]) => path !== './utils/ids.ts' && /crypto\.randomUUID\(/.test(stripComments(source)),
+    ).map(([path]) => path);
+    expect(offenders).toEqual([]);
+  });
+});

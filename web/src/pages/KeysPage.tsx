@@ -13,6 +13,7 @@ import { DataState, ErrorView } from '../components/states';
 import { useActiveOrg } from '../session/SessionProvider';
 import { usePlaygroundKey } from '../session/PlaygroundKeyProvider';
 import { formatTimestamp } from '../utils/format';
+import { newUUID } from '../utils/ids';
 
 interface KeyForm { name: string }
 
@@ -45,7 +46,7 @@ export function KeysPage(): ReactNode {
     if (!canCreate) return;
     const values = await form.validateFields();
     try {
-      const result = await create.mutateAsync({ name: values.name.trim(), operation_id: operationId.current ??= crypto.randomUUID() });
+      const result = await create.mutateAsync({ name: values.name.trim(), operation_id: operationId.current ??= newUUID() });
       setCreated(result);
       setCreateOpen(false);
       operationId.current = null;
