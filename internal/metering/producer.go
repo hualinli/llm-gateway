@@ -1,16 +1,10 @@
 package metering
 
 import (
-	"bufio"
-	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
 	"log"
-	"os"
 	"path/filepath"
 	"sync"
 	"time"
@@ -49,8 +43,13 @@ type Producer struct {
 
 	spoolPath      string
 	maxSpoolSize   int64
-	spoolMu        sync.Mutex
-	spoolRecovered bool // protected by spoolMu; repair before the first append
+	spoolMu        sync.Mutex // guards the active file, rotation and removal; never held across Redis I/O
+	spoolRecovered bool       // protected by spoolMu; repair before the first append
+	// replay is the cursor of the segment being drained (see spool.go). Only the
+	// loop goroutine touches it.
+	replay spoolReplay
+	// sendBatch replaces the Redis publisher in tests. nil means Redis.
+	sendBatch func(context.Context, []Event) error
 
 	mu       sync.RWMutex
 	closed   bool
@@ -94,7 +93,7 @@ func NewProducerWithOptions(rdb *redis.Client, buffer int, batch int, interval t
 	}
 	if options.SpoolDir != "" {
 		p.spoolPath = filepath.Join(options.SpoolDir, "events.jsonl")
-		updateSpoolGauge(p.spoolPath)
+		p.refreshSpoolGauge()
 	}
 	go p.loop()
 	return p
@@ -249,7 +248,16 @@ func (p *Producer) loop() {
 	}
 }
 
+// flushBatch publishes one batch to the Redis stream. It is the only path that
+// reaches Redis, and tests can intercept it through sendBatch.
 func (p *Producer) flushBatch(ctx context.Context, events []Event) error {
+	if p.sendBatch != nil {
+		return p.sendBatch(ctx, events)
+	}
+	return p.publishRedis(ctx, events)
+}
+
+func (p *Producer) publishRedis(ctx context.Context, events []Event) error {
 	if p.rdb == nil {
 		return errors.New("redis client is nil")
 	}
@@ -287,287 +295,4 @@ func (p *Producer) flushBatch(ctx context.Context, events []Event) error {
 		}
 	}
 	return lastErr
-}
-
-func (p *Producer) appendSpool(events []Event) error {
-	p.spoolMu.Lock()
-	defer p.spoolMu.Unlock()
-	return p.appendSpoolLocked(events)
-}
-
-func (p *Producer) appendSpoolLocked(events []Event) error {
-	if len(events) == 0 || p.spoolPath == "" {
-		if len(events) == 0 {
-			return nil
-		}
-		return errors.New("metering spool is not configured")
-	}
-	if !p.spoolRecovered {
-		if _, err := p.recoverSpoolLocked(); err != nil {
-			return err
-		}
-	}
-	if err := os.MkdirAll(filepath.Dir(p.spoolPath), 0o700); err != nil {
-		return err
-	}
-	var payload bytes.Buffer
-	enc := json.NewEncoder(&payload)
-	for _, e := range events {
-		if err := enc.Encode(e); err != nil {
-			return err
-		}
-	}
-
-	currentSize := int64(0)
-	if info, statErr := os.Stat(p.spoolPath); statErr == nil {
-		currentSize = info.Size()
-	} else if !errors.Is(statErr, os.ErrNotExist) {
-		return statErr
-	}
-	quarantinedSize, err := quarantineBytes(p.spoolPath)
-	if err != nil {
-		return err
-	}
-	if currentSize+quarantinedSize+int64(payload.Len()) > p.maxSpoolSize {
-		return fmt.Errorf("spool and quarantine size %d exceeds limit %d", currentSize+quarantinedSize+int64(payload.Len()), p.maxSpoolSize)
-	}
-
-	f, err := os.OpenFile(p.spoolPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	if n, err := f.Write(payload.Bytes()); err != nil || n != payload.Len() {
-		p.spoolRecovered = false
-		if err == nil {
-			err = io.ErrShortWrite
-		}
-		return err
-	}
-	if err := f.Sync(); err != nil {
-		p.spoolRecovered = false
-		return err
-	}
-	if err := syncSpoolDirectory(p.spoolPath); err != nil {
-		return err
-	}
-	updateSpoolGauge(p.spoolPath)
-	return nil
-}
-
-func (p *Producer) replaySpool(ctx context.Context) error {
-	if p.spoolPath == "" {
-		return nil
-	}
-	// Keep the lock across read -> Redis replay -> rewrite. Otherwise an
-	// overflow Enqueue could append a new event while replay is in progress,
-	// and the later rewrite could overwrite that event.
-	p.spoolMu.Lock()
-	defer p.spoolMu.Unlock()
-	events, err := p.recoverSpoolLocked()
-	if err != nil {
-		return err
-	}
-	for len(events) > 0 {
-		n := p.batch
-		if n > len(events) {
-			n = len(events)
-		}
-		if err := p.flushBatch(ctx, events[:n]); err != nil {
-			return err
-		}
-		metrics.MeteringSpoolReplayTotal.Inc()
-		events = events[n:]
-		if err := rewriteSpool(p.spoolPath, events); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func readSpool(path string) ([]Event, error) {
-	contents, err := scanSpool(path)
-	if err != nil {
-		return nil, err
-	}
-	if len(contents.corrupt) > 0 {
-		return contents.events, fmt.Errorf("spool contains %d malformed records", contents.corruptRecords)
-	}
-	return contents.events, nil
-}
-
-type spoolContents struct {
-	events           []Event
-	corrupt          []byte
-	corruptRecords   int
-	missingDelimiter bool
-}
-
-// JSONL framing lets one malformed line be quarantined without losing valid
-// records before or after it. A partial final line is never joined to a new
-// append: recoverSpoolLocked runs before the first append after a restart.
-func scanSpool(path string) (spoolContents, error) {
-	var contents spoolContents
-	f, err := os.Open(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return contents, nil
-	}
-	if err != nil {
-		return contents, err
-	}
-	defer f.Close()
-
-	reader := bufio.NewReader(f)
-	for {
-		line, readErr := reader.ReadBytes('\n')
-		if len(line) > 0 && line[len(line)-1] != '\n' {
-			contents.missingDelimiter = true
-		}
-		if len(bytes.TrimSpace(line)) > 0 {
-			var event Event
-			if err := json.Unmarshal(line, &event); err != nil {
-				contents.corrupt = append(contents.corrupt, line...)
-				contents.corruptRecords++
-			} else {
-				contents.events = append(contents.events, event)
-			}
-		}
-		if errors.Is(readErr, io.EOF) {
-			return contents, nil
-		}
-		if readErr != nil {
-			return contents, readErr
-		}
-	}
-}
-
-func (p *Producer) recoverSpoolLocked() ([]Event, error) {
-	contents, err := scanSpool(p.spoolPath)
-	if err != nil {
-		return nil, err
-	}
-	if len(contents.corrupt) > 0 {
-		// A content-addressed quarantine is idempotent if the process dies
-		// after saving the corrupt bytes but before replacing the active file.
-		quarantinePath := fmt.Sprintf("%s.corrupt-%x", p.spoolPath, sha256.Sum256(contents.corrupt))
-		if err := writeSpoolAtomically(quarantinePath, func(w io.Writer) error {
-			_, err := w.Write(contents.corrupt)
-			return err
-		}); err != nil {
-			return nil, fmt.Errorf("quarantine corrupt spool: %w", err)
-		}
-		log.Printf("metering quarantined corrupt spool: valid_records=%d corrupt_records=%d quarantine=%s", len(contents.events), contents.corruptRecords, quarantinePath)
-	}
-	if len(contents.corrupt) > 0 || contents.missingDelimiter {
-		if err := rewriteSpool(p.spoolPath, contents.events); err != nil {
-			return nil, err
-		}
-		metrics.MeteringSpoolCorruptRecordsTotal.Add(float64(contents.corruptRecords))
-	}
-	p.spoolRecovered = true
-	return contents.events, nil
-}
-
-func quarantineBytes(path string) (int64, error) {
-	paths, err := filepath.Glob(path + ".corrupt-*")
-	if err != nil {
-		return 0, err
-	}
-	var total int64
-	for _, name := range paths {
-		info, err := os.Stat(name)
-		if err != nil {
-			return 0, err
-		}
-		total += info.Size()
-	}
-	return total, nil
-}
-
-func rewriteSpool(path string, events []Event) error {
-	if len(events) == 0 {
-		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-		if err := syncSpoolDirectory(path); err != nil {
-			return err
-		}
-		updateSpoolGauge(path)
-		return nil
-	}
-	err := writeSpoolAtomically(path, func(w io.Writer) error {
-		enc := json.NewEncoder(w)
-		for _, event := range events {
-			if err := enc.Encode(event); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-	if err == nil {
-		updateSpoolGauge(path)
-	}
-	return err
-}
-
-func writeSpoolAtomically(path string, write func(io.Writer) error) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".events-*.tmp")
-	if err != nil {
-		return err
-	}
-	tmpName := tmp.Name()
-	cleanup := func() {
-		_ = tmp.Close()
-		_ = os.Remove(tmpName)
-	}
-	defer cleanup()
-
-	if err := write(tmp); err != nil {
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	if err := os.Chmod(tmpName, 0o600); err != nil {
-		return err
-	}
-	if err := os.Rename(tmpName, path); err != nil {
-		return err
-	}
-	if err := syncSpoolDirectory(path); err != nil {
-		return err
-	}
-	return nil
-}
-
-func syncSpoolDirectory(path string) error {
-	dir, err := os.Open(filepath.Dir(path))
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	defer dir.Close()
-	return dir.Sync()
-}
-
-func updateSpoolGauge(path string) {
-	if path == "" {
-		return
-	}
-	info, err := os.Stat(path)
-	if errors.Is(err, os.ErrNotExist) {
-		metrics.MeteringSpoolBytes.Set(0)
-		return
-	}
-	if err == nil {
-		metrics.MeteringSpoolBytes.Set(float64(info.Size()))
-	}
 }
