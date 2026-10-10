@@ -14,18 +14,20 @@ func mapLookup(values map[string]string) appenv.Lookup {
 
 func goodGatewayEnv() map[string]string {
 	return map[string]string{
-		"GATEWAY_ADDR":                 ":8090",
-		"GATEWAY_DIAGNOSTICS_ADDR":     "127.0.0.1:9090",
-		"LIMITER_ON_REDIS_ERROR":       "closed",
-		"GATEWAY_LIMITER_RATE":         "100",
-		"GATEWAY_LIMITER_BURST":        "200",
-		"GATEWAY_MAX_ACTIVE_STREAMS":   "256",
-		"GATEWAY_ACCESS_GUARD":         "pg",
-		"GATEWAY_BILLING":              "pg",
-		"POSTGRES_DSN":                 "postgres://gateway:gateway@postgres:5432/llm_gateway?sslmode=disable",
-		"CONTROL_TLS_CA_FILE":          "data/dev-certs/ca.crt",
-		"CONTROL_TLS_CLIENT_CERT_FILE": "data/dev-certs/gateway-client.crt",
-		"CONTROL_TLS_CLIENT_KEY_FILE":  "data/dev-certs/gateway-client.key",
+		"GATEWAY_ADDR":                       ":8090",
+		"GATEWAY_DIAGNOSTICS_ADDR":           "127.0.0.1:9090",
+		"LIMITER_ON_REDIS_ERROR":             "closed",
+		"GATEWAY_INSTANCE_ID":                "gateway-a",
+		"GATEWAY_LIMITER_RATE":               "100",
+		"GATEWAY_LIMITER_BURST":              "200",
+		"GATEWAY_MAX_ACTIVE_STREAMS":         "256",
+		"GATEWAY_MAX_ACTIVE_STREAMS_PER_ORG": "16",
+		"GATEWAY_ACCESS_GUARD":               "pg",
+		"GATEWAY_BILLING":                    "pg",
+		"POSTGRES_DSN":                       "postgres://gateway:gateway@postgres:5432/llm_gateway?sslmode=disable",
+		"CONTROL_TLS_CA_FILE":                "data/dev-certs/ca.crt",
+		"CONTROL_TLS_CLIENT_CERT_FILE":       "data/dev-certs/gateway-client.crt",
+		"CONTROL_TLS_CLIENT_KEY_FILE":        "data/dev-certs/gateway-client.key",
 	}
 }
 
@@ -58,9 +60,11 @@ func TestGatewayChecksCoverEveryRequiredItem(t *testing.T) {
 		"GATEWAY_BILLING",
 		"POSTGRES_DSN",
 		"LIMITER_ON_REDIS_ERROR",
+		"GATEWAY_INSTANCE_ID",
 		"GATEWAY_LIMITER_RATE",
 		"GATEWAY_LIMITER_BURST",
 		"GATEWAY_MAX_ACTIVE_STREAMS",
+		"GATEWAY_MAX_ACTIVE_STREAMS_PER_ORG",
 		"GATEWAY_DIAGNOSTICS_ADDR",
 		"CONTROL_TLS_CA_FILE",
 		"CONTROL_TLS_CLIENT_CERT_FILE/CONTROL_TLS_CLIENT_KEY_FILE",
@@ -193,6 +197,42 @@ func TestGatewayChecksRejectRelaxedSettings(t *testing.T) {
 			failing: "GATEWAY_MAX_ACTIVE_STREAMS",
 		},
 		{
+			// The hostname-pid fallback makes two processes on one host look
+			// like one instance to the recovery janitor, and a statefulset that
+			// reuses a fixed env value has the same effect across pods: the
+			// surviving process keeps renewing a dead instance's lease, so the
+			// dead one's reserved funds are held until a human runs the review
+			// queue.
+			name:    "instance id unset falls back to hostname-pid",
+			mutate:  func(env map[string]string) { delete(env, "GATEWAY_INSTANCE_ID") },
+			failing: "GATEWAY_INSTANCE_ID",
+		},
+		{
+			name:    "instance id is only whitespace",
+			mutate:  func(env map[string]string) { env["GATEWAY_INSTANCE_ID"] = "  " },
+			failing: "GATEWAY_INSTANCE_ID",
+		},
+		{
+			name:    "per-org max streams unset",
+			mutate:  func(env map[string]string) { delete(env, "GATEWAY_MAX_ACTIVE_STREAMS_PER_ORG") },
+			failing: "GATEWAY_MAX_ACTIVE_STREAMS_PER_ORG",
+		},
+		{
+			name:    "per-org max streams zero is unlimited",
+			mutate:  func(env map[string]string) { env["GATEWAY_MAX_ACTIVE_STREAMS_PER_ORG"] = "0" },
+			failing: "GATEWAY_MAX_ACTIVE_STREAMS_PER_ORG",
+		},
+		{
+			name:    "per-org max streams negative",
+			mutate:  func(env map[string]string) { env["GATEWAY_MAX_ACTIVE_STREAMS_PER_ORG"] = "-1" },
+			failing: "GATEWAY_MAX_ACTIVE_STREAMS_PER_ORG",
+		},
+		{
+			name:    "per-org max streams unparsable",
+			mutate:  func(env map[string]string) { env["GATEWAY_MAX_ACTIVE_STREAMS_PER_ORG"] = "many" },
+			failing: "GATEWAY_MAX_ACTIVE_STREAMS_PER_ORG",
+		},
+		{
 			name:    "diagnostics address unset",
 			mutate:  func(env map[string]string) { delete(env, "GATEWAY_DIAGNOSTICS_ADDR") },
 			failing: "GATEWAY_DIAGNOSTICS_ADDR",
@@ -269,9 +309,11 @@ func TestGatewayChecksAggregateFailuresInProduction(t *testing.T) {
 		"GATEWAY_ACCESS_GUARD",
 		"GATEWAY_BILLING",
 		"LIMITER_ON_REDIS_ERROR",
+		"GATEWAY_INSTANCE_ID",
 		"GATEWAY_LIMITER_RATE",
 		"GATEWAY_LIMITER_BURST",
 		"GATEWAY_MAX_ACTIVE_STREAMS",
+		"GATEWAY_MAX_ACTIVE_STREAMS_PER_ORG",
 		"GATEWAY_DIAGNOSTICS_ADDR",
 		"CONTROL_TLS_CA_FILE",
 		"CONTROL_TLS_CLIENT_CERT_FILE/CONTROL_TLS_CLIENT_KEY_FILE",

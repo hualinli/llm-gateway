@@ -230,7 +230,7 @@ func main() {
 	mux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 200*time.Millisecond)
 		defer cancel()
-		ready.Write(w, ready.Gateway(len(registry.Models()), rdb.Ping(ctx).Err(), lim.FailClosed()))
+		gatewayReadyz(w, ready.Gateway(len(registry.Models()), rdb.Ping(ctx).Err(), lim.FailClosed()))
 	})
 	mux.Handle("/v1/chat/completions", authedLimitedProxy)
 	guarded := gatewayguard.Middleware(accessGuard, gatewayguard.Options{KnownModel: registry.HasModel})
@@ -332,6 +332,25 @@ func registerGatewayDiagnostics(mux *http.ServeMux) {
 	_ = metrics.ActiveStreams // 触发 metrics 包 init 注册
 }
 
+// gatewayReadyz 把探针细节落到日志，再把正文交给 ready.Write。
+//
+// ready.Write 只渲染无敏感信息的 Summary（依赖原文含内部地址/端口，而 /readyz
+// 无需鉴权），所以详情必须在这里落日志，否则依赖故障在响应里被抹掉之后就再也查不
+// 到了。不自己拼正文：状态码与正文格式是 ready 包的契约。
+//
+// ready.Gateway 对健康进程会把 Messages 填成 ["ok"]，所以逐条跳过它：健康探针
+// 每次都被 nginx / docker healthcheck 打到，不该刷日志。fail-open 降级时进程仍是
+// Ready 但 Messages 非 "ok"，那一条要记——它正是运维需要知道的状态。
+func gatewayReadyz(w http.ResponseWriter, st ready.Status) {
+	for _, msg := range st.Messages {
+		if msg == "ok" {
+			continue
+		}
+		log.Printf("gateway readyz: ready=%t %s", st.Ready, msg)
+	}
+	ready.Write(w, st)
+}
+
 // gatewayChecks is the pure production preflight list for the data plane. It
 // never reads the process environment itself and has no side effects.
 func gatewayChecks(lookup appenv.Lookup, controlTLSConfigured bool) []appenv.Check {
@@ -376,6 +395,11 @@ func gatewayChecks(lookup appenv.Lookup, controlTLSConfigured bool) []appenv.Che
 			OK:     strings.EqualFold(strings.TrimSpace(lookup("LIMITER_ON_REDIS_ERROR")), "closed"),
 		},
 		{
+			Name:   "GATEWAY_INSTANCE_ID",
+			Detail: "must be explicitly set to a non-empty value: it is the primary key of gateway_instances and the only signal the recovery janitor (cmd/metering/recovery.go) has for judging whether the process that owned an execution is still alive, so the hostname-pid fallback is not allowed in production — two processes sharing one id keep renewing a dead instance's lease forever and its reserved funds stay held until a human runs the review queue",
+			OK:     strings.TrimSpace(lookup("GATEWAY_INSTANCE_ID")) != "",
+		},
+		{
 			Name:   "GATEWAY_LIMITER_RATE",
 			Detail: "must be explicitly set to a positive integer; production must not inherit the demo default",
 			OK:     positiveInt(lookup, "GATEWAY_LIMITER_RATE"),
@@ -389,6 +413,15 @@ func gatewayChecks(lookup appenv.Lookup, controlTLSConfigured bool) []appenv.Che
 			Name:   "GATEWAY_MAX_ACTIVE_STREAMS",
 			Detail: "must be explicitly set to a positive integer; 0 means unlimited and is not allowed in production",
 			OK:     positiveInt(lookup, "GATEWAY_MAX_ACTIVE_STREAMS"),
+		},
+		{
+			// The per-org cap is the same class of guard as the global one, so
+			// production requires both: docs/ARCHITECTURE.md lists 组织并发上限 as
+			// a real link stage, and a hard global gate next to an unlimited
+			// organization cap is only half a limit.
+			Name:   "GATEWAY_MAX_ACTIVE_STREAMS_PER_ORG",
+			Detail: "must be explicitly set to a positive integer; 0 means unlimited and is not allowed in production. Note the cap is per instance and not a cross-instance quota — with two instances an organization reaches 2x this value; the org RPM token bucket in Redis is the only cross-instance limiter",
+			OK:     positiveInt(lookup, "GATEWAY_MAX_ACTIVE_STREAMS_PER_ORG"),
 		},
 		{
 			Name:   "GATEWAY_DIAGNOSTICS_ADDR",
