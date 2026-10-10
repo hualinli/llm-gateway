@@ -187,12 +187,13 @@ func (a *billingAdapter) SetObserver(observer BillingObserver) {
 // Middleware admits every chat completion before the proxy can call an upstream
 // and decides the reservation's fate after the response.
 //
-// Ordering in the process is fixed by the caller:
+// Ordering in the process is fixed by chatChain:
 //
-//	auth → access guard (authoritative identity) → limiter → billing → proxy
+//	auth → access guard (authoritative identity) → rate limiter →
+//	organization stream cap → billing → proxy
 //
 // so an admission always has a verified org/user/key/execution identity and a
-// request that the limiter already accepted.
+// request that both limiters already accepted.
 func (a *billingAdapter) Middleware(next http.Handler) http.Handler {
 	if a == nil {
 		return next

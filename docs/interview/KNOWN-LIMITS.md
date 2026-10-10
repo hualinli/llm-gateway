@@ -98,7 +98,7 @@
 | C2 | **usage 缺失/非法/自相矛盾 → review_required（默认 24h，可配置 SLA）**，不自动释放；这类未知 usage 的 exception receipt 用零 token 占位且不能自动结算。传输异常的 exception 可能有有效原始 usage，只有受控重投能恢复它。 | T06C §5；本次补充报告与恢复手册 |
 | C3 | **超预占不截断费用**：上游不遵守 `max_tokens` 时按实际费用入 receipt + 审计 `over_reserved=true`，走显式应收/账户暂停政策 | T06C §2；ADR-0004 §2.3 |
 | C4 | **没有 per-attempt 供应商成本账**：`billing_entries` 只记客户 charge，失败 attempt 的上游成本无处落账（能力缺失，不是回归） | T10 F01-1 |
-| C5 | **被限流/流上限拒绝的请求已经写过资金通路**：链路顺序 billing 在 limiter 之前，每次 429/503 都产生 1 条 execution + 1 条 reservation + 1 条 release（`failed_no_charge`，资金不被占用）；故障期间资金通路的写入量与请求量同阶 | T10 F08-2；T11 容量 §7.1 |
+| C5 | **全局流上限拒绝（proxy 内 503）的请求仍会写资金通路**：该上限位于 billing 之后，每次 503 产生 1 条 execution + 1 条 reservation + 1 条 release（`failed_no_charge`，资金不被占用）；故障期间这部分写入量与请求量同阶。限流（429）与组织级并发上限（429）已前移到 billing 之前（`cmd/gateway/chain.go`），不再写资金行 | T10 F08-2；T11 容量 §7.1；本次修复 |
 | C6 | **未知上游成本 ≠ 0**：`provider_*_cost` 可空表示未知，NULL 当 0 会凭空造出毛利 | ADR-0004 §2.3 |
 | C7 | **finalize 失败 / COMMIT 未知 → 不写 `[DONE]`、保留预占、走人工/复核**；usage 被 veto 且 exception 行写不进 PG 时 execution 长期占款（人工路径） | ADR-0005 §2.4；T10 §8 限制 2 |
 | C8 | **`abandoned:` 标记只声明「本 attempt 已结束且没有 durable decision」**，不声明上游没有成本；标记没有 TTL/GC（释放后不再扫描，但标记本身一直留着） | T10 §4 F02、§8 限制 1/4 |

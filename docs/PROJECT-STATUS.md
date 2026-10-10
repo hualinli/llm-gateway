@@ -267,7 +267,7 @@ PG 正式计费当前只接受文本与单份输出（n=1）；不完整 SSE 不
 | 真实 Provider、容量拐点、慢客户端、多实例容量 | **本机已测（`9e8bd64`）**：慢客户端 7 点 0 拒绝/0 超时、过载/回落有界、1 vs 2 Gateway 与 1 vs 10 钱包对照；**真实付费 Provider 未调用**，绝对吞吐不可外推生产 | T11（本机限定） |
 | 长 Redis 停机后的自动恢复 | T10 历史 FINDING 已在恢复分支修复：传输失败持续有界退避；旧异常受控重投，未知 usage 仍拒绝自动恢复 | 已合入 main；见 2026-10-06 审核合并报告 |
 | 没有 per-attempt 供应商成本账（T10 F01-1） | `billing_entries` 只记客户 charge，失败 attempt 的上游成本无处落账；`provider_*_cost` 可空表示未知（未知 ≠ 0） | T10（能力缺失） |
-| 被限流/流上限拒绝的请求仍写资金通路（T10 F08-2） | 链路顺序 billing 在 limiter 之前：每次 429/503 都写 1 条 execution + 1 条 reservation + 1 条 release（`failed_no_charge`，资金不被占用）；故障期间资金通路写入量与请求量同阶 | T10（可用性/成本观察） |
+| 全局流上限拒绝的请求仍写资金通路（T10 F08-2） | 全局流上限在 proxy 内、billing 之后：每次 503 写 1 条 execution + 1 条 reservation + 1 条 release（`failed_no_charge`，资金不被占用）。限流与组织并发上限已前移到 billing 之前（`chatChain`），不再写资金行 | T10（可用性/成本观察） |
 | 容量运行结束时 2 条执行停在 `executing` | 8300 micro 预占（占播种余额 0.0000008%）；账本重算与投影一致，**不是资金差异**；最可能是 500/s 过载下 finalize 超时，但未保留错误日志，**机制未确认**；设计上属于 T07B 的有界恢复窗口，本次未留观察时间 | T11（未过对账项，如实记录） |
 | `GATEWAY_MAX_ACTIVE_STREAMS_PER_ORG` 未进生产 preflight | ADR-0001 §2.2 的生产必需变量表要求显式设置，但 `gatewayChecks` 未包含它，只打印 WARNING；每实例上限也不是跨实例硬配额（两实例可相加，实测热组织 881 → 1743 条） | T09 §10 / T11 容量 §5.4 |
 | T12 发布候选证据 | 已产出冷启动、三角色、资金、安全扫描证据；主线 CI #18 成功 | [T12 验收](verification/2026-10-01/t12-release-candidate/README.md) |

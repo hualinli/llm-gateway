@@ -37,9 +37,10 @@ import (
 // which the billing/IAM suites use) and every test builds its own schema, so a
 // business database is never touched.
 //
-// The chain under test is the production one:
+// The chain under test is the production one (chatChain, shared with main.go):
 //
-//	observability → auth → access guard → limiter → billing → proxy → upstream
+//	observability → auth → access guard → rate limiter → organization stream cap
+//	→ billing → proxy → upstream
 //
 // with a real OpenAI-compatible SSE upstream and a real PostgreSQL for prices,
 // reservations and receipts.
@@ -260,14 +261,8 @@ func newBillingHarness(t *testing.T, options ...billingHarnessOption) *billingHa
 	authStore := auth.NewMemoryStoreFromRecords([]auth.KeyRecord{keyRecord})
 
 	rotator := limiter.New(nil, 1000, 1000, 0)
-	var chat http.Handler = proxyHandler
-	if h.adapter != nil {
-		chat = h.adapter.Middleware(chat)
-	}
-	chain := observability.Middleware(
-		auth.Middleware(authStore)(
-			gatewayguard.Middleware(guard, gatewayguard.Options{KnownModel: registry.HasModel})(
-				limiter.Middleware(rotator)(chat))))
+	chain := observability.Middleware(chatChain(
+		authStore, guard, gatewayguard.Options{KnownModel: registry.HasModel}, rotator, h.adapter, proxyHandler))
 	h.server = httptest.NewServer(chain)
 	t.Cleanup(h.server.Close)
 	return h

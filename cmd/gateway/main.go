@@ -216,16 +216,11 @@ func main() {
 		log.Printf("WARNING: GATEWAY_MAX_ACTIVE_STREAMS_PER_ORG is 0 (unlimited): per-organization concurrency is not bounded on this instance")
 	}
 
-	// 链路顺序：auth(提租户) → guard(权威校验+归属) → limiter(按 org/租户限) →
-	// billing(资金预占+fault-closed) → proxy(透传+计量)。计费必须在 guard 之后
-	// （需要已验证的 org/user/key/execution 归属）且在任何上游之前。
-	guarded := gatewayguard.Middleware(accessGuard, gatewayguard.Options{KnownModel: registry.HasModel})
-	// StreamLimit 只包住 SSE 出口：/v1/models 这类非流请求不占组织并发预算。
-	admittedProxy := limiter.Middleware(lim)(limiter.StreamLimit(lim)(proxyHandler))
-	if billingAdmission != nil {
-		admittedProxy = billingAdmission.Middleware(admittedProxy)
-	}
-	authedLimitedProxy := auth.Middleware(authStore)(guarded(admittedProxy))
+	// 链路顺序由 chatChain（chain.go）统一装配：auth → guard → limiter → 组织
+	// 并发上限 → billing → proxy。拒绝类请求（限流 / 并发上限）先于资金预占，
+	// 不写 execution、不预占资金；计费必须在 guard 之后（需要已验证的归属）且在
+	// 任何上游之前。StreamLimit 只包住 SSE 出口：/v1/models 不占并发上限。
+	authedLimitedProxy := chatChain(authStore, accessGuard, gatewayguard.Options{KnownModel: registry.HasModel}, lim, billingAdmission, proxyHandler)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", ready.Live)
@@ -236,6 +231,7 @@ func main() {
 		ready.Write(w, ready.Gateway(len(registry.Models()), rdb.Ping(ctx).Err(), lim.FailClosed()))
 	})
 	mux.Handle("/v1/chat/completions", authedLimitedProxy)
+	guarded := gatewayguard.Middleware(accessGuard, gatewayguard.Options{KnownModel: registry.HasModel})
 	mux.Handle("/v1/models", auth.Middleware(authStore)(guarded(limiter.Middleware(lim)(proxy.NewModelsHandler(registry)))))
 
 	// 生产把 pprof/metrics 与业务 listener 分离；demo/test 未设置诊断地址时保持
