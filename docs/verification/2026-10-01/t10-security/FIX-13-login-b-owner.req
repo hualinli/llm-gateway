@@ -1,6 +1,0 @@
-POST http://127.0.0.1:58872/api/v1/auth/login
-X-Request-ID: t10-FIX-13
-Accept: application/json
-Content-Type: application/json
-
-{"email": "t10-z9162-b-owner@t10.test", "password": "9lQg…<redacted:18>"}

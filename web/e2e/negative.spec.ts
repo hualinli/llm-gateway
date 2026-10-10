@@ -1,187 +1,129 @@
-/**
- * Negative cases. These are the RBAC and session proofs the T08 prompt asks
- * for; they exercise the *server*, not the hidden buttons:
- *
- *   1. a member cannot read another user's usage (`403`);
- *   2. a member gets `404` on an organization they are not in (never `403`,
- *      so existence does not leak) and the UI renders that state;
- *   3. a member cannot read the organization's money at all;
- *   4. a `billing_viewer` is read-only: no edit actions in the UI and `403` from
- *      the API when one is forced;
- *   5. a write without `X-CSRF-Token` is refused with `403 forbidden`;
- *   6. logout invalidates the session: `/api/v1/me` answers `401` afterwards.
- *
- * `page.request` shares the browser context's cookies, so these are real
- * same-origin calls with a real session — not mocks. Each role runs on the
- * session captured by global-setup.
- */
-
-import {
-  ANONYMOUS,
-  AUTH,
-  button,
-  expect,
-  gotoOrg,
-  loadState,
-  requireBackend,
-  test,
-} from './fixtures';
+import { ANONYMOUS, AUTH, expect, loadState, requireBackend, test } from './fixtures';
 
 const state = loadState();
 
 interface ErrorEnvelope {
-  error: { code: string; message: string; request_id: string };
+  error: { code: string; request_id: string };
 }
 
-test.describe('negative cases: member', () => {
+test.describe('member boundaries', () => {
   test.use({ storageState: AUTH.member });
+  test.beforeEach(() => requireBackend(state));
 
-  test.beforeEach(() => {
-    requireBackend(state);
-  });
+  test('sees only personal consumption and cannot request a team breakdown', async ({ page }) => {
+    const usage = await page.request.get('/api/v1/orgs/' + state.orgA.id + '/usage');
+    expect(usage.status()).toBe(200);
+    const data = (await usage.json()) as { scope: string; items: Array<{ user_id: string | null }> };
+    expect(data.scope).toBe('self');
+    expect(data.items.every((item) => item.user_id === null || item.user_id === state.member.userId)).toBe(true);
 
-  test('cannot read another user usage, but may read their own', async ({ page }) => {
-    const foreign = await page.request.get(
-      `/api/v1/orgs/${state.orgA.id}/usage?user=${state.viewer.userId}`,
+    const summary = await page.request.get('/api/v1/orgs/' + state.orgA.id + '/billing/member-summary');
+    expect(summary.status()).toBe(200);
+    const memberSummary = (await summary.json()) as {
+      scope: string;
+      items: Array<{ user_id: string; email: string }>;
+    };
+    expect(memberSummary.scope).toBe('self');
+    expect(memberSummary.items).toHaveLength(1);
+    expect(memberSummary.items[0]).toMatchObject({ user_id: state.member.userId, email: state.member.email });
+    expect(JSON.stringify(memberSummary)).not.toMatch(/key_id|provider_cost|api_key/i);
+
+    const members = await page.request.get('/api/v1/orgs/' + state.orgA.id + '/members');
+    expect(members.status()).toBe(200);
+    const memberPage = (await members.json()) as { items: Array<{ user_id: string; email: string; role: string }> };
+    expect(memberPage.items).toHaveLength(1);
+    expect(memberPage.items[0]).toMatchObject({ user_id: state.member.userId, email: state.member.email, role: 'member' });
+
+    const otherUserUsage = await page.request.get(
+      '/api/v1/orgs/' + state.orgA.id + '/usage?user=' + encodeURIComponent(state.orgAdmin.userId),
     );
-    expect(foreign.status()).toBe(403);
-    const envelope = (await foreign.json()) as ErrorEnvelope;
-    expect(envelope.error.code).toBe('forbidden');
-    expect(envelope.error.request_id).toBeTruthy();
-
-    const own = await page.request.get(`/api/v1/orgs/${state.orgA.id}/usage`);
-    expect(own.status()).toBe(200);
-    const body = (await own.json()) as { scope: string };
-    expect(body.scope).toBe('self');
+    expect(otherUserUsage.status()).toBe(403);
+    expect(((await otherUserUsage.json()) as ErrorEnvelope).error.code).toBe('forbidden');
   });
 
-  test('gets 404 (not 403) on a foreign organization, in the API and in the UI', async ({
-    page,
-  }) => {
-    const api = await page.request.get(`/api/v1/orgs/${state.orgB.id}/members`);
-    expect(api.status()).toBe(404);
-    expect(((await api.json()) as ErrorEnvelope).error.code).toBe('not_found');
+  test('cannot change membership or monthly limit, and account data stays isolated across enterprises', async ({ page }) => {
+    const me = (await (await page.request.get('/api/v1/me')).json()) as { csrf_token: string };
+    const quota = await page.request.patch(
+      '/api/v1/orgs/' + state.orgA.id + '/members/' + state.member.userId + '/quota',
+      { headers: { 'X-CSRF-Token': me.csrf_token }, data: { monthly_limit_micro: null } },
+    );
+    expect(quota.status()).toBe(403);
+    const role = await page.request.patch(
+      '/api/v1/orgs/' + state.orgA.id + '/members/' + state.member.userId,
+      { headers: { 'X-CSRF-Token': me.csrf_token }, data: { role: 'admin' } },
+    );
+    expect(role.status()).toBe(403);
 
-    await page.goto(`/orgs/${state.orgB.id}/overview`);
-    await expect(page.getByText('组织不可见（404 not_found）')).toBeVisible();
-    await expect(
-      page.getByText('服务端对非成员固定返回 404，不泄露组织是否存在'),
-    ).toBeVisible();
-  });
-
-  test('cannot read organization money (account / entries / statement / exceptions)', async ({
-    page,
-  }) => {
-    for (const path of [
-      'billing/account',
-      'billing/entries',
-      'billing/statements',
-      'billing/exceptions',
-    ]) {
-      const response = await page.request.get(`/api/v1/orgs/${state.orgA.id}/${path}`);
-      expect(response.status(), `${path} must be forbidden for a member`).toBe(403);
-      expect(((await response.json()) as ErrorEnvelope).error.code).toBe('forbidden');
+    const foreign = await page.request.get('/api/v1/orgs/' + state.orgB.id + '/members');
+    expect(foreign.status()).toBe(200);
+    const ownForeignMembership = (await foreign.json()) as { items: Array<{ user_id: string; email: string }> };
+    expect(ownForeignMembership.items).toHaveLength(1);
+    expect(ownForeignMembership.items[0]).toMatchObject({ user_id: state.member.userId, email: state.member.email });
+    const foreignSummaryResponse = await page.request.get('/api/v1/orgs/' + state.orgB.id + '/billing/member-summary');
+    expect(foreignSummaryResponse.status()).toBe(200);
+    const foreignSummary = (await foreignSummaryResponse.json()) as {
+      scope: string;
+      items: Array<{ user_id: string; email: string }>;
+    };
+    expect(foreignSummary.scope).toBe('self');
+    expect(foreignSummary.items).toHaveLength(1);
+    expect(foreignSummary.items[0]).toMatchObject({ user_id: state.member.userId, email: state.member.email });
+    await page.goto('/orgs/' + state.orgB.id + '/overview');
+    await expect(page.getByTestId('overview-usage')).toBeVisible();
+    const otherUsage = await page.request.get('/api/v1/orgs/' + state.orgB.id + '/usage');
+    expect(otherUsage.status()).toBe(200);
+    const usage = (await otherUsage.json()) as { scope: string; items: Array<{ key_id?: string }> };
+    expect(usage.scope).toBe('self');
+    if (state.controlAvailable) {
+      const otherKeys = await page.request.get('/api/v1/orgs/' + state.orgB.id + '/keys?limit=100');
+      expect(otherKeys.status()).toBe(200);
+      const otherKeyPage = (await otherKeys.json()) as { items: Array<{ organization_id: string; owner_user_id: string | null; key_id: string }> };
+      expect(otherKeyPage.items.every((item) => item.organization_id === state.orgB.id && item.owner_user_id === state.member.userId)).toBe(true);
+      const homeKeys = await page.request.get('/api/v1/orgs/' + state.orgA.id + '/keys?limit=100');
+      expect(homeKeys.status()).toBe(200);
+      const homeKeyIds = new Set(((await homeKeys.json()) as { items: Array<{ key_id: string }> }).items.map((item) => item.key_id));
+      expect(otherKeyPage.items.every((item) => !homeKeyIds.has(item.key_id))).toBe(true);
+      expect(usage.items.every((item) => !item.key_id || !homeKeyIds.has(item.key_id))).toBe(true);
     }
   });
 
-  test('cannot reach the platform surfaces at all', async ({ page }) => {
-    const prices = await page.request.get('/api/v1/admin/prices');
-    expect(prices.status()).toBe(403);
-
-    await page.goto('/platform');
-    await expect(page.getByText('需要平台管理员权限')).toBeVisible();
+  test('cannot access platform account records', async ({ page }) => {
+    const response = await page.request.get('/api/v1/admin/organizations');
+    expect(response.status()).toBe(403);
+    await page.goto('/platform/organizations');
+    await expect(page.getByText('此工作区仅供平台管理员使用')).toBeVisible();
   });
 });
 
-test.describe('negative cases: billing_viewer', () => {
-  test.use({ storageState: AUTH.viewer });
-
-  test.beforeEach(() => {
-    requireBackend(state);
-  });
-
-  test('cannot edit members (403 even when forced outside the UI)', async ({ page }) => {
-    // Read is allowed…
-    const members = await page.request.get(`/api/v1/orgs/${state.orgA.id}/members`);
-    expect(members.status()).toBe(200);
-
-    // …writes are not.
-    const change = await page.request.patch(
-      `/api/v1/orgs/${state.orgA.id}/members/${state.member.userId}`,
-      { data: { role: 'admin' } },
-    );
-    expect(change.status()).toBe(403);
-    expect(((await change.json()) as ErrorEnvelope).error.code).toBe('forbidden');
-
-    const invite = await page.request.post(`/api/v1/orgs/${state.orgA.id}/invitations`, {
-      data: { email: `viewer-probe-${state.runId}@example.com`, role: 'member' },
-    });
-    expect(invite.status()).toBe(403);
-
-    // The UI shows no editing controls at all.
-    await gotoOrg(page, state.orgA.id, 'members');
-    await expect(page.getByText('只读（billing_viewer）')).toBeVisible();
-    await expect(button(page, '邀请成员')).toHaveCount(0);
-  });
-
-  test('cannot write money and cannot open the platform surfaces', async ({ page }) => {
-    const adjust = await page.request.post(
-      `/api/v1/admin/billing/accounts/${state.orgA.id}/adjustments`,
-      {
-        headers: { 'Idempotency-Key': `viewer-probe-${state.runId}` },
-        data: { amount_micro: '1', direction: 'credit', reason: 'viewer probe' },
-      },
-    );
-    expect(adjust.status()).toBe(403);
-
-    await page.goto('/platform/billing');
-    await expect(page.getByText('需要平台管理员权限')).toBeVisible();
-  });
-});
-
-test.describe('negative cases: session and CSRF', () => {
+test.describe('session and request protection', () => {
   test.use({ storageState: AUTH.admin });
+  test.beforeEach(() => requireBackend(state));
 
-  test.beforeEach(() => {
-    requireBackend(state);
-  });
+  test('state changes require the signed-in session token', async ({ page }) => {
+    const body = { enterprise_name: 'csrf-check-' + state.runId };
+    const refused = await page.request.post('/api/v1/admin/activation-codes', { data: body });
+    expect(refused.status()).toBe(403);
+    expect(((await refused.json()) as ErrorEnvelope).error.code).toBe('forbidden');
 
-  test('a write without X-CSRF-Token is refused with 403 forbidden', async ({ page }) => {
-    // CSRF failure path: the session cookie is valid, the header is missing.
-    const withoutToken = await page.request.post('/api/v1/admin/users', {
-      data: { email: `csrf-probe-${state.runId}@example.com`, password: 'csrf-probe-pw' },
+    const me = (await (await page.request.get('/api/v1/me')).json()) as { csrf_token: string };
+    const accepted = await page.request.post('/api/v1/admin/activation-codes', {
+      headers: { 'X-CSRF-Token': me.csrf_token },
+      data: body,
     });
-    expect(withoutToken.status()).toBe(403);
-    const envelope = (await withoutToken.json()) as ErrorEnvelope;
-    expect(envelope.error.code).toBe('forbidden');
-    expect(envelope.error.message.toLowerCase()).toContain('csrf');
-
-    // The same write from the UI (which sends the session-bound token) succeeds.
-    await page.goto('/platform');
-    await page.getByLabel('邮箱').fill(`e2e-csrf-ok-${state.runId}@example.com`);
-    await page.getByLabel('初始密码').fill('csrf-probe-pw');
-    await button(page, '创建用户').click();
-    await expect(page.getByText(/已创建 e2e-csrf-ok/)).toBeVisible();
+    expect(accepted.status()).toBe(201);
+    expect(((await accepted.json()) as { code: string }).code.length).toBeGreaterThan(8);
   });
-
 });
 
-test.describe('negative cases: anonymous', () => {
+test.describe('anonymous visitor', () => {
   test.use({ storageState: ANONYMOUS });
+  test.beforeEach(() => requireBackend(state));
 
-  test.beforeEach(() => {
-    requireBackend(state);
-  });
-
-  test('an anonymous browser is always redirected to the login route', async ({ page }) => {
-    await page.goto(`/orgs/${state.orgA.id}/billing`);
+  test('must sign in before opening a personal or platform account', async ({ page }) => {
+    await page.goto('/orgs/' + state.orgA.id + '/usage');
     await expect(page).toHaveURL(/\/login$/);
-
     await page.goto('/platform/billing');
     await expect(page).toHaveURL(/\/login$/);
-
-    const me = await page.request.get('/api/v1/me');
-    expect(me.status()).toBe(401);
+    expect((await page.request.get('/api/v1/me')).status()).toBe(401);
   });
-
 });

@@ -333,6 +333,9 @@ func TestMeReturnsUserOrganizationsAndCSRFToken(t *testing.T) {
 	if len(body.Organizations) != 2 || body.Organizations[1].Role != "admin" {
 		t.Fatalf("organizations=%+v", body.Organizations)
 	}
+	if body.Organizations[1].MembershipID != "1004" || body.Organizations[1].Status != "active" || body.Organizations[1].MonthlyLimitMicro != nil {
+		t.Fatalf("membership DTO omits current relation state: %+v", body.Organizations[1])
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -450,58 +453,14 @@ func TestGetOrganizationMalformedIDIsBadRequest(t *testing.T) {
 	}
 }
 
-func TestCreateOrganizationRequiresCSRFAndReturns201(t *testing.T) {
+func TestSelfServiceOrganizationCreationIsDisabled(t *testing.T) {
 	h := newHarness(t, nil)
 	fx := defaultFixture()
 	h.withSessionFixture(fx)
-	h.orgs.createFn = func(_ context.Context, ownerUserID int64, name string) (organization.Organization, error) {
-		if ownerUserID != fx.user.ID {
-			t.Fatalf("ownerUserID=%d, want %d", ownerUserID, fx.user.ID)
-		}
-		if name != "acme" {
-			t.Fatalf("name=%q, want acme (trimmed)", name)
-		}
-		return organization.Organization{ID: 99, Type: "enterprise", Name: name, Status: "active", CreatedAt: time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC)}, nil
-	}
-
-	rec := h.serve(http.MethodPost, PathOrganizations, jsonBody(`{"name":"  acme  "}`),
-		cookieHeader(fx.rawToken, fx.csrfToken))
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("status=%d without CSRF, want 403", rec.Code)
-	}
-
-	rec = h.serve(http.MethodPost, PathOrganizations, jsonBody(`{"name":"  acme  "}`),
+	rec := h.serve(http.MethodPost, PathOrganizations, jsonBody(`{"name":"acme"}`),
 		cookieHeader(fx.rawToken, fx.csrfToken), hdr("X-CSRF-Token", fx.csrfToken))
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("status=%d, want 201 (body=%s)", rec.Code, rec.Body.String())
-	}
-	var body membershipDTO
-	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
-		t.Fatal(err)
-	}
-	if body.Organization.ID != "99" || body.Role != "owner" {
-		t.Fatalf("body=%+v, want the created organization with role owner", body)
-	}
-}
-
-func TestCreateOrganizationNameValidation(t *testing.T) {
-	h := newHarness(t, nil)
-	fx := defaultFixture()
-	h.withSessionFixture(fx)
-
-	rec := h.serve(http.MethodPost, PathOrganizations, jsonBody(`{"name":"   "}`),
-		cookieHeader(fx.rawToken, fx.csrfToken), hdr("X-CSRF-Token", fx.csrfToken))
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("empty name status=%d, want 400", rec.Code)
-	}
-
-	h.orgs.createFn = func(context.Context, int64, string) (organization.Organization, error) {
-		return organization.Organization{}, organization.ErrNameInvalid
-	}
-	rec = h.serve(http.MethodPost, PathOrganizations, jsonBody(`{"name":"!!"}`),
-		cookieHeader(fx.rawToken, fx.csrfToken), hdr("X-CSRF-Token", fx.csrfToken))
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("ErrNameInvalid status=%d, want 400", rec.Code)
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("legacy self-service account creation status=%d, want 405", rec.Code)
 	}
 }
 
@@ -535,12 +494,9 @@ func TestAdminCreateUserReturns201AndAudits(t *testing.T) {
 	h.iam.createUserFn = func(_ context.Context, email, password string, platformAdmin bool) (iam.User, error) {
 		return iam.User{ID: 5, Email: email, Status: "active", PlatformAdmin: platformAdmin, CreatedAt: time.Now().UTC()}, nil
 	}
-	h.orgs.getFn = func(_ context.Context, userID, orgID int64) (organization.MemberOrg, error) {
-		return sampleMembership(orgID, "acme", "owner"), nil
-	}
 
 	rec := h.serve(http.MethodPost, PathAdminUsers,
-		jsonBody(`{"email":"new@example.com","password":"pw","platform_admin":true,"organizations":["7"]}`),
+		jsonBody(`{"email":"new@example.com","password":"pw","platform_admin":true}`),
 		cookieHeader(fx.rawToken, fx.csrfToken), hdr("X-CSRF-Token", fx.csrfToken))
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status=%d, want 201 (body=%s)", rec.Code, rec.Body.String())
@@ -552,8 +508,8 @@ func TestAdminCreateUserReturns201AndAudits(t *testing.T) {
 	if body.ID != "5" || body.Email != "new@example.com" || !body.PlatformAdmin {
 		t.Fatalf("body=%+v", body)
 	}
-	if len(h.orgs.addCalls) != 1 || h.orgs.addCalls[0] != (addMemberCall{OrgID: 7, UserID: 5, Role: "member"}) {
-		t.Fatalf("addMember calls=%+v", h.orgs.addCalls)
+	if len(h.orgs.addCalls) != 0 {
+		t.Fatalf("legacy admin user creation must not add memberships: %+v", h.orgs.addCalls)
 	}
 	events := h.audit.all()
 	if len(events) != 1 || events[0].Action != "admin.user.create" || events[0].Outcome != "success" {
@@ -583,23 +539,20 @@ func TestAdminCreateUserDuplicateEmailIs409Conflict(t *testing.T) {
 	}
 }
 
-func TestAdminCreateUserRejectsInvisibleOrganizationBeforeCreatingUser(t *testing.T) {
+func TestAdminCreateUserRejectsLegacyOrganizationAssignment(t *testing.T) {
 	h := newHarness(t, nil)
 	fx := defaultFixture()
 	h.withSessionFixture(fx)
-	h.orgs.getFn = func(context.Context, int64, int64) (organization.MemberOrg, error) {
-		return organization.MemberOrg{}, organization.ErrNotMember
-	}
 	h.iam.createUserFn = func(context.Context, string, string, bool) (iam.User, error) {
-		t.Fatal("user must not be created when an organization is not visible")
+		t.Fatal("user must not be created when the legacy organizations field is present")
 		return iam.User{}, nil
 	}
 
 	rec := h.serve(http.MethodPost, PathAdminUsers,
 		jsonBody(`{"email":"new@example.com","password":"pw","organizations":["7"]}`),
 		cookieHeader(fx.rawToken, fx.csrfToken), hdr("X-CSRF-Token", fx.csrfToken))
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("status=%d, want 404 (body=%s)", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d, want 400 (body=%s)", rec.Code, rec.Body.String())
 	}
 }
 
@@ -745,18 +698,22 @@ func TestRecoveryRendersEnvelope(t *testing.T) {
 // The route label must stay a bounded vocabulary: it is a Prometheus label.
 func TestRouteClassIsBounded(t *testing.T) {
 	known := map[string]bool{
-		RouteAuthLogin: true, RouteAuthLogout: true, RouteMe: true,
-		RouteOrganizationsList: true, RouteOrganizationsGet: true, RouteOrganizationsCreate: true,
-		RouteAdminUsersCreate: true, RouteAdminUsersSetStatus: true,
+		RouteAuthLogin: true, RouteAuthRegister: true, RouteAuthLogout: true, RouteMe: true, RouteMePassword: true,
+		RouteOrganizationsList: true, RouteOrganizationsGet: true,
+		RouteOrganizationsActivate: true, RouteAdminActivationCodesList: true, RouteAdminActivationCodesCreate: true,
+		RouteMeJoinRequests: true, RouteOrgJoinRequestsList: true, RouteOrgJoinRequestsCreate: true,
+		RouteOrgJoinRequestDecision: true,
+		RouteAdminUsersCreate:       true, RouteAdminUsersSetStatus: true,
 		RouteOrgMembersList: true, RouteOrgMemberUpdate: true, RouteOrgMemberDelete: true,
 		RouteOrgInvitationsList: true, RouteOrgInvitationsNew: true, RouteInvitationsAccept: true,
 		RouteOrgOwnerTransfer: true, RouteOrgAuditList: true,
 		RouteHealth: true, RouteMetrics: true, RouteOther: true,
 	}
-	if len(known) != 19 {
+	if len(known) != 27 {
 		t.Fatalf("route vocabulary changed: %d members", len(known))
 	}
-	for _, path := range []string{PathLogin, PathLogout, PathMe, PathOrganizations, PathOrganization,
+	for _, path := range []string{PathLogin, PathRegister, PathLogout, PathMe, PathMePassword, PathOrganizations, PathOrganizationsActivate,
+		PathAdminActivationCodes, PathMeJoinRequests, PathOrgJoinRequests, PathOrgJoinRequestDecision, PathOrganization,
 		PathAdminUsers, PathAdminUserStatus, PathOrgMembers, PathOrgMember, PathOrgInvitations,
 		PathInvitationAccept, PathOrgOwnerTransfer, PathOrgAudit,
 		PathLivez, PathReadyz, PathMetrics, "", "/nope", "/api/v1/x/1/2/3"} {
@@ -766,8 +723,8 @@ func TestRouteClassIsBounded(t *testing.T) {
 			}
 		}
 	}
-	if RouteClass(http.MethodPost, PathOrganizations) != RouteOrganizationsCreate {
-		t.Fatal("POST /organizations must be labelled organizations_create, not organizations_list")
+	if RouteClass(http.MethodPost, PathOrganizations) != RouteOther {
+		t.Fatal("unregistered POST /organizations must collapse to the other route class")
 	}
 	if RouteClass(http.MethodGet, PathOrganizations) != RouteOrganizationsList {
 		t.Fatal("GET /organizations must be labelled organizations_list")

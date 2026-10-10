@@ -105,7 +105,8 @@ LIMIT $3`
 // gateway_instances join needs.
 const executionColumnsAliased = `e.execution_id, e.org_id, e.user_id, e.key_id, e.gateway_id, e.price_version_id,
        e.model, e.status, e.reserved_micro, e.input_tokens_upper, e.output_tokens_upper, e.request_id,
-       e.created_at, e.updated_at, e.receipt_recorded_at, e.terminal_reason`
+       e.created_at, e.updated_at, e.receipt_recorded_at, e.terminal_reason, e.membership_id,
+       to_char(e.quota_month, 'YYYY-MM')`
 
 // recoverySourceStatuses is the state guard of an audited recovery release.
 // review_required is included on purpose (the roadmap allows
@@ -408,6 +409,9 @@ func (s *PGAccountStore) recoverExecutionGuardedTx(ctx context.Context, tx *sql.
 		if err != nil {
 			return RecoveryResult{}, err
 		}
+	}
+	if err := releaseMemberQuotaTx(ctx, tx, *execution, execution.ReservedMicro, 0, now); err != nil {
+		return RecoveryResult{}, err
 	}
 
 	transition, err := s.TransitionExecutionTx(ctx, tx, ExecutionTransitionParams{

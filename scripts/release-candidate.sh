@@ -2,14 +2,14 @@
 #
 # release-candidate.sh — T12 发布候选的一键可复现验收。
 #
-# 一次运行完成：构建镜像 → 空库迁移 → 三角色 bootstrap（平台管理员 / 两家企业
-# 及其成员 / 一个 billing_viewer）→ 受控 Provider 与资金账户 → 全栈启动
+# 一次运行完成：构建镜像 → 空库迁移 → bootstrap 平台管理员 → 通过正式开户与加入流程
+# 建立两家企业及成员 → 受控 Provider 与资金账户 → 全栈启动
 # （Gateway/Control/Console/Metering/mocks/PG/Redis）→ 端到端验收
 # （登录、成员建 Key 并流式调用、企业看到收费、余额不足在上游之前被拒、
 # 撤销与被移除成员的 Key 被拒、平台异常/审计面、Redis 与 Gateway 故障恢复）
 # → 安全/profile 检查 → 证据归档 → 只回收自己的资源。
 #
-# 约束（与 docs/plans/BENCHMARK-AND-ACCEPTANCE-2026-10-01.md §7/§8 一致）：
+# 约束（与 docs/DEVELOPMENT.md 一致）：
 #   * 只操作自己的 compose project：每条 docker compose 命令都显式带
 #     --project-name "$RC_PROJECT" 和自己的 -f 文件；down 只 drop 自己的 project。
 #     绝不执行无 -p 的 `docker compose down`、`docker system prune`，也不触碰 demo 栈。
@@ -33,7 +33,13 @@ RC_WORK_DIR="${RC_WORK_DIR:-}"
 RC_EVIDENCE_DIR="${RC_EVIDENCE_DIR:-}"
 RC_KEEP=0
 RC_SKIP_BUILD=0
+RC_WEB_PORT_SET=0
+RC_MOCK_BASE_PORT_SET=0
+RC_WITH_PREVIEW=0
+RC_WEB_PORT="${RC_WEB_PORT:-5173}"
+RC_MOCK_BASE_PORT="${RC_MOCK_BASE_PORT:-18180}"
 RC_WITH_E2E=0
+RC_E2E_FAILED=0
 RC_WITH_FAILURE=1
 RC_GOPROXY="${RC_GOPROXY-}"
 RC_PULL=0
@@ -76,7 +82,9 @@ rc_usage() {
 用法:
   scripts/release-candidate.sh [run] [选项]   构建 → 全栈 → bootstrap/seed → 端到端验收 → 安全检查 → 证据 → 回收
   scripts/release-candidate.sh up   [选项]    只做 构建/启动/bootstrap/seed，保留栈继续运行
-  scripts/release-candidate.sh demo [选项]    对着已运行的栈走 5 分钟 Demo（配合 DEMO.md）
+  scripts/release-candidate.sh preview [选项] Web + 全栈 + 三个可控 Mock；已有 state 时保留数据更新
+  scripts/release-candidate.sh stop [选项]   停止本项目服务，保留数据卷
+  scripts/release-candidate.sh demo [选项]    对着已运行的栈走 5 分钟 Demo（操作见 docs/DEVELOPMENT.md）
   scripts/release-candidate.sh e2e  [选项]    对着已运行的栈跑 Playwright 三角色套件
   scripts/release-candidate.sh security [选]  对着已运行的栈只跑安全/profile 检查
   scripts/release-candidate.sh status [选项]  显示本项目容器与证据位置
@@ -86,7 +94,7 @@ rc_usage() {
 选项:
   --project-name NAME    compose project 名（默认 t12rc-<pid>；拒绝 "default"）
   --work-dir DIR         运行期工作目录（默认 data/release-candidate/<UTC 时间戳>-<pid>）
-  --evidence-dir DIR     证据目录（默认 docs/verification/2026-10-01/t12-release-candidate/runs/<时间戳>）
+  --evidence-dir DIR     证据目录（默认 data/verification/release-candidate/<时间戳>）
   --keep                 结束后保留容器与卷（run 默认回收）
   --skip-build           复用已存在的镜像，不重新 build
   --pull                 构建前 docker compose pull（基础镜像）
@@ -96,6 +104,8 @@ rc_usage() {
   --timeout SECONDS      单阶段超时（默认 900）
   --admin-email EMAIL    平台管理员邮箱（默认 rc-admin@example.com）
   --run-id ID            运行 ID（默认 UTC 时间戳-pid）
+  --port-web N          完整预览网页端口（默认 5173）
+  --port-mock-base N    三个可控 Mock 起始端口（默认 18180）
   --port-gateway N       宿主 Gateway 端口（默认 18090，被占用时自动改选）
   --port-console N       宿主 Console 端口（默认 18092，被占用时自动改选）
   --port-metering N      宿主 Metering 端口（默认 18091）
@@ -117,7 +127,7 @@ USAGE
 rc_parse_args() {
   if [[ $# -gt 0 ]]; then
     case "$1" in
-      run|up|demo|e2e|status|down|security|help) RC_COMMAND="$1"; shift ;;
+      run|up|preview|stop|demo|e2e|status|down|security|help) RC_COMMAND="$1"; shift ;;
       -h|--help) RC_COMMAND="help"; shift ;;
       -*) ;;
       *) rc_die "未知命令 $1（见 --help）" ;;
@@ -144,6 +154,8 @@ rc_parse_args() {
       --admin-email=*) RC_ADMIN_EMAIL="${1#*=}"; shift ;;
       --run-id) RC_RUN_ID="${2:-}"; shift 2 ;;
       --run-id=*) RC_RUN_ID="${1#*=}"; shift ;;
+      --port-web) RC_WEB_PORT="${2:-}"; RC_WEB_PORT_SET=1; shift 2 ;;
+      --port-mock-base) RC_MOCK_BASE_PORT="${2:-}"; RC_MOCK_BASE_PORT_SET=1; shift 2 ;;
       --port-gateway) RC_GATEWAY_PORT="${2:-}"; shift 2 ;;
       --port-console) RC_CONSOLE_PORT="${2:-}"; shift 2 ;;
       --port-metering) RC_METERING_PORT="${2:-}"; shift 2 ;;
@@ -156,6 +168,7 @@ rc_parse_args() {
       *) rc_die "未知参数 $1（见 --help）" ;;
     esac
   done
+  [[ "$RC_COMMAND" != "preview" ]] || RC_WITH_PREVIEW=1
   RC_RUN_ID="${RC_RUN_ID:-$RC_STAMP-$$}"
 }
 
@@ -200,7 +213,11 @@ rc_random_master_key() { python3 -c 'import base64,os; print(base64.b64encode(os
 # ---------------------------------------------------------------------------
 # compose 包装：永远显式 -p 与本脚本自己的 -f 列表
 # ---------------------------------------------------------------------------
-rc_compose() { docker compose --project-name "$RC_PROJECT" "${RC_COMPOSE_FILES[@]}" "$@"; }
+rc_compose() {
+  local profiles=()
+  [[ "$RC_WITH_PREVIEW" != "1" ]] || profiles+=(--profile web --profile preview)
+  docker compose --project-name "$RC_PROJECT" "${RC_COMPOSE_FILES[@]}" "${profiles[@]}" "$@"
+}
 
 # 把 -f/路径列表原样拼成一条可复制的命令字符串（供 --compose-cmd 与 DEMO 使用）。
 # 注意不要写成 `printf ' -f %s' "${RC_COMPOSE_FILES[@]}"`：数组里本来就有 -f 元素，
@@ -209,6 +226,7 @@ rc_compose() { docker compose --project-name "$RC_PROJECT" "${RC_COMPOSE_FILES[@
 rc_compose_command_string() {
   local out="docker compose --project-name $RC_PROJECT" f
   for f in "${RC_COMPOSE_FILES[@]}"; do out+=" $f"; done
+  [[ "$RC_WITH_PREVIEW" != "1" ]] || out+=" --profile web --profile preview"
   printf '%s' "$out"
 }
 
@@ -249,7 +267,7 @@ rc_prepare_dirs() {
   chmod 700 "$RC_WORK_DIR/secrets"
 
   if [[ "$RC_EVIDENCE_DIR_SET" == "0" ]]; then
-    RC_EVIDENCE_DIR="$RC_ROOT/docs/verification/2026-10-01/t12-release-candidate/runs/$RC_RUN_ID"
+    RC_EVIDENCE_DIR="$RC_ROOT/data/verification/release-candidate/$RC_RUN_ID"
   fi
   mkdir -p "$RC_EVIDENCE_DIR"
   RC_EVIDENCE_DIR="$(cd "$RC_EVIDENCE_DIR" && pwd)"
@@ -258,7 +276,7 @@ rc_prepare_dirs() {
 
 rc_base_compose_file() {
   # 顺序固定：基础文件 → 构建覆盖（可选）→ 本次运行的 RC 覆盖。
-  RC_COMPOSE_FILES=(-f "$RC_ROOT/docker-compose.yml")
+  RC_COMPOSE_FILES=(-f "$RC_ROOT/docker-compose.yml" -f "$RC_ROOT/docker-compose.mock.yml")
 }
 
 rc_materialize_drivers() {
@@ -271,7 +289,7 @@ rc_materialize_drivers() {
 "前缀…<redacted:N>" 形式出现，明文只存在于进程内存与 0600 的 identities.json。
 
 phase:
-  seed    价格版本、资金账户、成员与 billing_viewer，写 identities.json
+  seed    价格版本、资金账户、自注册企业成员与加入审批，写 identities.json
   accept  端到端验收（S1–S9），写 steps.jsonl / summary.json / responses/
   demo    5 分钟现场演示（打印真实命令与实际观测）
 
@@ -285,10 +303,12 @@ import os
 import pathlib
 import re
 import shlex
+import secrets
 import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 # ---------------------------------------------------------------------------
@@ -311,7 +331,8 @@ def redact_text(text):
             text = text.replace(value, "%s…<redacted:%d>" % (value[:6], len(value)))
     text = re.sub(r"(sk-[A-Za-z0-9_\-]{6})[A-Za-z0-9_\-]+", r"\1…<redacted>", text)
     text = re.sub(r'("csrf_token"\s*:\s*")[^"]+(")', r"\1<redacted>\2", text)
-    text = re.sub(r"(gw_session=)[^;\s\"]+", r"\1<redacted>", text)
+    text = re.sub(r"(?i)(gw_session|gw_csrf)=[^;\s\"]+", r"\1=<redacted>", text)
+    text = re.sub(r"(?i)(x-csrf-token\s*[:=]\s*)[^;\s,\"]+", r"\1<redacted>", text)
     text = re.sub(r"(Bearer\s+)[A-Za-z0-9_\-\.]{8,}", r"\1<redacted>", text)
     return text
 
@@ -382,6 +403,15 @@ class Session:
         status, headers, body = self.request("POST", "/api/v1/auth/login",
                                              {"email": email, "password": password})
         if status == 200 and isinstance(body, dict):
+            self.csrf = body.get("csrf_token")
+            self.email = email
+            register_secret("csrf:" + email, self.csrf)
+        return status, headers, body
+
+    def register(self, email, password):
+        status, headers, body = self.request("POST", "/api/v1/auth/register",
+                                             {"email": email, "password": password})
+        if status == 201 and isinstance(body, dict):
             self.csrf = body.get("csrf_token")
             self.email = email
             register_secret("csrf:" + email, self.csrf)
@@ -529,28 +559,67 @@ def do_seed(args, rec):
                  ["login %s -> %s" % (args.admin_email, status)], hard=True)
         return rec.finish()
 
-    orgs = {m["organization"]["name"]: m["organization"]["id"] for m in body.get("organizations", [])}
-    missing = [n for n in (args.org_a, args.org_b) if n not in orgs]
-    if missing:
-        rec.step("SEED-0", "两家 demo 企业存在", False,
-                 ["缺少组织 %s；bootstrap 需要用 --demo-data" % missing])
-        return rec.finish()
-    org_a, org_b = orgs[args.org_a], orgs[args.org_b]
-
     identities = read_identities(args.identities)
     if identities is None:
         identities = {
             "run_id": args.run_id,
             "admin": {"email": args.admin_email},
-            "org_a": {"id": org_a, "name": args.org_a},
-            "org_b": {"id": org_b, "name": args.org_b},
+            "org_a": {"id": "", "name": args.org_a},
+            "org_b": {"id": "", "name": args.org_b},
             "effective_at": time.strftime("%Y-%m-%dT%H:%M:%SZ",
                                           time.gmtime(int(time.time() / 60) * 60 - 600)),
             "users": {},
             "keys": {},
         }
-    identities["org_a"]["id"] = org_a
-    identities["org_b"]["id"] = org_b
+    admin_user_id = (body.get("user") or {}).get("id")
+    check_cursor = None
+    platform_accounts = []
+    for _ in range(20):
+        query = "?type=enterprise&limit=100"
+        if check_cursor:
+            query += "&cursor=" + urllib.parse.quote(str(check_cursor))
+        status, _, page = admin.request("GET", "/api/v1/admin/organizations" + query)
+        if status != 200 or not isinstance(page, dict):
+            rec.step("SEED-0", "读取平台企业账户", False,
+                     ["status=%s body=%s" % (status, page)])
+            return rec.finish()
+        platform_accounts.extend(page.get("items") or [])
+        check_cursor = page.get("next_cursor")
+        if not check_cursor:
+            break
+    if check_cursor:
+        rec.step("SEED-0", "平台企业账户目录分页", False,
+                 ["达到 2000 条安全读取上限，尚有后续账户"])
+        return rec.finish()
+
+    org_ids = {}
+    for key, name in (("org_a", args.org_a), ("org_b", args.org_b)):
+        existing = next((item for item in platform_accounts if item.get("name") == name), None)
+        if existing:
+            if existing.get("owner_user_id") != admin_user_id:
+                rec.step("SEED-0", "确认企业负责人 %s" % name, False,
+                         ["已有同名企业由其他用户负责；请使用新的 RC project/run-id 或重建开发库"])
+                return rec.finish()
+            organization_id = existing.get("id")
+        else:
+            status, _, created = admin.request("POST", "/api/v1/admin/organizations",
+                                               {"name": name, "owner_email": args.admin_email})
+            membership = (created or {}).get("organization") if isinstance(created, dict) else None
+            organization_id = membership.get("id") if isinstance(membership, dict) else None
+            if status != 201 or not isinstance(organization_id, str) or not organization_id.isdigit():
+                rec.step("SEED-0", "平台创建企业 %s" % name, False,
+                         ["status=%s body=%s" % (status, created)])
+                return rec.finish()
+            platform_accounts.append({"id": organization_id, "name": name,
+                                      "owner_user_id": admin_user_id, "owner_email": args.admin_email})
+        if not isinstance(organization_id, str) or not organization_id.isdigit():
+            rec.step("SEED-0", "企业编号 %s" % name, False,
+                     ["organization.id=%r 应为 JSON 字符串" % organization_id])
+            return rec.finish()
+        identities[key] = {"id": organization_id, "name": name}
+        org_ids[key] = organization_id
+    org_a, org_b = org_ids["org_a"], org_ids["org_b"]
+    write_identities(args.identities, identities)
 
     # 价格版本（同 (model, effective_at) 幂等：重复得到 409）
     published = []
@@ -569,11 +638,42 @@ def do_seed(args, rec):
     rec.capture("prices", {"models": [args.price_model, args.probe_model]},
                 {"results": published})
 
+    status, _, catalog = admin.request("GET", "/api/v1/admin/models")
+    if status != 200 or not isinstance(catalog, dict):
+        rec.step("SEED-1A", "读取平台模型目录", False,
+                 ["status=%s body=%s" % (status, catalog)])
+        return rec.finish()
+    catalog_items = {item.get("model"): bool(item.get("enabled"))
+                     for item in catalog.get("items", []) if isinstance(item, dict) and item.get("model")}
+    for model in (args.price_model, args.probe_model):
+        catalog_items[model] = True
+    status, _, catalog = admin.request(
+        "PUT", "/api/v1/admin/models",
+        {"items": [{"model": model, "enabled": enabled}
+                   for model, enabled in sorted(catalog_items.items())]})
+    if status != 200:
+        rec.step("SEED-1A", "开放 RC 模型", False,
+                 ["status=%s body=%s" % (status, catalog)])
+        return rec.finish()
+    for organization_id in (org_a, org_b):
+        status, _, settings = admin.request(
+            "PUT", "/api/v1/admin/organizations/%s/models" % organization_id,
+            {"model_allowlist": None})
+        if status != 200:
+            rec.step("SEED-1A", "开放企业模型范围", False,
+                     ["org=%s status=%s body=%s" % (organization_id, status, settings)])
+            return rec.finish()
+    rec.capture("model-catalog", {"models": [args.price_model, args.probe_model]},
+                {"enabled_models": [args.price_model, args.probe_model],
+                 "account_scope": "inherit platform-enabled models"})
+
     # 资金账户：给企业 A 充值（Idempotency-Key 固定 → 重放不重复入账）
     adjust_key = "rc-credit-%s" % identities["run_id"]
+    payment_reference = "rc-%s-initial-funding" % identities["run_id"]
     status, _, resp = admin.request(
         "POST", "/api/v1/admin/billing/accounts/%s/adjustments" % org_a,
-        {"amount_micro": "100000000", "direction": "credit",
+        {"amount_micro": "100000000", "type": "recharge",
+         "payment_reference": payment_reference,
          "reason": "T12 release-candidate seed credit"},
         headers={"Idempotency-Key": adjust_key})
     rec.capture("fund-org-a", {"org": org_a, "amount_micro": "100000000"},
@@ -585,12 +685,11 @@ def do_seed(args, rec):
                              "status": status,
                              "replayed": bool(isinstance(resp, dict) and resp.get("replayed"))}
 
-    # 身份：A 的 member、B 的 member、A 的 member（用于"移除成员"）、A 的 billing_viewer
+    # 身份：经公开注册创建个人账户，再通过企业加入申请由负责人审批成为普通成员。
     wanted = [
         ("member_a", args.org_a, "member"),
         ("member_b", args.org_b, "member"),
         ("member_c", args.org_a, "member"),
-        ("viewer_a", args.org_a, "billing_viewer"),
     ]
     for label, org_name, role in wanted:
         existing = identities["users"].get(label)
@@ -600,35 +699,72 @@ def do_seed(args, rec):
         email = "rc-%s-%s@rc.test" % (label.replace("_", "-"), args.run_id)
         password = "rc-%s-%s" % (label, args.run_id)
         register_secret("pw:" + label, password)
-        status, _, resp = admin.request("POST", "/api/v1/admin/users", {
-            "email": email, "password": password, "platform_admin": False,
-            "organizations": [identities[("org_a" if org_name == args.org_a else "org_b")]["id"]]})
-        if status not in (201, 409):
-            rec.step("SEED-3", "创建用户 %s" % label, False,
+        member = Session(args.console)
+        status, _, resp = member.register(email, password)
+        if status == 409:
+            status, _, resp = member.login(email, password)
+        if status != 201 and status != 200:
+            rec.step("SEED-3", "注册个人账户 %s" % label, False,
                      ["%s -> %s %s" % (email, status, resp)])
             return rec.finish()
-        user_id = resp.get("id") if isinstance(resp, dict) else None
-        if user_id is None:
-            # 409：已存在，从 /admin/users 列表里找不到接口，直接复用旧 identity
-            rec.step("SEED-3", "创建用户 %s" % label, False,
-                     ["用户已存在但 identities.json 无记录，请先执行 down -v 重新开始"])
+        user_id = (resp.get("user") or {}).get("id") if isinstance(resp, dict) else None
+        if not isinstance(user_id, str) or not user_id.isdigit():
+            rec.step("SEED-3", "注册个人账户 %s" % label, False,
+                     ["注册响应缺少字符串 user.id: %s" % resp])
             return rec.finish()
-        if role != "member":
-            status, _, resp2 = admin.request(
-                "PATCH", "/api/v1/orgs/%s/members/%s" % (identities["org_a"]["id"], user_id),
-                {"role": role})
-            if status not in (200, 204):
-                rec.step("SEED-3", "设置 %s 角色 %s" % (label, role), False,
-                         ["status=%s body=%s" % (status, resp2)])
+
+        org_id = identities[("org_a" if org_name == args.org_a else "org_b")]["id"]
+        membership = next((m for m in (resp.get("organizations") or [])
+                           if (m.get("organization") or {}).get("id") == org_id
+                           and m.get("status") == "active"), None)
+        if membership is None:
+            status, _, requests = member.request("GET", "/api/v1/me/join-requests")
+            if status != 200:
+                rec.step("SEED-3", "读取加入申请 %s" % label, False,
+                         ["status=%s body=%s" % (status, requests)])
                 return rec.finish()
+            request = next((item for item in (requests or {}).get("items", [])
+                            if item.get("organization_id") == org_id), None)
+            if request is None or request.get("status") != "pending":
+                status, _, request = member.request(
+                    "POST", "/api/v1/orgs/%s/join-requests" % org_id,
+                    {"display_name": label.replace("_", " ").title()})
+                if status != 201 or not isinstance(request, dict):
+                    rec.step("SEED-3", "提交加入申请 %s" % label, False,
+                             ["status=%s body=%s" % (status, request)])
+                    return rec.finish()
+            request_id = request.get("id")
+            if not isinstance(request_id, str) or not request_id.isdigit():
+                rec.step("SEED-3", "读取加入申请编号 %s" % label, False,
+                         ["申请响应缺少字符串 id: %s" % request])
+                return rec.finish()
+            status, _, decision = admin.request(
+                "POST", "/api/v1/orgs/%s/join-requests/%s/decision" % (org_id, request_id),
+                {"status": "approved", "monthly_limit_micro": "100000000"})
+            if status not in (200, 409):
+                rec.step("SEED-3", "审批加入申请 %s" % label, False,
+                         ["status=%s body=%s" % (status, decision)])
+                return rec.finish()
+            # Keep the one-time member session, then confirm the approved account membership.
+            status, _, resp = member.request("GET", "/api/v1/me")
+            membership = next((m for m in (resp or {}).get("organizations", [])
+                               if (m.get("organization") or {}).get("id") == org_id
+                               and m.get("status") == "active"), None)
+            if status != 200 or membership is None:
+                rec.step("SEED-3", "确认加入企业 %s" % label, False,
+                         ["status=%s body=%s" % (status, resp)])
+                return rec.finish()
+
         identities["users"][label] = {"email": email, "password": password,
-                                      "user_id": user_id, "role": role, "org": org_name}
+                                      "user_id": user_id, "role": "member", "org": org_name}
+        # Persist incrementally so a later seed retry can log these accounts in.
+        write_identities(args.identities, identities)
 
     write_identities(args.identities, identities)
     rec.capture("identities-redacted", {"identities": args.identities},
                 {"users": {k: {"email": v["email"], "user_id": v["user_id"], "role": v["role"]}
                            for k, v in identities["users"].items()}})
-    rec.step("SEED-OK", "seed 完成（价格 / 资金 / 成员 / billing_viewer）", True, [
+    rec.step("SEED-OK", "seed 完成（价格 / 资金 / 自注册成员 / 加入审批）", True, [
         "org_a=%s(%s) org_b=%s(%s)" % (args.org_a, org_a, args.org_b, org_b),
         "prices=%s" % ", ".join("%s:%s" % (p["model"], p["status"]) for p in published),
         "funding=%s micro (status=%s replayed=%s)" % (
@@ -654,12 +790,12 @@ def do_accept(args, rec):
     org_a = identities["org_a"]["id"]
     org_b = identities["org_b"]["id"]
 
-    # ---------------- S1 三个角色登录 ----------------
+    # ---------------- S1 平台管理员/企业负责人/普通成员登录 ----------------
     roles = {}
     logins = []
     ok = True
-    for label, expected_role in (("admin", None), ("member_a", "member"),
-                                 ("member_b", "member"), ("viewer_a", "billing_viewer")):
+    for label, expected_role in (("admin", "owner"), ("member_a", "member"),
+                                 ("member_b", "member"), ("member_c", "member")):
         sess = Session(args.console)
         if label == "admin":
             email, password = args.admin_email, admin_pw
@@ -672,6 +808,13 @@ def do_accept(args, rec):
             entry["platform_admin"] = body.get("user", {}).get("platform_admin")
             entry["organizations"] = [m["organization"]["name"] + ":" + m["role"]
                                       for m in body.get("organizations", [])]
+            org_id = org_a if label in ("admin", "member_a", "member_c") else org_b
+            membership = next((m for m in body.get("organizations", [])
+                               if (m.get("organization") or {}).get("id") == org_id), None)
+            entry["enterprise_role"] = membership.get("role") if membership else None
+            if membership is None or membership.get("role") != expected_role:
+                ok = False
+                entry["role_error"] = "expected %s in %s" % (expected_role, org_id)
             raw_cookies = headers.get("Set-Cookie-All") or headers.get("Set-Cookie") or ""
             entry["set_cookie"] = redact_text(raw_cookies)
             entry["cookie_flags"] = {
@@ -685,17 +828,17 @@ def do_accept(args, rec):
             entry["body"] = body
             roles[label] = sess
         logins.append(entry)
-    rec.capture("login-roles", {"roles": ["admin", "member_a", "member_b", "viewer_a"]},
+    rec.capture("login-roles", {"roles": ["admin", "member_a", "member_b", "member_c"]},
                 {"logins": logins})
     # 负例：错口令必须 401
     bad = Session(args.console)
     bad_status, _, bad_body = bad.login(args.admin_email, "definitely-not-the-password")
     neg_ok = bad_status == 401
-    rec.step("S1", "三角色登录（+ 错误口令 401 负例）", ok and neg_ok, [
+    rec.step("S1", "负责人和普通成员登录（+ 错误口令 401 负例）", ok and neg_ok, [
         "platform_admin=%s" % logins[0].get("status"),
         "member_a/%s -> %s" % (identities["users"]["member_a"]["email"], logins[1].get("status")),
         "member_b -> %s" % logins[2].get("status"),
-        "billing_viewer -> %s (orgA role 应为 billing_viewer)" % logins[3].get("status"),
+        "member_c -> %s (orgA role 应为 member)" % logins[3].get("status"),
         "错误口令 -> %s（应为 401 %s）" % (bad_status, (bad_body or {}).get("error", {}).get("code")
                                           if isinstance(bad_body, dict) else ""),
         "session cookie flags (member_a): %s" % logins[1].get("cookie_flags"),
@@ -704,10 +847,11 @@ def do_accept(args, rec):
     if not ok:
         return rec.finish()
 
-    admin, member_a, member_b, viewer_a = roles["admin"], roles["member_a"], roles["member_b"], roles["viewer_a"]
+    admin, member_a, member_b, member_c = roles["admin"], roles["member_a"], roles["member_b"], roles["member_c"]
 
-    # ---------------- S2 成员建 Key + 流式调用 ----------------
-    status, _, key = member_a.request("POST", "/api/v1/orgs/%s/keys" % org_a, {})
+    # ---------------- S2 成员创建命名 Key + 流式调用 ----------------
+    status, _, key = member_a.request("POST", "/api/v1/orgs/%s/keys" % org_a,
+                                      {"name": "release-candidate member A", "operation_id": "rc-%s-member-a-%s" % (args.run_id, secrets.token_hex(6))})
     if status != 201 or not isinstance(key, dict) or not key.get("secret"):
         rec.capture("member-key", {"org": org_a}, {"status": status, "body": key})
         rec.step("S2", "成员创建 API Key", False, ["status=%s body=%s" % (status, key)])
@@ -719,7 +863,7 @@ def do_accept(args, rec):
                 {"status": status, "key": key.get("key"),
                  "secret_returned_once": key.get("secret_returned_once")})
 
-    _, _, pre_account = viewer_a.request("GET", "/api/v1/orgs/%s/billing/account" % org_a)
+    _, _, pre_account = admin.request("GET", "/api/v1/orgs/%s/billing/account" % org_a)
     accepted, accept_latency = wait_gateway(args.gateway, secret_a, args.price_model, until_ok, timeout=60)
     rec.capture("gateway-call-primary", {"model": args.price_model, "stream": True},
                 {"status": accepted["status"], "done": accepted["done"],
@@ -744,9 +888,9 @@ def do_accept(args, rec):
     status = status2 = status3 = 0
     debit, rows = [], []
     while True:
-        status, _, account = viewer_a.request("GET", "/api/v1/orgs/%s/billing/account" % org_a)
-        status2, _, entries = viewer_a.request("GET", "/api/v1/orgs/%s/billing/entries?limit=20" % org_a)
-        status3, _, usage = viewer_a.request("GET", "/api/v1/orgs/%s/usage?limit=20" % org_a)
+        status, _, account = admin.request("GET", "/api/v1/orgs/%s/billing/account" % org_a)
+        status2, _, entries = admin.request("GET", "/api/v1/orgs/%s/billing/entries?limit=20" % org_a)
+        status3, _, usage = admin.request("GET", "/api/v1/orgs/%s/usage?limit=20" % org_a)
         debit = [e for e in (entries or {}).get("items", [])
                  if e.get("kind") == "debit" and "billing_receipt:debit:" in str(e.get("business_id", ""))]
         rows = [u for u in (usage or {}).get("items", []) if u.get("model") == args.price_model]
@@ -756,7 +900,7 @@ def do_accept(args, rec):
         if time.time() > settle_deadline:
             break
         time.sleep(0.25)
-    rec.capture("org-a-charge", {"org": org_a, "actor": "billing_viewer"},
+    rec.capture("org-a-charge", {"org": org_a, "actor": "enterprise_owner"},
                 {"account": account, "entries": entries, "usage": usage,
                  "settle_visible_after_s": settle_visible_after})
     available = None
@@ -782,15 +926,35 @@ def do_accept(args, rec):
             status3, len(rows), args.price_model,
             rows[0].get("provider") if rows else None,
             rows[0].get("total_tokens") if rows else None),
-        "企业角色=member 读账户会被 403（负例见 responses）",
+        "企业成员只看到自己的用量；组织汇总不包含任何成员 Key 字段。",
     ], observations={"available_micro_before": pre_available, "available_micro_after": available,
                      "settled_entries": len(debit), "usage_rows": len(rows),
                      "settle_visible_after_s": settle_visible_after})
-    status_neg, _, neg = member_a.request("GET", "/api/v1/orgs/%s/billing/account" % org_a)
-    rec.capture("member-billing-forbidden", {"actor": "member_a"}, {"status": status_neg, "body": neg})
+    status_neg, _, member_usage = member_a.request("GET", "/api/v1/orgs/%s/usage?limit=20" % org_a)
+    member_items = (member_usage or {}).get("items", []) if isinstance(member_usage, dict) else []
+    member_user_id = identities["users"]["member_a"]["user_id"]
+    member_item_ids = [item.get("user_id") for item in member_items if item.get("user_id") is not None]
+    member_execution_ids = {item.get("execution_id") for item in member_items}
+    org_execution_ids = {item.get("execution_id") for item in rows}
+    member_scope_ok = (status_neg == 200 and (member_usage or {}).get("scope") == "self"
+                       and all(item_id == member_user_id for item_id in member_item_ids)
+                       and member_execution_ids.issubset(org_execution_ids))
+    org_items = (usage or {}).get("items", []) if isinstance(usage, dict) else []
+    no_key_leak = all("key_id" not in item and "key_name" not in item for item in org_items)
+    rec.capture("member-usage-scope", {"actor": "member_a"},
+                {"status": status_neg, "scope": (member_usage or {}).get("scope"),
+                 "row_count": len(member_items), "organization_rows_contain_key_fields": not no_key_leak})
+    rec.step("S3B", "成员只读取本人消费，企业汇总不含 Key 信息",
+             member_scope_ok and no_key_leak, [
+                 "成员 GET /usage -> %s scope=%s rows=%d；本人 user_id=%s" % (
+                     status_neg, (member_usage or {}).get("scope"), len(member_items), member_user_id),
+                 "成员行 execution_id 均属于企业汇总；企业明细没有 key_id/key_name 字段。",
+             ], observations={"member_usage_scope": (member_usage or {}).get("scope"),
+                             "member_rows": len(member_items), "organization_key_fields": not no_key_leak})
 
     # ---------------- S4 余额不足在上游之前被拒 ----------------
-    status, _, key_b = member_b.request("POST", "/api/v1/orgs/%s/keys" % org_b, {})
+    status, _, key_b = member_b.request("POST", "/api/v1/orgs/%s/keys" % org_b,
+                                        {"name": "release-candidate member B", "operation_id": "rc-%s-member-b-%s" % (args.run_id, secrets.token_hex(6))})
     if status != 201 or not isinstance(key_b, dict):
         rec.step("S4", "企业 B 成员创建 Key", False, ["status=%s body=%s" % (status, key_b)])
         return rec.finish()
@@ -842,7 +1006,8 @@ def do_accept(args, rec):
     member_c = Session(args.console)
     user_c = identities["users"]["member_c"]
     member_c.login(user_c["email"], user_c["password"])
-    status, _, key_c = member_c.request("POST", "/api/v1/orgs/%s/keys" % org_a, {})
+    status, _, key_c = member_c.request("POST", "/api/v1/orgs/%s/keys" % org_a,
+                                        {"name": "release-candidate removed member", "operation_id": "rc-%s-member-c-%s" % (args.run_id, secrets.token_hex(6))})
     if status != 201 or not isinstance(key_c, dict):
         rec.step("S6", "成员 C 创建 Key", False, ["status=%s body=%s" % (status, key_c)])
         return rec.finish()
@@ -866,7 +1031,7 @@ def do_accept(args, rec):
     ], observations={"removal_propagation_s": remove_latency,
                      "gateway_status": denied_c["status"]})
 
-    # ---------------- S7 平台管理员的异常与审计面 ----------------
+    # ---------------- S7 企业负责人账单/审计与平台策略面 ----------------
     status, _, exceptions = admin.request("GET", "/api/v1/orgs/%s/billing/exceptions" % org_a)
     status2, _, audit = admin.request("GET", "/api/v1/orgs/%s/audit?limit=50" % org_a)
     status3, _, statement = admin.request("GET", "/api/v1/orgs/%s/billing/statements" % org_a)
@@ -882,7 +1047,7 @@ def do_accept(args, rec):
                    and review_status == 200 and isinstance(review, dict)
                    and review.get("min_age_seconds") == 7800
                    and review.get("sla_seconds") == 7200)
-    rec.step("S7", "平台管理员的资金异常 / 审计 / 月度账单面", surfaces_ok, [
+    rec.step("S7", "负责人查看企业资金异常 / 审计，平台查看策略队列", surfaces_ok, [
         "GET /billing/exceptions -> %s totals=%s（%s）" % (
             status, totals, "空队列也是真实事实" if not (exceptions or {}).get("items") else "有异常行"),
         "GET /audit -> %s %d 条，动作=%s" % (status2, len((audit or {}).get("items", [])),
@@ -897,7 +1062,8 @@ def do_accept(args, rec):
 
     # ---------------- S8 Redis 故障：fail-closed 与恢复 ----------------
     if args.with_failure and args.compose_cmd:
-        status, _, key_f = member_a.request("POST", "/api/v1/orgs/%s/keys" % org_a, {})
+        status, _, key_f = member_a.request("POST", "/api/v1/orgs/%s/keys" % org_a,
+                                            {"name": "release-candidate redis recovery", "operation_id": "rc-%s-redis-%s" % (args.run_id, secrets.token_hex(6))})
         secret_f = key_f.get("secret") if isinstance(key_f, dict) else None
         if secret_f:
             register_secret("key:failure", secret_f)
@@ -956,7 +1122,8 @@ def do_accept(args, rec):
             if ready:
                 break
             time.sleep(1)
-        status, _, key_g = member_a.request("POST", "/api/v1/orgs/%s/keys" % org_a, {})
+        status, _, key_g = member_a.request("POST", "/api/v1/orgs/%s/keys" % org_a,
+                                        {"name": "release-candidate gateway restart", "operation_id": "rc-%s-restart-%s" % (args.run_id, secrets.token_hex(6))})
         secret_g = key_g.get("secret") if isinstance(key_g, dict) else None
         if secret_g:
             register_secret("key:restart", secret_g)
@@ -1004,18 +1171,20 @@ def do_demo(args, rec):
     print("T12 发布候选 · 5 分钟演示（Console=%s Gateway=%s）" % (args.console, args.gateway))
     print(DEMO_LINE)
 
-    # 1 成员登录 + 建 Key + 流式调用
-    t0 = time.time()
+    # 1 成员登录 + 建命名 Key + 流式调用
     member = Session(args.console)
     member.login(identities["users"]["member_a"]["email"], identities["users"]["member_a"]["password"])
-    status, _, key = member.request("POST", "/api/v1/orgs/%s/keys" % org_a, {})
+    demo_operation = "rc-demo-%s-member-a-%s" % (args.run_id, secrets.token_hex(6))
+    status, _, key = member.request("POST", "/api/v1/orgs/%s/keys" % org_a,
+                                    {"name": "release-candidate demo", "operation_id": demo_operation})
     secret = key["secret"] if isinstance(key, dict) else None
     register_secret("key:demo", secret)
     call = wait_gateway(args.gateway, secret, args.price_model, until_ok, timeout=60)[0]
     demo_print(1, "成员登录 → 创建 Key → 流式调用", """
 curl -s -c jar -X POST %s/api/v1/auth/login -H 'Content-Type: application/json' \\
   -d '{"email":"%s","password":"<来自 identities.json>"}'
-curl -s -b jar -X POST %s/api/v1/orgs/%s/keys -H "X-CSRF-Token: <login.csrf_token>" -d '{}'
+curl -s -b jar -X POST %s/api/v1/orgs/%s/keys -H "X-CSRF-Token: <login.csrf_token>" \
+  -H 'Content-Type: application/json' -d '{"name":"release-candidate demo","operation_id":"<unique-operation-id>"}'
 curl -sN -X POST %s/v1/chat/completions -H "Authorization: Bearer <key.secret>" \\
   -H 'Accept: text/event-stream' -H 'Content-Type: application/json' \\
   -d '{"model":"%s","stream":true,"messages":[{"role":"user","content":"hello"}]}'
@@ -1031,18 +1200,18 @@ curl -sN -X POST %s/v1/chat/completions -H "Authorization: Bearer <key.secret>" 
     except Exception:
         exec_seen = None
 
-    # 2 企业查费
-    viewer = Session(args.console)
-    viewer.login(identities["users"]["viewer_a"]["email"], identities["users"]["viewer_a"]["password"])
-    _, _, account = viewer.request("GET", "/api/v1/orgs/%s/billing/account" % org_a)
+    # 2 企业负责人查费。平台身份本身不授予组织访问；该账号通过 seed 取得真实 owner membership。
+    owner = Session(args.console)
+    owner.login(args.admin_email, admin_pw)
+    _, _, account = owner.request("GET", "/api/v1/orgs/%s/billing/account" % org_a)
     # 结算由 dispatcher 异步完成：有界等待它可见，并记录时延（不要在这之前下结论）。
     settle_started = time.time()
     settle_visible_after = None
     debit = []
     entries = usage = None
     for _ in range(60):
-        _, _, entries = viewer.request("GET", "/api/v1/orgs/%s/billing/entries?limit=5" % org_a)
-        _, _, usage = viewer.request("GET", "/api/v1/orgs/%s/usage?limit=5" % org_a)
+        _, _, entries = owner.request("GET", "/api/v1/orgs/%s/billing/entries?limit=5" % org_a)
+        _, _, usage = owner.request("GET", "/api/v1/orgs/%s/usage?limit=5" % org_a)
         debit = [e for e in (entries or {}).get("items", [])
                  if e.get("kind") == "debit"
                  and "billing_receipt:debit:" in str(e.get("business_id", ""))]
@@ -1050,11 +1219,13 @@ curl -sN -X POST %s/v1/chat/completions -H "Authorization: Bearer <key.secret>" 
             settle_visible_after = round(time.time() - settle_started, 3)
             break
         time.sleep(0.25)
-    demo_print(2, "企业 billing_viewer 看到这笔收费", """
-curl -s -b viewer.jar %s/api/v1/orgs/%s/billing/account
-curl -s -b viewer.jar '%s/api/v1/orgs/%s/billing/entries?limit=5'
-curl -s -b viewer.jar '%s/api/v1/orgs/%s/usage?limit=5'
-""" % (args.console, org_a, args.console, org_a, args.console, org_a),
+    demo_print(2, "企业负责人查看正式账单", """
+curl -s -c owner.jar -X POST %s/api/v1/auth/login -H 'Content-Type: application/json' \
+  -d '{"email":"%s","password":"<来自 secrets/admin-password>"}'
+curl -s -b owner.jar %s/api/v1/orgs/%s/billing/account
+curl -s -b owner.jar '%s/api/v1/orgs/%s/billing/entries?limit=5'
+curl -s -b owner.jar '%s/api/v1/orgs/%s/usage?limit=5'
+""" % (args.console, args.admin_email, args.console, org_a, args.console, org_a, args.console, org_a),
                "available_micro=%s reserved_micro=%s\n结算可见延迟 %s s；debit 条目 %d 条（billing_receipt:debit:<execution> 是结算扣费，release 条目是预占释放）\n用量行：model=%s provider=%s tokens=%s execution=%s"
                % (account.get("available_micro"), account.get("reserved_micro"),
                   settle_visible_after, len(debit),
@@ -1067,7 +1238,8 @@ curl -s -b viewer.jar '%s/api/v1/orgs/%s/usage?limit=5'
     member_b = Session(args.console)
     member_b.login(identities["users"]["member_b"]["email"], identities["users"]["member_b"]["password"])
     org_b = identities["org_b"]["id"]
-    _, _, key_b = member_b.request("POST", "/api/v1/orgs/%s/keys" % org_b, {})
+    _, _, key_b = member_b.request("POST", "/api/v1/orgs/%s/keys" % org_b,
+                                  {"name": "release-candidate demo B", "operation_id": "rc-demo-%s-member-b-%s" % (args.run_id, secrets.token_hex(6))})
     secret_b = key_b["secret"]
     register_secret("key:demo-b", secret_b)
     wait_gateway(args.gateway, secret_b, args.probe_model, until_status(402), timeout=60)
@@ -1098,7 +1270,8 @@ curl -s -o /dev/null -w '%%{http_code}\\n' -X POST %s/v1/chat/completions \\
 
     # 5 故障恢复
     if args.compose_cmd:
-        _, _, key_f = member.request("POST", "/api/v1/orgs/%s/keys" % org_a, {})
+        _, _, key_f = member.request("POST", "/api/v1/orgs/%s/keys" % org_a,
+                                     {"name": "release-candidate demo recovery", "operation_id": "rc-demo-%s-recovery-%s" % (args.run_id, secrets.token_hex(6))})
         secret_f = key_f["secret"]
         register_secret("key:demo-f", secret_f)
         wait_gateway(args.gateway, secret_f, args.price_model, until_ok, timeout=60)
@@ -1127,7 +1300,7 @@ curl -s -o /dev/null -w '%%{http_code}\\n' -X POST %s/v1/chat/completions -H "Au
     _, _, exceptions = admin.request("GET", "/api/v1/orgs/%s/billing/exceptions" % org_a)
     _, _, audit = admin.request("GET", "/api/v1/orgs/%s/audit?limit=20" % org_a)
     actions = sorted({i.get("action") for i in (audit or {}).get("items", [])})
-    demo_print(6, "平台管理员的异常队列与审计", """
+    demo_print(6, "企业负责人的异常队列与审计", """
 curl -s -b admin.jar -X POST %s/api/v1/auth/login -H 'Content-Type: application/json' \\
   -d '{"email":"%s","password":"<来自 secrets/admin-password>"}'
 curl -s -b admin.jar %s/api/v1/orgs/%s/billing/exceptions
@@ -1284,7 +1457,8 @@ def check_cookie_flags(args):
     httponly = any("HttpOnly" in c for c in session)
     samesite = any("SameSite=" in c for c in session)
     secure = any("Secure" in c for c in session)
-    safe = re.sub(r"gw_session=[^;]+", "gw_session=<redacted>", joined)
+    safe = re.sub(r"(?i)(gw_session|gw_csrf)=[^;,\s]+", lambda m: m.group(1) + "=<redacted>", joined)
+    safe = re.sub(r"(?i)(x-csrf-token\s*[:=]\s*)[^;,\s]+", r"\1<redacted>", safe)
     # demo profile 明确关闭 Secure（明文 http 调试）；HttpOnly/SameSite 是硬要求。
     ok = code == 200 and bool(session) and httponly and samesite
     record("cookie_flags", ok, [
@@ -1494,9 +1668,9 @@ rc_secrets_init() {
 rc_write_compose_files() {
   if [[ "$RC_GOPROXY" != "https://proxy.golang.org,direct" ]]; then
     python3 - "$RC_ROOT/Dockerfile" "$RC_WORK_DIR/Dockerfile.rc" "$RC_GOPROXY" \
-      "$RC_ROOT" "$RC_WORK_DIR/compose.build.yml" <<'PY'
+      "$RC_ROOT" "$RC_WORK_DIR/compose.build.yml" "$RC_WITH_PREVIEW" <<'PY'
 import sys, pathlib
-src, dst, goproxy, root, buildyml = sys.argv[1:6]
+src, dst, goproxy, root, buildyml, preview = sys.argv[1:7]
 out = []
 for line in pathlib.Path(src).read_text().splitlines():
     out.append(line)
@@ -1506,7 +1680,9 @@ for line in pathlib.Path(src).read_text().splitlines():
 pathlib.Path(dst).write_text("\n".join(out) + "\n")
 lines = ["# 由 scripts/release-candidate.sh 生成：只为构建注入 GOPROXY，不改仓库 Dockerfile。",
          "services:"]
-for svc in ("gateway", "control", "console", "metering", "migrate", "mock-primary", "mock-backup"):
+services = ["gateway", "control", "console", "metering", "migrate", "mock-primary", "mock-backup"]
+if preview == "1": services += ["mock-fixed", "mock-echo", "mock-flaky"]
+for svc in services:
     lines += ["  %s:" % svc, "    build:", "      context: %s" % root,
               "      dockerfile: %s" % dst, "      args:", "        GOPROXY: %s" % goproxy]
 pathlib.Path(buildyml).write_text("\n".join(lines) + "\n")
@@ -1564,6 +1740,21 @@ services:
 PY
   RC_COMPOSE_FILES+=(-f "$RC_WORK_DIR/compose.rc.yml")
 
+  if [[ "$RC_WITH_PREVIEW" == "1" ]]; then
+    python3 - "$RC_WORK_DIR/compose.preview.ports.yml" "$RC_WEB_PORT" "$RC_MOCK_BASE_PORT" <<'PY'
+import pathlib, sys
+path, web, base = sys.argv[1:]
+web, base = int(web), int(base)
+if not 1024 <= web <= 65535 or not 1024 <= base <= 65533:
+    raise SystemExit("preview ports out of range")
+lines = ["services:", "  web:", "    ports: !override", f'      - "127.0.0.1:{web}:8080"']
+for i, service in enumerate(("mock-fixed", "mock-echo", "mock-flaky")):
+    lines += [f"  {service}:", "    ports: !override", f'      - "127.0.0.1:{base+i}:18080"']
+pathlib.Path(path).write_text("\n".join(lines)+"\n")
+PY
+    RC_COMPOSE_FILES+=(-f "$RC_WORK_DIR/compose.preview.ports.yml")
+  fi
+
   rc_compose config >"$RC_WORK_DIR/logs/compose.config.yml" 2>&1 \
     || rc_die "compose 配置合并失败（需要 docker compose >= 2.24 才支持 !override）：见 $RC_WORK_DIR/logs/compose.config.yml"
   rc_compose config --format json >"$RC_WORK_DIR/logs/compose.config.raw.json" 2>&1 || true
@@ -1592,6 +1783,9 @@ rc_write_state() {
     RC_COMPOSE_PATHS+=("$_f")
   done
   cat > "$RC_STATE_FILE" <<EOF
+RC_WITH_PREVIEW=$RC_WITH_PREVIEW
+RC_WEB_PORT=$RC_WEB_PORT
+RC_MOCK_BASE_PORT=$RC_MOCK_BASE_PORT
 RC_RUN_ID=$RC_RUN_ID
 RC_PROJECT=$RC_PROJECT
 RC_WORK_DIR=$RC_WORK_DIR
@@ -1627,6 +1821,13 @@ rc_load_state() {
   RC_COMPOSE_FILES=()
   local f
   for f in $COMPOSE_PATHS; do RC_COMPOSE_FILES+=(-f "$f"); done
+  # Old local runs predate the separate mock file; restore complete test-only definitions.
+  if [[ "$COMPOSE_PATHS" != *"docker-compose.mock.yml"* ]]; then
+    RC_COMPOSE_FILES=(-f "$RC_ROOT/docker-compose.yml" -f "$RC_ROOT/docker-compose.mock.yml")
+    for f in $COMPOSE_PATHS; do
+      [[ "$f" == "$RC_ROOT/docker-compose.yml" || "$f" == *"docker-compose.preview.yml" ]] || RC_COMPOSE_FILES+=(-f "$f")
+    done
+  fi
   [[ ${#RC_COMPOSE_FILES[@]} -gt 0 ]] || rc_die "state.env 里没有 compose 文件列表"
 }
 
@@ -1765,13 +1966,11 @@ with urllib.request.urlopen(req, timeout=30) as resp:
 PY
   rc_log "    desired_version=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("desired_version"))' "$RC_WORK_DIR/logs/control-config.json" 2>/dev/null || echo '?')"
 
-  rc_log "==> bootstrap 平台管理员与两家企业（密码只从 stdin 读，不打印不落盘）"
+  rc_log "==> bootstrap 平台管理员与个人账户（不注入演示企业/旧角色）"
   if ! printf '%s' "$(cat "$RC_WORK_DIR/secrets/admin-password")" | \
       rc_compose_run run --rm -T --no-deps console bootstrap \
         --admin-email "$RC_ADMIN_EMAIL" \
         --admin-password-file /dev/stdin \
-        --demo-data \
-        --demo-credentials-file /tmp/rc-demo-credentials.txt \
         >>"$RC_WORK_DIR/logs/bootstrap.log" 2>&1; then
     tail -30 "$RC_WORK_DIR/logs/bootstrap.log" >&2
     rc_die "console bootstrap 失败"
@@ -1805,7 +2004,7 @@ rc_accept() {
     --console "http://127.0.0.1:$RC_CONSOLE_PORT" \
     --gateway "http://127.0.0.1:$RC_GATEWAY_PORT" \
     --control "http://127.0.0.1:$RC_CONTROL_HTTP_PORT" \
-    --admin-token "$(cat "$RC_WORK_DIR/secrets/control-admin-token")" \
+    --admin-token="$(cat "$RC_WORK_DIR/secrets/control-admin-token")" \
     --admin-email "$RC_ADMIN_EMAIL" \
     --admin-password-file "$RC_WORK_DIR/secrets/admin-password" \
     --identities "$RC_WORK_DIR/secrets/identities.json" \
@@ -1815,6 +2014,15 @@ rc_accept() {
     --org-a "$RC_ORG_A" --org-b "$RC_ORG_B" \
     --compose-cmd "$(rc_compose_command_string)" \
     "$@" 2>&1 | tee -a "$RC_WORK_DIR/logs/acceptance.log"
+  local -a pipeline_status=("${PIPESTATUS[@]}")
+  local driver_exit="${pipeline_status[0]:-1}"
+  local tee_exit="${pipeline_status[1]:-1}"
+  local command_exit="$driver_exit"
+  [[ "$command_exit" -ne 0 ]] || command_exit="$tee_exit"
+  printf '{"phase":"%s","driver_exit":%s,"tee_exit":%s,"exit_code":%s}\n' \
+    "$phase" "$driver_exit" "$tee_exit" "$command_exit" \
+    > "$RC_WORK_DIR/logs/accept-${phase}.exit.json"
+  return "$command_exit"
 }
 
 rc_security_checks() {
@@ -1862,25 +2070,25 @@ rc_evidence_collect() {
 rc_e2e() {
   command -v npm >/dev/null 2>&1 || rc_die "缺少 npm（Playwright 三角色套件需要 Node >= 20.19）"
   rc_log "==> 前端依赖（npm ci）"
-  ( cd "$RC_ROOT/web" && npm ci >>"$RC_WORK_DIR/logs/e2e.log" 2>&1 ) \
+  ( cd "$RC_ROOT/web" && npm ci --no-audit --no-fund >>"$RC_WORK_DIR/logs/e2e.log" 2>&1 ) \
     || { tail -20 "$RC_WORK_DIR/logs/e2e.log" >&2; rc_die "npm ci 失败"; }
   rc_log "==> Playwright 三角色套件（Console=$RC_CONSOLE_PORT Gateway=${RC_GATEWAY_PORT}）"
-  # screenshots.spec.ts 会把 PNG 写进被跟踪的 docs/web/screenshots/（属于 T04/T08 的
-  # 交付物）。发布候选运行不允许覆盖别的任务的受跟踪文件，因此按标题排除，
-  # 并在证据 README 里把这条记为"有意跳过 + 原因"。
+  # 一并运行角色流程与桌面/窄屏截图，输出到 data/verification/web-screenshots。
   set +e
   ( cd "$RC_ROOT/web" && \
     E2E_CONSOLE_URL="http://127.0.0.1:$RC_CONSOLE_PORT" \
     E2E_GATEWAY_URL="http://127.0.0.1:$RC_GATEWAY_PORT" \
+    E2E_GATEWAY_MODEL="$RC_PRICE_MODEL" \
+    E2E_REQUIRE_FULL_STACK=1 \
     E2E_ADMIN_EMAIL="$RC_ADMIN_EMAIL" \
     E2E_ADMIN_PASSWORD="$(cat "$RC_WORK_DIR/secrets/admin-password")" \
-    CI=1 npm run e2e -- --reporter=list --grep-invert screenshots ) \
+    CI=1 npm run e2e -- --reporter=list ) \
     2>&1 | tee -a "$RC_WORK_DIR/logs/e2e.log" | tail -45
   local rc=${PIPESTATUS[0]}
   set -e
   mkdir -p "$RC_EVIDENCE_DIR/e2e"
   tail -300 "$RC_WORK_DIR/logs/e2e.log" > "$RC_EVIDENCE_DIR/e2e/playwright.log" 2>/dev/null || true
-  # web/e2e/.state.json 里带 admin/member/viewer 的明文口令（T08 套件的既有设计，
+  # web/e2e/.state.json 里带测试账号的明文口令（套件的既有设计，
   # 文件被 gitignore）。归档到证据前必须把凭据字段抹掉。
   python3 "$RC_WORK_DIR/redact_state.py" "$RC_ROOT/web/e2e/.state.json" \
     "$RC_EVIDENCE_DIR/e2e/state.json" 2>/dev/null || true
@@ -1955,7 +2163,9 @@ if ident.is_file():
 # 硬失败模式：出现在**本次运行的证据/日志**里就是真泄漏。
 hard_patterns = [
     ("api_key_secret", re.compile(r"sk-[A-Za-z0-9_\-]{20,}")),
-    ("session_cookie", re.compile(r"gw_session=[A-Za-z0-9_\-%]{10,}")),
+    ("session_cookie", re.compile(r"gw_session=(?!<redacted>)[A-Za-z0-9_\-%]{10,}")),
+    ("csrf_cookie", re.compile(r"gw_csrf=(?!<redacted>)[A-Za-z0-9_\-%]{8,}")),
+    ("csrf_token", re.compile(r"(?i)(?:csrf_token|x-csrf-token)\s*[:=]\s*[\"']?(?!<redacted>)[A-Za-z0-9_\-%]{8,}")),
     ("private_key", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")),
     ("aws_access_key", re.compile(r"AKIA[0-9A-Z]{16}")),
     ("bearer_token", re.compile(r"Bearer\s+(?!<redacted>)[A-Za-z0-9_\-\.]{20,}")),
@@ -1984,9 +2194,9 @@ def scan_file(path, label, patterns, with_secrets):
                 found.append({"file": label, "kind": "run_secret:" + kind,
                               "match": "<redacted>", "severity": "leak"})
     for kind, rx in patterns:
-        for m in rx.finditer(text):
+        for _ in rx.finditer(text):
             found.append({"file": label, "kind": kind,
-                          "match": m.group(0)[:24] + "…<redacted>", "severity": "leak"})
+                          "match": "<redacted>", "severity": "leak"})
     return found
 
 def scan_soft(path, label):
@@ -2024,7 +2234,7 @@ for rel in tracked:
     for kind, rx in tracked_patterns:
         for _ in rx.finditer(text):
             category = ("test_fixture" if rel.endswith("_test.go")
-                        else "prior_evidence" if rel.startswith("docs/verification/")
+                        else "prior_evidence" if rel.startswith("data/verification/")
                         else "other")
             tracked_literals.append({"file": rel, "kind": kind, "category": category})
     defaults += scan_soft(p, rel)
@@ -2080,46 +2290,100 @@ PY
 }
 
 rc_summary() {
-  python3 - "$RC_EVIDENCE_DIR" "$RC_RUN_ID" "$RC_PROJECT" "$RC_SECURITY_OK" <<'PY'
+  python3 - "$RC_EVIDENCE_DIR" "$RC_RUN_ID" "$RC_PROJECT" "$RC_SECURITY_OK" \
+    "$RC_WORK_DIR/logs/accept-accept.exit.json" "$RC_WITH_FAILURE" \
+    "$1" "$2" "$3" "$4" <<'PY'
 import json, pathlib, sys
-evidence, run_id, project, security = sys.argv[1:5]
+
+(evidence, run_id, project, security, driver_path, with_failure,
+ final_failed, with_e2e, e2e_failed, isolation_failed) = sys.argv[1:11]
 base = pathlib.Path(evidence)
-accept = {}
-p = base / "summary.json"
-if p.is_file():
-    accept = json.loads(p.read_text())
-observations = {}
+def read_json(path, default=None):
+    p = pathlib.Path(path)
+    if not p.is_file():
+        return default if default is not None else {}
+    try:
+        value = json.loads(p.read_text())
+        return value if isinstance(value, dict) else (default if default is not None else {})
+    except Exception:
+        return default if default is not None else {}
+
+accept = read_json(base / "summary.json")
+driver = read_json(driver_path)
+all_steps = []
 steps_path = base / "steps.jsonl"
 if steps_path.is_file():
     for line in steps_path.read_text().splitlines():
-        line = line.strip()
-        if not line:
-            continue
         try:
-            step = json.loads(line)
+            all_steps.append(json.loads(line))
         except Exception:
             continue
-        observations[step.get("id")] = step.get("observations")
-scan = {}
-p = base / "secret-scan.json"
-if p.is_file():
-    scan = json.loads(p.read_text())
-sec = {}
-p = base / "security" / "summary.json"
-if p.is_file():
-    sec = json.loads(p.read_text())
+step_count = accept.get("steps_total")
+steps = all_steps[-step_count:] if isinstance(step_count, int) and step_count > 0 else []
+observations = {step.get("id"): step.get("observations") for step in steps}
+scan_path = base / "secret-scan.json"
+sec_path = base / "security" / "summary.json"
+scan = read_json(scan_path)
+sec = read_json(sec_path)
+scan_valid = scan_path.is_file() and isinstance(scan.get("leaks"), list) and scan.get("leaks_ok") is True
+security_valid = security == "pass" and sec_path.is_file() and sec.get("ok") is True
+e2e_requested = with_e2e == "1"
+e2e_failure_observed = e2e_failed == "1"
+isolation_failure_observed = isolation_failed == "1"
+overall_failure_observed = final_failed == "1"
+required_steps = ["S1", "S2", "S3", "S3B", "S4", "S5", "S6", "S7"]
+if with_failure == "1":
+    required_steps += ["S8", "S9"]
+passed_ids = {step.get("id") for step in steps if step.get("ok") is True and step.get("hard", True) is True}
+missing_steps = [sid for sid in required_steps if sid not in passed_ids]
+expected_skips = [] if with_failure == "1" else ["S8", "S9"]
+driver_exit = driver.get("driver_exit", -1)
+acceptance_valid = (
+    driver.get("phase") == "accept"
+    and driver_exit == 0
+    and driver.get("tee_exit", -1) == 0
+    and accept.get("phase") == "accept"
+    and accept.get("run_id") == run_id
+    and accept.get("ok") is True
+    and not missing_steps
+)
+overall_ok = (
+    not overall_failure_observed
+    and acceptance_valid
+    and security_valid
+    and scan_valid
+    and not scan.get("leaks")
+    and (not e2e_requested or not e2e_failure_observed)
+    and not isolation_failure_observed
+)
 summary = {
     "run_id": run_id,
     "compose_project": project,
-    "acceptance_ok": accept.get("ok"),
+    "acceptance_ok": acceptance_valid,
+    "acceptance_phase": accept.get("phase"),
+    "acceptance_driver_exit_code": driver_exit,
+    "acceptance_tee_exit_code": driver.get("tee_exit", -1),
     "acceptance_steps": accept.get("steps_total"),
+    "acceptance_expected_steps": required_steps,
+    "acceptance_missing_steps": missing_steps,
+    "acceptance_skipped_steps": expected_skips,
     "acceptance_hard_failures": accept.get("hard_failures", []),
     "acceptance_observations": observations,
-    "security_ok": sec.get("ok"),
+    "security_ok": security_valid,
+    "security_execution_status": security,
+    "secret_scan_valid": scan_valid,
     "security_failed": sec.get("failed", []),
     "secret_scan_leaks": len(scan.get("leaks", [])),
     "secret_scan_known_defaults": len(scan.get("known_defaults", [])),
-    "ok": bool(accept.get("ok")) and bool(sec.get("ok")) and not scan.get("leaks"),
+    "e2e_requested": e2e_requested,
+    "e2e_status": ("not_requested" if not e2e_requested else
+                    ("failed" if e2e_failure_observed else "passed")),
+    "e2e_failed": e2e_failure_observed if e2e_requested else False,
+    "isolation_status": "failed" if isolation_failure_observed else "passed",
+    "isolation_failed": isolation_failure_observed,
+    "overall_failure_observed_before_summary": overall_failure_observed,
+    "overall_failed": not overall_ok,
+    "ok": overall_ok,
 }
 (base / "release-candidate-summary.json").write_text(
     json.dumps(summary, indent=2, ensure_ascii=False) + "\n")
@@ -2143,9 +2407,13 @@ rc_setup() {
 
 rc_cmd_run() {
   rc_setup
+  rm -f "$RC_WORK_DIR/logs/accept-seed.exit.json" "$RC_WORK_DIR/logs/accept-accept.exit.json"
+  rm -f "$RC_EVIDENCE_DIR/secret-scan.json" "$RC_EVIDENCE_DIR/security/summary.json" \
+    "$RC_EVIDENCE_DIR/release-candidate-summary.json"
   [[ "$RC_KEEP" == "1" ]] || RC_TEARDOWN=1
   trap rc_trap EXIT
   local failed=0
+  local isolation_failed=0
   # 栈本身起不来是环境问题，直接 die；验收/安全/E2E 的失败一律记录下来，
   # 保证证据一定被收集，最后再以非零码退出。
   rc_build
@@ -2153,10 +2421,15 @@ rc_cmd_run() {
   rc_assert_migrations
   rc_bootstrap
   rc_wait_gateway_applied
-  rc_accept seed || { rc_warn "seed 阶段失败"; failed=1; }
+  if ! rc_accept seed; then
+    rc_warn "seed 阶段失败"
+    failed=1
+  fi
   if [[ $failed -eq 0 ]]; then
-    rc_accept accept $([[ "$RC_WITH_FAILURE" == "1" ]] && printf '%s' --with-failure) \
-      || { rc_warn "端到端验收存在硬失败"; failed=1; }
+    if ! rc_accept accept $([[ "$RC_WITH_FAILURE" == "1" ]] && printf '%s' --with-failure); then
+      rc_warn "端到端验收存在硬失败"
+      failed=1
+    fi
   fi
   rc_security_checks
   [[ "$RC_SECURITY_OK" == "pass" ]] || { rc_warn "安全/profile 检查存在硬失败"; failed=1; }
@@ -2169,10 +2442,17 @@ rc_cmd_run() {
     || { rc_warn "秘密扫描发现泄漏"; failed=1; }
   rc_isolation_snapshot "$RC_WORK_DIR/logs/isolation-after.txt" || true
   rc_isolation_diff "$RC_WORK_DIR/logs/isolation-before.txt" "$RC_WORK_DIR/logs/isolation-after.txt" \
-    || { rc_warn "隔离校验失败：其它 compose project 的容器/卷集合发生变化"; failed=1; }
+    || { rc_warn "隔离校验失败：其它 compose project 的容器/卷集合发生变化"; isolation_failed=1; failed=1; }
   cp "$RC_WORK_DIR/logs/isolation-before.txt" "$RC_EVIDENCE_DIR/stack/isolation-before.txt" 2>/dev/null || true
   cp "$RC_WORK_DIR/logs/isolation-after.txt" "$RC_EVIDENCE_DIR/stack/isolation-after.txt" 2>/dev/null || true
-  rc_summary
+  rc_summary "$failed" "$RC_WITH_E2E" "$RC_E2E_FAILED" "$isolation_failed"
+  local summary_ok
+  summary_ok="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("ok") is True)' \
+    "$RC_EVIDENCE_DIR/release-candidate-summary.json" 2>/dev/null || printf false)"
+  if [[ "$summary_ok" != "True" ]]; then
+    rc_warn "发布候选摘要未确认全部必需阶段和检查通过"
+    failed=1
+  fi
   if [[ $failed -ne 0 ]]; then
     rc_warn "发布候选验收未通过（见 $RC_EVIDENCE_DIR/release-candidate-summary.json）"
     exit 1
@@ -2190,11 +2470,46 @@ rc_cmd_up() {
   rc_wait_gateway_applied
   rc_accept seed
   rc_log "==> 栈已就绪并保留运行。"
+  if [[ "$RC_WITH_PREVIEW" == "1" ]]; then
+    rc_log "    Web      http://127.0.0.1:$RC_WEB_PORT"
+    rc_log "    可控 Provider 内网地址：http://mock-fixed:18080 / http://mock-echo:18080 / http://mock-flaky:18080"
+  fi
   rc_log "    Console  http://127.0.0.1:$RC_CONSOLE_PORT"
   rc_log "    Gateway  http://127.0.0.1:$RC_GATEWAY_PORT"
   rc_log "    Metering http://127.0.0.1:$RC_METERING_PORT"
   rc_log "    work dir $RC_WORK_DIR"
   rc_log "    下一步：scripts/release-candidate.sh demo | e2e | security | down"
+}
+
+rc_cmd_preview() {
+  # Repeat startup reuses the saved ports/secrets and never reruns onboarding seed.
+  local state_dir="${RC_WORK_DIR:-$RC_ROOT/data/release-candidate/current}"
+  if [[ ! -f "$state_dir/state.env" ]]; then
+    rc_cmd_up
+    return
+  fi
+  local requested_web="$RC_WEB_PORT" requested_mock="$RC_MOCK_BASE_PORT"
+  rc_load_state
+  [[ "$RC_WEB_PORT_SET" != "1" ]] || RC_WEB_PORT="$requested_web"
+  [[ "$RC_MOCK_BASE_PORT_SET" != "1" ]] || RC_MOCK_BASE_PORT="$requested_mock"
+  RC_WITH_PREVIEW=1
+  rc_preflight
+  rc_base_compose_file
+  rc_write_compose_files
+  rc_write_state
+  RC_TEARDOWN=0
+  rc_build
+  rc_up
+  rc_log "==> 完整预览已就绪，已有账户和数据保留。"
+  rc_log "    Web http://127.0.0.1:$RC_WEB_PORT"
+  rc_log "    Provider 内网地址：http://mock-fixed:18080 / http://mock-echo:18080 / http://mock-flaky:18080"
+}
+
+rc_cmd_stop() {
+  rc_preflight
+  rc_load_state
+  rc_compose_run --profile demo-mocks stop
+  rc_log "==> 已停止本项目服务，数据卷保留。"
 }
 
 rc_cmd_demo() {
@@ -2242,6 +2557,8 @@ rc_main() {
     help) rc_usage; exit 0 ;;
     run) rc_cmd_run ;;
     up) rc_cmd_up ;;
+    preview) rc_cmd_preview ;;
+    stop) rc_cmd_stop ;;
     demo) rc_cmd_demo ;;
     e2e) rc_cmd_e2e ;;
     security) rc_cmd_security ;;

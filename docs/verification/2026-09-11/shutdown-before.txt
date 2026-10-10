@@ -1,7 +1,0 @@
-=== RUN   TestGatewayShutdownFlushesAfterCancelingLongStream
-    shutdown_test.go:56: HTTP drain timeout skipped metering close
-2026/09/11 09:34:42 metering flush failed batch=2 err=redis client is nil; persisted to spool
---- FAIL: TestGatewayShutdownFlushesAfterCancelingLongStream (0.03s)
-FAIL
-FAIL	llm-gateway/cmd/gateway	1.051s
-FAIL

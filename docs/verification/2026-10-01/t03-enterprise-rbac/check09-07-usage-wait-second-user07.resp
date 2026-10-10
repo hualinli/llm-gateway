@@ -1,9 +1,0 @@
-HTTP 200 (0.004s)
-Server: hertz
-Date: Wed, 30 Sep 2026 22:50:48 GMT
-Content-Type: application/json
-Content-Length: 793
-X-Request-Id: t03-check09-07
-X-Trace-Id: 44f91df562a1b0c821f49221d206f174
-
-{"items":[{"id":"exec_a4dfed942560fb16334e51383e89b979","occurred_at":"2026-09-30T22:50:33Z","organization_id":"12","user_id":"4","key_id":"key_b188cd75392ac3c3c40ff46539d81b74","execution_id":"exec_a4dfed942560fb16334e51383e89b979","tenant_id":"org:12","model":"gpt-4o-mini","provider":"primary","prompt_tokens":12,"completion_tokens":8,"total_tokens":20,"cost_cents":"20","attribution":"attributed"}],"next_cursor":null,"totals":{"events":1,"prompt_tokens":12,"completion_tokens":8,"total_tokens":20,"cost_cents":"20","cost_kind":"demo_consumption","cost_note":"cost_cents is accumulated demo consumption at the fixed demo price (1 token = 1 cent). It is not an account balance and not an invoice amount."},"window":{"from":"2026-09-29T22:50:48Z","to":"2026-09-30T22:50:48Z"},"scope":"self"}

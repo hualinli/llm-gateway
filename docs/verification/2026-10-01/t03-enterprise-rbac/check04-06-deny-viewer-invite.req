@@ -1,8 +1,0 @@
-POST http://127.0.0.1:18092/api/v1/orgs/12/invitations
-X-Request-ID: t03-check04-06
-Accept: application/json
-Cookie: gw_session=RILR…<redacted:18>; gw_csrf=gpB2…<redacted:18>
-X-CSRF-Token: gpB2…<redacted:18>
-Content-Type: application/json
-
-{"email": "t03-17c0af-x2@t03.test", "role": "member"}

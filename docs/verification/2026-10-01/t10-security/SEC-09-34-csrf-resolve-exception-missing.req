@@ -1,7 +1,0 @@
-POST http://127.0.0.1:58872/api/v1/admin/billing/exceptions/99999999/resolution
-X-Request-ID: t10-SEC-09-34
-Accept: application/json
-Cookie: gw_session=nBg6…<redacted:18>; gw_csrf=lEAl…<redacted:18>
-Content-Type: application/json
-
-{"decision": "dismiss", "reason": "csrf probe"}

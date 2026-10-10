@@ -25,7 +25,7 @@ import (
 // Amounts are JSON strings, and the legacy cost column is labelled demo
 // consumption: it is the fixed demo price of this repository, not a balance and
 // not an invoice.
-func (s *server) listOrgUsage(ctx context.Context, c *app.RequestContext) {
+func (s *server) listLegacyOrgUsage(ctx context.Context, c *app.RequestContext) {
 	auth, ok := authFrom(c)
 	if !ok {
 		s.writeError(c, http.StatusUnauthorized, "", "authentication required")

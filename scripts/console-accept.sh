@@ -8,7 +8,7 @@
 #   * 密码、session token、CSRF token 在输出与证据文件里一律只以
 #     "前缀…<redacted:N>" 形式出现，明文既不打印也不落盘。
 #
-# 契约来源：docs/decisions/ADR-0002-iam-identity-and-organizations.md §4/§5、
+# 契约来源：docs/decisions.md、
 # docs/openapi/console-v1.yaml（T02 冻结子集）。
 #
 # 退出码：0 = 全部硬检查通过（可能含非致命 OBSERVED 发现）；1 = 首个硬失败；2 = 用法/环境错误。
@@ -22,8 +22,6 @@ script_name="$(basename "$0")"
 base_url="http://127.0.0.1:8092"
 admin_email=""
 admin_password_file=""
-demo_credentials_file=""
-demo_user_email=""
 evidence_dir=""
 insecure_cookies_ok=0
 fail_on_contract_divergence=0
@@ -43,8 +41,6 @@ usage() {
 
 选项:
   --base-url URL                 目标 Console 地址（默认 http://127.0.0.1:8092）
-  --demo-credentials-file PATH   bootstrap --demo-data 生成的凭据文件；check 6 / check 8 必需
-  --demo-user-email EMAIL        用哪个 demo 用户登录（默认第一条 demo-enterprise-a-* 记录）
   --evidence-dir DIR             证据目录（默认 data/console-accept/<UTC 时间戳>）
   --insecure-cookies-ok          声明目标是明文 http：要求 Set-Cookie 不带 Secure 属性；
                                  不传该开关时不要求 Secure（只记录 observation）
@@ -59,11 +55,11 @@ usage() {
   1  GET  /livez                 → 200；GET /readyz → 200
   2  POST /api/v1/auth/login      → 200 + gw_session(HttpOnly/SameSite=Lax) + csrf_token + user.id 字符串 + 个人组织 owner
   3  GET  /api/v1/me              → 200（同用户）；无 cookie → 401 unauthorized；篡改 cookie → 401
-  4  POST /api/v1/organizations   → 缺/错 CSRF 403 forbidden；正确 CSRF 201 且调用者 owner
+  4  开户与 CSRF                   → 旧 POST /organizations 为 405；激活码管理校验缺失/错误 CSRF 403
   5  GET  /api/v1/organizations   → 200 含个人组织与新组织；limit=1000 被截断不报错；limit=0/abc → 400 invalid_request
-  6  跨组织负例（demo 用户）      → GET 组织 B 404 not_found；GET 组织 A 200
+  6  加入申请与跨企业隔离         → 获批成员 GET 组织 A 200；未加入组织 B 404
   7  POST /api/v1/auth/logout     → 204；旧 cookie 再用 → 401
-  8  POST /api/v1/admin/users     → 平台管理员 201；非管理员 403 forbidden
+  8  公开注册个人账户               → 创建个人 owner/session；重复邮箱 409；非平台管理员不能创建后台账号
   9  POST /api/v1/admin/users/{id}/status → 200 且旧会话失效 401；非法 status 400；未知用户 404
   10 登录节流                     → 连续错误密码最终 429 rate_limited + Retry-After
   11 错误信封                     → 每个 4xx/5xx 都是 T01A 信封 + X-Content-Type-Options: nosniff
@@ -85,10 +81,6 @@ while [[ $# -gt 0 ]]; do
     --admin-email=*) admin_email="${1#*=}"; shift ;;
     --admin-password-file) admin_password_file="${2:-}"; shift 2 ;;
     --admin-password-file=*) admin_password_file="${1#*=}"; shift ;;
-    --demo-credentials-file) demo_credentials_file="${2:-}"; shift 2 ;;
-    --demo-credentials-file=*) demo_credentials_file="${1#*=}"; shift ;;
-    --demo-user-email) demo_user_email="${2:-}"; shift 2 ;;
-    --demo-user-email=*) demo_user_email="${1#*=}"; shift ;;
     --evidence-dir) evidence_dir="${2:-}"; shift 2 ;;
     --evidence-dir=*) evidence_dir="${1#*=}"; shift ;;
     --insecure-cookies-ok) insecure_cookies_ok=1; shift ;;
@@ -111,7 +103,6 @@ done
 [[ -n "$admin_email" ]] || die_usage "缺少 --admin-email"
 [[ -n "$admin_password_file" ]] || die_usage "缺少 --admin-password-file"
 [[ -r "$admin_password_file" ]] || die_usage "--admin-password-file 不存在或不可读: $admin_password_file"
-[[ -z "$demo_credentials_file" || -r "$demo_credentials_file" ]] || die_usage "--demo-credentials-file 不存在或不可读: $demo_credentials_file"
 case "$base_url" in
   http://*|https://*) ;;
   *) die_usage "--base-url 必须是 http(s) URL: $base_url" ;;
@@ -140,7 +131,6 @@ evidence_dir="$(cd "$evidence_dir" && pwd)"
   printf 'base_url=%s\n' "$base_url"
   printf 'admin_email=%s\n' "$admin_email"
   printf 'admin_password_file=%s\n' "$admin_password_file"
-  printf 'demo_credentials_file=%s\n' "$demo_credentials_file"
   printf 'insecure_cookies_ok=%s\n' "$insecure_cookies_ok"
   printf 'login_burst=%s\n' "$login_burst"
   printf 'max_throttle_attempts=%s\n' "$max_throttle_attempts"
@@ -478,9 +468,6 @@ class Env:
         self.admin_email = args.admin_email
         self.admin_password = read_password(args.admin_password_file)
         self.red.add(self.admin_password)
-        self.demo_entries = read_demo_credentials(args.demo_credentials_file) if args.demo_credentials_file else []
-        for _, password in self.demo_entries:
-            self.red.add(password)
         self.state = {}
         self.bugs = []
         self.checks = []
@@ -507,19 +494,6 @@ def read_password(path):
     if not value.strip():
         raise InfraFailure("密码文件为空: %s" % path)
     return value
-
-
-def read_demo_credentials(path):
-    entries = []
-    with open(path, "r", encoding="utf-8", errors="replace") as handle:
-        for line in handle:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            parts = line.split()
-            if len(parts) >= 2:
-                entries.append((parts[0], parts[1]))
-    return entries
 
 
 def session_of(check, response, label):
@@ -664,31 +638,44 @@ def check03(env, check):
 
 def check04(env, check):
     admin = env.state["admin_session"]
-    org_name = env.state.setdefault("new_org_name", "accept-%s" % secrets.token_hex(4))
-    body = {"name": org_name}
+    body = {"enterprise_name": ""}
 
-    missing = env.client.call(check, "create-org-no-csrf", "POST", "/api/v1/organizations",
+    missing = env.client.call(check, "activation-no-csrf", "POST", "/api/v1/admin/activation-codes",
                               body=body, session=admin, csrf=None)
-    assert_error(check, missing, 403, "forbidden", "POST /api/v1/organizations（无 X-CSRF-Token）")
+    assert_error(check, missing, 403, "forbidden", "POST /api/v1/admin/activation-codes（无 X-CSRF-Token）")
 
-    wrong = env.client.call(check, "create-org-wrong-csrf", "POST", "/api/v1/organizations",
+    wrong = env.client.call(check, "activation-wrong-csrf", "POST", "/api/v1/admin/activation-codes",
                             body=body, session=admin, csrf=flip(admin["csrf"]))
-    assert_error(check, wrong, 403, "forbidden", "POST /api/v1/organizations（错误 X-CSRF-Token）")
+    assert_error(check, wrong, 403, "forbidden", "POST /api/v1/admin/activation-codes（错误 X-CSRF-Token）")
 
-    created = env.client.call(check, "create-org-ok", "POST", "/api/v1/organizations",
+    valid_csrf = env.client.call(check, "activation-valid-csrf-invalid-input", "POST", "/api/v1/admin/activation-codes",
                               body=body, session=admin, csrf=admin["csrf"])
+    assert_error(check, valid_csrf, 400, "invalid_request",
+                 "有效 CSRF 下的空开户码企业名称（请求应进入参数校验）")
+
+    legacy = env.client.call(check, "legacy-self-service-organization", "POST", "/api/v1/organizations",
+                             body={"name": "must-not-be-created"}, session=admin, csrf=admin["csrf"])
+    assert_error(check, legacy, 405, "method_not_allowed", "已停用的 POST /api/v1/organizations")
+
+    org_name = "accept-owner-%s" % secrets.token_hex(4)
+    created = env.client.call(check, "platform-create-enterprise", "POST", "/api/v1/admin/organizations",
+                              body={"name": org_name, "owner_email": env.admin_email},
+                              session=admin, csrf=admin["csrf"])
     check.require(created.status == 201,
-                  "POST /api/v1/organizations status=%d, want 201 (body=%s)" % (created.status, created.body[:300]))
-    payload = created.json() or {}
-    organization = payload.get("organization") or {}
+                  "平台开户 status=%d, want 201 (body=%s)" % (created.status, created.body[:300]))
+    membership = created.json() or {}
+    organization = membership.get("organization") or {}
     check.require(isinstance(organization.get("id"), str) and organization["id"].isdigit(),
-                  "创建组织返回的 organization.id=%r，应为 JSON 字符串" % (organization.get("id"),))
-    check.require(payload.get("role") == "owner", "创建者角色=%r, want owner" % payload.get("role"))
-    check.require(organization.get("type") == "enterprise", "新组织 type=%r, want enterprise" % organization.get("type"))
-    check.require(organization.get("name") == org_name, "新组织 name=%r, want %r" % (organization.get("name"), org_name))
+                  "平台开户响应缺少字符串 organization.id: %r" % organization.get("id"))
+    check.require(organization.get("type") == "enterprise" and organization.get("name") == org_name,
+                  "平台开户返回错误企业: %r" % organization)
+    check.require(membership.get("role") == "owner" and membership.get("status") == "active",
+                  "owner_email 指定的平台账号应取得 owner membership，实际 role/status=%r/%r"
+                  % (membership.get("role"), membership.get("status")))
     env.state["new_org_id"] = organization["id"]
-    check.details["new_org_id"] = organization["id"]
-    check.details["new_org_name"] = org_name
+    env.state["new_org_name"] = org_name
+    check.details.update({"new_org_id": organization["id"], "new_org_name": org_name})
+    check.note("企业只能由平台创建或通过有效开户码兑换；旧自助开户路径已关闭。")
 
 
 def check05(env, check):
@@ -706,10 +693,10 @@ def check05(env, check):
     check.require(by_id.get(env.state["personal_org_id"]) == "owner",
                   "列表缺少个人组织（id=%s）或角色不是 owner" % env.state["personal_org_id"])
     check.require(by_id.get(env.state["new_org_id"]) == "owner",
-                  "列表缺少刚创建的组织（id=%s）或角色不是 owner" % env.state["new_org_id"])
-    same_name = [item for item in items if (item.get("organization") or {}).get("name") == env.state["new_org_name"]]
-    check.require(len(same_name) == 1,
-                  "同名组织 %r 出现 %d 次（两次 403 不应产生组织）" % (env.state["new_org_name"], len(same_name)))
+                  "列表缺少刚由平台创建的企业（id=%s）或角色不是 owner" % env.state["new_org_id"])
+    same_name = [item for item in items
+                 if (item.get("organization") or {}).get("name") == env.state["new_org_name"]]
+    check.require(len(same_name) == 1, "刚创建的企业在列表中出现 %d 次" % len(same_name))
 
     clamped = env.client.call(check, "list-limit-1000", "GET", "/api/v1/organizations?limit=1000", session=admin)
     check.require(clamped.status == 200, "limit=1000 status=%d, want 200（上限应被截断而不是报错）" % clamped.status)
@@ -745,53 +732,72 @@ def check05(env, check):
         "limit_abc_status": alpha.status,
         "pagination_cursor": cursor,
     })
-    check.note("limit=0/limit=abc → 400 invalid_request（与 OpenAPI 一致：小于 1 或非数字被拒绝）")
+    check.note("账户目录可分页读取；limit=0/limit=abc → 400 invalid_request。")
 
 
 def check06(env, check):
     admin = env.state["admin_session"]
-    listing = env.client.call(check, "admin-list-orgs", "GET", "/api/v1/organizations?limit=100", session=admin)
-    check.require(listing.status == 200, "管理员列组织 status=%d" % listing.status)
-    by_name = {}
-    for item in (listing.json() or {}).get("items") or []:
-        organization = item.get("organization") or {}
-        by_name[organization.get("name")] = organization.get("id")
-    for name in ("demo-enterprise-a", "demo-enterprise-b"):
-        check.require(name in by_name, "管理员看不到 %s（bootstrap --demo-data 是否执行？）" % name)
-    org_a, org_b = by_name["demo-enterprise-a"], by_name["demo-enterprise-b"]
+    stamp = secrets.token_hex(4)
+    org_ids = {}
+    org_names = {}
+    for label in ("A", "B"):
+        name = "accept-%s-%s" % (label.lower(), stamp)
+        created = env.client.call(check, "create-isolation-org-" + label, "POST",
+                                  "/api/v1/admin/organizations",
+                                  body={"name": name, "owner_email": env.admin_email},
+                                  session=admin, csrf=admin["csrf"])
+        check.require(created.status == 201,
+                      "平台创建隔离企业 %s status=%d (body=%s)" % (label, created.status, created.body[:300]))
+        organization = (created.json() or {}).get("organization") or {}
+        check.require(isinstance(organization.get("id"), str) and organization["id"].isdigit(),
+                      "新企业 %s 的 organization.id=%r" % (label, organization.get("id")))
+        org_ids[label] = organization["id"]
+        org_names[label] = name
+    org_a, org_b = org_ids["A"], org_ids["B"]
     env.state["org_a"], env.state["org_b"] = org_a, org_b
+    env.state["org_b_name"] = org_names["B"]
 
-    if not env.demo_entries:
-        raise CheckFailure("check 6 需要 --demo-credentials-file（bootstrap --demo-data 生成的 0600 文件）")
-    selected = None
-    if env.args.demo_user_email:
-        for email, password in env.demo_entries:
-            if email == env.args.demo_user_email:
-                selected = (email, password)
-                break
-        check.require(selected is not None, "凭据文件里没有 %s" % env.args.demo_user_email)
-    else:
-        for email, password in env.demo_entries:
-            if "demo-enterprise-a" in email:
-                selected = (email, password)
-                break
-        check.require(selected is not None, "凭据文件里没有 demo-enterprise-a 用户")
-    demo_email, demo_password = selected
-
-    login = env.login(check, demo_email, demo_password, tag="login-demo")
-    check.require(login.status == 200,
-                  "demo 用户登录 status=%d, want 200 (body=%s)" % (login.status, login.body[:300]))
-    demo = session_of(check, login, "demo login")
-    env.state["demo_session"] = demo
+    applicant_email = "accept-applicant-%s@accept.test" % stamp
+    applicant_password = "Acc3pt-%s-%s" % (stamp, secrets.token_urlsafe(12))
+    env.red.add(applicant_password)
+    login = env.client.call(check, "register-join-applicant", "POST", "/api/v1/auth/register",
+                            body={"email": applicant_email, "password": applicant_password})
+    check.require(login.status == 201,
+                  "加入申请人自助注册 status=%d, want 201 (body=%s)" % (login.status, login.body[:300]))
+    applicant = session_of(check, login, "join applicant register")
+    env.state["nonadmin_session"] = applicant
     demo_user = (login.json() or {}).get("user") or {}
-    check.require(demo_user.get("platform_admin") is False, "demo 用户不应是平台管理员")
+    check.require(demo_user.get("platform_admin") is False, "注册用户不应是平台管理员")
 
-    forbidden = env.client.call(check, "get-org-b", "GET", "/api/v1/organizations/%s" % org_b, session=demo)
+    application = env.client.call(check, "submit-join-request", "POST",
+                                   "/api/v1/orgs/%s/join-requests" % org_a,
+                                   body={"display_name": "Acceptance Applicant"}, session=applicant,
+                                   csrf=applicant["csrf"])
+    check.require(application.status == 201,
+                  "加入申请 status=%d, want 201 (body=%s)" % (application.status, application.body[:300]))
+    request_id = (application.json() or {}).get("id")
+    check.require(isinstance(request_id, str) and request_id.isdigit(),
+                  "加入申请 id=%r，应为 JSON 字符串" % request_id)
+    decision = env.client.call(check, "approve-join-request", "POST",
+                               "/api/v1/orgs/%s/join-requests/%s/decision" % (org_a, request_id),
+                               body={"status": "approved", "monthly_limit_micro": "100000000"},
+                               session=admin, csrf=admin["csrf"])
+    check.require(decision.status == 200,
+                  "企业负责人审批加入申请 status=%d, want 200 (body=%s)" % (decision.status, decision.body[:300]))
+    refreshed = env.client.call(check, "me-after-approval", "GET", "/api/v1/me", session=applicant)
+    check.require(refreshed.status == 200, "审批后读取 /me status=%d" % refreshed.status)
+    membership = next((item for item in (refreshed.json() or {}).get("organizations", [])
+                       if (item.get("organization") or {}).get("id") == org_a), None)
+    check.require(membership is not None and membership.get("role") == "member"
+                  and membership.get("status") == "active",
+                  "审批后没有获得 A 企业普通成员关系")
+
+    forbidden = env.client.call(check, "get-org-b", "GET", "/api/v1/organizations/%s" % org_b, session=applicant)
     assert_error(check, forbidden, 404, "not_found", "GET /api/v1/organizations/{org_b}")
     # 不泄露存在性的判据：非成员读一个真实组织，与读一个完全不存在的组织，
     # 响应必须逐字段一致（同样的 code/message），且不能回显对方的 id/name。
     unknown_org = env.client.call(check, "get-unknown-org", "GET",
-                                  "/api/v1/organizations/9223372036854775807", session=demo)
+                                  "/api/v1/organizations/9223372036854775807", session=applicant)
     assert_error(check, unknown_org, 404, "not_found", "GET /api/v1/organizations/{未知 org}")
     existing_err = forbidden.error() or {}
     unknown_err = unknown_org.error() or {}
@@ -799,24 +805,24 @@ def check06(env, check):
                   "非成员与不存在组织的 404 message 不同：%r vs %r（泄露存在性）"
                   % (existing_err.get("message"), unknown_err.get("message")))
     compact = re.sub(r"\s+", "", forbidden.body)
-    check.require(('"id":"%s"' % org_b) not in compact and "demo-enterprise-b" not in forbidden.body,
+    check.require(('"id":"%s"' % org_b) not in compact and org_names["B"] not in forbidden.body,
                   "404 响应泄露了组织 B 的 id/name: %s" % forbidden.body[:200])
 
-    allowed = env.client.call(check, "get-org-a", "GET", "/api/v1/organizations/%s" % org_a, session=demo)
+    allowed = env.client.call(check, "get-org-a", "GET", "/api/v1/organizations/%s" % org_a, session=applicant)
     check.require(allowed.status == 200, "GET /api/v1/organizations/{org_a} status=%d, want 200" % allowed.status)
     got = ((allowed.json() or {}).get("organization") or {}).get("id")
     check.require(got == org_a, "组织 A 返回 id=%r, want %s" % (got, org_a))
 
-    demo_list = env.client.call(check, "demo-list-orgs", "GET", "/api/v1/organizations?limit=100", session=demo)
-    check.require(demo_list.status == 200, "demo 用户列组织 status=%d" % demo_list.status)
-    demo_ids = [(item.get("organization") or {}).get("id")
-                for item in (demo_list.json() or {}).get("items") or []]
-    check.require(org_a in demo_ids, "demo 用户列表缺少组织 A")
-    check.require(org_b not in demo_ids, "demo 用户列表出现了组织 B")
+    applicant_list = env.client.call(check, "applicant-list-orgs", "GET", "/api/v1/organizations?limit=100", session=applicant)
+    check.require(applicant_list.status == 200, "申请人列组织 status=%d" % applicant_list.status)
+    applicant_ids = [(item.get("organization") or {}).get("id")
+                     for item in (applicant_list.json() or {}).get("items") or []]
+    check.require(org_a in applicant_ids, "申请人列表缺少获批企业 A")
+    check.require(org_b not in applicant_ids, "申请人列表出现了未加入的企业 B")
 
-    check.details.update({"demo_user": demo_email, "org_a": org_a, "org_b": org_b,
+    check.details.update({"applicant_user": applicant_email, "org_a": org_a, "org_b": org_b,
                           "org_b_status": forbidden.status, "org_a_status": allowed.status})
-    check.note("demo 用户 %s：org_a=%s → 200，org_b=%s → 404 not_found（不泄露存在性）" % (demo_email, org_a, org_b))
+    check.note("公开注册用户申请获批后，org_a=%s → 200，org_b=%s → 404 not_found（不泄露存在性）" % (org_a, org_b))
 
 
 def check07(env, check):
@@ -845,39 +851,53 @@ def check08(env, check):
     victim_password = env.state.setdefault("victim_password", "V1ctim-%s-%s" % (secrets.token_urlsafe(12), stamp))
     env.red.add(victim_password)
 
-    created = env.client.call(check, "admin-create-user", "POST", "/api/v1/admin/users",
-                              body={"email": victim_email, "password": victim_password},
-                              session=admin, csrf=admin["csrf"])
+    created = env.client.call(check, "public-register", "POST", "/api/v1/auth/register",
+                              body={"email": victim_email, "password": victim_password})
     check.require(created.status == 201,
-                  "POST /api/v1/admin/users status=%d, want 201 (body=%s)" % (created.status, created.body[:300]))
+                  "POST /api/v1/auth/register status=%d, want 201 (body=%s)" % (created.status, created.body[:300]))
     user = created.json() or {}
-    check.require(isinstance(user.get("id"), str) and user["id"].isdigit(),
-                  "新建用户 id=%r，应为 JSON 字符串" % (user.get("id"),))
-    check.require(user.get("email") == victim_email, "新建用户 email=%r" % user.get("email"))
-    check.require(user.get("status") == "active", "新建用户 status=%r, want active" % user.get("status"))
-    check.require(user.get("platform_admin") is False, "新建用户默认不应是平台管理员")
-    env.state["victim_id"] = user["id"]
+    registered_user = user.get("user") or {}
+    check.require(isinstance(registered_user.get("id"), str) and registered_user["id"].isdigit(),
+                  "新注册 user.id=%r，应为 JSON 字符串" % registered_user.get("id"))
+    check.require(registered_user.get("email") == victim_email, "注册 user.email=%r" % registered_user.get("email"))
+    check.require(registered_user.get("status") == "active", "注册 user.status=%r, want active" % registered_user.get("status"))
+    check.require(registered_user.get("platform_admin") is False, "自助注册用户默认不应是平台管理员")
+    personal = [item for item in user.get("organizations", [])
+                if (item.get("organization") or {}).get("type") == "personal"]
+    check.require(len(personal) == 1 and personal[0].get("role") == "owner",
+                  "公开注册应创建且仅创建一个个人 owner 账户")
+    session_of(check, created, "self-register")
+    env.state["victim_id"] = registered_user["id"]
     env.state["victim_email"] = victim_email
 
-    demo = env.state.get("demo_session")
-    check.require(demo is not None, "check 8 需要 check 6 建立的 demo 会话（--demo-credentials-file）")
+    duplicate = env.client.call(check, "duplicate-register", "POST", "/api/v1/auth/register",
+                                body={"email": victim_email, "password": victim_password})
+    assert_error(check, duplicate, 409, "conflict", "重复注册相同邮箱")
+
+    nonadmin = env.state.get("nonadmin_session")
+    check.require(nonadmin is not None, "check 8 需要 check 6 建立的普通用户会话")
     evil_email = "accept-evil-%s@accept.test" % stamp
     evil_password = "Ev1l-%s" % secrets.token_urlsafe(12)
     env.red.add(evil_password)
     denied = env.client.call(check, "nonadmin-create-user", "POST", "/api/v1/admin/users",
                              body={"email": evil_email, "password": evil_password},
-                             session=demo, csrf=demo["csrf"])
+                             session=nonadmin, csrf=nonadmin["csrf"])
     assert_error(check, denied, 403, "forbidden", "非平台管理员 POST /api/v1/admin/users")
 
-    prove = env.client.call(check, "admin-creates-same-email", "POST", "/api/v1/admin/users",
-                            body={"email": evil_email, "password": evil_password},
-                            session=admin, csrf=admin["csrf"])
-    check.require(prove.status == 201,
-                  "403 之后同一 email 由管理员创建应成功（证明 403 没有副作用），实际 status=%d (body=%s)"
-                  % (prove.status, prove.body[:200]))
-    check.details.update({"victim_user_id": user["id"], "victim_email": victim_email,
-                          "nonadmin_status": denied.status})
-    check.note("受控用户 id=%s；非管理员同端点 → 403 forbidden 且未创建账号" % user["id"])
+    no_side_effect = env.client.call(check, "register-after-admin-denial", "POST", "/api/v1/auth/register",
+                                     body={"email": evil_email, "password": evil_password})
+    check.require(no_side_effect.status == 201,
+                  "后台建用户被拒后，相同邮箱公开注册应成功（证明拒绝无副作用）；实际 status=%d" % no_side_effect.status)
+    after_user = (no_side_effect.json() or {}).get("user") or {}
+    after_personal = [item for item in (no_side_effect.json() or {}).get("organizations", [])
+                      if (item.get("organization") or {}).get("type") == "personal"]
+    check.require(after_user.get("email") == evil_email and len(after_personal) == 1
+                  and after_personal[0].get("role") == "owner",
+                  "拒绝后台创建后，普通公开注册未按预期创建个人 owner 账户")
+
+    check.details.update({"victim_user_id": registered_user["id"], "victim_email": victim_email,
+                          "nonadmin_status": denied.status, "same_email_register_status": no_side_effect.status})
+    check.note("公开注册创建了个人 owner 账户；重复邮箱为 409；后台用户创建被拒后，同邮箱公开注册成功。")
 
 
 def check09(env, check):
@@ -1059,11 +1079,11 @@ CHECKS = [
     ("check01", "GET /livez 探针", check01, "check"),
     ("check02", "POST /api/v1/auth/login 会话与 cookie", check02, "check"),
     ("check03", "GET /api/v1/me 无/篡改 cookie 负例", check03, "check"),
-    ("check04", "POST /api/v1/organizations CSRF", check04, "check"),
+    ("check04", "开户入口与CSRF保护", check04, "check"),
     ("check05", "GET /api/v1/organizations 列表与 limit", check05, "check"),
-    ("check06", "跨组织读取不泄露存在性（demo 用户）", check06, "check"),
+    ("check06", "注册、加入审批与跨企业隔离", check06, "check"),
     ("check07", "POST /api/v1/auth/logout 会话撤销", check07, "check"),
-    ("check08", "POST /api/v1/admin/users 权限", check08, "check"),
+    ("check08", "公开注册个人账户与后台用户保护", check08, "check"),
     ("check09", "POST /api/v1/admin/users/{id}/status", check09, "check"),
     ("check10", "登录节流 429 rate_limited", check10, "check"),
     ("check11", "错误信封与 nosniff 全量扫描", check11, "check"),
@@ -1084,8 +1104,6 @@ def main():
     parser.add_argument("--base-url", required=True)
     parser.add_argument("--admin-email", required=True)
     parser.add_argument("--admin-password-file", required=True)
-    parser.add_argument("--demo-credentials-file", default="")
-    parser.add_argument("--demo-user-email", default="")
     parser.add_argument("--evidence-dir", required=True)
     parser.add_argument("--insecure-cookies-ok", action="store_true")
     parser.add_argument("--fail-on-contract-divergence", action="store_true")
@@ -1118,7 +1136,6 @@ def main():
         "started_at": utcnow(),
         "base_url": args.base_url,
         "admin_email": args.admin_email,
-        "demo_credentials_file": args.demo_credentials_file or None,
         "insecure_cookies_ok": bool(args.insecure_cookies_ok),
         "login_burst": args.login_burst,
         "checks": [],
@@ -1211,12 +1228,6 @@ python_args=(
   --throttle-settle-seconds "$throttle_settle_seconds"
   --timeout-seconds "$timeout_seconds"
 )
-if [[ -n "$demo_credentials_file" ]]; then
-  python_args+=(--demo-credentials-file "$demo_credentials_file")
-fi
-if [[ -n "$demo_user_email" ]]; then
-  python_args+=(--demo-user-email "$demo_user_email")
-fi
 if [[ "$insecure_cookies_ok" == "1" ]]; then
   python_args+=(--insecure-cookies-ok)
 fi

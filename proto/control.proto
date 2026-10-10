@@ -42,6 +42,8 @@ message ApiKeyMetadata {
   google.protobuf.Timestamp created_at = 10;
   google.protobuf.Timestamp revoked_at = 11; // absent while active
   string tenant_id = 12;                     // legacy tenant projection for the Gateway
+  string name = 13;                          // user-assigned label; never a secret
+  int64 membership_id = 14;                  // pinned membership incarnation
 }
 
 // ConfigService 控制面配置下发契约，与 internal/control/control.go 的 Go 结构体等价。
@@ -80,6 +82,7 @@ message KeyRecord {
   optional int64 owner_user_id = 7;
   google.protobuf.Timestamp expires_at = 8;
   ModelAllowlist model_allowlist = 9;
+  int64 membership_id = 10;
 }
 
 // ProviderConfig contains non-secret provider settings. Secrets are referred
@@ -159,6 +162,14 @@ service AdminService {
   rpc ListApiKeys(ListApiKeysRequest) returns (ListApiKeysResponse);
   rpc GetOperation(GetOperationRequest) returns (GetOperationResponse);
   rpc ApplyOrgPolicy(ApplyOrgPolicyRequest) returns (ApplyOrgPolicyResponse);
+  rpc ListProviders(ListProvidersRequest) returns (ListProvidersResponse);
+  rpc UpsertProvider(UpsertProviderRequest) returns (UpsertProviderResponse);
+  rpc DeleteProvider(DeleteProviderRequest) returns (DeleteProviderResponse);
+  rpc GetRoutes(GetRoutesRequest) returns (GetRoutesResponse);
+  rpc ReplaceRoutes(ReplaceRoutesRequest) returns (ReplaceRoutesResponse);
+  rpc ListProviderCredentials(ListProviderCredentialsRequest) returns (ListProviderCredentialsResponse);
+  rpc CreateProviderCredential(CreateProviderCredentialRequest) returns (CreateProviderCredentialResponse);
+  rpc RevokeProviderCredential(RevokeProviderCredentialRequest) returns (RevokeProviderCredentialResponse);
 }
 
 // CreateApiKeyRequest creates one API key for an organization. owner_user_id
@@ -174,6 +185,8 @@ message CreateApiKeyRequest {
   optional int64 owner_user_id = 7;
   google.protobuf.Timestamp expires_at = 8;
   ModelAllowlist model_allowlist = 9;
+  int64 membership_id = 10;                  // resolved from the authenticated actor
+  string name = 11;
 }
 
 // CreateApiKeyResponse carries the raw key exactly once. An idempotent replay
@@ -197,6 +210,7 @@ message RevokeApiKeyRequest {
   string request_id = 5;
   string key_id = 6;
   int64 org_id = 7;
+  int64 membership_id = 8;
 }
 
 message RevokeApiKeyResponse {
@@ -219,6 +233,7 @@ message ListApiKeysRequest {
   optional int64 owner_user_id = 7;
   int32 page_size = 8;
   string page_token = 9;
+  int64 membership_id = 10;
 }
 
 message ListApiKeysResponse {
@@ -235,6 +250,7 @@ message GetOperationRequest {
   int64 actor_user_id = 3;
   int64 actor_org_id = 4;
   string request_id = 5;
+  int64 membership_id = 6;
 }
 
 message GetOperationResponse {
@@ -279,4 +295,120 @@ message ApplyOrgPolicyResponse {
   OrgPolicy policy = 1;
   int64 resulting_version = 2;
   bool replayed = 3;
+}
+
+// Provider management is a Console -> Control mTLS API. ProviderConfig is a
+// redacted, non-secret configuration projection; credential bytes are only
+// accepted by CreateProviderCredential and are never returned by any RPC.
+message ListProvidersRequest {
+  string operation_id = 1;
+  int64 actor_user_id = 2;
+  int64 actor_org_id = 3;
+  string request_id = 4;
+}
+
+message ListProvidersResponse {
+  repeated ProviderConfig providers = 1;
+  int64 version = 2;
+}
+
+message UpsertProviderRequest {
+  string operation_id = 1;
+  int64 actor_user_id = 2;
+  int64 actor_org_id = 3;
+  string request_id = 4;
+  ProviderConfig provider = 5;
+  bool create_only = 6;
+}
+
+message UpsertProviderResponse {
+  ProviderConfig provider = 1;
+  int64 resulting_version = 2;
+}
+
+message DeleteProviderRequest {
+  string operation_id = 1;
+  int64 actor_user_id = 2;
+  int64 actor_org_id = 3;
+  string request_id = 4;
+  string provider_id = 5;
+}
+
+message DeleteProviderResponse {
+  string provider_id = 1;
+  int64 resulting_version = 2;
+}
+
+message GetRoutesRequest {
+  string operation_id = 1;
+  int64 actor_user_id = 2;
+  int64 actor_org_id = 3;
+  string request_id = 4;
+}
+
+message GetRoutesResponse {
+  map<string, ProviderList> routes = 1;
+  int64 version = 2;
+}
+
+message ReplaceRoutesRequest {
+  string operation_id = 1;
+  int64 actor_user_id = 2;
+  int64 actor_org_id = 3;
+  string request_id = 4;
+  map<string, ProviderList> routes = 5;
+  int64 expected_version = 6;
+}
+
+message ReplaceRoutesResponse {
+  map<string, ProviderList> routes = 1;
+  int64 resulting_version = 2;
+}
+
+// ProviderCredentialMetadata never includes ciphertext or plaintext secret.
+message ProviderCredentialMetadata {
+  string credential_id = 1;
+  string credential_ref = 2;
+  string provider_id = 3;
+  string fingerprint = 4;
+  string status = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp revoked_at = 7;
+}
+
+message ListProviderCredentialsRequest {
+  string operation_id = 1;
+  int64 actor_user_id = 2;
+  int64 actor_org_id = 3;
+  string request_id = 4;
+  string provider_id = 5; // empty lists credentials for every provider
+}
+
+message ListProviderCredentialsResponse {
+  repeated ProviderCredentialMetadata items = 1;
+}
+
+message CreateProviderCredentialRequest {
+  string operation_id = 1;
+  int64 actor_user_id = 2;
+  int64 actor_org_id = 3;
+  string request_id = 4;
+  string provider_id = 5;
+  bytes secret = 6;
+}
+
+message CreateProviderCredentialResponse {
+  ProviderCredentialMetadata credential = 1;
+}
+
+message RevokeProviderCredentialRequest {
+  string operation_id = 1;
+  int64 actor_user_id = 2;
+  int64 actor_org_id = 3;
+  string request_id = 4;
+  string credential_id = 5;
+}
+
+message RevokeProviderCredentialResponse {
+  ProviderCredentialMetadata credential = 1;
 }

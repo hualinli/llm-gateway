@@ -29,23 +29,34 @@ type Organization struct {
 
 // Membership 是 memberships 表的对外视图。
 type Membership struct {
-	OrgID     int64
-	UserID    int64
-	Role      string
-	Status    string
-	CreatedAt time.Time
+	ID                int64
+	OrgID             int64
+	UserID            int64
+	Role              string
+	Status            string
+	MonthlyLimitMicro *int64
+	CreatedAt         time.Time
 }
 
 // MemberOrg 是“调用者可见组织 + 自己在其中的角色”。
 type MemberOrg struct {
-	Organization Organization
-	Role         string
+	Organization      Organization
+	MembershipID      int64
+	Role              string
+	Status            string
+	MonthlyLimitMicro *int64
 }
 
 var (
-	ErrNotFound    = errors.New("organization: not found")
-	ErrNotMember   = errors.New("organization: not an active member")
-	ErrNameInvalid = errors.New("organization: invalid name")
+	ErrNotFound                    = errors.New("organization: not found")
+	ErrNotMember                   = errors.New("organization: not an active member")
+	ErrNameInvalid                 = errors.New("organization: invalid name")
+	ErrEnterpriseOwnerEmailInvalid = errors.New("organization: enterprise owner email is invalid")
+	ErrEnterpriseOwnerInactive     = errors.New("organization: enterprise owner account is not active")
+	ErrPersonalTeam                = errors.New("organization: personal accounts do not support team membership")
+	ErrLimitRequired               = errors.New("organization: monthly_limit_micro must be explicitly provided")
+	ErrOrganizationSuspended       = errors.New("organization: account is suspended")
+	ErrMemberStatusInvalid         = errors.New("organization: member status must be active or suspended")
 )
 
 const (
@@ -55,13 +66,13 @@ const (
 	statusActive    = "active"
 	statusSuspended = "suspended"
 
-	memberActive  = "active"
-	memberRemoved = "removed"
+	memberActive    = "active"
+	memberSuspended = "suspended"
+	memberRemoved   = "removed"
 
-	roleOwner         = "owner"
-	roleAdmin         = "admin"
-	roleMember        = "member"
-	roleBillingViewer = "billing_viewer"
+	roleOwner  = "owner"
+	roleAdmin  = "admin"
+	roleMember = "member"
 
 	defaultListLimit = 20
 	maxListLimit     = 100
@@ -106,7 +117,10 @@ func (s *Service) EnsurePersonalOrganization(ctx context.Context, userID int64, 
 	if err != nil {
 		return Organization{}, err
 	}
-	if _, err := tx.ExecContext(ctx, queryUpsertMembership, org.ID, userID, roleOwner, now); err != nil {
+	if _, err := tx.ExecContext(ctx, queryUpsertMembership, org.ID, userID, roleOwner, nil, now); err != nil {
+		return Organization{}, err
+	}
+	if err := ensureZeroBalanceWallet(ctx, tx, org.ID, now); err != nil {
 		return Organization{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -135,7 +149,10 @@ func (s *Service) CreateEnterprise(ctx context.Context, ownerUserID int64, name 
 	if err != nil {
 		return Organization{}, err
 	}
-	if _, err := tx.ExecContext(ctx, queryInsertMembership, org.ID, ownerUserID, roleOwner, now); err != nil {
+	if _, err := tx.ExecContext(ctx, queryInsertMembership, org.ID, ownerUserID, roleOwner, nil, now); err != nil {
+		return Organization{}, err
+	}
+	if err := ensureZeroBalanceWallet(ctx, tx, org.ID, now); err != nil {
 		return Organization{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -144,7 +161,79 @@ func (s *Service) CreateEnterprise(ctx context.Context, ownerUserID int64, name 
 	return org, nil
 }
 
-// ListForUser 按 id ASC 列出调用者的 active 组织，cursor 是上一页最后一个 id。
+// CreateEnterpriseForEmail creates an enterprise for an already-registered,
+// active owner. Organization, owner membership, and wallet are one transaction;
+// the platform operator who calls this service is deliberately not an input and
+// never becomes a member as a side effect.
+func (s *Service) CreateEnterpriseForEmail(ctx context.Context, ownerEmail, name string) (MemberOrg, error) {
+	clean, err := normalizeOrgName(name)
+	if err != nil {
+		return MemberOrg{}, err
+	}
+	normalizedEmail := normalizeInvitationEmail(ownerEmail)
+	if err := validateInvitationEmail(normalizedEmail); err != nil {
+		return MemberOrg{}, ErrEnterpriseOwnerEmailInvalid
+	}
+
+	now := time.Now().UTC()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return MemberOrg{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var ownerUserID int64
+	var ownerStatus string
+	err = tx.QueryRowContext(ctx, queryLockUserByEmail, normalizedEmail).Scan(&ownerUserID, &ownerStatus)
+	if errors.Is(err, sql.ErrNoRows) {
+		return MemberOrg{}, ErrNotFound
+	}
+	if err != nil {
+		return MemberOrg{}, err
+	}
+	if ownerStatus != "active" {
+		return MemberOrg{}, ErrEnterpriseOwnerInactive
+	}
+
+	org, err := scanOrganization(tx.QueryRowContext(ctx, queryInsertOrganization,
+		typeEnterprise, clean, ownerUserID, now).Scan)
+	if err != nil {
+		return MemberOrg{}, err
+	}
+	var owner Membership
+	if err := scanMembership(tx.QueryRowContext(ctx, queryInsertActivationOwnerMembership,
+		org.ID, ownerUserID, roleOwner, nil, now).Scan, &owner); err != nil {
+		return MemberOrg{}, err
+	}
+	if err := ensureZeroBalanceWallet(ctx, tx, org.ID, now); err != nil {
+		return MemberOrg{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return MemberOrg{}, err
+	}
+	return MemberOrg{
+		Organization:      org,
+		MembershipID:      owner.ID,
+		Role:              owner.Role,
+		Status:            owner.Status,
+		MonthlyLimitMicro: cloneLimit(owner.MonthlyLimitMicro),
+	}, nil
+}
+
+// ensureZeroBalanceWallet makes every newly provisioned organization immediately
+// usable by billing and platform top-ups. It shares the organization creation
+// transaction so a failed wallet insert cannot leave a half-open account.
+func ensureZeroBalanceWallet(ctx context.Context, tx *sql.Tx, orgID int64, now time.Time) error {
+	_, err := tx.ExecContext(ctx, `INSERT INTO billing_accounts
+		(org_id, currency, posted_balance_micro, reserved_micro, status, version, created_at, updated_at)
+		VALUES ($1, 'CNY', 0, 0, 'active', 1, $2, $2)
+		ON CONFLICT (org_id) DO NOTHING`, orgID, now)
+	return err
+}
+
+// ListForUser 按 id ASC 列出调用者当前仍保留的 active/suspended 组织，
+// 让暂停成员仍能进入本人历史账单；removed membership 不授予账户访问入口。
+// cursor 是上一页最后一个 id。
 // limit <= 0 取 20，最大 100；返回非 nil 切片，next_cursor 为空表示没有下一页。
 func (s *Service) ListForUser(ctx context.Context, userID int64, limit int, cursor int64) ([]MemberOrg, string, error) {
 	limit = normalizeLimit(limit)
@@ -192,8 +281,7 @@ func (s *Service) GetForUser(ctx context.Context, userID, orgID int64) (MemberOr
 // 处理是刻意的：它只服务于已知组织的授权细节查询，对外可见性由 GetForUser 决定。
 func (s *Service) Membership(ctx context.Context, userID, orgID int64) (Membership, error) {
 	var m Membership
-	err := s.db.QueryRowContext(ctx, queryGetMembership, orgID, userID).
-		Scan(&m.OrgID, &m.UserID, &m.Role, &m.Status, &m.CreatedAt)
+	err := scanMembership(s.db.QueryRowContext(ctx, queryGetMembership, orgID, userID).Scan, &m)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Membership{}, ErrNotFound
 	}
@@ -202,6 +290,27 @@ func (s *Service) Membership(ctx context.Context, userID, orgID int64) (Membersh
 	}
 	if m.Status != memberActive {
 		return Membership{}, ErrNotMember
+	}
+	return m, nil
+}
+
+// AuthorizeOwnBillingHistory permits a suspended member to inspect their own
+// historical usage and quota state. It deliberately has no caller-supplied
+// membership ID and never grants organization-wide billing visibility.
+func (s *Service) AuthorizeOwnBillingHistory(ctx context.Context, userID, orgID int64) (Membership, error) {
+	var m Membership
+	err := scanMembership(s.db.QueryRowContext(ctx, queryGetMembership, orgID, userID).Scan, &m)
+	if errors.Is(err, sql.ErrNoRows) || m.Status == memberRemoved {
+		return Membership{}, ErrNotFound
+	}
+	if err != nil {
+		return Membership{}, err
+	}
+	if m.Status != memberActive && m.Status != memberSuspended {
+		return Membership{}, ErrNotFound
+	}
+	if !Allowed(m.Role, ActionViewOwnUsage) {
+		return Membership{}, ErrForbidden
 	}
 	return m, nil
 }
@@ -220,9 +329,11 @@ func (s *Service) AddMember(ctx context.Context, orgID, userID int64, role strin
 	if !validRole(role) {
 		return Membership{}, fmt.Errorf("organization: invalid role %q", role)
 	}
+	if err := ensureEnterprise(ctx, s.db, orgID); err != nil {
+		return Membership{}, err
+	}
 	var m Membership
-	err := s.db.QueryRowContext(ctx, queryUpsertMembership, orgID, userID, role, time.Now().UTC()).
-		Scan(&m.OrgID, &m.UserID, &m.Role, &m.Status, &m.CreatedAt)
+	err := scanMembership(s.db.QueryRowContext(ctx, queryUpsertMembership, orgID, userID, role, nil, time.Now().UTC()).Scan, &m)
 	if isForeignKeyViolation(err) {
 		return Membership{}, ErrNotFound
 	}
@@ -298,7 +409,7 @@ func personalOrgName(name string) (string, error) {
 
 func validRole(role string) bool {
 	switch role {
-	case roleOwner, roleAdmin, roleMember, roleBillingViewer:
+	case roleOwner, roleAdmin, roleMember:
 		return true
 	default:
 		return false
@@ -326,7 +437,8 @@ func scanMemberOrg(scan func(dest ...any) error) (MemberOrg, error) {
 		legacy sql.NullString
 	)
 	if err := scan(&item.Organization.ID, &item.Organization.Type, &item.Organization.Name,
-		&item.Organization.Status, &legacy, &item.Organization.CreatedAt, &item.Role); err != nil {
+		&item.Organization.Status, &legacy, &item.Organization.CreatedAt, &item.MembershipID,
+		&item.Role, &item.Status, &item.MonthlyLimitMicro); err != nil {
 		return MemberOrg{}, err
 	}
 	if legacy.Valid {
@@ -334,6 +446,19 @@ func scanMemberOrg(scan func(dest ...any) error) (MemberOrg, error) {
 		item.Organization.LegacyTenantID = &value
 	}
 	return item, nil
+}
+
+func scanMembership(scan func(dest ...any) error, membership *Membership) error {
+	var cap sql.NullInt64
+	if err := scan(&membership.ID, &membership.OrgID, &membership.UserID, &membership.Role,
+		&membership.Status, &cap, &membership.CreatedAt); err != nil {
+		return err
+	}
+	if cap.Valid {
+		value := cap.Int64
+		membership.MonthlyLimitMicro = &value
+	}
+	return nil
 }
 
 func isUniqueViolation(err error) bool {
@@ -344,4 +469,40 @@ func isUniqueViolation(err error) bool {
 func isForeignKeyViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "23503"
+}
+
+func ensureEnterpriseInTx(ctx context.Context, tx *sql.Tx, orgID int64) error {
+	var typ, status string
+	err := tx.QueryRowContext(ctx, queryGetOrganizationType, orgID).Scan(&typ, &status)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if typ != typeEnterprise {
+		return ErrPersonalTeam
+	}
+	if status != statusActive {
+		return ErrOrganizationSuspended
+	}
+	return nil
+}
+
+func ensureEnterprise(ctx context.Context, db *sql.DB, orgID int64) error {
+	var typ, status string
+	err := db.QueryRowContext(ctx, queryGetOrganizationType, orgID).Scan(&typ, &status)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if typ != typeEnterprise {
+		return ErrPersonalTeam
+	}
+	if status != statusActive {
+		return ErrOrganizationSuspended
+	}
+	return nil
 }

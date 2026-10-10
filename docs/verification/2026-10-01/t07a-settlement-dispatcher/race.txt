@@ -1,9 +1,0 @@
-ok  	llm-gateway/internal/billing	12.176s
-ok  	llm-gateway/internal/metering	14.332s
---- FAIL: TestMeteringChecksCoverEveryRequiredItem (0.00s)
-    profiles_test.go:63: metering check names = [METERING_REQUIRE_POSTGRES POSTGRES_DSN METERING_ADMIN_TOKEN METERING_DIAGNOSTICS_ADDR], want [METERING_REQUIRE_POSTGRES POSTGRES_DSN METERING_ADMIN_TOKEN METERING_RECONCILE_WINDOW METERING_DIAGNOSTICS_ADDR]
-2026/10/01 09:25:50 WARNING: METERING_SETTLEMENT=off: usage receipts will not be dispatched or settled by this process; every settled execution stays receipt_recorded with its reservation held
-2026/10/01 09:25:50 WARNING: ledger is in-memory; receipt dispatch and settlement are disabled (demo fallback)
-FAIL
-FAIL	llm-gateway/cmd/metering	0.977s
-FAIL

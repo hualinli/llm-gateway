@@ -84,6 +84,19 @@ func countPersonalOrgs(t *testing.T, db *sql.DB, userID int64) int {
 	return count
 }
 
+func assertZeroBalanceWallet(t *testing.T, db *sql.DB, orgID int64) {
+	t.Helper()
+	var currency, status string
+	var posted, reserved, version int64
+	if err := db.QueryRow(`SELECT currency, posted_balance_micro, reserved_micro, status, version
+		FROM billing_accounts WHERE org_id = $1`, orgID).Scan(&currency, &posted, &reserved, &status, &version); err != nil {
+		t.Fatal(err)
+	}
+	if currency != "CNY" || posted != 0 || reserved != 0 || status != "active" || version != 1 {
+		t.Fatalf("wallet = %s/%d/%d/%s/v%d, want active zero CNY wallet", currency, posted, reserved, status, version)
+	}
+}
+
 func TestEnsurePersonalOrganizationIsIdempotentAndConcurrencySafe(t *testing.T) {
 	db, _ := isolatedDSN(t)
 	svc := organization.NewService(db)
@@ -129,6 +142,7 @@ func TestEnsurePersonalOrganizationIsIdempotentAndConcurrencySafe(t *testing.T) 
 		t.Fatalf("personal organizations = %d, want exactly 1 row", got)
 	}
 	first := results[0]
+	assertZeroBalanceWallet(t, db, first.ID)
 	if first.Type != "personal" || first.Status != "active" || first.Name != "Alice" {
 		t.Fatalf("unexpected personal organization: %+v", first)
 	}
@@ -154,6 +168,10 @@ func TestEnsurePersonalOrganizationIsIdempotentAndConcurrencySafe(t *testing.T) 
 	}
 	if got := countPersonalOrgs(t, db, user.ID); got != 1 {
 		t.Fatalf("personal organizations after repeat = %d, want 1", got)
+	}
+	var wallets int
+	if err := db.QueryRow(`SELECT count(*) FROM billing_accounts WHERE org_id = $1`, first.ID).Scan(&wallets); err != nil || wallets != 1 {
+		t.Fatalf("wallet rows after repeat = %d, err=%v; want one", wallets, err)
 	}
 
 	// 空 displayName 用 email local part 兜底。
@@ -191,6 +209,7 @@ func TestCreateEnterpriseAddsOwnerMembership(t *testing.T) {
 	if org.Type != "enterprise" || org.Name != "Acme" || org.Status != "active" || org.LegacyTenantID != nil {
 		t.Fatalf("unexpected enterprise organization: %+v", org)
 	}
+	assertZeroBalanceWallet(t, db, org.ID)
 
 	membership, err := svc.Membership(ctx, owner.ID, org.ID)
 	if err != nil {
@@ -216,6 +235,62 @@ func TestCreateEnterpriseAddsOwnerMembership(t *testing.T) {
 	}
 	if _, err := svc.CreateEnterprise(ctx, 9999999, "Ghost Inc"); !errors.Is(err, organization.ErrNotFound) {
 		t.Fatalf("unknown owner = %v, want ErrNotFound", err)
+	}
+}
+
+func TestCreateEnterpriseForEmailRequiresActiveOwnerAndPreservesPersonalAccount(t *testing.T) {
+	db, _ := isolatedDSN(t)
+	ctx := context.Background()
+	users := iam.NewService(db, iam.Options{BcryptCost: bcrypt.MinCost, LoginRatePerMinute: 600, LoginBurst: 100})
+	owner, _, err := users.Register(ctx, " Owner@Example.com ", "correct horse battery staple", "org-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	disabled, err := users.CreateUser(ctx, "disabled-owner@example.com", "correct horse battery staple", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := users.SetUserStatus(ctx, disabled.ID, "disabled"); err != nil {
+		t.Fatal(err)
+	}
+
+	orgs := organization.NewService(db)
+	if _, err := orgs.CreateEnterpriseForEmail(ctx, "missing@example.com", "Missing Owner Inc"); !errors.Is(err, organization.ErrNotFound) {
+		t.Fatalf("missing owner = %v, want ErrNotFound", err)
+	}
+	if _, err := orgs.CreateEnterpriseForEmail(ctx, disabled.Email, "Disabled Owner Inc"); !errors.Is(err, organization.ErrEnterpriseOwnerInactive) {
+		t.Fatalf("disabled owner = %v, want ErrEnterpriseOwnerInactive", err)
+	}
+	if _, err := orgs.CreateEnterpriseForEmail(ctx, "not an email", "Invalid Owner Inc"); !errors.Is(err, organization.ErrEnterpriseOwnerEmailInvalid) {
+		t.Fatalf("invalid owner email = %v, want ErrEnterpriseOwnerEmailInvalid", err)
+	}
+	var disabledEnterprises, disabledWallets int
+	if err := db.QueryRow(`SELECT count(*) FROM organizations WHERE type='enterprise' AND owner_user_id=$1`, disabled.ID).Scan(&disabledEnterprises); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`SELECT count(*) FROM billing_accounts b JOIN organizations o ON o.id=b.org_id WHERE o.type='enterprise' AND o.owner_user_id=$1`, disabled.ID).Scan(&disabledWallets); err != nil {
+		t.Fatal(err)
+	}
+	if disabledEnterprises != 0 || disabledWallets != 0 {
+		t.Fatalf("disabled owner provisioning left enterprise/wallet rows=%d/%d", disabledEnterprises, disabledWallets)
+	}
+
+	created, err := orgs.CreateEnterpriseForEmail(ctx, " OWNER@EXAMPLE.COM ", "  Acme Email Owner  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.Organization.Type != "enterprise" || created.Organization.Name != "Acme Email Owner" ||
+		created.Organization.Status != "active" || created.Role != "owner" || created.Status != "active" ||
+		created.MonthlyLimitMicro != nil {
+		t.Fatalf("created enterprise membership = %+v", created)
+	}
+	assertZeroBalanceWallet(t, db, created.Organization.ID)
+	if countPersonalOrgs(t, db, owner.ID) != 1 {
+		t.Fatalf("existing personal account was not preserved for owner %d", owner.ID)
+	}
+	if membership, err := orgs.Membership(ctx, owner.ID, created.Organization.ID); err != nil ||
+		membership.Role != "owner" || membership.Status != "active" || membership.MonthlyLimitMicro != nil {
+		t.Fatalf("owner membership = %+v, err=%v", membership, err)
 	}
 }
 
@@ -415,8 +490,8 @@ func TestMembershipRemovedIsNotActive(t *testing.T) {
 	if _, err := db.ExecContext(ctx, `UPDATE memberships SET status = 'removed' WHERE org_id = $1 AND user_id = $2`, org.ID, bob.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.Membership(ctx, bob.ID, org.ID); !errors.Is(err, organization.ErrNotMember) {
-		t.Fatalf("removed membership = %v, want ErrNotMember", err)
+	if _, err := svc.Membership(ctx, bob.ID, org.ID); !errors.Is(err, organization.ErrNotFound) {
+		t.Fatalf("removed membership = %v, want ErrNotFound", err)
 	}
 	if _, err := svc.GetForUser(ctx, bob.ID, org.ID); !errors.Is(err, organization.ErrNotFound) {
 		t.Fatalf("removed member GetForUser = %v, want ErrNotFound", err)

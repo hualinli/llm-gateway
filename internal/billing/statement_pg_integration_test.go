@@ -81,7 +81,7 @@ func statementMonth(t *testing.T, label string) StatementMonth {
 // actually posted, an earlier month does not gain it retroactively, and the
 // totals are exactly the hand-computed numbers.
 func TestStatementMonthlyTotalsMatchAHandComputedFixture(t *testing.T) {
-	db := t07TestDB(t)
+	db, _ := billingTestDB(t)
 	seedStatementFixture(t, db)
 	store := NewPGStatementStore(db)
 	ctx := context.Background()
@@ -128,8 +128,8 @@ func TestStatementMonthlyTotalsMatchAHandComputedFixture(t *testing.T) {
 	if september.Currency != CurrencyCNY || september.Month.Label != "2026-09" {
 		t.Fatalf("statement envelope = %+v", september)
 	}
-	if !september.Month.CutoffAt.Equal(time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)) {
-		t.Fatalf("cutoff = %s, want the exclusive end of the UTC month", september.Month.CutoffAt)
+	if !september.Month.CutoffAt.Equal(time.Date(2026, 9, 30, 16, 0, 0, 0, time.UTC)) {
+		t.Fatalf("cutoff = %s, want the exclusive end of the Beijing month", september.Month.CutoffAt)
 	}
 
 	// The late settlement is visible as a line, not averaged into the total: the
@@ -161,7 +161,7 @@ func TestStatementMonthlyTotalsMatchAHandComputedFixture(t *testing.T) {
 // TestStatementPagingUsesThePostedAtCursor walks the statement cursor and
 // proves a page and its totals never disagree.
 func TestStatementPagingUsesThePostedAtCursor(t *testing.T) {
-	db := t07TestDB(t)
+	db, _ := billingTestDB(t)
 	seedStatementFixture(t, db)
 	store := NewPGStatementStore(db)
 	ctx := context.Background()
@@ -212,7 +212,7 @@ VALUES (2, 'enterprise', 'org-2', 'active', 2, now(), now())`); err != nil {
 }
 
 func TestStatementRejectsMalformedParameters(t *testing.T) {
-	db := t07TestDB(t)
+	db, _ := billingTestDB(t)
 	store := NewPGStatementStore(db)
 	ctx := context.Background()
 	if _, err := store.MonthlyStatement(ctx, StatementParams{Month: statementMonth(t, "2026-09")}); !errors.Is(err, ErrInvalidArgument) {
@@ -232,7 +232,7 @@ func TestStatementQueryPlansOnALargeMonth(t *testing.T) {
 	if testing.Short() {
 		t.Skip("the large statement plan capture is skipped in -short mode")
 	}
-	db := t07TestDB(t)
+	db, _ := billingTestDB(t)
 	seedStatementFixture(t, db)
 	if _, err := db.Exec(`INSERT INTO billing_entries
   (org_id, kind, amount_micro, direction, business_id, payload_digest, reason, posted_at, created_at)

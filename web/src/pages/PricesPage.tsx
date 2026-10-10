@@ -1,18 +1,5 @@
-/**
- * Platform price versions (`/platform/prices`) — T05's immutable catalogue.
- *
- * `GET/POST /api/v1/admin/prices` are platform-administrator endpoints: every
- * other authenticated caller gets `403 forbidden`. This page therefore never
- * renders a price to an organization role, and it does not pretend the
- * catalogue is empty for them.
- *
- * A version is immutable: publishing re-prices from `effective_at` onwards, and
- * republishing the same `(model, effective_at)` is `409 conflict`, not an
- * overwrite. `provider_*_cost_*` is `null` when the cost is unknown — shown as
- * "未知", never as 0.
- */
-
 import { useState, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
   App as AntdApp,
@@ -26,396 +13,168 @@ import {
   Row,
   Space,
   Table,
-  Tag,
-  Tooltip,
   Typography,
 } from 'antd';
-import { ReloadOutlined, SearchOutlined } from '@ant-design/icons';
 import dayjs, { type Dayjs } from 'dayjs';
 
 import { useCreatePrice, usePrices } from '../api/queries';
 import type { CreatePriceVersionRequest, PriceVersion } from '../api/types';
 import { CursorPagination, useCursorPager } from '../components/CursorPager';
-import { ContractGap, PageHeader } from '../components/PageHeader';
-import { ErrorView, DataState, errorSummary } from '../components/states';
+import { DataState, ErrorView } from '../components/states';
+import { PageHeader } from '../components/PageHeader';
 import { useSession } from '../session/SessionProvider';
-import { formatMicroYuan, formatTimestamp } from '../utils/format';
+import { formatMicroYuan, formatTimestamp, yuanToMicro } from '../utils/format';
 
-/** Non-negative integer string, the only amount shape the contract accepts. */
-const AMOUNT_PATTERN = /^[0-9]+$/;
-
-interface PriceForm {
+interface PriceFormValues {
   model: string;
-  input_price_micro_per_million: string;
-  output_price_micro_per_million: string;
-  provider_input_cost_micro_per_million?: string;
-  provider_output_cost_micro_per_million?: string;
   effective_at: Dayjs;
+  input_price_yuan: string;
+  output_price_yuan: string;
+  provider_input_cost_yuan?: string;
+  provider_output_cost_yuan?: string;
 }
 
-function PriceCell({ value }: { value: string | null }): ReactNode {
-  if (value === null) {
-    return (
-      <Tooltip title="provider cost 未知；null 不等于 0">
-        <Tag color="orange">未知（null）</Tag>
-      </Tooltip>
-    );
-  }
-  return (
-    <Tooltip title={`${value} µ¥ / 1M tokens`}>
-      <Typography.Text style={{ fontVariantNumeric: 'tabular-nums' }}>
-        {formatMicroYuan(value)} 元 / 1M
-      </Typography.Text>
-    </Tooltip>
-  );
+function validRate(value: string | undefined): boolean {
+  return value === undefined || value.trim() === '' || yuanToMicro(value) !== null;
+}
+
+function optionalRate(value: string | undefined): string | null {
+  if (!value?.trim()) return null;
+  return yuanToMicro(value.trim());
 }
 
 export function PricesPage(): ReactNode {
   const { me } = useSession();
   const { message } = AntdApp.useApp();
+  const client = useQueryClient();
   const pager = useCursorPager();
-  const [modelFilter, setModelFilter] = useState('');
-  const [appliedModel, setAppliedModel] = useState('');
-  const [form] = Form.useForm<PriceForm>();
-  const [lastCreated, setLastCreated] = useState<PriceVersion | null>(null);
-
-  const isPlatformAdmin = me?.user.platform_admin === true;
-  const prices = usePrices(
-    {
-      limit: 20,
-      cursor: pager.cursor ?? undefined,
-      ...(appliedModel === '' ? {} : { model: appliedModel }),
-    },
-    isPlatformAdmin,
-  );
+  const [model, setModel] = useState('');
+  const [form] = Form.useForm<PriceFormValues>();
+  const isAdmin = me?.user.platform_admin === true;
+  const prices = usePrices({ limit: 20, cursor: pager.cursor ?? undefined, ...(model ? { model } : {}) }, isAdmin);
   const createPrice = useCreatePrice();
 
-  if (me && !isPlatformAdmin) {
-    return (
-      <Result
-        status="403"
-        title="需要平台管理员权限"
-        subTitle="GET/POST /api/v1/admin/prices 只对 users.platform_admin 开放；其它已认证调用者固定得到 403 forbidden。企业 admin/owner 不是平台管理员。"
-      />
-    );
+  if (me && !isAdmin) {
+    return <Result status="warning" title="此工作区仅供平台管理员使用" subTitle="模型价格由平台统一维护。" />;
   }
 
   const submit = async (): Promise<void> => {
     const values = await form.validateFields();
+    const inputRate = yuanToMicro(values.input_price_yuan);
+    const outputRate = yuanToMicro(values.output_price_yuan);
+    const providerInput = optionalRate(values.provider_input_cost_yuan);
+    const providerOutput = optionalRate(values.provider_output_cost_yuan);
+    if (inputRate === null || outputRate === null || (values.provider_input_cost_yuan?.trim() && providerInput === null) || (values.provider_output_cost_yuan?.trim() && providerOutput === null)) {
+      message.error('金额最多支持小数点后 6 位，请检查输入。');
+      return;
+    }
     const body: CreatePriceVersionRequest = {
       model: values.model.trim(),
       currency: 'CNY',
-      input_price_micro_per_million: values.input_price_micro_per_million.trim(),
-      output_price_micro_per_million: values.output_price_micro_per_million.trim(),
+      input_price_micro_per_million: inputRate,
+      output_price_micro_per_million: outputRate,
+      provider_input_cost_micro_per_million: providerInput,
+      provider_output_cost_micro_per_million: providerOutput,
       effective_at: values.effective_at.toISOString(),
-      ...(values.provider_input_cost_micro_per_million
-        ? {
-            provider_input_cost_micro_per_million:
-              values.provider_input_cost_micro_per_million.trim(),
-          }
-        : {}),
-      ...(values.provider_output_cost_micro_per_million
-        ? {
-            provider_output_cost_micro_per_million:
-              values.provider_output_cost_micro_per_million.trim(),
-          }
-        : {}),
     };
     try {
-      const created = await createPrice.mutateAsync(body);
-      setLastCreated(created);
-      message.success(`已发布价格版本 #${created.id}（${created.model}）`);
+      await createPrice.mutateAsync(body);
+      message.success(`已发布 ${body.model} 的新价格`);
       form.resetFields();
-      void prices.refetch();
+      await client.invalidateQueries({ queryKey: ['prices'] });
+      pager.reset();
     } catch (error) {
-      message.error(`发布失败 — ${errorSummary(error)}`);
+      message.error(`价格未发布：${error instanceof Error ? error.message : '请稍后重试'}`);
     }
   };
 
   return (
-    <Space direction="vertical" size={16} style={{ width: '100%' }}>
-      <PageHeader
-        title="价格版本"
-        description="GET/POST /api/v1/admin/prices · 只对平台管理员开放；金额是「微元 / 每百万 token」的十进制字符串。"
-      />
-
+    <Space className="responsive-page-content" direction="vertical" size={16} style={{ width: '100%', minWidth: 0 }}>
+      <PageHeader title="模型价格" description="设置用户实际支付的输入和输出价格，并记录已知上游成本。" />
       <Alert
         type="info"
         showIcon
-        message="价格是不可变行，重定价 = 发布新版本"
-        description="(model, effective_at) 是版本身份：同键重复发布是 409 conflict，而不是覆盖。列表按 id DESC 返回「发布历史」，不代表当前生效版本；T06 在 admission 时锁定版本，因此一次执行永远能用它被接纳时的价格重算。"
+        message="新价格按生效时间用于后续调用"
+        description="已发生的调用保留开始时采用的价格。上游成本留空代表未知，不能当作免费或零成本。金额以元填写，最多支持 6 位小数。"
       />
-
-      <Card
-        size="small"
-        title="发布新价格版本（POST /api/v1/admin/prices）"
-        data-testid="prices-create-card"
-      >
-        <Form<PriceForm>
+      <Card title="发布模型价格" data-testid="prices-create-card">
+        <Form<PriceFormValues>
           form={form}
           layout="vertical"
-          initialValues={{
-            effective_at: dayjs().add(1, 'minute'),
-            input_price_micro_per_million: '0',
-            output_price_micro_per_million: '0',
-          }}
-          style={{ maxWidth: 760 }}
+          initialValues={{ effective_at: dayjs().add(1, 'minute') }}
+          onFinish={() => void submit()}
+          style={{ maxWidth: 850 }}
         >
           <Row gutter={[16, 0]}>
             <Col xs={24} md={12}>
-              <Form.Item
-                name="model"
-                label="model"
-                rules={[{ required: true, max: 128, message: '必填，最长 128 字符' }]}
-              >
-                <Input placeholder="例如 default" autoComplete="off" />
+              <Form.Item name="model" label="模型名称" rules={[{ required: true, max: 128, message: '请输入模型名称' }]}>
+                <Input autoComplete="off" placeholder="例如 gpt-4o" />
               </Form.Item>
             </Col>
             <Col xs={24} md={12}>
-              <Form.Item
-                name="effective_at"
-                label="effective_at（生效时刻，UTC）"
-                rules={[{ required: true }]}
-                extra="与 model 一起构成版本身份；重复即 409。"
-              >
+              <Form.Item name="effective_at" label="生效时间" rules={[{ required: true }]}>
                 <DatePicker showTime style={{ width: '100%' }} />
               </Form.Item>
             </Col>
             <Col xs={24} md={12}>
-              <Form.Item
-                name="input_price_micro_per_million"
-                label="input 价格（µ¥ / 1M tokens）"
-                rules={[
-                  { required: true },
-                  { pattern: AMOUNT_PATTERN, message: '只能是非负整数字符串（JSON number 会被 400 拒绝）' },
-                ]}
-              >
-                <Input placeholder="1500000（= 1.5 元 / 1M）" inputMode="numeric" />
+              <Form.Item name="input_price_yuan" label="输入价格（元 / 百万 Token）" rules={[{ required: true }, { validator: async (_, value: string) => validRate(value) ? undefined : Promise.reject(new Error('金额最多支持 6 位小数')) }]}>
+                <Input inputMode="decimal" placeholder="例如 1.5" />
               </Form.Item>
             </Col>
             <Col xs={24} md={12}>
-              <Form.Item
-                name="output_price_micro_per_million"
-                label="output 价格（µ¥ / 1M tokens）"
-                rules={[
-                  { required: true },
-                  { pattern: AMOUNT_PATTERN, message: '只能是非负整数字符串' },
-                ]}
-              >
-                <Input placeholder="6000000（= 6 元 / 1M）" inputMode="numeric" />
+              <Form.Item name="output_price_yuan" label="输出价格（元 / 百万 Token）" rules={[{ required: true }, { validator: async (_, value: string) => validRate(value) ? undefined : Promise.reject(new Error('金额最多支持 6 位小数')) }]}>
+                <Input inputMode="decimal" placeholder="例如 6" />
               </Form.Item>
             </Col>
             <Col xs={24} md={12}>
-              <Form.Item
-                name="provider_input_cost_micro_per_million"
-                label="provider input 成本（可选）"
-                rules={[{ pattern: AMOUNT_PATTERN, message: '非负整数字符串' }]}
-                extra="留空 = 成本未知（null），界面不会显示为 0。"
-              >
-                <Input placeholder="900000" inputMode="numeric" />
+              <Form.Item name="provider_input_cost_yuan" label="上游输入成本（可选）" rules={[{ validator: async (_, value: string) => validRate(value) ? undefined : Promise.reject(new Error('金额最多支持 6 位小数')) }]}>
+                <Input inputMode="decimal" placeholder="留空表示未知" />
               </Form.Item>
             </Col>
             <Col xs={24} md={12}>
-              <Form.Item
-                name="provider_output_cost_micro_per_million"
-                label="provider output 成本（可选）"
-                rules={[{ pattern: AMOUNT_PATTERN, message: '非负整数字符串' }]}
-                extra="留空 = 成本未知（null）。"
-              >
-                <Input placeholder="留空表示未知" inputMode="numeric" />
+              <Form.Item name="provider_output_cost_yuan" label="上游输出成本（可选）" rules={[{ validator: async (_, value: string) => validRate(value) ? undefined : Promise.reject(new Error('金额最多支持 6 位小数')) }]}>
+                <Input inputMode="decimal" placeholder="留空表示未知" />
               </Form.Item>
             </Col>
           </Row>
-          <Button type="primary" loading={createPrice.isPending} onClick={() => void submit()}>
-            发布版本
-          </Button>
+          <Button type="primary" htmlType="submit" loading={createPrice.isPending}>发布价格</Button>
         </Form>
-        {createPrice.isError ? (
-          <div style={{ marginTop: 12 }}>
-            <ErrorView error={createPrice.error} title="发布价格版本失败" />
-          </div>
-        ) : null}
-        {lastCreated ? (
-          <Alert
-            style={{ marginTop: 12 }}
-            type="success"
-            showIcon
-            message={`已发布 #${lastCreated.id} · ${lastCreated.model} · 生效于 ${formatTimestamp(lastCreated.effective_at)}`}
-            description={`input ${formatMicroYuan(lastCreated.input_price_micro_per_million)} 元/1M · output ${formatMicroYuan(lastCreated.output_price_micro_per_million)} 元/1M · currency=${lastCreated.currency} · created_by=${lastCreated.created_by ?? '—'}`}
-          />
-        ) : null}
+        {createPrice.isError ? <div style={{ marginTop: 12 }}><ErrorView error={createPrice.error} title="价格未发布" /></div> : null}
       </Card>
 
       <Card
-        size="small"
-        title="发布历史（GET /api/v1/admin/prices，id DESC）"
+        className="responsive-table-card"
+        title="已发布的价格"
         data-testid="prices-history-card"
         extra={
-          <Space size={8} wrap>
-            <Input
-              size="small"
-              style={{ width: 180 }}
-              placeholder="model 精确过滤"
-              aria-label="model 过滤"
-              value={modelFilter}
-              onChange={(event) => setModelFilter(event.target.value)}
-              onPressEnter={() => {
-                pager.reset();
-                setAppliedModel(modelFilter.trim());
-              }}
-            />
-            <Button
-              size="small"
-              icon={<SearchOutlined />}
-              onClick={() => {
-                pager.reset();
-                setAppliedModel(modelFilter.trim());
-              }}
-            >
-              查询
-            </Button>
-            <Button
-              size="small"
-              icon={<ReloadOutlined />}
-              loading={prices.isFetching}
-              onClick={() => void prices.refetch()}
-            >
-              刷新
-            </Button>
+          <Space>
+            <Input value={model} onChange={(event) => setModel(event.target.value)} onPressEnter={() => pager.reset()} placeholder="筛选模型" aria-label="筛选模型" />
+            <Button onClick={() => pager.reset()}>查询</Button>
           </Space>
         }
       >
-        <DataState
-          query={prices}
-          loadingRows={5}
-          isEmpty={(page) => page.items.length === 0}
-          emptyDescription={
-            appliedModel === ''
-              ? '还没有任何价格版本：未定价的模型在 T06 admission 无法结算（不是免费）'
-              : `model=${appliedModel} 没有价格版本`
-          }
-        >
-          {(page) => (
-            <>
-              <Table<PriceVersion>
-                size="small"
-                rowKey="id"
-                dataSource={page.items}
-                pagination={false}
-                scroll={{ x: 1250 }}
-                columns={[
-                  { title: 'id', dataIndex: 'id', width: 70 },
-                  { title: 'model', dataIndex: 'model' },
-                  {
-                    title: 'input（元 / 1M）',
-                    dataIndex: 'input_price_micro_per_million',
-                    render: (value: string) => (
-                      <Tooltip title={`${value} µ¥`}>
-                        <Typography.Text style={{ fontVariantNumeric: 'tabular-nums' }}>
-                          {formatMicroYuan(value)}
-                        </Typography.Text>
-                      </Tooltip>
-                    ),
-                  },
-                  {
-                    title: 'output（元 / 1M）',
-                    dataIndex: 'output_price_micro_per_million',
-                    render: (value: string) => (
-                      <Tooltip title={`${value} µ¥`}>
-                        <Typography.Text style={{ fontVariantNumeric: 'tabular-nums' }}>
-                          {formatMicroYuan(value)}
-                        </Typography.Text>
-                      </Tooltip>
-                    ),
-                  },
-                  {
-                    title: 'provider input 成本',
-                    dataIndex: 'provider_input_cost_micro_per_million',
-                    render: (value: string | null) => <PriceCell value={value} />,
-                  },
-                  {
-                    title: 'provider output 成本',
-                    dataIndex: 'provider_output_cost_micro_per_million',
-                    render: (value: string | null) => <PriceCell value={value} />,
-                  },
-                  {
-                    title: 'effective_at',
-                    dataIndex: 'effective_at',
-                    render: (value: string) => formatTimestamp(value),
-                  },
-                  {
-                    title: 'created_by / created_at',
-                    key: 'created',
-                    render: (_, record) => (
-                      <Space direction="vertical" size={0}>
-                        <span>{record.created_by ?? '—'}</span>
-                        <Typography.Text type="secondary">
-                          {formatTimestamp(record.created_at)}
-                        </Typography.Text>
-                      </Space>
-                    ),
-                  },
-                  {
-                    title: '操作',
-                    key: 'action',
-                    render: (_, record) => (
-                      <Button
-                        size="small"
-                        onClick={() => {
-                          form.setFieldsValue({
-                            model: record.model,
-                            input_price_micro_per_million: record.input_price_micro_per_million,
-                            output_price_micro_per_million: record.output_price_micro_per_million,
-                            effective_at: dayjs().add(1, 'minute'),
-                            ...(record.provider_input_cost_micro_per_million
-                              ? {
-                                  provider_input_cost_micro_per_million:
-                                    record.provider_input_cost_micro_per_million,
-                                }
-                              : {}),
-                            ...(record.provider_output_cost_micro_per_million
-                              ? {
-                                  provider_output_cost_micro_per_million:
-                                    record.provider_output_cost_micro_per_million,
-                                }
-                              : {}),
-                          });
-                          message.info(
-                            '已把该版本填入表单；请改一个 effective_at（同键发布会 409）。',
-                          );
-                        }}
-                      >
-                        复制为新版本
-                      </Button>
-                    ),
-                  },
-                ]}
-              />
-              <CursorPagination
-                pager={pager}
-                hasNext={page.next_cursor !== null}
-                loading={prices.isFetching}
-                itemCount={page.items.length}
-                onNext={() => {
-                  if (page.next_cursor) pager.next(page.next_cursor);
-                }}
-              />
-            </>
-          )}
+        <DataState query={prices} loadingRows={5} isEmpty={(page) => page.items.length === 0} emptyDescription="还没有发布模型价格。">
+          {(page) => <>
+            <Table<PriceVersion>
+              rowKey="id"
+              size="small"
+              pagination={false}
+              dataSource={page.items}
+              scroll={{ x: 1120 }}
+              columns={[
+                { title: '模型', dataIndex: 'model' },
+                { title: '输入价 / 百万 Token', dataIndex: 'input_price_micro_per_million', render: (value: string) => `${formatMicroYuan(value)} 元` },
+                { title: '输出价 / 百万 Token', dataIndex: 'output_price_micro_per_million', render: (value: string) => `${formatMicroYuan(value)} 元` },
+                { title: '已知上游输入成本', dataIndex: 'provider_input_cost_micro_per_million', render: (value: string | null) => value === null ? '未知' : `${formatMicroYuan(value)} 元` },
+                { title: '已知上游输出成本', dataIndex: 'provider_output_cost_micro_per_million', render: (value: string | null) => value === null ? '未知' : `${formatMicroYuan(value)} 元` },
+                { title: '生效时间', dataIndex: 'effective_at', render: (value: string) => formatTimestamp(value) },
+              ]}
+            />
+            <CursorPagination pager={pager} hasNext={page.next_cursor !== null} loading={prices.isFetching} itemCount={page.items.length} onNext={() => page.next_cursor && pager.next(page.next_cursor)} />
+            <Typography.Text type="secondary">组织和个人账户中的实际模型售价会遵循各自已开通的模型范围。</Typography.Text>
+          </>}
         </DataState>
       </Card>
-
-      <Typography.Text type="secondary">
-        当前身份：{me?.user.email ?? '—'}（user_id={me?.user.id ?? '—'}）
-        {me?.csrf_token ? ' · CSRF 已持有（仅内存）' : ' · 未持有 CSRF'}
-      </Typography.Text>
-
-      <ContractGap title="没有「当前生效价」与「模型价目给组织看」的端点">
-        {'列表是发布历史（id DESC），没有 `effective_at <= now` 的“当前价”视图，也没有组织可见的价目端点：'}
-        <code>/api/v1/admin/prices</code>
-        {' 对非平台管理员固定 403，因此用户视角的「模型价格」无法在本版本显示（不猜测、不用缓存冒充）。'}
-        {' 另外审计动作 `admin.price.create` 会写入 console_audit_events，但审计读取端点只有组织作用域，平台侧没有全局审计列表。'}
-      </ContractGap>
     </Space>
   );
 }

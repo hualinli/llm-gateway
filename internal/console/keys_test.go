@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"llm-gateway/internal/controlclient"
-	"llm-gateway/internal/organization"
 )
 
 // T03 key-management HTTP tests: the real Hertz engine, the real
@@ -21,6 +20,7 @@ import (
 type keyPageBody struct {
 	Items []struct {
 		KeyID          string    `json:"key_id"`
+		Name           string    `json:"name"`
 		Prefix         string    `json:"prefix"`
 		OrganizationID string    `json:"organization_id"`
 		OwnerUserID    *string   `json:"owner_user_id"`
@@ -36,6 +36,7 @@ type keyPageBody struct {
 type createKeyBody struct {
 	Key struct {
 		KeyID          string    `json:"key_id"`
+		Name           string    `json:"name"`
 		OwnerUserID    *string   `json:"owner_user_id"`
 		ModelAllowlist *[]string `json:"model_allowlist"`
 		Status         string    `json:"status"`
@@ -118,10 +119,10 @@ func TestMemberIsScopedToOwnKeys(t *testing.T) {
 		t.Fatalf("control list request lost its scope: %+v", got)
 	}
 
-	// Asking for somebody else's keys is a refusal, not an empty page.
+	// Asking for somebody else's keys uses the same 404 as an unknown owner.
 	rec = h.orgReq(http.MethodGet, "/api/v1/orgs/2/keys?owner_user_id=11", "", member, false)
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("member list of another owner = %d, want 403", rec.Code)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("member list of another owner = %d, want 404", rec.Code)
 	}
 	if _, _, lists, _ := h.control.calls(); lists != 1 {
 		t.Fatalf("list calls=%d, want 1 (the refused request must not reach Control)", lists)
@@ -136,13 +137,13 @@ func TestMemberIsScopedToOwnKeys(t *testing.T) {
 			ResultingVersion: 9,
 		}, nil
 	}
-	rec = h.orgReq(http.MethodPost, "/api/v1/orgs/2/keys", `{}`, member, true)
+	rec = h.orgReq(http.MethodPost, "/api/v1/orgs/2/keys", `{"name":"My key"}`, member, true)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("member create = %d, want 201 (body=%s)", rec.Code, rec.Body.String())
 	}
 	var created createKeyBody
 	decodeInto(t, rec, &created)
-	if created.Secret != secret || !created.SecretReturnedOnce || created.Replayed {
+	if created.Secret != secret || !created.SecretReturnedOnce || created.Replayed || created.Key.Name != "Example key" {
 		t.Fatalf("create response must return the secret exactly once: %+v", created)
 	}
 	if !strings.Contains(strings.ToLower(created.Notice), "only once") {
@@ -158,24 +159,27 @@ func TestMemberIsScopedToOwnKeys(t *testing.T) {
 	if wire.ActorUserID != 10 || wire.ActorOrgID != 2 || wire.OrgID != 2 {
 		t.Fatalf("control create lost the actor triple: %+v", wire)
 	}
+	if wire.MembershipID != 210 || wire.Name != "My key" {
+		t.Fatalf("Control request lost the name/membership binding: %+v", wire)
+	}
 	if wire.OperationID == "" {
 		t.Fatal("control create must carry a generated operation id")
 	}
 
-	// Creating a key for somebody else is refused before any command is sent.
-	rec = h.orgReq(http.MethodPost, "/api/v1/orgs/2/keys", `{"owner_user_id":"11"}`, member, true)
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("member create for another owner = %d, want 403", rec.Code)
+	// Creating a key for somebody else is indistinguishable from a missing key.
+	rec = h.orgReq(http.MethodPost, "/api/v1/orgs/2/keys", `{"name":"Other key","owner_user_id":"11"}`, member, true)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("member create for another owner = %d, want 404", rec.Code)
 	}
 	if creates, _, _, _ := h.control.calls(); creates != 1 {
 		t.Fatalf("create calls=%d, want 1", creates)
 	}
 
-	// Revoke: the ownership proof is a scan of the caller's own keys.
-	h.control.listFn = func(_ context.Context, req controlclient.ListApiKeysRequest) (controlclient.ListApiKeysResult, error) {
-		return controlclient.ListApiKeysResult{Keys: []controlclient.KeyMetadata{sampleKey("key_mine", 2, 10)}}, nil
-	}
+	// Revoke: Control atomically verifies the actor and membership incarnation.
 	h.control.revokeFn = func(_ context.Context, req controlclient.RevokeApiKeyRequest) (controlclient.RevokeApiKeyResult, error) {
+		if req.KeyID == "key_someone_else" {
+			return controlclient.RevokeApiKeyResult{}, controlclient.ErrNotFound
+		}
 		key := sampleKey(req.KeyID, 2, 10)
 		key.Status = "revoked"
 		return controlclient.RevokeApiKeyResult{Key: key, ResultingVersion: 10}, nil
@@ -196,12 +200,12 @@ func TestMemberIsScopedToOwnKeys(t *testing.T) {
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("member revoke of another user's key = %d, want 404 (body=%s)", rec.Code, rec.Body.String())
 	}
-	if _, revokes, _, _ := h.control.calls(); revokes != 1 {
-		t.Fatalf("revoke calls=%d, want 1: an unauthorized revoke must not reach Control", revokes)
+	if _, revokes, _, _ := h.control.calls(); revokes != 2 {
+		t.Fatalf("revoke calls=%d, want 2: an unknown/foreign Key is checked by Control", revokes)
 	}
 }
 
-func TestAdminAndOwnerManageOrganizationKeys(t *testing.T) {
+func TestAdminAndOwnerManageOnlyOwnKeys(t *testing.T) {
 	for _, actor := range []struct {
 		name string
 		id   int64
@@ -211,12 +215,12 @@ func TestAdminAndOwnerManageOrganizationKeys(t *testing.T) {
 			h.keyOrgFixture()
 			fx := h.t03Session(actor.id, actor.name+"@example.com")
 
-			h.control.listFn = func(_ context.Context, _ controlclient.ListApiKeysRequest) (controlclient.ListApiKeysResult, error) {
+			h.control.listFn = func(_ context.Context, req controlclient.ListApiKeysRequest) (controlclient.ListApiKeysResult, error) {
+				if req.OwnerUserID == nil || *req.OwnerUserID != actor.id {
+					t.Errorf("admin/owner list was not scoped to actor %d: %+v", actor.id, req)
+				}
 				return controlclient.ListApiKeysResult{
-					Keys: []controlclient.KeyMetadata{
-						sampleKey("key_a", 2, 10),
-						sampleKey("key_b", 2, 11),
-					},
+					Keys:          []controlclient.KeyMetadata{sampleKey("key_self", 2, actor.id)},
 					NextPageToken: "next-token",
 				}, nil
 			}
@@ -225,54 +229,48 @@ func TestAdminAndOwnerManageOrganizationKeys(t *testing.T) {
 				t.Fatalf("org list = %d, want 200 (body=%s)", rec.Code, rec.Body.String())
 			}
 			wire := h.control.lastList(t)
-			if wire.OwnerUserID != nil {
-				t.Fatalf("an admin list must not be owner-filtered, got %v", *wire.OwnerUserID)
+			if wire.OwnerUserID == nil || *wire.OwnerUserID != actor.id {
+				t.Fatalf("an admin list must be owner-filtered to self, got %v", wire.OwnerUserID)
 			}
 			if wire.PageSize != 50 {
 				t.Fatalf("page size=%d, want 50", wire.PageSize)
 			}
 			var page keyPageBody
 			decodeInto(t, rec, &page)
-			if len(page.Items) != 2 || page.NextCursor == nil || *page.NextCursor != "next-token" {
+			if len(page.Items) != 1 || page.Items[0].OwnerUserID == nil || *page.Items[0].OwnerUserID != formatID(actor.id) || page.NextCursor == nil || *page.NextCursor != "next-token" {
 				t.Fatalf("unexpected org page %+v", page)
 			}
 
-			// Creating for another active member is allowed.
-			h.orgs.listMembersFn = func(context.Context, int64, int64) ([]organization.Member, error) {
-				return []organization.Member{{UserID: 10, Email: "member@example.com", Role: "member", Status: "active"}}, nil
-			}
+			// Admins and owners also create only their own Keys.
 			h.control.createFn = func(_ context.Context, req controlclient.CreateApiKeyRequest) (controlclient.CreateApiKeyResult, error) {
 				owner := int64(0)
 				if req.OwnerUserID != nil {
 					owner = *req.OwnerUserID
 				}
-				return controlclient.CreateApiKeyResult{Key: sampleKey("key_for_member", 2, owner), Secret: "sk-for-member"}, nil
+				return controlclient.CreateApiKeyResult{Key: sampleKey("key_self", 2, owner), Secret: "sk-for-self"}, nil
 			}
-			rec = h.orgReq(http.MethodPost, "/api/v1/orgs/2/keys", `{"owner_user_id":"10"}`, fx, true)
+			rec = h.orgReq(http.MethodPost, "/api/v1/orgs/2/keys", `{"name":"My admin key"}`, fx, true)
 			if rec.Code != http.StatusCreated {
-				t.Fatalf("admin create for a member = %d, want 201 (body=%s)", rec.Code, rec.Body.String())
+				t.Fatalf("admin create self key = %d, want 201 (body=%s)", rec.Code, rec.Body.String())
 			}
-			if got := h.control.lastCreate(t); got.OwnerUserID == nil || *got.OwnerUserID != 10 {
-				t.Fatalf("owner=%v, want 10", got.OwnerUserID)
-			}
-
-			// A non-member owner is refused: Control cannot check membership.
-			rec = h.orgReq(http.MethodPost, "/api/v1/orgs/2/keys", `{"owner_user_id":"999"}`, fx, true)
-			if rec.Code != http.StatusBadRequest {
-				t.Fatalf("admin create for a non-member = %d, want 400 (body=%s)", rec.Code, rec.Body.String())
-			}
-			if body := decodeError(t, rec); body.Error.Code != "invalid_request" {
-				t.Fatalf("error code=%q, want invalid_request", body.Error.Code)
+			if got := h.control.lastCreate(t); got.OwnerUserID == nil || *got.OwnerUserID != actor.id || got.MembershipID != 200+actor.id || got.Name != "My admin key" {
+				t.Fatalf("self ownership/membership/name=%+v", got)
 			}
 
-			// Revoke needs no ownership scan for an org-wide role.
+			// Naming a colleague is indistinguishable from a missing target.
+			rec = h.orgReq(http.MethodPost, "/api/v1/orgs/2/keys", `{"name":"Other key","owner_user_id":"10"}`, fx, true)
+			if rec.Code != http.StatusNotFound {
+				t.Fatalf("admin create for another member = %d, want 404 (body=%s)", rec.Code, rec.Body.String())
+			}
+
+			// Revoke needs no list scan and is scoped to the current member.
 			h.control.revokeFn = func(_ context.Context, req controlclient.RevokeApiKeyRequest) (controlclient.RevokeApiKeyResult, error) {
-				key := sampleKey(req.KeyID, 2, 10)
+				key := sampleKey(req.KeyID, 2, actor.id)
 				key.Status = "revoked"
 				return controlclient.RevokeApiKeyResult{Key: key}, nil
 			}
 			_, revokesBefore, listsBefore, _ := h.control.calls()
-			rec = h.orgReq(http.MethodPost, "/api/v1/orgs/2/keys/key_a/revoke", "", fx, true)
+			rec = h.orgReq(http.MethodPost, "/api/v1/orgs/2/keys/key_self/revoke", "", fx, true)
 			if rec.Code != http.StatusOK {
 				t.Fatalf("admin revoke = %d, want 200 (body=%s)", rec.Code, rec.Body.String())
 			}
@@ -422,7 +420,7 @@ func TestKeyCreateIsIdempotentByOperationID(t *testing.T) {
 			ResultingVersion: 9,
 		}, nil
 	}
-	rec := h.orgReq(http.MethodPost, "/api/v1/orgs/2/keys", `{"operation_id":"browser-retry-1"}`, member, true)
+	rec := h.orgReq(http.MethodPost, "/api/v1/orgs/2/keys", `{"name":"Retry key","operation_id":"browser-retry-1"}`, member, true)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("replayed create = %d, want 201 (body=%s)", rec.Code, rec.Body.String())
 	}
@@ -442,7 +440,7 @@ func TestKeyCreateIsIdempotentByOperationID(t *testing.T) {
 
 	// A malformed client operation id is refused before reaching Control.
 	rec = h.orgReq(http.MethodPost, "/api/v1/orgs/2/keys",
-		`{"operation_id":"`+strings.Repeat("x", maxKeyOperationIDLength+1)+`"}`, member, true)
+		`{"name":"Retry key","operation_id":"`+strings.Repeat("x", maxKeyOperationIDLength+1)+`"}`, member, true)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("oversized operation_id = %d, want 400", rec.Code)
 	}
@@ -457,7 +455,7 @@ func TestKeyCreateValidatesAllowlistAndExpiry(t *testing.T) {
 	}
 
 	// Tri-state: explicit allowlists are canonicalized (trimmed, sorted).
-	rec := h.orgReq(http.MethodPost, "/api/v1/orgs/2/keys", `{"model_allowlist":[" gpt-4o ","claude","gpt-4o"]}`, admin, true)
+	rec := h.orgReq(http.MethodPost, "/api/v1/orgs/2/keys", `{"name":"Model key","model_allowlist":[" gpt-4o ","claude","gpt-4o"]}`, admin, true)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create with allowlist = %d, want 201 (body=%s)", rec.Code, rec.Body.String())
 	}
@@ -468,7 +466,7 @@ func TestKeyCreateValidatesAllowlistAndExpiry(t *testing.T) {
 	}
 
 	// An explicit empty list is deny-all, not "inherit".
-	if rec := h.orgReq(http.MethodPost, "/api/v1/orgs/2/keys", `{"model_allowlist":[]}`, admin, true); rec.Code != http.StatusCreated {
+	if rec := h.orgReq(http.MethodPost, "/api/v1/orgs/2/keys", `{"name":"Deny all","model_allowlist":[]}`, admin, true); rec.Code != http.StatusCreated {
 		t.Fatalf("create with deny-all = %d, want 201", rec.Code)
 	}
 	wire = h.control.lastCreate(t)
@@ -477,7 +475,7 @@ func TestKeyCreateValidatesAllowlistAndExpiry(t *testing.T) {
 	}
 
 	// Absent stays absent (inherit).
-	if rec := h.orgReq(http.MethodPost, "/api/v1/orgs/2/keys", `{}`, admin, true); rec.Code != http.StatusCreated {
+	if rec := h.orgReq(http.MethodPost, "/api/v1/orgs/2/keys", `{"name":"Inherited key"}`, admin, true); rec.Code != http.StatusCreated {
 		t.Fatalf("create without allowlist = %d, want 201", rec.Code)
 	}
 	if wire = h.control.lastCreate(t); wire.ModelAllowlist != nil {
@@ -487,11 +485,13 @@ func TestKeyCreateValidatesAllowlistAndExpiry(t *testing.T) {
 	// Malformed values never reach Control.
 	before, _, _, _ := h.control.calls()
 	invalid := []string{
-		`{"model_allowlist":[""]}`,
-		`{"model_allowlist":["` + strings.Repeat("m", maxModelNameLength+1) + `"]}`,
-		`{"expires_at":"2020-01-01T00:00:00Z"}`,
-		`{"owner_user_id":"0"}`,
-		`{"owner_user_id":"not-a-number"}`,
+		`{"name":"Test key","model_allowlist":[""]}`,
+		`{"name":"Test key","model_allowlist":["` + strings.Repeat("m", maxModelNameLength+1) + `"]}`,
+		`{"name":"Test key","expires_at":"2020-01-01T00:00:00Z"}`,
+		`{"name":"Test key","owner_user_id":"0"}`,
+		`{"name":"Test key","owner_user_id":"not-a-number"}`,
+		`{"name":"   "}`,
+		`{"name":"` + strings.Repeat("x", 121) + `"}`,
 	}
 	for _, body := range invalid {
 		rec := h.orgReq(http.MethodPost, "/api/v1/orgs/2/keys", body, admin, true)
@@ -499,7 +499,7 @@ func TestKeyCreateValidatesAllowlistAndExpiry(t *testing.T) {
 			t.Errorf("body %s = %d, want 400 (body=%s)", body, rec.Code, rec.Body.String())
 		}
 	}
-	rec = h.orgReq(http.MethodPost, "/api/v1/orgs/2/keys", `{"expires_at":"not-a-time"}`, admin, true)
+	rec = h.orgReq(http.MethodPost, "/api/v1/orgs/2/keys", `{"name":"Expiry key","expires_at":"not-a-time"}`, admin, true)
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("malformed expires_at = %d, want 400", rec.Code)
 	}
@@ -509,7 +509,7 @@ func TestKeyCreateValidatesAllowlistAndExpiry(t *testing.T) {
 	}
 
 	// A valid future expiry is forwarded.
-	rec = h.orgReq(http.MethodPost, "/api/v1/orgs/2/keys", `{"expires_at":"2027-01-01T00:00:00Z"}`, admin, true)
+	rec = h.orgReq(http.MethodPost, "/api/v1/orgs/2/keys", `{"name":"Expiry key","expires_at":"2027-01-01T00:00:00Z"}`, admin, true)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create with a future expiry = %d, want 201 (body=%s)", rec.Code, rec.Body.String())
 	}
@@ -582,7 +582,7 @@ func TestKeyErrorMappingFromControl(t *testing.T) {
 			h.control.createFn = func(context.Context, controlclient.CreateApiKeyRequest) (controlclient.CreateApiKeyResult, error) {
 				return controlclient.CreateApiKeyResult{}, testCase.controlErr
 			}
-			rec := h.orgReq(http.MethodPost, "/api/v1/orgs/2/keys", `{}`, admin, true)
+			rec := h.orgReq(http.MethodPost, "/api/v1/orgs/2/keys", `{"name":"Error mapping key"}`, admin, true)
 			if rec.Code != testCase.wantStatus {
 				t.Fatalf("status=%d, want %d (body=%s)", rec.Code, testCase.wantStatus, rec.Body.String())
 			}
@@ -607,6 +607,37 @@ func TestKeyErrorMappingFromControl(t *testing.T) {
 	})
 }
 
+func TestForeignKeyRevokeFailureDoesNotLeakControlDetails(t *testing.T) {
+	h := newHarness(t, nil)
+	h.keyOrgFixture()
+	admin := h.t03Session(11, "admin@example.com")
+	const foreignDetails = "key_id=key_hidden name=Colleague secret key prefix=sk-hidden"
+	h.control.revokeFn = func(context.Context, controlclient.RevokeApiKeyRequest) (controlclient.RevokeApiKeyResult, error) {
+		return controlclient.RevokeApiKeyResult{}, fmt.Errorf("%w: %s", controlclient.ErrNotFound, foreignDetails)
+	}
+
+	rec := h.orgReq(http.MethodPost, "/api/v1/orgs/2/keys/key_hidden/revoke", "", admin, true)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("foreign key revoke = %d, want 404 (body=%s)", rec.Code, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), foreignDetails) || strings.Contains(rec.Body.String(), "key_hidden") {
+		t.Fatalf("404 response exposed Control's foreign-key detail: %s", rec.Body.String())
+	}
+	events := h.audit.all()
+	if len(events) != 1 {
+		t.Fatalf("audit events = %+v, want one refusal", events)
+	}
+	event := events[0]
+	detail, err := json.Marshal(event.Detail)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if event.Outcome != "failure" || event.TargetID != "" || event.Error != "key_revoke_failed" ||
+		strings.Contains(string(detail), "key_hidden") || strings.Contains(string(detail), "Colleague") || strings.Contains(event.Error, "prefix") {
+		t.Fatalf("foreign-key details leaked into refusal audit: %+v detail=%s", event, detail)
+	}
+}
+
 // TestKeySecretNeverLeaksIntoLogsOrAudit is the raw-secret containment test:
 // the secret appears exactly once, in the create response body, and in no log
 // line and no audit row.
@@ -622,7 +653,7 @@ func TestKeySecretNeverLeaksIntoLogsOrAudit(t *testing.T) {
 			ResultingVersion: 4,
 		}, nil
 	}
-	rec := h.orgReq(http.MethodPost, "/api/v1/orgs/2/keys", `{}`, member, true)
+	rec := h.orgReq(http.MethodPost, "/api/v1/orgs/2/keys", `{"name":"Secret key"}`, member, true)
 	if rec.Code != http.StatusCreated || !strings.Contains(rec.Body.String(), secret) {
 		t.Fatalf("the create response must carry the secret once (status=%d)", rec.Code)
 	}
@@ -645,20 +676,23 @@ func TestKeySecretNeverLeaksIntoLogsOrAudit(t *testing.T) {
 		t.Fatalf("unexpected audit event %+v", events[0])
 	}
 	if events[0].TargetID != "key_secret" {
-		t.Fatalf("audit target=%q, want the key id", events[0].TargetID)
+		t.Fatalf("successful audit target=%q, want the key id", events[0].TargetID)
 	}
 
 	// A failed create is audited too, without the request body.
 	h.control.createFn = func(context.Context, controlclient.CreateApiKeyRequest) (controlclient.CreateApiKeyResult, error) {
 		return controlclient.CreateApiKeyResult{}, controlclient.ErrConflict
 	}
-	if rec := h.orgReq(http.MethodPost, "/api/v1/orgs/2/keys", `{}`, member, true); rec.Code != http.StatusConflict {
+	if rec := h.orgReq(http.MethodPost, "/api/v1/orgs/2/keys", `{"name":"Secret key"}`, member, true); rec.Code != http.StatusConflict {
 		t.Fatalf("conflicting create = %d, want 409", rec.Code)
 	}
 	failures := h.audit.all()
 	last := failures[len(failures)-1]
 	if last.Outcome != "failure" || last.Action != ActionKeyCreate {
 		t.Fatalf("failed create not audited: %+v", last)
+	}
+	if last.TargetID != "" || last.Error != "key_create_failed" {
+		t.Fatalf("failed create audit leaked a target or raw error: %+v", last)
 	}
 }
 

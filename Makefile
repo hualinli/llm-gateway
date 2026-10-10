@@ -38,11 +38,12 @@ demo-smoke-unavailable:
 demo-accept:
 	bash scripts/demo-accept.sh
 
-demo-down: down
+demo-down:
+	docker compose -f docker-compose.yml -f docker-compose.mock.yml --profile demo-mocks down
 
 # Explicitly destructive: removes PostgreSQL, Redis, Grafana and spool volumes.
 demo-clean:
-	docker compose down -v
+	docker compose -f docker-compose.yml -f docker-compose.mock.yml --profile demo-mocks down -v
 
 ensure-master-key:
 	go run ./cmd/democtl ensure-master-key
@@ -142,7 +143,7 @@ migrate-down-one:
 # 一键可复现验收：构建镜像 → 空库迁移 → 三角色 bootstrap/seed → 全栈启动 →
 # 端到端验收（成员调用/企业查费/余额拒绝/撤销传播/故障恢复/平台审计）→
 # 安全 profile 检查 → 证据归档 → 只回收自己的 compose project。
-# 用法与证据：docs/verification/2026-10-01/t12-release-candidate/README.md
+# 用法与证据：docs/DEVELOPMENT.md
 RC_RUN_FLAGS ?=
 
 release-candidate:

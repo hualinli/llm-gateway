@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	pb "llm-gateway/proto/control"
 
@@ -79,6 +80,9 @@ type CreateAPIKeyParams struct {
 	RequestID       string
 	ExpectedVersion *int64
 	OrgID           int64
+	ActorUserID     int64
+	MembershipID    int64
+	Name            string
 	OwnerUserID     *int64
 	CreatedBy       *int64
 	ExpiresAt       *time.Time
@@ -98,17 +102,20 @@ type RevokeAPIKeyParams struct {
 	ExpectedVersion *int64
 	KeyID           string
 	OrgID           int64
+	ActorUserID     int64
+	MembershipID    int64
 	Now             time.Time
 }
 
-// ListAPIKeysParams is the bounded metadata query. OwnerUserID nil means "any
-// owner"; OrgID 0 means "every organization"; Cursor is the decoded last
-// key_id of the previous page.
+// ListAPIKeysParams is a bounded query for one active owner membership. Owner,
+// organization and membership incarnation are all required; Cursor is the
+// decoded last key_id of the previous page.
 type ListAPIKeysParams struct {
-	OrgID       int64
-	OwnerUserID *int64
-	PageSize    int
-	Cursor      string
+	OrgID        int64
+	OwnerUserID  *int64
+	MembershipID int64
+	PageSize     int
+	Cursor       string
 }
 
 // ApplyOrgPolicyParams replaces the complete policy of one organization.
@@ -171,11 +178,23 @@ func (s *PGAPIKeyStore) CreateApiKey(ctx context.Context, params CreateAPIKeyPar
 	if params.OrgID <= 0 {
 		return nil, fmt.Errorf("%w: org_id is required", ErrAdminInvalidArgument)
 	}
+	if params.ActorUserID <= 0 || params.MembershipID <= 0 || params.OwnerUserID == nil || *params.OwnerUserID != params.ActorUserID || params.CreatedBy == nil || *params.CreatedBy != params.ActorUserID {
+		return nil, ErrAPIKeyNotFound
+	}
+	if params.Name == "" || params.Name != strings.TrimSpace(params.Name) || utf8.RuneCountInString(params.Name) > 120 || strings.ContainsAny(params.Name, "\x00\r\n") {
+		return nil, fmt.Errorf("%w: key name must be 1 to 120 trimmed characters", ErrAdminInvalidArgument)
+	}
 	if strings.TrimSpace(params.KeyID) == "" || params.RawKey == "" {
 		return nil, fmt.Errorf("%w: key_id and raw key are required", ErrAdminInvalidArgument)
 	}
 	mutation := &APIKeyMutation{}
 	err := s.withMutationTx(ctx, func(tx *sql.Tx) error {
+		if err := ensureOrganizationTx(ctx, tx, params.OrgID); err != nil {
+			return err
+		}
+		if err := validateActiveKeyMembershipTx(ctx, tx, params.MembershipID, params.OrgID, params.ActorUserID); err != nil {
+			return err
+		}
 		replayed, err := replayOperationTx(ctx, tx, params.OperationID, operationCreateAPIKey, params.PayloadDigest)
 		if err != nil {
 			return err
@@ -186,9 +205,6 @@ func (s *PGAPIKeyStore) CreateApiKey(ctx context.Context, params CreateAPIKeyPar
 			mutation.Replayed = true
 			mutation.Operation = replayed.Response
 			return nil
-		}
-		if err := ensureOrganizationTx(ctx, tx, params.OrgID); err != nil {
-			return err
 		}
 		snapshot, current, err := loadSnapshotTx(ctx, tx)
 		if err != nil {
@@ -209,7 +225,7 @@ func (s *PGAPIKeyStore) CreateApiKey(ctx context.Context, params CreateAPIKeyPar
 		if _, err := tx.ExecContext(ctx, queryInsertAPIKey,
 			params.KeyID, apiKeyHash(params.RawKey), rawKeyPrefix(params.RawKey), params.OrgID,
 			params.OwnerUserID, params.CreatedBy, "active", params.ExpiresAt, allowlistJSON,
-			policyVersion, params.OperationID, now); err != nil {
+			policyVersion, params.OperationID, now, params.MembershipID, params.Name); err != nil {
 			return mapAPIKeyWriteError(err, params.OrgID)
 		}
 		resulting, snapshot, err := saveProjectedSnapshotTx(ctx, tx, snapshot, current+1)
@@ -274,8 +290,14 @@ func (s *PGAPIKeyStore) RevokeApiKey(ctx context.Context, params RevokeAPIKeyPar
 	if strings.TrimSpace(params.KeyID) == "" {
 		return nil, fmt.Errorf("%w: key_id is required", ErrAdminInvalidArgument)
 	}
+	if params.ActorUserID <= 0 || params.MembershipID <= 0 || params.OrgID <= 0 {
+		return nil, ErrAPIKeyNotFound
+	}
 	mutation := &APIKeyMutation{}
 	err := s.withMutationTx(ctx, func(tx *sql.Tx) error {
+		if err := validateActiveKeyMembershipTx(ctx, tx, params.MembershipID, params.OrgID, params.ActorUserID); err != nil {
+			return err
+		}
 		replayed, err := replayOperationTx(ctx, tx, params.OperationID, operationRevokeAPIKey, params.PayloadDigest)
 		if err != nil {
 			return err
@@ -300,7 +322,7 @@ func (s *PGAPIKeyStore) RevokeApiKey(ctx context.Context, params RevokeAPIKeyPar
 		}
 		// Scope assertion: an internal caller that names the wrong organization
 		// must not learn that the key exists elsewhere.
-		if params.OrgID != 0 && params.OrgID != existing.orgID {
+		if params.OrgID != existing.orgID || !existing.ownerUserID.Valid || existing.ownerUserID.Int64 != params.ActorUserID || existing.membershipID != params.MembershipID {
 			return ErrAPIKeyNotFound
 		}
 		now := params.Now.UTC()
@@ -365,18 +387,17 @@ func (s *PGAPIKeyStore) ListApiKeys(ctx context.Context, params ListAPIKeysParam
 	if s == nil || s.db == nil {
 		return nil, "", errors.New("api key store is not configured")
 	}
+	if params.OrgID <= 0 || params.OwnerUserID == nil || *params.OwnerUserID <= 0 || params.MembershipID <= 0 {
+		return nil, "", ErrAPIKeyNotFound
+	}
 	cursor := strings.TrimSpace(params.Cursor)
 	pageSize := params.PageSize
 	if pageSize <= 0 {
 		pageSize = defaultListPageSize
 	}
-	owner := int64(0)
-	if params.OwnerUserID != nil {
-		owner = *params.OwnerUserID
-	}
 	// Fetch one extra row to detect whether another page exists without a
 	// second query.
-	rows, err := s.db.QueryContext(ctx, queryListAPIKeys, params.OrgID, owner, cursor, pageSize+1)
+	rows, err := s.db.QueryContext(ctx, queryListAPIKeys, params.OrgID, *params.OwnerUserID, params.MembershipID, cursor, pageSize+1)
 	if err != nil {
 		return nil, "", err
 	}
@@ -416,6 +437,45 @@ func (s *PGAPIKeyStore) GetOperation(ctx context.Context, operationID string) (*
 		return nil, err
 	}
 	return record.Response, nil
+}
+
+// GetOperationForActor returns only a Key create operation produced by this
+// actor under the currently active membership incarnation. An old membership
+// must not recover its metadata after removal and rejoin.
+func (s *PGAPIKeyStore) GetOperationForActor(ctx context.Context, operationID string, actorUserID, orgID, membershipID int64) (*pb.GetOperationResponse, error) {
+	if s == nil || s.db == nil || actorUserID <= 0 || orgID <= 0 || membershipID <= 0 {
+		return nil, ErrOperationNotFound
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	var found int
+	err = tx.QueryRowContext(ctx, queryActiveKeyMembership, membershipID, orgID, actorUserID).Scan(&found)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrOperationNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	row := tx.QueryRowContext(ctx, queryGetOperation, strings.TrimSpace(operationID))
+	record, err := scanOperationRow(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrOperationNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	response := record.Response
+	key := response.GetResult().GetKey()
+	if response.GetKind() != operationCreateAPIKey || key == nil || key.GetOrgId() != orgID || key.GetMembershipId() != membershipID || key.OwnerUserId == nil || key.GetOwnerUserId() != actorUserID || key.CreatedBy == nil || key.GetCreatedBy() != actorUserID {
+		return nil, ErrOperationNotFound
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return response, nil
 }
 
 // ApplyOrgPolicy replaces the organization's policy inside the versioned
@@ -649,6 +709,8 @@ type apiKeyRow struct {
 	createdAt     time.Time
 	revokedAt     sql.NullTime
 	legacyTenant  sql.NullString
+	name          string
+	membershipID  int64
 }
 
 func scanAPIKeyRow(row rowScanner) (*apiKeyRow, error) {
@@ -656,7 +718,7 @@ func scanAPIKeyRow(row rowScanner) (*apiKeyRow, error) {
 	if err := row.Scan(&record.keyID, &record.keyHash, &record.keyPrefix, &record.orgID,
 		&record.ownerUserID, &record.createdBy, &record.status, &record.expiresAt,
 		&record.allowlist, &record.policyVersion, &record.createdAt, &record.revokedAt,
-		&record.legacyTenant); err != nil {
+		&record.legacyTenant, &record.name, &record.membershipID); err != nil {
 		return nil, err
 	}
 	return &record, nil
@@ -681,6 +743,8 @@ func (r *apiKeyRow) metadata() *pb.ApiKeyMetadata {
 		PolicyVersion: r.policyVersion,
 		CreatedAt:     timestamppb.New(r.createdAt.UTC()),
 		TenantId:      r.tenantIDString(),
+		Name:          r.name,
+		MembershipId:  r.membershipID,
 	}
 	if r.ownerUserID.Valid {
 		metadata.OwnerUserId = proto.Int64(r.ownerUserID.Int64)
@@ -716,7 +780,20 @@ func (r *apiKeyRow) keyRecord() *pb.KeyRecord {
 		OwnerUserId:    nullableInt64(r.ownerUserID),
 		ExpiresAt:      nullableTimestamp(r.expiresAt),
 		ModelAllowlist: modelAllowlistFromJSON(r.allowlist),
+		MembershipId:   r.membershipID,
 	}
+}
+
+func validateActiveKeyMembershipTx(ctx context.Context, tx *sql.Tx, membershipID, orgID, userID int64) error {
+	if membershipID <= 0 || orgID <= 0 || userID <= 0 {
+		return ErrAPIKeyNotFound
+	}
+	var found int
+	err := tx.QueryRowContext(ctx, queryValidateAPIKeyMembership, membershipID, orgID, userID).Scan(&found)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrAPIKeyNotFound
+	}
+	return err
 }
 
 func getAPIKeyTx(ctx context.Context, tx *sql.Tx, keyID string) (*apiKeyRow, error) {
@@ -942,6 +1019,12 @@ var queryRevokeAPIKey string
 
 //go:embed queries/list_api_keys.sql
 var queryListAPIKeys string
+
+//go:embed queries/validate_api_key_membership.sql
+var queryValidateAPIKeyMembership string
+
+//go:embed queries/active_api_key_membership.sql
+var queryActiveKeyMembership string
 
 //go:embed queries/project_api_keys.sql
 var queryProjectAPIKeys string

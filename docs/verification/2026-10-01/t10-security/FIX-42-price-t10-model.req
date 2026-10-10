@@ -1,8 +1,0 @@
-POST http://127.0.0.1:58872/api/v1/admin/prices
-X-Request-ID: t10-FIX-42
-Accept: application/json
-Cookie: gw_session=nBg6…<redacted:18>; gw_csrf=lEAl…<redacted:18>
-X-CSRF-Token: lEAl…<redacted:18>
-Content-Type: application/json
-
-{"model": "t10-model", "currency": "CNY", "input_price_micro_per_million": "1000000", "output_price_micro_per_million": "1000000", "effective_at": "2026-10-01T05:44:34Z"}

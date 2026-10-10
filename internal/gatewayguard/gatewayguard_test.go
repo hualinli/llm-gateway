@@ -25,6 +25,7 @@ func models(values ...string) *[]string {
 func TestModelPolicyTriStateIntersection(t *testing.T) {
 	cases := []struct {
 		name   string
+		global *[]string
 		org    *[]string
 		member *[]string
 		key    *[]string
@@ -32,12 +33,15 @@ func TestModelPolicyTriStateIntersection(t *testing.T) {
 		want   bool
 	}{
 		{name: "all inherit allows everything", model: "gpt-a", want: true},
+		{name: "global catalog allows configured model", global: models("gpt-a"), model: "gpt-a", want: true},
+		{name: "global catalog denies unconfigured model", global: models("gpt-a"), model: "gpt-b", want: false},
 		{name: "org list allows member", org: models("gpt-a", "gpt-b"), model: "gpt-a", want: true},
 		{name: "org list denies other", org: models("gpt-a"), model: "gpt-b", want: false},
 		{name: "explicit empty org list denies all", org: models(), model: "gpt-a", want: false},
 		{name: "key list narrows org", org: models("gpt-a", "gpt-b"), key: models("gpt-b"), model: "gpt-a", want: false},
 		{name: "key list intersect org allows", org: models("gpt-a", "gpt-b"), key: models("gpt-b"), model: "gpt-b", want: true},
 		{name: "explicit empty key list denies all", key: models(), model: "gpt-a", want: false},
+		{name: "global and org are intersected", global: models("gpt-a"), org: models("gpt-b"), model: "gpt-b", want: false},
 		{name: "member list narrows org", org: models("gpt-a", "gpt-b"), member: models("gpt-a"), model: "gpt-b", want: false},
 		{name: "member inherit does not widen key", member: nil, key: models("gpt-a"), model: "gpt-b", want: false},
 		{name: "explicit empty member list denies all", org: models("gpt-a"), member: models(), model: "gpt-a", want: false},
@@ -46,12 +50,12 @@ func TestModelPolicyTriStateIntersection(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			policy := ModelPolicy{Org: tc.org, Member: tc.member, Key: tc.key}
+			policy := ModelPolicy{Global: tc.global, Org: tc.org, Member: tc.member, Key: tc.key}
 			if got := policy.Allows(tc.model); got != tc.want {
 				t.Fatalf("Allows(%q) = %v, want %v (org=%v member=%v key=%v)",
 					tc.model, got, tc.want, deref(tc.org), deref(tc.member), deref(tc.key))
 			}
-			restricted := tc.org != nil || tc.member != nil || tc.key != nil
+			restricted := tc.global != nil || tc.org != nil || tc.member != nil || tc.key != nil
 			if policy.Restricted() != restricted {
 				t.Fatalf("Restricted() = %v, want %v", policy.Restricted(), restricted)
 			}
@@ -382,7 +386,7 @@ func TestMiddlewareMapsDenialsToEnvelope(t *testing.T) {
 }
 
 func TestMiddlewareInjectsAttributionAndExecutionID(t *testing.T) {
-	guard := &fakeGuard{permit: Permit{TenantID: "org:7", OrgID: 7, UserID: 42, KeyID: "key-1"}}
+	guard := &fakeGuard{permit: Permit{TenantID: "org:7", OrgID: 7, UserID: 42, MembershipID: 27, KeyID: "key-1"}}
 	record := auth.KeyRecord{ID: "key-1", Hash: "h", TenantID: "org:7", Status: "active", OrgID: 7}
 	rec, captured := guardRequest(t, Middleware(guard, Options{}), &record, `{"model":"m","stream":true}`)
 	if rec.Code != http.StatusOK || captured == nil {
@@ -392,7 +396,7 @@ func TestMiddlewareInjectsAttributionAndExecutionID(t *testing.T) {
 	if !ok {
 		t.Fatal("no attribution in context")
 	}
-	if attribution.OrgID != 7 || attribution.UserID != 42 || attribution.KeyID != "key-1" || attribution.TenantID != "org:7" {
+	if attribution.OrgID != 7 || attribution.UserID != 42 || attribution.MembershipID != 27 || attribution.KeyID != "key-1" || attribution.TenantID != "org:7" {
 		t.Fatalf("attribution = %+v", attribution)
 	}
 	if !strings.HasPrefix(attribution.ExecutionID, "exec_") || len(attribution.ExecutionID) != len("exec_")+32 {
@@ -452,6 +456,18 @@ func TestMiddlewareModelPolicy(t *testing.T) {
 	}
 }
 
+func TestMiddlewareGlobalCatalogDeniesBeforeNextHandler(t *testing.T) {
+	guard := &fakeGuard{permit: Permit{TenantID: "t", Model: ModelPolicy{Global: models()}}}
+	record := auth.KeyRecord{ID: "key-1", Hash: "h", TenantID: "t", Status: "active"}
+	rec, captured := guardRequest(t, Middleware(guard, Options{KnownModel: func(model string) bool { return model == "known" }}), &record, `{"model":"known","stream":true}`)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("global-disabled known model status=%d body=%s, want 403", rec.Code, rec.Body.String())
+	}
+	if captured != nil {
+		t.Fatal("globally disabled model reached downstream proxy/provider handler")
+	}
+}
+
 func TestMiddlewareNilKnownModelStillDenies(t *testing.T) {
 	guard := &fakeGuard{permit: Permit{TenantID: "t", Model: ModelPolicy{Key: models("a")}}}
 	record := auth.KeyRecord{ID: "key-1", Hash: "h", TenantID: "t", Status: "active"}
@@ -502,7 +518,7 @@ func TestPGGuardEvaluateDecisionTable(t *testing.T) {
 	base := func() Facts {
 		return Facts{
 			Found: true, KeyID: "key-1", KeyStatus: "active", OrgID: 7, OrgStatus: "active",
-			UserID: 42, UserKnown: true, UserStatus: "active", MemberRole: "member", MemberStatus: "active",
+			UserID: 42, UserKnown: true, UserStatus: "active", MembershipID: 27, MemberRole: "member", MemberStatus: "active",
 		}
 	}
 	cases := []struct {
@@ -514,6 +530,7 @@ func TestPGGuardEvaluateDecisionTable(t *testing.T) {
 	}{
 		{name: "active member is admitted", mutate: func(*Facts) {}},
 		{name: "key row missing is 401", mutate: func(f *Facts) { f.Found = false }, wantStatus: 401, wantCode: httperr.CodeUnauthorized},
+		{name: "missing membership incarnation is 403", mutate: func(f *Facts) { f.MembershipID = 0 }, wantStatus: 403, wantCode: httperr.CodeForbidden},
 		{name: "key revoked in pg is 401", mutate: func(f *Facts) { f.KeyStatus = "revoked" }, wantStatus: 401, wantCode: httperr.CodeUnauthorized},
 		{name: "key expired in pg is 401", mutate: func(f *Facts) { f.KeyExpiresAt = &expired }, wantStatus: 401, wantCode: httperr.CodeUnauthorized},
 		{name: "key expiring later is admitted", mutate: func(f *Facts) { f.KeyExpiresAt = &future }},
@@ -545,7 +562,7 @@ func TestPGGuardEvaluateDecisionTable(t *testing.T) {
 				if denial.Denied() {
 					t.Fatalf("unexpected denial %+v", denial)
 				}
-				if permit.OrgID != 7 || permit.KeyID != "key-1" {
+				if permit.OrgID != 7 || permit.MembershipID != 27 || permit.KeyID != "key-1" {
 					t.Fatalf("permit = %+v", permit)
 				}
 				return

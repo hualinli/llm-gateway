@@ -1,9 +1,0 @@
-HTTP 200 (0.003s)
-Server: hertz
-Date: Thu, 01 Oct 2026 06:44:39 GMT
-Content-Type: application/json
-Content-Length: 1371
-X-Request-Id: t10-SEC-09-05
-X-Trace-Id: fffca9b39972b6cfa9b9c482b17ad92a
-
-{"items":[{"id":"5","organization_id":"4","kind":"release","direction":"debit","amount_micro":"4153","business_id":"billing_execution:release:exec_bffd8fe1690c8937ecc3d1fe72089b5b","reason":"settlement: usage receipt settled, reservation released","operator_user_id":null,"request_id":"t10-SEC-02-06","posted_at":"2026-10-01T06:44:34Z","created_at":"2026-10-01T06:44:34Z"},{"id":"4","organization_id":"4","kind":"debit","direction":"debit","amount_micro":"20","business_id":"billing_receipt:debit:exec_bffd8fe1690c8937ecc3d1fe72089b5b","reason":"settle usage receipt exec_bffd8fe1690c8937ecc3d1fe72089b5b","operator_user_id":null,"request_id":"t10-SEC-02-06","posted_at":"2026-10-01T06:44:34Z","created_at":"2026-10-01T06:44:34Z"},{"id":"3","organization_id":"4","kind":"reservation","direction":"credit","amount_micro":"4153","business_id":"billing_execution:reservation:exec_bffd8fe1690c8937ecc3d1fe72089b5b","reason":"reserve t10-model","operator_user_id":null,"request_id":"t10-SEC-02-06","posted_at":"2026-10-01T06:44:34Z","created_at":"2026-10-01T06:44:34Z"},{"id":"1","organization_id":"4","kind":"adjustment","direction":"credit","amount_micro":"50000000","business_id":"t10-fund-4","reason":"t10 security matrix funding","operator_user_id":"1","request_id":"t10-FIX-43","posted_at":"2026-10-01T06:44:34Z","created_at":"2026-10-01T06:44:34Z"}],"next_cursor":null}

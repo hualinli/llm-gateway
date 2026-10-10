@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 )
 
 const maxBodyBytes = 4 << 20
@@ -19,6 +20,15 @@ const maxBodyBytes = 4 << 20
 // Config is the process-level behavior of a fake OpenAI-compatible upstream.
 // Gateway talks to it as a normal HTTP provider; knobs stay on this process.
 type Config struct {
+	Mode             string  // synthetic (legacy), fixed, echo, info
+	Text             string  // fixed-mode source; never returned by /stats
+	Repeat           int     // text repetitions, capped by CompletionTokens
+	TPS              float64 // simulated tokens/sec per stream; 0 uses TokenInterval
+	TokensPerChunk   int     // text-mode Unicode characters per SSE content event
+	FaultEvery       int     // every Nth valid request gets FaultStatus; 0 disables
+	FaultStatus      int
+	StallAfter       int // pause after N content events
+	StallDuration    time.Duration
 	Name             string
 	TTFT             time.Duration
 	TokenInterval    time.Duration
@@ -82,11 +92,13 @@ func parseUsageMode(raw string) (string, bool) {
 	}
 }
 
-// Handler serves POST /v1/chat/completions and GET /healthz.
+// Handler serves streaming chat, health, JSON statistics and Prometheus metrics.
 type Handler struct {
 	cfg      Config
 	inflight atomic.Int32
 	sem      chan struct{}
+	stats    *statistics
+	sequence atomic.Uint64
 }
 
 func NewHandler(cfg Config) *Handler {
@@ -102,7 +114,19 @@ func NewHandler(cfg Config) *Handler {
 	if cfg.Status == 0 {
 		cfg.Status = http.StatusOK
 	}
-	h := &Handler{cfg: cfg}
+	if cfg.Mode == "" {
+		cfg.Mode = "synthetic"
+	}
+	if cfg.Repeat <= 0 {
+		cfg.Repeat = 1
+	}
+	if cfg.TokensPerChunk <= 0 {
+		cfg.TokensPerChunk = 1
+	}
+	if cfg.FaultStatus == 0 {
+		cfg.FaultStatus = 503
+	}
+	h := &Handler{cfg: cfg, stats: newStatistics(cfg.Name)}
 	if cfg.MaxInflight > 0 {
 		h.sem = make(chan struct{}, cfg.MaxInflight)
 	}
@@ -111,12 +135,19 @@ func NewHandler(cfg Config) *Handler {
 	} else {
 		cfg.UsageMode = UsageModeNormal
 	}
+	h.cfg = cfg
 	return h
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
-	case r.URL.Path == "/healthz":
+	case r.Method == http.MethodGet && r.URL.Path == "/stats":
+		h.serveStats(w, r)
+		return
+	case r.Method == http.MethodGet && r.URL.Path == "/metrics":
+		h.stats.metrics.ServeHTTP(w, r)
+		return
+	case r.Method == http.MethodGet && r.URL.Path == "/healthz":
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok\n"))
 		return
@@ -128,6 +159,19 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
+	started := time.Now()
+	tracked := &countingWriter{ResponseWriter: w, stats: h.stats}
+	w = tracked
+	outcome := "incomplete"
+	h.stats.begin()
+	defer func() {
+		if tracked.status >= 300 {
+			outcome = "rejected"
+		} else if r.Context().Err() != nil {
+			outcome = "cancelled"
+		}
+		h.stats.end(outcome, time.Since(started))
+	}()
 	if h.cfg.ExpectedAuthorization != "" {
 		provided := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 		if subtle.ConstantTimeCompare([]byte(provided), []byte(h.cfg.ExpectedAuthorization)) != 1 {
@@ -158,6 +202,9 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if cfg.FaultEvery > 0 && h.sequence.Add(1)%uint64(cfg.FaultEvery) == 0 {
+		cfg.Status = cfg.FaultStatus
+	}
 	if cfg.Status < 200 || cfg.Status >= 300 {
 		writeJSONError(w, cfg.Status, "injected upstream failure")
 		return
@@ -202,7 +249,22 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	finishReason := "stop"
+	if cfg.Mode != "synthetic" && !cfg.Echo && int64(utf8.RuneCountInString(textSource(req, cfg)))*int64(cfg.Repeat) > int64(cfg.CompletionTokens) {
+		finishReason = "length"
+	}
 	chunks := h.contentChunks(raw, req, cfg)
+	// Text modes report exactly the emitted simulated token count.
+	if cfg.Mode != "synthetic" && !cfg.Echo {
+		cfg.CompletionTokens = 0
+		for _, chunk := range chunks {
+			cfg.CompletionTokens += len([]rune(chunk))
+		}
+		cfg.PromptTokens = 0
+		for _, msg := range req.Messages {
+			cfg.PromptTokens += len([]rune(messageText(msg.Content)))
+		}
+	}
 	limit := len(chunks)
 	if cfg.FailAfter > 0 && cfg.FailAfter < limit {
 		limit = cfg.FailAfter
@@ -216,8 +278,25 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		flush()
+		tokenCount := 1
+		if cfg.Mode != "synthetic" && !cfg.Echo {
+			tokenCount = len([]rune(chunks[i]))
+		}
+		h.stats.emitted(tokenCount)
+		if i == 0 {
+			h.stats.firstContent.Observe(time.Since(started).Seconds())
+		}
+		if cfg.StallAfter > 0 && i+1 == cfg.StallAfter {
+			if err := wait(ctx, cfg.StallDuration); err != nil {
+				return
+			}
+		}
 		if i+1 < limit {
-			if err := wait(ctx, cfg.TokenInterval); err != nil {
+			interval := cfg.TokenInterval
+			if cfg.TPS > 0 {
+				interval = time.Duration(float64(time.Second) * float64(tokenCount) / cfg.TPS)
+			}
+			if err := wait(ctx, interval); err != nil {
 				return
 			}
 		}
@@ -232,7 +311,7 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		"choices": []map[string]any{{
 			"index":         0,
 			"delta":         map[string]any{},
-			"finish_reason": "stop",
+			"finish_reason": finishReason,
 		}},
 	}
 	if usage := usagePayload(cfg); usage != nil {
@@ -246,11 +325,20 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	flush()
+	outcome = "completed"
 }
 
 type chatRequest struct {
-	Stream   *bool         `json:"stream"`
-	Messages []chatMessage `json:"messages"`
+	MaxTokens           *int          `json:"max_tokens"`
+	MaxCompletionTokens *int          `json:"max_completion_tokens"`
+	MockTPS             *float64      `json:"x_mock_tps"`
+	MockStatus          *int          `json:"x_mock_status"`
+	MockHang            *bool         `json:"x_mock_hang"`
+	MockFailAfter       *int          `json:"x_mock_fail_after"`
+	MockStallAfter      *int          `json:"x_mock_stall_after"`
+	MockStallMillis     *int          `json:"x_mock_stall_ms"`
+	Stream              *bool         `json:"stream"`
+	Messages            []chatMessage `json:"messages"`
 	// MockUsage is the per-request F04 usage shape. It reaches the mock
 	// verbatim because the Gateway forwards unknown request fields unchanged.
 	MockUsage *string `json:"x_mock_usage"`
@@ -311,6 +399,9 @@ func readChatRequest(w http.ResponseWriter, r *http.Request) ([]byte, chatReques
 }
 
 func (h *Handler) contentChunks(raw []byte, req chatRequest, cfg Config) []string {
+	if cfg.Mode != "synthetic" && !cfg.Echo {
+		return textChunks(req, cfg)
+	}
 	if cfg.Echo {
 		return splitRunes(echoText(cfg.Name, raw, req.Messages), cfg.CompletionTokens)
 	}
@@ -330,6 +421,30 @@ func (h *Handler) contentChunks(raw []byte, req chatRequest, cfg Config) []strin
 // the mock allocate an unbounded response.
 func (h *Handler) effectiveConfig(req chatRequest) (Config, error) {
 	cfg := h.cfg
+	if err := ValidateConfig(cfg); err != nil {
+		return cfg, err
+	}
+	if req.MockTPS != nil {
+		cfg.TPS = *req.MockTPS
+	}
+	if req.MockStatus != nil {
+		cfg.Status = *req.MockStatus
+	}
+	if req.MockHang != nil {
+		cfg.Hang = *req.MockHang
+	}
+	if req.MockFailAfter != nil {
+		cfg.FailAfter = *req.MockFailAfter
+	}
+	if req.MockStallAfter != nil {
+		cfg.StallAfter = *req.MockStallAfter
+	}
+	if req.MockStallMillis != nil {
+		if *req.MockStallMillis < 0 || *req.MockStallMillis > 600_000 {
+			return cfg, fmt.Errorf("x_mock_stall_ms out of range")
+		}
+		cfg.StallDuration = time.Duration(*req.MockStallMillis) * time.Millisecond
+	}
 	if req.MockTTFTMillis != nil {
 		if *req.MockTTFTMillis < 0 || *req.MockTTFTMillis > 600_000 {
 			return cfg, fmt.Errorf("x_mock_ttft_ms out of range")
@@ -364,10 +479,27 @@ func (h *Handler) effectiveConfig(req chatRequest) (Config, error) {
 		}
 		cfg.UsageMode = mode
 	}
+	if cfg.Mode != "synthetic" && !cfg.Echo {
+		cap := req.MaxCompletionTokens
+		if cap == nil {
+			cap = req.MaxTokens
+		}
+		if cap != nil {
+			if *cap <= 0 || *cap > maxMockTokens {
+				return cfg, fmt.Errorf("max completion tokens out of range")
+			}
+			if *cap < cfg.CompletionTokens {
+				cfg.CompletionTokens = *cap
+			}
+		}
+	}
 	if cfg.EventLineBytes > 0 && cfg.CompletionTokens > 0 {
 		if int64(cfg.EventLineBytes)*int64(cfg.CompletionTokens) > maxMockStreamBytes {
 			return cfg, fmt.Errorf("requested stream size exceeds %d bytes", maxMockStreamBytes)
 		}
+	}
+	if err := ValidateConfig(cfg); err != nil {
+		return cfg, err
 	}
 	return cfg, nil
 }

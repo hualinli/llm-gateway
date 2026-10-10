@@ -23,13 +23,17 @@ type Attribution struct {
 	OrgID    int64
 	// UserID is 0 when the key has no owner; metering stores NULL.
 	UserID int64
-	KeyID  string
+	// MembershipID is sourced from authoritative guard facts and pins
+	// billing to the key's membership incarnation.
+	MembershipID int64
+	KeyID        string
 	// ExecutionID identifies one admission independently of the client
 	// correlation ID. It is the identity metering bills under.
 	ExecutionID string
 }
 
 type attributionKey struct{}
+type modelPolicyKey struct{}
 
 // WithAttribution attaches a verified attribution to the context.
 func WithAttribution(ctx context.Context, attribution Attribution) context.Context {
@@ -40,6 +44,41 @@ func WithAttribution(ctx context.Context, attribution Attribution) context.Conte
 func AttributionFromContext(ctx context.Context) (Attribution, bool) {
 	attribution, ok := ctx.Value(attributionKey{}).(Attribution)
 	return attribution, ok
+}
+
+// WithModelPolicy attaches the guard's verified model-scope intersection to a
+// request context. The policy is deep-copied so handlers cannot mutate a
+// snapshot or another request's allowlists.
+func WithModelPolicy(ctx context.Context, policy ModelPolicy) context.Context {
+	return context.WithValue(ctx, modelPolicyKey{}, cloneModelPolicy(policy))
+}
+
+// ModelPolicyFromContext returns a copy of the verified policy when the
+// access-guard middleware has run. Direct/legacy handler callers have no
+// policy in context and keep the handler's unfiltered behavior.
+func ModelPolicyFromContext(ctx context.Context) (ModelPolicy, bool) {
+	policy, ok := ctx.Value(modelPolicyKey{}).(ModelPolicy)
+	if !ok {
+		return ModelPolicy{}, false
+	}
+	return cloneModelPolicy(policy), true
+}
+
+func cloneModelPolicy(policy ModelPolicy) ModelPolicy {
+	return ModelPolicy{
+		Global: cloneModelAllowlist(policy.Global),
+		Org:    cloneModelAllowlist(policy.Org),
+		Member: cloneModelAllowlist(policy.Member),
+		Key:    cloneModelAllowlist(policy.Key),
+	}
+}
+
+func cloneModelAllowlist(models *[]string) *[]string {
+	if models == nil {
+		return nil
+	}
+	copy := append([]string{}, (*models)...)
+	return &copy
 }
 
 // ExecutionIDFromContext returns the guard-assigned execution identity, or ""
@@ -130,14 +169,17 @@ func Middleware(guard Guard, options Options) func(http.Handler) http.Handler {
 			}
 
 			attribution := Attribution{
-				TenantID:    permit.TenantID,
-				OrgID:       permit.OrgID,
-				UserID:      permit.UserID,
-				KeyID:       permit.KeyID,
-				ExecutionID: newExecutionID(),
+				TenantID:     permit.TenantID,
+				OrgID:        permit.OrgID,
+				UserID:       permit.UserID,
+				MembershipID: permit.MembershipID,
+				KeyID:        permit.KeyID,
+				ExecutionID:  newExecutionID(),
 			}
 			metrics.AccessGuardDecisions.WithLabelValues("allowed").Inc()
-			next.ServeHTTP(w, r.WithContext(WithAttribution(r.Context(), attribution)))
+			ctx := WithAttribution(r.Context(), attribution)
+			ctx = WithModelPolicy(ctx, permit.Model)
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }

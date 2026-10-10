@@ -53,7 +53,7 @@ function Root(): ReactNode {
   return (
     <StrictMode>
       <QueryClientProvider client={queryClient}>
-        <ConfigProvider locale={zhCN} theme={{ token: { colorPrimary: '#1677ff' } }}>
+        <ConfigProvider locale={zhCN} theme={{ token: { colorPrimary: '#087f72', colorInfo: '#087f72', colorText: '#18312e', colorTextSecondary: '#667773', colorBgLayout: '#f4f6f5', colorBorderSecondary: '#e3e9e6', borderRadius: 10, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif' }, components: { Menu: { itemHeight: 44, itemBorderRadius: 8 }, Card: { headerFontSize: 15 }, Button: { controlHeight: 38 } } }}>
           <AntdApp>
             <BrowserRouter>
               <SessionProvider>

@@ -1,8 +1,0 @@
-POST http://127.0.0.1:18092/api/v1/orgs/12/owner-transfer
-X-Request-ID: t03-check05-07
-Accept: application/json
-Cookie: gw_session=jPHx…<redacted:18>; gw_csrf=aHVN…<redacted:18>
-X-CSRF-Token: aHVN…<redacted:18>
-Content-Type: application/json
-
-{"user": "3"}

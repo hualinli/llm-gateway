@@ -1,5 +1,0 @@
-GET /api/v1/me HTTP/1.1
-X-Request-ID: acc-check09-03
-Accept: application/json
-Cookie: gw_session=pg1k…<redacted:18>; gw_csrf=vsR6…<redacted:18>
-X-CSRF-Token: vsR6…<redacted:18>

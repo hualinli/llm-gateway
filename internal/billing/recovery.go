@@ -11,7 +11,7 @@ import (
 
 // T07B: bounded recovery of abandoned executions.
 //
-// PRODUCTION-INTERVIEW-ROADMAP §6.5 and the T07 task text state the policy, and
+// docs/runbooks/billing-recovery.md and the T07 task text state the policy, and
 // this file is its executable form:
 //
 //	僵尸 reservation 只有在 gateway 实例失活、最大 attempt 时长 + 恢复宽限已过、

@@ -11,12 +11,18 @@
 #                  再用**同一个主密钥文件**启动 B 的 control/console/gateway/metering，
 #                  验证身份/价格/账本/收据/密文/对账全部可用。
 #
-# 然后做两件事：
+# 然后演练三项恢复属性：
 #   1. 主密钥依赖：用**错误**主密钥和**完全没有**主密钥分别启动 B 的 control，记录实际行为
 #      （进程拒绝启动还是降级为不可用），并给出确切的日志/退出码。
 #   2. Redis 清空演练：在 PG 里存在"已投递但未结算（dispatched）"收据时 FLUSHALL
 #      （传输丢失），再停 Redis 证明新请求 fail-closed，随后恢复 Redis，证明
 #      PG 驱动的重投（METERING_SETTLEMENT_REDISPATCH）把结算补齐且**不重复扣款**。
+#   3. RF-03：B-only 将兼容配置 METERING_SETTLEMENT_MAX_ATTEMPTS 设为 3，停 Redis 后
+#      验证至少 4 次 publish 失败仍保留 pending_dispatch/资金预占；恢复后自然结算一次。
+#
+# 隔离约定：只创建带唯一 T10 run id 的容器和随机本地端口；PG 数据目录及 Redis /data
+# 都是 tmpfs，不使用 Compose 项目或持久命名卷。密钥、原始 HTTP scratch 与 pg_dump
+# 保存在 0700 临时 secrets 目录，默认 teardown 删除；仅 --keep 会保留供人工复现。
 #
 # 退出码：0 = 全部硬检查通过；1 = 存在 FAIL；2 = 用法/环境错误。
 #
@@ -28,11 +34,20 @@ script_name="$(basename "$0")"
 # shellcheck source=scripts/t10-lab-common.sh
 source "$script_dir/t10-lab-common.sh"
 
-evidence_dir="$T10_ROOT/docs/verification/2026-10-01/t10-security"
+evidence_dir="$T10_ROOT/data/verification/t10-security"
 timeout_seconds=20
 keep_lab=0
 live_requests=12
 flush_requests=8
+driver_dir=""
+
+backup_drill_teardown() {
+  t10_teardown
+  if [[ -n "$driver_dir" ]]; then rm -rf -- "$driver_dir"; fi
+  if [[ "$keep_lab" != "1" && -n "${T10_SECRETS_DIR:-}" ]]; then
+    rm -rf -- "$T10_SECRETS_DIR"
+  fi
+}
 
 usage() {
   cat <<'USAGE'
@@ -40,7 +55,7 @@ usage() {
   scripts/backup-restore-drill.sh [选项]
 
 选项:
-  --evidence-dir DIR    证据目录（默认 docs/verification/2026-10-01/t10-security）
+  --evidence-dir DIR    证据目录（默认 data/verification/t10-security）
   --timeout-seconds N   单个 curl 超时，默认 20
   --live-requests N     备份前用真实流量写入的计费请求数，默认 12
   --flush-requests N    Redis 清空演练里"已投递未结算"的收据数，默认 8
@@ -56,6 +71,7 @@ usage() {
   BK-05  RPO / RTO 实测数字（并声明单节点 PG 不是 HA）
   RF-01  Redis 清空（传输丢失）+ Redis 停机 fail-closed + PG 驱动重投恢复结算
   RF-02  恢复后恰好一次扣款：receipt/execution/debit 1:1、账户投影==流水、对账一致
+  RF-03  越过兼容重试次数配置的 Redis 故障 + 恢复自动结算一次
 USAGE
 }
 
@@ -80,6 +96,7 @@ case "$flush_requests" in ''|*[!0-9]*) t10_die "--flush-requests 必须是非负
 
 t10_require docker curl python3 go git shasum
 t10_install_traps
+trap 'backup_drill_teardown' EXIT
 
 prefix="t10bk-$(printf '%s' "$T10_RUN_ID" | tr '[:upper:]' '[:lower:]')"
 prefix="${prefix:0:40}"
@@ -275,6 +292,9 @@ metering_env_b=(
   "METERING_SPOOL_DIR=$T10_SECRETS_DIR/spool-b-metering"
   "METERING_ADMIN_TOKEN=$metering_admin_token"
   "METERING_SETTLEMENT_REDISPATCH=3s"
+  # Isolated acceptance fixture: prove transport failures continue beyond the
+  # legacy attempt threshold without waiting through the production default.
+  "METERING_SETTLEMENT_MAX_ATTEMPTS=3"
 )
 console_env_b=(
   "GATEWAY_PROFILE=demo"
@@ -289,7 +309,8 @@ console_env_b=(
 
 json_env() { python3 -c 'import json,sys;print(json.dumps(dict(a.split("=",1) for a in sys.argv[1:])))' "$@"; }
 
-cat > "$T10_EVIDENCE_DIR/restore-lab.json" <<JSON
+private_lab_config="$T10_SECRETS_DIR/restore-lab-private.json"
+cat > "$private_lab_config" <<JSON
 {
   "run_id": "$T10_RUN_ID",
   "root": "$T10_ROOT",
@@ -346,6 +367,33 @@ cat > "$T10_EVIDENCE_DIR/restore-lab.json" <<JSON
   }
 }
 JSON
+chmod 600 "$private_lab_config"
+
+# Public run metadata intentionally omits credentials, DSNs, process environments,
+# and command arguments. The full driver configuration stays in the 0700 secret dir.
+python3 - "$private_lab_config" "$T10_EVIDENCE_DIR/restore-lab.json" <<'PY'
+import json
+import os
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    config = json.load(handle)
+public = {
+    "run_id": config["run_id"],
+    "root": config["root"],
+    "evidence_dir": config["evidence_dir"],
+    "timeout_seconds": config["timeout_seconds"],
+    "live_requests": config["live_requests"],
+    "flush_requests": config["flush_requests"],
+    "admin_email": config["admin_email"],
+    "a": {key: config["a"][key] for key in ("ports", "urls", "containers")},
+    "b": {key: config["b"][key] for key in ("ports", "urls", "containers")},
+    "secret_material": "temporary private config; removed after teardown unless --keep is used",
+}
+with open(sys.argv[2], "w", encoding="utf-8") as handle:
+    json.dump(public, handle, indent=2)
+os.chmod(sys.argv[2], 0o600)
+PY
 
 driver_dir="$(mktemp -d "${TMPDIR:-/tmp}/t10bk-driver.XXXXXX")"
 driver_path="$driver_dir/backup_restore_driver.py"
@@ -548,10 +596,10 @@ CSRF_DEFAULT = object()
 
 
 class Client:
-    def __init__(self, evidence_dir, timeout):
+    def __init__(self, evidence_dir, timeout, scratch_dir=None):
         self.evidence_dir = evidence_dir
         self.timeout = timeout
-        self.scratch = tempfile.mkdtemp(prefix="t10sec-http.")
+        self.scratch = tempfile.mkdtemp(prefix="t10sec-http.", dir=scratch_dir)
         self.records = []
 
     def call(self, check, label, method, path, *, base_url, query=None, body=None, raw_body=None,
@@ -649,7 +697,18 @@ class Client:
         for key, value in response.headers:
             resp_dump.append("%s: %s" % (key, value))
         resp_dump.append("")
-        resp_dump.append(response.body[:MAX_STORED_BODY])
+        response_body = response.body[:MAX_STORED_BODY]
+        # Activation codes are one-time credentials carried as `code`, not
+        # `token`; redact this creation response before it reaches evidence.
+        if response.method == "POST" and response.path.split("?", 1)[0] == "/api/v1/admin/activation-codes":
+            try:
+                payload = json.loads(response_body)
+                if isinstance(payload, dict) and isinstance(payload.get("code"), str):
+                    payload["code"] = "<redacted: one-time activation code>"
+                    response_body = json.dumps(payload, ensure_ascii=False)
+            except (TypeError, ValueError):
+                pass
+        resp_dump.append(response_body)
         if len(response.body) > MAX_STORED_BODY:
             resp_dump.append("\n…(%d bytes truncated)" % (len(response.body) - MAX_STORED_BODY))
         with open(os.path.join(self.evidence_dir, stem + ".resp"), "w", encoding="utf-8") as handle:
@@ -976,7 +1035,7 @@ class Actor:
 
 
 class Fixtures:
-    """Two enterprises, four roles each, created through real HTTP."""
+    """Two enterprises and their account actors, created through real HTTP."""
 
     def __init__(self, lab, client, cid="FIX"):
         self.lab = lab
@@ -986,11 +1045,105 @@ class Fixtures:
         self.orgs = {}
         self.keys = {}
         self.invitations = {}
+        self.opening_codes = {}
         self.prices = {}
         self.secrets_path = os.path.join(lab.secret_dir, "fixtures.json")
 
     def url(self, name):
         return self.lab.urls[name]
+
+    def enable_platform_models(self, check, models):
+        """Merge required fixture models into the complete platform catalog."""
+        admin = self.actors["platform-admin"]
+        path = "/api/v1/admin/models"
+        current = self.client.call(check, "read-platform-model-catalog", "GET", path,
+                                   base_url=self.url("console"), session=admin.session)
+        check.require_status(current, 200, label="读取平台模型目录")
+        current_body = current.json()
+        check.require(isinstance(current_body, dict), "平台模型目录响应不是对象")
+        existing = current_body.get("items")
+        check.require(isinstance(existing, list), "平台模型目录响应缺少 items 数组")
+        catalog = {}
+        for item in existing:
+            check.require(isinstance(item, dict) and isinstance(item.get("model"), str) and
+                          isinstance(item.get("enabled"), bool),
+                          "平台模型目录包含无效条目：%r" % item)
+            check.require(item["model"] not in catalog,
+                          "平台模型目录包含重复条目：%s" % item["model"])
+            catalog[item["model"]] = item["enabled"]
+        for model in models:
+            catalog[model] = True
+        requested = [{"model": model, "enabled": catalog[model]} for model in sorted(catalog)]
+        updated = self.client.call(check, "enable-platform-fixture-models", "PUT", path,
+                                   base_url=self.url("console"), body={"items": requested},
+                                   session=admin.session)
+        check.require_status(updated, 200, label="启用平台测试模型并保留现有目录")
+        updated_body = updated.json()
+        check.require(isinstance(updated_body, dict), "更新平台模型目录响应不是对象")
+        items = updated_body.get("items")
+        check.require(isinstance(items, list), "更新平台模型目录响应缺少 items 数组")
+        updated_catalog = {}
+        for item in items:
+            check.require(isinstance(item, dict) and isinstance(item.get("model"), str) and
+                          isinstance(item.get("enabled"), bool),
+                          "更新后的平台模型目录包含无效条目：%r" % item)
+            check.require(item["model"] not in updated_catalog,
+                          "更新后的平台模型目录包含重复条目：%s" % item["model"])
+            updated_catalog[item["model"]] = item["enabled"]
+        check.require(updated_catalog == catalog,
+                      "更新平台模型目录时有条目被删除或改写：expected=%r actual=%r" %
+                      (catalog, updated_catalog))
+        enabled = {model for model, is_enabled in updated_catalog.items() if is_enabled}
+        check.require(set(models).issubset(enabled),
+                      "测试模型未全部启用：requested=%r enabled=%r" % (models, sorted(enabled)))
+        check.detail("platform_model_catalog_fixture_models", sorted(models))
+        check.detail("platform_model_catalog_preserved_entries", len(existing))
+
+    def require_personal_wallet(self, check, actor, only_personal=False):
+        response = self.client.call(check, "personal-account-" + actor.name, "GET", "/api/v1/organizations",
+                                    base_url=self.url("console"), session=actor.session)
+        check.require_status(response, 200, label="自助注册用户的账户 " + actor.name)
+        memberships = (response.json() or {}).get("items", [])
+        personal = [item for item in memberships
+                    if ((item.get("organization") or {}).get("type") == "personal")]
+        check.require(len(personal) == 1,
+                      "%s 应保留且仅有一个 personal 账户，实际=%r" % (actor.name, personal))
+        if len(personal) != 1:
+            return
+        check.require(personal[0].get("role") == "owner" and personal[0].get("status") == "active",
+                      "%s 的 personal membership 非 active owner：%r" % (actor.name, personal[0]))
+        if only_personal:
+            check.require(len(memberships) == 1,
+                          "%s 注册后不应自动加入 enterprise：%r" % (actor.name, memberships))
+        if not actor.user_id.isdigit() or int(actor.user_id) <= 0:
+            check.require(False, "%s 注册响应缺少有效 user id：%r" % (actor.name, actor.user_id))
+            return
+        wallets = self.lab.psql_lines(
+            "SELECT count(*) FROM organizations o "
+            "JOIN memberships m ON m.org_id=o.id AND m.user_id=o.owner_user_id "
+            "AND m.role='owner' AND m.status='active' "
+            "JOIN billing_accounts a ON a.org_id=o.id "
+            "WHERE o.type='personal' AND o.owner_user_id=%s AND m.user_id=%s"
+            % (actor.user_id, actor.user_id))
+        check.require(wallets == ["1"],
+                      "%s 的 personal 钱包/owner membership 未原子创建：%r" % (actor.name, wallets))
+
+    def require_own_key_view(self, check, base_url, actor, org, expected_key, forbidden_key=None):
+        response = self.client.call(check, actor.name + "-own-key-view", "GET",
+                                    "/api/v1/orgs/%s/keys" % org, base_url=base_url,
+                                    session=actor.session)
+        check.require_status(response, 200, label=actor.name + " 读取本人 Key")
+        items = (response.json() or {}).get("items", [])
+        key_ids = {item.get("key_id") for item in items}
+        check.require(expected_key in key_ids,
+                      "%s 的 Key 列表缺少本人 Key：%r" % (actor.name, items))
+        check.require(all(item.get("owner_user_id") == actor.user_id and item.get("name")
+                          for item in items),
+                      "%s 的 Key 列表暴露他人 Key 或无名称：%r" % (actor.name, items))
+        if forbidden_key:
+            check.require(forbidden_key not in key_ids,
+                          "%s 的 Key 列表包含其他成员 Key" % actor.name)
+        return items
 
     def login(self, check, actor, console="console", label=None):
         response = self.client.call(check, label or ("login-" + actor.name), "POST", "/api/v1/auth/login",
@@ -1021,56 +1174,96 @@ class Fixtures:
         self.actors["platform-admin"] = admin
         admin_id = admin.session["user_id"]
         admin.user_id = admin_id
+        self.enable_platform_models(check, ("default", "t10-model", "t10bk-model"))
+        self.require_personal_wallet(check, admin, only_personal=True)
 
         tag = self.lab.cfg["run_id"][-6:].lower().replace("-", "")[-6:]
         self.tag = tag
 
-        def create_user(name, platform_admin=False):
+        def register_user(name):
             email = "t10-%s-%s@t10.test" % (tag, name)
             password = secrets.token_urlsafe(18)
-            response = self.client.call(check, "create-user-" + name, "POST", "/api/v1/admin/users",
+            response = self.client.call(check, "register-user-" + name, "POST", "/api/v1/auth/register",
                                         base_url=self.url("console"),
-                                        body={"email": email, "password": password,
-                                              "platform_admin": platform_admin},
-                                        session=admin.session)
-            check.require_status(response, 201, label="create user " + email)
+                                        body={"email": email, "password": password}, csrf=None)
+            check.require_status(response, 201, label="self-register " + email)
             RED.add(password)
-            actor = Actor(name, email, password, str((response.json() or {}).get("id", "")), None, platform_admin)
+            registration = response.json() or {}
+            cookies = cookies_of(response)
+            registration_token = cookies.get("gw_session", "")
+            registration_csrf = cookies.get("gw_csrf") or registration.get("csrf_token", "")
+            check.require(bool(registration_token), "注册响应缺少 gw_session cookie")
+            check.require(bool(registration_csrf), "注册响应缺少 CSRF token")
+            RED.add(registration_token)
+            RED.add(registration_csrf)
+            user = registration.get("user") or {}
+            actor = Actor(name, email, password, str(user.get("id", "")), None, False)
             self.actors[name] = actor
+            self.login(check, actor, label="login-registered-" + name)
+            self.require_personal_wallet(check, actor, only_personal=True)
             return actor
 
         # Enterprise A
-        a_owner = create_user("a-owner")
-        a_admin = create_user("a-admin")
-        a_member = create_user("a-member")
-        a_viewer = create_user("a-viewer")
-        a_member2 = create_user("a-member2")     # removed-member-with-live-key case
-        a_disabled = create_user("a-disabled")   # disabled-user-with-live-session case
-        invitee = create_user("a-invitee")       # invitation tamper case
+        a_owner = register_user("a-owner")
+        a_admin = register_user("a-admin")
+        a_member = register_user("a-member")
+        a_member3 = register_user("a-member3")
+        a_member2 = register_user("a-member2")     # removed-member-with-live-key case
+        a_disabled = register_user("a-disabled")   # disabled-user-with-live-session case
+        invitee = register_user("a-invitee")       # invitation tamper case
         # Enterprise B
-        b_owner = create_user("b-owner")
-        b_member = create_user("b-member")
+        b_owner = register_user("b-owner")
+        b_member = register_user("b-member")
 
-        # Organization A: created by its owner (POST /api/v1/organizations).
-        self.login(check, a_owner)
-        response = self.client.call(check, "create-org-acme", "POST", "/api/v1/organizations",
-                                    base_url=self.url("console"), body={"name": "t10-%s-acme" % tag},
-                                    session=a_owner.session)
-        check.require_status(response, 201, label="create org A")
+        # Enterprise A is manually opened by a platform admin for a registered active owner.
+        response = self.client.call(check, "create-org-acme", "POST", "/api/v1/admin/organizations",
+                                    base_url=self.url("console"),
+                                    body={"name": "t10-%s-acme" % tag, "owner_email": a_owner.email},
+                                    session=admin.session)
+        check.require_status(response, 201, label="平台管理员为 owner_email 手动创建 org A")
         self.orgs["A"] = str(response.json()["organization"]["id"])
+        check.require(response.json().get("role") == "owner",
+                      "手动开户的 owner_email 未成为 owner：%r" % response.json())
+        admin_members = self.client.call(check, "platform-admin-not-org-member", "GET",
+                                         "/api/v1/orgs/%s/members" % self.orgs["A"],
+                                         base_url=self.url("console"), session=admin.session)
+        check.require_status(admin_members, 404, "not_found", label="平台管理员未被自动加入企业")
+        self.require_personal_wallet(check, a_owner, only_personal=False)
 
-        # Organization B.
-        self.login(check, b_owner)
-        response = self.client.call(check, "create-org-beta", "POST", "/api/v1/organizations",
-                                    base_url=self.url("console"), body={"name": "t10-%s-beta" % tag},
+        # Enterprise B is provisioned only by a single-use activation code.
+        code_response = self.client.call(check, "create-opening-code-beta", "POST",
+                                         "/api/v1/admin/activation-codes", base_url=self.url("console"),
+                                         body={"enterprise_name": "t10-%s-beta" % tag},
+                                         session=admin.session)
+        check.require_status(code_response, 201, label="平台管理员签发 enterprise 开户码")
+        opening_code = (code_response.json() or {}).get("code", "")
+        check.require(bool(opening_code), "开户码响应缺少一次性 code")
+        RED.add(opening_code)
+        self.opening_codes["B"] = {"code": opening_code, "id": (code_response.json() or {}).get("id", "")}
+        response = self.client.call(check, "activate-org-beta", "POST", "/api/v1/organizations/activate",
+                                    base_url=self.url("console"), body={"code": opening_code},
                                     session=b_owner.session)
-        check.require_status(response, 201, label="create org B")
+        check.require_status(response, 201, label="b-owner 使用开户码创建 org B")
         self.orgs["B"] = str(response.json()["organization"]["id"])
+        check.require(response.json().get("role") == "owner",
+                      "开户码创建的 user 未成为 owner：%r" % response.json())
+        self.require_personal_wallet(check, b_owner, only_personal=False)
+        check.require(self.orgs["A"].isdigit() and self.orgs["B"].isdigit(),
+                      "企业开户响应缺少数字组织 ID，无法验证默认模型范围")
+        inherited_scopes = self.lab.psql_lines(
+            "SELECT count(*) FROM organizations WHERE id IN (%s,%s) AND model_allowlist IS NULL"
+            % (int(self.orgs["A"]), int(self.orgs["B"])))
+        check.require(inherited_scopes == ["2"],
+                      "新建企业应以 NULL 范围继承全局模型目录：%r" % inherited_scopes)
+        check.detail("enterprise_model_scope", "A/B inherit platform catalog")
 
         def invite_and_accept(owner, actor, org, role):
+            invitation = {"email": actor.email, "role": role}
+            if role == "member":
+                invitation["monthly_limit_micro"] = "100000000"
             response = self.client.call(check, "invite-" + actor.name, "POST",
                                         "/api/v1/orgs/%s/invitations" % org, base_url=self.url("console"),
-                                        body={"email": actor.email, "role": role}, session=owner.session)
+                                        body=invitation, session=owner.session)
             check.require_status(response, 201, label="invite " + actor.name)
             token = (response.json() or {}).get("token", "")
             check.require(bool(token), "邀请响应缺少 token")
@@ -1080,11 +1273,15 @@ class Fixtures:
                                       "/api/v1/invitations/%s/accept" % token, base_url=self.url("console"),
                                       body={}, session=actor.session)
             check.require_status(accept, 200, label="accept " + actor.name)
+            if role == "member":
+                check.require((accept.json() or {}).get("monthly_limit_micro") == "100000000",
+                              "普通 member 接受邀请后额度未保留：%r" % accept.json())
+            self.invitations[actor.name] = {"token": token, "email": actor.email, "user_id": actor.user_id}
             return token
 
         invite_and_accept(a_owner, a_admin, self.orgs["A"], "admin")
         invite_and_accept(a_owner, a_member, self.orgs["A"], "member")
-        invite_and_accept(a_owner, a_viewer, self.orgs["A"], "billing_viewer")
+        invite_and_accept(a_owner, a_member3, self.orgs["A"], "member")
         invite_and_accept(a_owner, a_member2, self.orgs["A"], "member")
         invite_and_accept(a_owner, a_disabled, self.orgs["A"], "member")
         invite_and_accept(b_owner, b_member, self.orgs["B"], "member")
@@ -1095,7 +1292,8 @@ class Fixtures:
         # A pending invitation (used by the tamper/negative cases).
         response = self.client.call(check, "invite-pending", "POST", "/api/v1/orgs/%s/invitations" % self.orgs["A"],
                                     base_url=self.url("console"),
-                                    body={"email": invitee.email, "role": "member"}, session=a_owner.session)
+                                    body={"email": invitee.email, "role": "member",
+                                          "monthly_limit_micro": "100000000"}, session=a_owner.session)
         check.require_status(response, 201, label="invite pending")
         pending_token = (response.json() or {}).get("token", "")
         RED.add(pending_token)
@@ -1103,10 +1301,9 @@ class Fixtures:
                                        "user_id": invitee.user_id}
 
         # Keys: every key is created through the Console → Control AdminService path.
-        def create_key(actor, org, owner_user_id=None, operation_id=None):
-            body = {}
-            if owner_user_id:
-                body["owner_user_id"] = str(owner_user_id)
+        def create_key(actor, org, name=None, operation_id=None):
+            name = name or "t10-%s-key" % actor.name
+            body = {"name": name}
             if operation_id:
                 body["operation_id"] = operation_id
             response = self.client.call(check, "create-key-" + actor.name, "POST",
@@ -1117,15 +1314,36 @@ class Fixtures:
             key = payload.get("secret", "")
             check.require(bool(key), "创建 Key 响应缺少 secret")
             RED.add(key)
-            return {"secret": key, "key_id": payload["key"]["key_id"], "prefix": payload["key"]["prefix"],
-                    "owner_user_id": payload["key"].get("owner_user_id")}
+            metadata = payload["key"]
+            key_id = str(metadata["key_id"])
+            membership = self.lab.psql_lines(
+                "SELECT k.membership_id, m.id, k.owner_user_id, m.user_id, k.name "
+                "FROM api_keys k JOIN memberships m ON m.id=k.membership_id AND m.org_id=k.org_id "
+                "AND m.user_id=k.owner_user_id AND m.status='active' "
+                "WHERE k.key_id='%s'" % key_id.replace("'", "''"))
+            parts = membership[0].split("|") if len(membership) == 1 else []
+            check.require(bool(parts) and parts[0] == parts[1] and parts[2] == actor.user_id and
+                          parts[3] == actor.user_id and parts[4] == name,
+                          "Key 未固定到本人当前 membership / 名称：actor=%s key=%r" % (actor.name, membership))
+            check.require(metadata.get("name") == name and metadata.get("owner_user_id") == actor.user_id and
+                          metadata.get("organization_id") == org,
+                          "Key DTO 的名称/归属与创建者不一致：%r" % metadata)
+            return {"secret": key, "key_id": key_id, "prefix": metadata["prefix"],
+                    "owner_user_id": metadata.get("owner_user_id"), "name": name,
+                    "membership_id": parts[0] if parts else ""}
 
         self.keys["a-member"] = create_key(a_member, self.orgs["A"])
+        self.keys["a-member3"] = create_key(a_member3, self.orgs["A"])
         self.keys["a-member2"] = create_key(a_member2, self.orgs["A"])
         self.keys["a-disabled"] = create_key(a_disabled, self.orgs["A"])
-        self.keys["a-viewer"] = create_key(a_admin, self.orgs["A"], owner_user_id=a_viewer.user_id)
+        self.keys["a-admin"] = create_key(a_admin, self.orgs["A"])
         self.keys["b-member"] = create_key(b_member, self.orgs["B"])
         self.keys["a-owner"] = create_key(a_owner, self.orgs["A"])
+
+        self.require_own_key_view(check, self.url("console"), a_member, self.orgs["A"],
+                                  self.keys["a-member"]["key_id"], self.keys["a-admin"]["key_id"])
+        self.require_own_key_view(check, self.url("console"), a_admin, self.orgs["A"],
+                                  self.keys["a-admin"]["key_id"], self.keys["a-member"]["key_id"])
 
         # Prices: 1 micro per token in both directions for the model the load
         # test uses ("default") and the drill model ("t10-model").
@@ -1143,14 +1361,37 @@ class Fixtures:
 
         # Fund both organizations through the audited platform-admin adjustment.
         for org, amount in ((self.orgs["A"], 50_000_000), (self.orgs["B"], 5_000_000)):
+            funding = {"type": "recharge", "amount_micro": str(amount),
+                       "payment_reference": "t10-fund-%s" % org,
+                       "reason": "t10 security matrix funding"}
+            idempotency_key = "t10-fund-%s" % org
+            path = "/api/v1/admin/billing/accounts/%s/adjustments" % org
             response = self.client.call(check, "fund-" + org, "POST",
-                                        "/api/v1/admin/billing/accounts/%s/adjustments" % org,
+                                        path,
                                         base_url=self.url("console"),
-                                        body={"amount_micro": str(amount), "direction": "credit",
-                                              "reason": "t10 security matrix funding"},
+                                        body=funding,
                                         session=admin.session,
-                                        extra_headers={"Idempotency-Key": "t10-fund-%s" % org})
+                                        extra_headers={"Idempotency-Key": idempotency_key})
             check.require_status(response, 201, label="fund org " + org)
+            first = response.json() or {}
+            replay = self.client.call(check, "fund-replay-" + org, "POST", path,
+                                      base_url=self.url("console"), body=funding, session=admin.session,
+                                      extra_headers={"Idempotency-Key": idempotency_key})
+            check.require_status(replay, 200, label="replay recharge org " + org)
+            replayed = replay.json() or {}
+            check.require(replayed.get("replayed") is True and
+                          (replayed.get("entry") or {}).get("id") == (first.get("entry") or {}).get("id") and
+                          (replayed.get("account") or {}).get("posted_balance_micro") ==
+                          (first.get("account") or {}).get("posted_balance_micro"),
+                          "重复充值没有返回同一流水/账户投影：first=%r replay=%r" % (first, replayed))
+            entry_count = self.lab.psql_lines(
+                "SELECT count(*) FROM billing_entries WHERE org_id=%s AND business_id='%s'"
+                % (org, idempotency_key.replace("'", "''")))
+            check.require(entry_count == ["1"],
+                          "同一 Idempotency-Key 产生多条流水：org=%s count=%r" % (org, entry_count))
+            check.detail("funding_replay_" + org, {"replayed": replayed.get("replayed"),
+                                                    "entry_id": (replayed.get("entry") or {}).get("id"),
+                                                    "business_rows": entry_count})
 
         # Wait for the gateway snapshot to carry the fixture keys (≤5s target).
         deadline = time.time() + 20
@@ -1168,6 +1409,7 @@ class Fixtures:
             "orgs": self.orgs,
             "keys": self.keys,
             "invitations": self.invitations,
+            "opening_codes": self.opening_codes,
             "prices": self.prices,
             "actors": {name: {"email": a.email, "user_id": a.user_id, "password": a.password,
                               "session": a.session, "platform_admin": a.platform_admin}
@@ -1180,11 +1422,14 @@ class Fixtures:
             "orgs": self.orgs,
             "users": {name: {"email": a.email, "user_id": a.user_id, "platform_admin": a.platform_admin}
                       for name, a in self.actors.items()},
-            "keys": {name: {"key_id": k["key_id"], "prefix": k["prefix"], "owner_user_id": k["owner_user_id"]}
+            "keys": {name: {"key_id": k["key_id"], "prefix": k["prefix"],
+                            "owner_user_id": k["owner_user_id"], "name": k["name"],
+                            "membership_id": k["membership_id"]}
                      for name, k in self.keys.items()},
             "prices": self.prices,
             "invitations": {name: {"email": v["email"], "user_id": v["user_id"]}
                             for name, v in self.invitations.items()},
+            "opening_codes": {name: {"id": v["id"]} for name, v in self.opening_codes.items()},
         }
         with open(os.path.join(self.lab.evidence_dir, "fixtures.json"), "w", encoding="utf-8") as handle:
             json.dump(summary, handle, indent=2, ensure_ascii=False)
@@ -1444,9 +1689,26 @@ class Drill:
         lines = env.psql_lines
         return {
             "users": q("SELECT count(*) FROM users"),
-            "organizations": lines("SELECT id||'|'||name||'|'||type||'|'||status FROM organizations ORDER BY id"),
-            "memberships": lines("SELECT org_id||'|'||user_id||'|'||role||'|'||status FROM memberships ORDER BY org_id, user_id"),
-            "api_keys": lines("SELECT key_id||'|'||org_id||'|'||coalesce(owner_user_id::text,'')||'|'||status FROM api_keys ORDER BY key_id"),
+            "organizations": lines("SELECT id||'|'||name||'|'||type||'|'||status||'|'||"
+                                    "coalesce(model_allowlist::text,'<inherit>') "
+                                    "FROM organizations ORDER BY id"),
+            "account_model_scopes": lines("SELECT id||'|'||coalesce(model_allowlist::text,'<inherit>') "
+                                           "FROM organizations ORDER BY id"),
+            "platform_model_catalog": lines("SELECT model||'|'||enabled::text "
+                                             "FROM platform_model_catalog ORDER BY model"),
+            "memberships": lines("SELECT org_id||'|'||user_id||'|'||role||'|'||status||'|'||"
+                                  "coalesce(monthly_limit_micro::text,'') FROM memberships ORDER BY org_id, user_id"),
+            "activation_codes": lines("SELECT id||'|'||enterprise_name||'|'||status||'|'||created_by||'|'||"
+                                       "coalesce(used_by::text,'')||'|'||coalesce(resulting_org_id::text,'') "
+                                       "FROM enterprise_activation_codes ORDER BY id"),
+            "personal_wallets": lines("SELECT o.owner_user_id||'|'||o.id||'|'||a.posted_balance_micro||'|'||a.reserved_micro "
+                                       "FROM organizations o JOIN billing_accounts a ON a.org_id=o.id "
+                                       "JOIN memberships m ON m.org_id=o.id AND m.user_id=o.owner_user_id "
+                                       "AND m.role='owner' AND m.status='active' "
+                                       "WHERE o.type='personal' ORDER BY o.owner_user_id"),
+            "api_keys": lines("SELECT k.key_id||'|'||k.org_id||'|'||coalesce(k.owner_user_id::text,'')||'|'||"
+                              "coalesce(k.membership_id::text,'')||'|'||k.name||'|'||k.status "
+                              "FROM api_keys k ORDER BY k.key_id"),
             "price_versions": lines("SELECT id||'|'||model||'|'||input_price_micro_per_million||'|'||output_price_micro_per_million FROM price_versions ORDER BY id"),
             "executions_by_status": lines("SELECT status||'|'||count(*) FROM billing_executions GROUP BY status ORDER BY status"),
             "receipts_by_status": lines("SELECT status||'|'||count(*)||'|'||sum(charge_micro) FROM usage_receipts GROUP BY status ORDER BY status"),
@@ -1458,6 +1720,26 @@ class Drill:
             "policy_publications": q("SELECT count(*) FROM policy_publications"),
             "schema_version": q("SELECT version FROM schema_migrations"),
         }
+
+    def check_evidence_secrets(self, check):
+        secrets = [value.encode("utf-8") for value in RED.secrets if value]
+        leaks = []
+        scanned = 0
+        for directory, _subdirs, filenames in os.walk(self.lab.evidence_dir):
+            for filename in filenames:
+                path = os.path.join(directory, filename)
+                try:
+                    if os.path.getsize(path) > 64 * 1024 * 1024:
+                        continue
+                    with open(path, "rb") as handle:
+                        content = handle.read()
+                except OSError:
+                    continue
+                scanned += 1
+                if any(secret in content for secret in secrets):
+                    leaks.append(os.path.relpath(path, self.lab.evidence_dir))
+        check.detail("evidence_secret_scan", {"files_scanned": scanned, "leak_files": leaks})
+        check.require(not leaks, "明文 secret 出现在 evidence 文件中：%r" % leaks)
 
     def money_fingerprint(self, env):
         """Order-independent digest of the four durable money layers."""
@@ -1632,11 +1914,13 @@ class Drill:
         check.detail("restore", self.restore_result)
         facts_b = self.facts(self.b)
         check.detail("facts_after_restore", facts_b)
-        for field in ("organizations", "memberships", "api_keys", "price_versions", "accounts",
+        for field in ("users", "organizations", "account_model_scopes", "platform_model_catalog",
+                      "memberships", "activation_codes", "personal_wallets", "api_keys", "price_versions", "accounts",
                       "ledger_sum_by_org", "executions_by_status", "receipts_by_status", "entries_by_kind",
                       "control_config", "schema_version", "provider_credentials"):
             check.require(facts_b[field] == self.facts_a[field],
                           "恢复后 %s 与备份前不一致:\n  A=%r\n  B=%r" % (field, self.facts_a[field], facts_b[field]))
+        self.check_evidence_secrets(check)
         self.fingerprint_b = self.money_fingerprint(self.b)
         check.require(self.fingerprint_b == self.fingerprint_a,
                       "恢复后的资金指纹不同: A=%s B=%s" % (self.fingerprint_a, self.fingerprint_b))
@@ -1645,7 +1929,7 @@ class Drill:
         crypto_b = [row for row in facts_b["provider_credentials"] if row.split("|")[3] == "active"]
         check.require(crypto_a == crypto_b and len(crypto_a) >= 1,
                       "provider credential 密文在恢复后不同: A=%r B=%r" % (crypto_a, crypto_b))
-        check.note("身份/成员/Key/价格/账本/账户/收据/control 配置/密文逐项一致；资金指纹 %s"
+        check.note("身份/成员/Key/价格/模型目录/账户模型范围/账本/账户/收据/control 配置/密文逐项一致；资金指纹 %s"
                    % self.fingerprint_b[:16])
 
     # -- BK-03 -------------------------------------------------------------
@@ -1700,6 +1984,12 @@ class Drill:
         check.require(self.b.wait_tcp(self.b.ports["upstream"], 30), "B 的 upstream 未监听")
         ensure_service(self.b, "metering", self.b.ports["metering"])
         ensure_service(self.b, "console", self.b.ports["console"])
+        self.fx.require_own_key_view(check, self.b.urls["console"], self.fx.actors["a-member"],
+                                     self.fx.orgs["A"], self.fx.keys["a-member"]["key_id"],
+                                     self.fx.keys["a-admin"]["key_id"])
+        self.fx.require_own_key_view(check, self.b.urls["console"], self.fx.actors["a-admin"],
+                                     self.fx.orgs["A"], self.fx.keys["a-admin"]["key_id"],
+                                     self.fx.keys["a-member"]["key_id"])
         gateway = Proc(self.b, "gateway")
         gateway.start()
         check.require(self.b.wait_http(self.b.urls["gateway"] + "/healthz", 60), "B 的 gateway 未就绪")
@@ -1935,86 +2225,162 @@ class Drill:
 
     # -- RF-03 -------------------------------------------------------------
     def rf03(self, check):
-        """长 Redis 停机边界：超过投递重试预算后，收据进入审计 exception（不再自动重投）。"""
+        """Transport errors keep retrying beyond the compatibility attempt setting."""
         env = self.b
         org = self.fx.orgs["A"]
         metering = Proc(env, "metering")
+        # RF-02 ends with a successful gateway request whose receipt can still
+        # be pending_dispatch. Drain all pre-existing B receipts before taking
+        # the money baseline, so only this check's requests can settle below.
+        ready = env.wait_http(env.urls["metering"] + "/readyz", 90)
+        check.require(ready, "RF-03 前 metering settlement pipeline 未就绪")
+        preceding_settled, preceding_statuses = self.wait_settled(env, timeout=180)
+        check.detail("pre_rf03_receipt_statuses", preceding_statuses)
+        check.require(preceding_settled,
+                      "RF-03 前 B 仍有未结算收据: %r" % preceding_statuses)
+        quiet_status, quiet_payload = env.metering_json("/receipts/backlog")
+        quiet_backlog = (quiet_payload or {}).get("backlog") if isinstance(quiet_payload, dict) else None
+        quiet_transport = (quiet_payload or {}).get("transport") if isinstance(quiet_payload, dict) else None
+        check.detail("pre_rf03_backlog_status", quiet_status)
+        check.detail("pre_rf03_backlog", quiet_backlog)
+        check.detail("pre_rf03_transport", quiet_transport)
+        check.require(quiet_status == 200 and isinstance(quiet_backlog, dict)
+                      and isinstance(quiet_transport, dict),
+                      "RF-03 前无法读取 durable backlog/transport 状态: %s %r"
+                      % (quiet_status, quiet_payload))
+        quiet_counts = ("pending_dispatch", "dispatched", "exception", "claimed", "unsettled")
+        check.require(all(quiet_backlog.get(key) == 0 for key in quiet_counts)
+                      and quiet_transport.get("pending") == 0,
+                      "RF-03 前 backlog/Redis consumer 尚未归零: backlog=%r transport=%r"
+                      % (quiet_backlog, quiet_transport))
         metering.stop()
         check.require(env.wait_port_closed(env.ports["metering"], 10), "metering 未停止")
-        executions = self.drive(check, 3, env=env, label="poison")
+        executions = self.drive(check, 3, env=env, label="retry-after-redis")
+        check.require(len(executions) == 3, "RF-03 驱动请求数不是 3 条: %r" % executions)
         posted_before = env.psql("SELECT posted_balance_micro FROM billing_accounts WHERE org_id=%s" % org)
         reserved_before = env.psql("SELECT reserved_micro FROM billing_accounts WHERE org_id=%s" % org)
+        expected = env.psql(
+            "SELECT COALESCE(sum(r.charge_micro),0)||'|'||COALESCE(sum(e.reserved_micro),0) "
+            "FROM usage_receipts r JOIN billing_executions e USING (execution_id) "
+            "WHERE r.execution_id IN (%s)" % ",".join("'%s'" % execution for execution in executions))
+        expected_charge, expected_reservation = [int(value) for value in expected.split("|", 1)]
+        initial = env.psql_lines(
+            "SELECT status||'|'||count(*) FROM usage_receipts WHERE execution_id IN (%s) GROUP BY status"
+            % ",".join("'%s'" % execution for execution in executions))
+        check.require(initial == ["pending_dispatch|%d" % len(executions)],
+                      "Redis 停机前演练收据不是完整的 pending_dispatch 集合: %r" % initial)
         # 让 Redis 在 dispatcher 投递期间一直不可用（先停 metering，保证这些收据还没被投递）。
         env.stop_container(env.containers["redis"])
         check.require(env.wait_port_closed(env.ports["redis"], 20), "Redis 未停止")
         outage_started = time.time()
         Proc(env, "metering").start()
         check.require(env.wait_tcp(env.ports["metering"], 45), "metering 未就绪")
-        poisoned_at = None
+        retried_at = None
         statuses = []
-        deadline = time.time() + 300
+        deadline = time.time() + 60
         while time.time() < deadline:
+            rows = env.psql_lines(
+                "SELECT execution_id||'|'||status||'|'||attempts||'|'||COALESCE(last_error,'') FROM usage_receipts "
+                "WHERE execution_id IN (%s) ORDER BY execution_id"
+                % ",".join("'%s'" % execution for execution in executions))
             statuses = env.psql_lines(
                 "SELECT status||'|'||count(*) FROM usage_receipts WHERE execution_id IN (%s) GROUP BY status"
                 % ",".join("'%s'" % execution for execution in executions))
-            if statuses and all(row.startswith("exception|") for row in statuses):
-                poisoned_at = time.time() - outage_started
+            if (len(rows) == len(executions)
+                    and all(row.split("|", 3)[1] == "pending_dispatch"
+                            and int(row.split("|", 3)[2]) >= 4
+                            and row.split("|", 3)[3].startswith("publish:")
+                            for row in rows)):
+                retried_at = time.time() - outage_started
                 break
             time.sleep(2.0)
-        check.detail("poison_boundary_seconds", poisoned_at)
+        check.detail("transport_retry_observed_seconds", retried_at)
+        check.detail("configured_max_attempts", 3)
+        check.detail("default_compatibility_max_attempts", 8)
+        check.detail("receipt_attempts_while_redis_down", rows)
         check.detail("statuses", statuses)
-        check.require(poisoned_at is not None,
-                      "300s 内收据没有进入 exception（预期长停机后会被投递重试预算判定为终态）: %r" % statuses)
-        rows = env.psql_lines(
-            "SELECT execution_id||'|'||attempts||'|'||coalesce(last_error,'') FROM usage_receipts "
-            "WHERE execution_id IN (%s) ORDER BY execution_id"
-            % ",".join("'%s'" % execution for execution in executions))
-        check.detail("poisoned_receipts", rows)
-        check.require(all(int(row.split("|")[1]) >= 8 for row in rows),
-                      "被 poison 的收据 attempts 不足: %r" % rows)
-        # 资金：没有 debit、预占仍被持有、posted 不变（钱没有丢，也没有重复扣）。
+        check.require(retried_at is not None,
+                      "Redis 停机期间 60s 内没有观察到每条收据至少第 4 次 publish 失败且保持 pending_dispatch: %r"
+                      % rows)
+        check.require(statuses == ["pending_dispatch|%d" % len(executions)],
+                      "传输失败将收据移出 pending_dispatch 或进入终态: %r" % statuses)
+        # PG is the durable backlog while Redis is unavailable: every receipt
+        # stays pending, and its exception endpoint remains empty for these ids.
+        durable_backlog = env.psql_lines(
+            "SELECT status||'|'||count(*) FROM usage_receipts "
+            "WHERE status IN ('pending_dispatch','exception') GROUP BY status ORDER BY status")
+        pending_backlog = sum(int(row.split("|")[1]) for row in durable_backlog
+                              if row.startswith("pending_dispatch|"))
+        check.detail("durable_receipt_backlog_while_redis_down", durable_backlog)
+        check.require(pending_backlog >= len(executions),
+                      "PostgreSQL durable pending_dispatch backlog 未包含演练收据: %r" % durable_backlog)
+        status, exceptions = env.metering_json("/receipts/exceptions")
+        exception_ids = {item.get("execution_id") for item in (exceptions or {}).get("receipts", [])
+                         if isinstance(item, dict)} if isinstance(exceptions, dict) else set()
+        check.detail("receipts_exceptions_endpoint_status", status)
+        check.detail("exception_ids_for_test_receipts", sorted(set(executions) & exception_ids))
+        check.require(status == 200, "Redis 停机期间 exception 查询端点不可用: HTTP %s" % status)
+        check.require(not (set(executions) & exception_ids),
+                      "仅因 Redis 传输失败的收据被错误列为 exception: %r" % sorted(set(executions) & exception_ids))
+        # 资金：没有 debit、预占精确保留、posted 不变。
         debits = env.psql_lines(
             "SELECT count(*) FROM billing_entries WHERE kind='debit' AND business_id IN (%s)"
             % ",".join("'billing_receipt:debit:%s'" % execution for execution in executions))
-        check.detail("debits_for_poisoned", debits)
-        check.require(debits and int(debits[0]) == 0, "被 poison 的执行产生了 debit: %r" % debits)
+        check.detail("debits_while_redis_down", debits)
+        check.require(debits and int(debits[0]) == 0, "Redis 停机期间演练执行产生了 debit: %r" % debits)
         posted_after = env.psql("SELECT posted_balance_micro FROM billing_accounts WHERE org_id=%s" % org)
         reserved_after = env.psql("SELECT reserved_micro FROM billing_accounts WHERE org_id=%s" % org)
         check.require(posted_before == posted_after,
-                      "长停机期间 posted 余额变化: %s -> %s" % (posted_before, posted_after))
-        check.require(int(reserved_after) >= int(reserved_before),
-                      "预占没有被保留: %s -> %s" % (reserved_before, reserved_after))
+                      "Redis 停机期间 posted 余额变化: %s -> %s" % (posted_before, posted_after))
+        check.require(int(reserved_after) == int(reserved_before),
+                      "Redis 停机期间预占发生变化: %s -> %s" % (reserved_before, reserved_after))
         check.detail("account", {"posted_before": posted_before, "posted_after": posted_after,
-                                 "reserved_before": reserved_before, "reserved_after": reserved_after})
-        # 恢复 Redis：这些收据**不会**自动复活（需要人工/后续版本处理）。
+                                 "reserved_before": reserved_before, "reserved_after": reserved_after,
+                                 "expected_charge_micro": expected_charge,
+                                 "expected_reservation_micro": expected_reservation})
+        # Recover transport and allow the normal dispatcher loop/backoff to
+        # publish these durable receipts. No DB edits or manual retry endpoint.
+        redis_recovery_started = time.monotonic()
         env.start_container(env.containers["redis"])
         check.require(env.wait_tcp(env.ports["redis"], 30), "Redis 未恢复")
         check.require(env.wait_http(env.urls["metering"] + "/readyz", 90), "metering 未恢复就绪")
-        time.sleep(20)
-        after = env.psql_lines(
-            "SELECT status||'|'||count(*) FROM usage_receipts WHERE execution_id IN (%s) GROUP BY status"
-            % ",".join("'%s'" % execution for execution in executions))
+        recovery_remaining = max(0, 60 - (time.monotonic() - redis_recovery_started))
+        recovered, after = self.wait_settled(env, timeout=recovery_remaining, executions=executions)
+        recovery_seconds = time.monotonic() - redis_recovery_started
+        check.detail("recovery_seconds", round(recovery_seconds, 3))
         check.detail("statuses_after_redis_back", after)
-        check.require(all(row.startswith("exception|") for row in after),
-                      "Redis 恢复后 exception 收据被自动处理了（预期仍需人工）: %r" % after)
-        # 可见性：审计 exception 队列与对账 backlog 必须能看到它们（不是静默丢失）。
-        status, exceptions = env.metering_json("/receipts/exceptions")
-        check.detail("receipts_exceptions_endpoint_status", status)
-        status2, report = env.metering_json("/reconcile?window=24h")
-        backlog = ((report or {}).get("report") or {}).get("backlog") or {}
-        check.detail("reconcile_after_poison", {"status": status2, "consistent": (report or {}).get("consistent"),
-                                                "complete": (report or {}).get("complete"), "backlog": backlog})
-        check.require(status2 == 200 and (report or {}).get("consistent"),
-                      "长停机后四层对账不一致: %s" % json.dumps(report)[:300])
-        check.require(backlog.get("receipt_exceptions", 0) >= len(executions),
-                      "异常收据没有出现在 backlog: %r" % backlog)
-        self.finding("长 Redis 停机（>%.0fs）会让 receipt dispatcher 用尽投递重试预算"
-                     "（max_attempts=8，退避 1s..5m）：%d 条收据进入终态 exception（日志「receipt poisoned」），"
-                     "预占资金仍被持有、没有 debit、posted 不变、对账仍 consistent，但**不会**在 Redis 恢复后自动重投，"
-                     "需要人工/后续机制处理（F08/§6.2 的 30s 故障仍在预算内，本边界是更长的停机）。"
-                     % (poisoned_at, len(executions)))
-        check.note("边界：Redis 停机 %.0fs 后 %d 条收据被 poison（attempts=8、last_error=publish 连接拒绝）；"
-                   "资金未动，异常在 backlog 可见，恢复 Redis 后不自动复活" % (poisoned_at, len(executions)))
+        check.require(recovered and recovery_seconds <= 60,
+                      "Redis 恢复后 60s 内未自然结算全部收据: %.3fs %r" % (recovery_seconds, after))
+        rows = env.psql_lines(
+            "SELECT r.execution_id||'|'||r.status||'|'||r.charge_micro||'|'||count(d.id)||'|'||"
+            "COALESCE(sum(d.amount_micro),0) FROM usage_receipts r LEFT JOIN billing_entries d "
+            "ON d.business_id='billing_receipt:debit:'||r.execution_id WHERE r.execution_id IN (%s) "
+            "GROUP BY r.execution_id,r.status,r.charge_micro ORDER BY r.execution_id"
+            % ",".join("'%s'" % execution for execution in executions))
+        check.detail("settled_receipt_debits", rows)
+        check.require(len(rows) == len(executions), "结算后收据行数不符: %r" % rows)
+        for row in rows:
+            parts = row.split("|")
+            check.require(parts[1] == "settled" and parts[3] == "1",
+                          "恢复后的执行 %s: status=%s debit_count=%s" % (parts[0], parts[1], parts[3]))
+            check.require(parts[2] == parts[4],
+                          "恢复后的执行 %s 扣款 %s != receipt 金额 %s" % (parts[0], parts[4], parts[2]))
+        posted_settled = env.psql("SELECT posted_balance_micro FROM billing_accounts WHERE org_id=%s" % org)
+        reserved_settled = env.psql("SELECT reserved_micro FROM billing_accounts WHERE org_id=%s" % org)
+        check.require(int(posted_settled) == int(posted_before) - expected_charge,
+                      "恢复后的 posted 余额与 receipt charge 总额不符: before=%s after=%s charge=%s"
+                      % (posted_before, posted_settled, expected_charge))
+        check.require(int(reserved_settled) == int(reserved_before) - expected_reservation,
+                      "恢复后的 reserved 余额未释放本批预占: before=%s after=%s reservation=%s"
+                      % (reserved_before, reserved_settled, expected_reservation))
+        status, report = env.metering_json("/reconcile?window=24h")
+        check.detail("reconcile_after_retry_recovery", {"status": status,
+                     "consistent": (report or {}).get("consistent"), "complete": (report or {}).get("complete"),
+                     "backlog": ((report or {}).get("report") or {}).get("backlog")})
+        check.require(status == 200 and (report or {}).get("consistent") and (report or {}).get("complete"),
+                      "Redis 恢复并结算后四层对账不完整/不一致: %s" % json.dumps(report)[:300])
+        check.note("隔离 B 显式设置 max_attempts=3（兼容配置；默认兼容值为 8）：Redis 停机时每条收据至少失败 4 次仍留在 pending_dispatch，"
+                   "预占精确保留且没有 debit；Redis 恢复后在 60s 内自然结算，每条恰好一笔与 receipt 金额一致的 debit，余额与四层对账正确")
 
 
 def write_summary(lab, checks, findings, extra):
@@ -2038,9 +2404,23 @@ def main():
     parser.add_argument("--lab", required=True)
     args = parser.parse_args()
     cfg = json.load(open(args.lab, encoding="utf-8"))
+    # Seed the redactor before any evidence scan; these values arrive from shell
+    # setup, before the Python-side fixtures know about the corresponding secret.
+    for value in (cfg.get("provider_secret", ""),
+                  cfg.get("tokens", {}).get("control_admin", ""),
+                  cfg.get("tokens", {}).get("metering_admin", "")):
+        RED.add(value)
+    for path_key in ("admin_password_file", "master_key_file", "wrong_key_file"):
+        secret_path = cfg.get(path_key)
+        if secret_path:
+            try:
+                with open(secret_path, encoding="utf-8") as handle:
+                    RED.add(handle.read().strip())
+            except OSError:
+                pass
     t10.set_logfile(os.path.join(cfg["log_dir"], "drill.log"))
     lab = Lab(cfg)
-    client = Client(cfg["evidence_dir"], cfg["timeout_seconds"])
+    client = Client(cfg["evidence_dir"], cfg["timeout_seconds"], scratch_dir=cfg["secret_dir"])
     drill = Drill(lab, cfg, client)
     os.makedirs(os.path.join(cfg["evidence_dir"], "raw"), exist_ok=True)
 
@@ -2084,7 +2464,7 @@ def main():
     drill.run("BK-05", "RPO / RTO 实测（并声明单节点 PG 不是 HA）", drill.bk05)
     drill.run("RF-01", "Redis 清空（传输丢失）+ 停机 fail-closed + PG 驱动重投", drill.rf01)
     drill.run("RF-02", "恰好一次扣款与对账一致（清空演练之后）", drill.rf02)
-    drill.run("RF-03", "长 Redis 停机的边界：收据进入审计 exception 且资金不动", drill.rf03)
+    drill.run("RF-03", "越过兼容重试次数配置的 Redis 故障 + 恢复自动结算一次", drill.rf03)
 
     extra = {
         "static_dump": getattr(drill, "dump_static", None),
@@ -2125,10 +2505,11 @@ DRIVER_EOF
 
 t10_log "运行演练驱动"
 set +e
-python3 "$driver_path" --lab "$T10_EVIDENCE_DIR/restore-lab.json" 2>&1 | tee "$T10_LOG_DIR/drill-run.log"
+python3 "$driver_path" --lab "$private_lab_config" 2>&1 | tee "$T10_LOG_DIR/drill-run.log"
 driver_rc=${PIPESTATUS[0]}
 set -e
-rm -rf "$driver_dir"
+rm -rf -- "$driver_dir"
+driver_dir=""
 
 if [[ "$keep_lab" == "1" ]]; then
   t10_log "--keep：保留两套实验台（端口/容器见 restore-lab.json），不执行 teardown"

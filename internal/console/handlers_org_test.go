@@ -122,8 +122,9 @@ func TestListOrgMembersVisibilityAndErrorMapping(t *testing.T) {
 		if actorUserID != 42 || orgID != 2 {
 			t.Fatalf("ListMembers(%d, %d), want (42, 2)", actorUserID, orgID)
 		}
+		limit := int64(250)
 		return []organization.Member{{
-			UserID: 42, Email: "owner@example.com", Role: "owner", Status: "active",
+			MembershipID: 142, UserID: 42, Email: "owner@example.com", Role: "owner", Status: "active", MonthlyLimitMicro: &limit,
 			CreatedAt: time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC),
 		}}, nil
 	}
@@ -133,14 +134,18 @@ func TestListOrgMembersVisibilityAndErrorMapping(t *testing.T) {
 	}
 	var page struct {
 		Items []struct {
-			UserID string `json:"user_id"`
-			Email  string `json:"email"`
-			Role   string `json:"role"`
+			MembershipID      string  `json:"membership_id"`
+			UserID            string  `json:"user_id"`
+			Email             string  `json:"email"`
+			Role              string  `json:"role"`
+			Status            string  `json:"status"`
+			MonthlyLimitMicro *string `json:"monthly_limit_micro"`
 		} `json:"items"`
 		NextCursor *string `json:"next_cursor"`
 	}
 	decodeInto(t, rec, &page)
-	if len(page.Items) != 1 || page.Items[0].UserID != "42" || page.Items[0].Role != "owner" {
+	if len(page.Items) != 1 || page.Items[0].MembershipID != "142" || page.Items[0].UserID != "42" || page.Items[0].Role != "owner" ||
+		page.Items[0].Status != "active" || page.Items[0].MonthlyLimitMicro == nil || *page.Items[0].MonthlyLimitMicro != "250" {
 		t.Fatalf("members page = %+v", page)
 	}
 	if page.NextCursor != nil {
@@ -205,7 +210,7 @@ func TestCreateInvitationReturnsTokenOnceAndAuditsWithoutIt(t *testing.T) {
 	}
 
 	rec := h.orgReq(http.MethodPost, "/api/v1/orgs/2/invitations",
-		`{"email":"  Invitee@Example.com  ","role":"member"}`, fx, true)
+		`{"email":"  Invitee@Example.com  ","role":"member","monthly_limit_micro":null}`, fx, true)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create invitation = %d, want 201 (body=%s)", rec.Code, rec.Body.String())
 	}
@@ -230,6 +235,9 @@ func TestCreateInvitationReturnsTokenOnceAndAuditsWithoutIt(t *testing.T) {
 	}
 	if gotTTL != DefaultInvitationTTL {
 		t.Fatalf("default ttl = %s, want %s", gotTTL, DefaultInvitationTTL)
+	}
+	if len(h.orgs.inviteLimitCalls) != 1 || !h.orgs.inviteLimitCalls[0].Provided || h.orgs.inviteLimitCalls[0].Limit != nil {
+		t.Fatalf("invitation monthly limit calls = %+v, want explicit unlimited", h.orgs.inviteLimitCalls)
 	}
 	if strings.Contains(rec.Body.String(), "token_hash") {
 		t.Fatal("response leaks a token hash field")
@@ -266,18 +274,19 @@ func TestCreateInvitationValidationAndRefusals(t *testing.T) {
 		want int
 		err  error
 	}{
-		{name: "missing email", body: `{"role":"member"}`, want: http.StatusBadRequest},
+		{name: "missing email", body: `{"role":"member","monthly_limit_micro":null}`, want: http.StatusBadRequest},
 		{name: "missing role", body: `{"email":"a@b.c"}`, want: http.StatusBadRequest},
-		{name: "ttl below the minimum", body: `{"email":"a@b.c","role":"member","expires_in_seconds":10}`, want: http.StatusBadRequest},
-		{name: "ttl above the maximum", body: `{"email":"a@b.c","role":"member","expires_in_seconds":99999999}`, want: http.StatusBadRequest},
+		{name: "member cap required", body: `{"email":"a@b.c","role":"member"}`, want: http.StatusBadRequest},
+		{name: "ttl below the minimum", body: `{"email":"a@b.c","role":"member","monthly_limit_micro":null,"expires_in_seconds":10}`, want: http.StatusBadRequest},
+		{name: "ttl above the maximum", body: `{"email":"a@b.c","role":"member","monthly_limit_micro":null,"expires_in_seconds":99999999}`, want: http.StatusBadRequest},
 		{name: "malformed json", body: `{"email":`, want: http.StatusBadRequest},
 		{name: "forbidden by the matrix", body: `{"email":"a@b.c","role":"admin"}`, want: http.StatusForbidden, err: organization.ErrForbidden},
 		{name: "admin cannot invite an admin", body: `{"email":"a@b.c","role":"admin"}`, want: http.StatusForbidden, err: organization.ErrForbidden},
 		{name: "owner grant is transfer-only", body: `{"email":"a@b.c","role":"owner"}`, want: http.StatusForbidden, err: organization.ErrOwnerGrant},
 		{name: "platform role refused", body: `{"email":"a@b.c","role":"platform_admin"}`, want: http.StatusForbidden, err: organization.ErrPlatformRole},
-		{name: "invalid email", body: `{"email":"nope","role":"member"}`, want: http.StatusBadRequest, err: organization.ErrInvitationEmailInvalid},
+		{name: "invalid email", body: `{"email":"nope","role":"member","monthly_limit_micro":null}`, want: http.StatusBadRequest, err: organization.ErrInvitationEmailInvalid},
 		{name: "invalid role value", body: `{"email":"a@b.c","role":"superuser"}`, want: http.StatusBadRequest, err: organization.ErrRoleInvalid},
-		{name: "non-member", body: `{"email":"a@b.c","role":"member"}`, want: http.StatusNotFound, err: organization.ErrNotFound},
+		{name: "non-member", body: `{"email":"a@b.c","role":"member","monthly_limit_micro":null}`, want: http.StatusNotFound, err: organization.ErrNotFound},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -321,13 +330,17 @@ func TestCreateInvitationValidationAndRefusals(t *testing.T) {
 	h.orgs.createInvitationFn = func(_ context.Context, _, _ int64, _, _ string, ttl time.Duration) (organization.Invitation, string, error) {
 		return organization.Invitation{ID: 9, OrgID: 2, Email: "a@b.c", Role: "member", Status: "pending", ExpiresAt: time.Now().UTC()}, "tok", nil
 	}
-	rec := h.orgReq(http.MethodPost, "/api/v1/orgs/2/invitations", `{"email":"a@b.c","role":"member","expires_in_seconds":3600}`, fx, true)
+	rec := h.orgReq(http.MethodPost, "/api/v1/orgs/2/invitations", `{"email":"a@b.c","role":"member","monthly_limit_micro":"0","expires_in_seconds":3600}`, fx, true)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create invitation with ttl = %d, want 201", rec.Code)
 	}
 	calls := h.orgs.inviteCalls
 	if len(calls) == 0 || calls[len(calls)-1].TTL != time.Hour {
 		t.Fatalf("ttl calls = %+v, want the last one to be 1h", calls)
+	}
+	lastLimit := h.orgs.inviteLimitCalls[len(h.orgs.inviteLimitCalls)-1]
+	if !lastLimit.Provided || lastLimit.Limit == nil || *lastLimit.Limit != 0 {
+		t.Fatalf("last invitation limit = %+v, want explicit zero cap", lastLimit)
 	}
 }
 
@@ -336,8 +349,9 @@ func TestListOrgInvitationsReturnsMetadataOnly(t *testing.T) {
 	fx := h.t03Session(42, "owner@example.com")
 	h.orgs.listInvitationsFn = func(context.Context, int64, int64) ([]organization.Invitation, error) {
 		return []organization.Invitation{{
-			ID: 3, OrgID: 2, Email: "invitee@example.com", Role: "billing_viewer",
-			Status: "pending", ExpiresAt: time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC),
+			ID: 3, OrgID: 2, Email: "invitee@example.com", Role: "member",
+			MonthlyLimitMicro: func() *int64 { v := int64(350); return &v }(),
+			Status:            "pending", ExpiresAt: time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC),
 			CreatedAt: time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC),
 		}}, nil
 	}
@@ -355,6 +369,9 @@ func TestListOrgInvitationsReturnsMetadataOnly(t *testing.T) {
 	decodeInto(t, rec, &page)
 	if len(page.Items) != 1 || page.Items[0].ID != "3" || page.Items[0].Email != "invitee@example.com" {
 		t.Fatalf("invitation page = %+v", page)
+	}
+	if page.Items[0].Role != "member" || page.Items[0].MonthlyLimitMicro == nil || *page.Items[0].MonthlyLimitMicro != "350" {
+		t.Fatalf("invitation cap was not preserved in DTO: %+v", page.Items[0])
 	}
 
 	// Matrix violation and non-member are distinguishable: 403 vs 404.
@@ -382,8 +399,9 @@ func TestAcceptInvitationMapping(t *testing.T) {
 		if rawToken != "invite-token" || userID != 43 || userEmail != "invitee@example.com" {
 			t.Fatalf("AcceptInvitation(%q, %d, %q)", rawToken, userID, userEmail)
 		}
+		limit := int64(500)
 		return organization.Membership{
-			OrgID: 2, UserID: 43, Role: "billing_viewer", Status: "active",
+			ID: 43, OrgID: 2, UserID: 43, Role: "member", Status: "active", MonthlyLimitMicro: &limit,
 			CreatedAt: time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC),
 		}, nil
 	}
@@ -393,7 +411,7 @@ func TestAcceptInvitationMapping(t *testing.T) {
 	}
 	var accepted membershipRecordDTO
 	decodeInto(t, rec, &accepted)
-	if accepted.OrganizationID != "2" || accepted.UserID != "43" || accepted.Role != "billing_viewer" || accepted.Status != "active" {
+	if accepted.MembershipID != "43" || accepted.OrganizationID != "2" || accepted.UserID != "43" || accepted.Role != "member" || accepted.Status != "active" || accepted.MonthlyLimitMicro == nil || *accepted.MonthlyLimitMicro != "500" {
 		t.Fatalf("accepted membership = %+v", accepted)
 	}
 	events := h.audit.all()
@@ -499,6 +517,43 @@ func TestChangeMemberRoleMappingAndAudit(t *testing.T) {
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("%s %s %s = %d, want 400", tc.method, tc.path, tc.body, rec.Code)
 		}
+	}
+}
+
+func TestChangeMemberRolePassesExplicitMonthlyLimit(t *testing.T) {
+	h := newHarness(t, nil)
+	fx := h.t03Session(42, "owner@example.com")
+	h.orgs.changeMemberRoleFn = func(context.Context, int64, int64, int64, string) error { return nil }
+
+	finite := h.orgReq(http.MethodPatch, "/api/v1/orgs/2/members/3",
+		`{"role":"member","monthly_limit_micro":"2500000"}`, fx, true)
+	if finite.Code != http.StatusNoContent {
+		t.Fatalf("finite cap role patch=%d body=%s", finite.Code, finite.Body.String())
+	}
+	if len(h.orgs.roleLimitCalls) != 1 || !h.orgs.roleLimitCalls[0].Provided ||
+		h.orgs.roleLimitCalls[0].Limit == nil || *h.orgs.roleLimitCalls[0].Limit != 2_500_000 {
+		t.Fatalf("finite role cap call = %+v", h.orgs.roleLimitCalls)
+	}
+	if got := h.audit.all()[0].Detail; got["role"] != "member" {
+		t.Fatalf("role audit detail = %+v; cap should not be copied into audit detail", got)
+	}
+
+	unlimited := h.orgReq(http.MethodPatch, "/api/v1/orgs/2/members/3",
+		`{"role":"member","monthly_limit_micro":null}`, fx, true)
+	if unlimited.Code != http.StatusNoContent {
+		t.Fatalf("unlimited cap role patch=%d body=%s", unlimited.Code, unlimited.Body.String())
+	}
+	if len(h.orgs.roleLimitCalls) != 2 || !h.orgs.roleLimitCalls[1].Provided || h.orgs.roleLimitCalls[1].Limit != nil {
+		t.Fatalf("explicit unlimited role cap call = %+v", h.orgs.roleLimitCalls)
+	}
+
+	invalid := h.orgReq(http.MethodPatch, "/api/v1/orgs/2/members/3",
+		`{"role":"member","monthly_limit_micro":2}`, fx, true)
+	if invalid.Code != http.StatusBadRequest {
+		t.Fatalf("numeric cap status=%d body=%s", invalid.Code, invalid.Body.String())
+	}
+	if len(h.orgs.roleLimitCalls) != 2 {
+		t.Fatalf("invalid limit reached service: %+v", h.orgs.roleLimitCalls)
 	}
 }
 
@@ -691,6 +746,59 @@ func TestListOrgAuditRequiresAdminAndPaginates(t *testing.T) {
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("audit %s = %d, want 400", query, rec.Code)
 		}
+	}
+}
+
+func TestListOrgAuditHidesOtherMembersKeyEventsWithoutChangingCursor(t *testing.T) {
+	h := newHarness(t, nil)
+	fx := h.t03Session(42, "admin@example.com")
+	h.orgs.authorizeFn = func(_ context.Context, actorUserID, orgID int64, action organization.Action) (organization.Membership, error) {
+		if actorUserID != 42 || orgID != 2 || action != organization.ActionManageMembers {
+			t.Fatalf("AuthorizeOrgAction(%d, %d, %q), want (42, 2, manage_members)", actorUserID, orgID, action)
+		}
+		return organization.Membership{OrgID: 2, UserID: 42, Role: "admin", Status: "active"}, nil
+	}
+	otherActor := int64(10)
+	currentActor := int64(42)
+	requestID := "req-page"
+	h.auditStore.listFn = func(_ context.Context, orgID int64, limit int, beforeID int64) ([]AuditRecord, string, error) {
+		if orgID != 2 || limit != 5 || beforeID != 0 {
+			t.Fatalf("audit store scope/page = %d/%d/%d", orgID, limit, beforeID)
+		}
+		return []AuditRecord{
+			{ID: 15, ActorUserID: &otherActor, ActorOrgID: &orgID, Action: ActionKeyCreate, TargetType: TargetAPIKey, TargetID: "key_foreign", Outcome: "success", Detail: json.RawMessage(`{"name":"Foreign key","prefix":"sk-foreign","metadata":{"key_id":"key_nested_foreign","secret":"upstream-secret"}}`), RequestID: &requestID},
+			{ID: 14, ActorUserID: &currentActor, ActorOrgID: &orgID, Action: ActionKeyRevoke, TargetType: TargetAPIKey, TargetID: "key_self", Outcome: "success", Detail: json.RawMessage(`{"prefix":"sk-self"}`), RequestID: &requestID},
+			{ID: 13, ActorUserID: nil, ActorOrgID: &orgID, Action: ActionKeyCreate, TargetType: TargetAPIKey, TargetID: "legacy_key", Outcome: "success", Detail: json.RawMessage(`{"prefix":"sk-legacy"}`), RequestID: &requestID},
+			{ID: 12, ActorUserID: &otherActor, ActorOrgID: &orgID, Action: ActionMemberRemove, TargetType: TargetMembership, TargetID: "member-10", Outcome: "success", Detail: json.RawMessage(`{"role":"member"}`), RequestID: &requestID},
+		}, "10", nil
+	}
+
+	rec := h.orgReq(http.MethodGet, "/api/v1/orgs/2/audit?limit=5", "", fx, false)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list audit = %d, want 200 (body=%s)", rec.Code, rec.Body.String())
+	}
+	var page struct {
+		Items      []auditEventDTO `json:"items"`
+		NextCursor *string         `json:"next_cursor"`
+	}
+	decodeInto(t, rec, &page)
+	if len(page.Items) != 2 {
+		t.Fatalf("visible audit page has %d items, want own Key event and ordinary event: %+v", len(page.Items), page.Items)
+	}
+	if page.Items[0].TargetID != "key_self" || page.Items[1].TargetID != "member-10" {
+		t.Fatalf("visible rows = %+v, want own Key then ordinary member event", page.Items)
+	}
+	if page.NextCursor == nil || *page.NextCursor != "10" {
+		t.Fatalf("next_cursor=%v, want original unfiltered page cursor 10", page.NextCursor)
+	}
+	for _, hidden := range []string{"key_foreign", "Foreign key", "sk-foreign", "key_nested_foreign", "upstream-secret", "legacy_key", "sk-legacy"} {
+		if strings.Contains(rec.Body.String(), hidden) {
+			t.Fatalf("other member or legacy Key detail %q leaked in audit response: %s", hidden, rec.Body.String())
+		}
+	}
+	calls := h.auditStore.calls
+	if len(calls) != 1 {
+		t.Fatalf("audit store calls=%+v, want one", calls)
 	}
 }
 

@@ -454,7 +454,7 @@ def main(argv=None):
     compose = [
         "docker", "compose",
         "-p", project,
-        "-f", BASE_COMPOSE_NAME,
+        "-f", BASE_COMPOSE_NAME, "-f", "docker-compose.mock.yml",
         "-f", override_arg,
         "--profile", PROFILE,
     ]

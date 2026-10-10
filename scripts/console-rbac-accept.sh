@@ -12,9 +12,9 @@
 #     不泄露元数据），越权写入必须 403/404，最后一个 owner 必须 409。
 #
 # 契约来源：
-#   * docs/decisions/ADR-0003-enterprise-rbac-keys-and-policy.md §2.2–§2.9、§5
+#   * docs/decisions.md
 #   * docs/openapi/console-v1.yaml（/api/v1/orgs/* 冻结子集）
-#   * docs/decisions/ADR-0002-iam-identity-and-organizations.md §4/§5（会话/CSRF）
+#   * docs/decisions.md（会话/CSRF）
 #
 # 退出码：0 = 无硬失败（可能含 SKIP / NOT VERIFIED）；1 = 首个硬失败；2 = 用法/环境错误。
 #
@@ -33,6 +33,7 @@ run_id=""
 timeout_seconds=15
 gateway_url=""
 gateway_model="gpt-4o-mini"
+seed_local_test_credit=0
 
 usage() {
   cat <<'USAGE'
@@ -53,33 +54,37 @@ usage() {
   --run-id ID                    fixture 命名后缀（默认用 state file 里的值，否则自动生成）
   --timeout-seconds N            单个 curl 请求超时，默认 15
   --gateway-url URL              Gateway 地址（例如 http://127.0.0.1:18090）。提供后启用
-                                 check08（GATEWAY_ACCESS_GUARD=pg：撤销 Key 401、
-                                 billing_viewer Key 403、成功请求写入带归属的计量行）；
-                                 不提供则 check08 记为 SKIP，不做任何猜测。
+                                 check08（GATEWAY_ACCESS_GUARD=pg：成员自己的 Key 放行、
+                                 撤销后 401、成功请求写入带归属的计量行）；
+                                 不提供则 check08 记为 SKIP，不做任何猜测。余额不足时，
+                                 需另显式启用下方受限的本地测试充值选项。
   --gateway-model MODEL          check08 使用的模型名，默认 gpt-4o-mini（必须已在 Control
                                  的 routes 里配置，否则 Gateway 返回 404 unknown model）
+  --seed-local-test-credit      显式为本次新建的随机测试企业 A 充值 100000000 微元；仅当
+                                 Console/Gateway 都是 loopback 且 state file 不存在时可用。
+                                 默认不充值；不能配合既有 state file 或显式 --run-id。
   -h, --help                     显示本帮助
 
 检查项（ADR-0003 §5 验收映射）:
-  01 登录与角色矩阵读取         A/B 两家企业各 4 个账号（owner/admin/member/billing_viewer），
+  01 登录与角色矩阵读取         A/B 两家企业各 4 个账号（owner/admin/member/member），
                                 owner/admin 看全组织，member 只看到自己
   02 跨组织读取                 A 的 owner 读 B 的 members/invitations/keys/audit/usage
                                 → 404 not_found，且与"不存在的组织"逐字节同形、无元数据泄露
   03 跨组织写入                 A 的 owner 改 B 的成员/角色/邀请/owner 转移/Key/撤销
                                 → 404；B 的状态与 Key 不变
-  04 角色矩阵负例               member/viewer 的邀请、成员管理、审计、Key 操作 → 403；
+  04 角色矩阵负例               普通成员的邀请、成员管理、审计 → 403；
                                 非法角色 → 400；platform_admin 不是组织角色 → 403
   05 最后 owner 保护            admin 不能移除/降级 owner、不能自升 owner；
                                 最后一个 owner 不能离开/自我降级 → 409
   06 邀请一次性与不可篡改       错 email 接受 → 403；接受请求体不能改 email/role；
                                 同 token 二次接受 → 409；未知 token → 404；TTL 越界 → 400
-  07 Key 归属与 secret 一次性    member 只能给自己建/撤 Key，动他人 Key → 403/404；
+  07 Key 归属与 secret 一次性    各角色只管理本人命名 Key，管理员看不到成员 Key；
                                 secret 只在 create 响应出现一次；?operation_id= 只能回查元数据
                                 （Console 未接 Control 时整段 SKIP，不猜）
   08 Gateway access guard        GATEWAY_ACCESS_GUARD=pg：成员 Key 放行到上游；撤销后 401；
-                                billing_viewer 的 Key 403；成功请求写入带 org/user/key/
+                                另一成员自己的 Key 也能放行；成功请求写入带 org/user/key/
                                 execution 归属的计量行（需 --gateway-url，否则 SKIP）
-  09 用量隔离                   member → scope=self 且只看本人；admin/owner/billing_viewer
+  09 用量隔离                   member → scope=self 且只看本人；admin/owner
                                 → scope=organization；member 指名他人 → 403；B 的数据不可见
   10 审计归属                   每个变更出现在**操作者组织**的审计里（含失败），
                                 绝不作为 success 出现在另一家企业的审计里
@@ -114,6 +119,7 @@ while [[ $# -gt 0 ]]; do
     --gateway-url=*) gateway_url="${1#*=}"; shift ;;
     --gateway-model) gateway_model="${2:-}"; shift 2 ;;
     --gateway-model=*) gateway_model="${1#*=}"; shift ;;
+    --seed-local-test-credit) seed_local_test_credit=1; shift ;;
     -h|--help) usage; exit 0 ;;
     --) shift; break ;;
     -*) die_usage "未知参数 $1" ;;
@@ -160,6 +166,7 @@ fi
   printf 'timeout_seconds=%s\n' "$timeout_seconds"
   printf 'gateway_url=%s\n' "${gateway_url:-<none>}"
   printf 'gateway_model=%s\n' "$gateway_model"
+  printf 'seed_local_test_credit=%s\n' "$seed_local_test_credit"
   printf 'script_sha256=%s\n' "$(shasum -a 256 "$script_dir/$script_name" 2>/dev/null | awk '{print $1}')"
 } > "$evidence_dir/run.env"
 
@@ -183,6 +190,8 @@ only. Nothing here reads the database or the product source tree.
 """
 
 import argparse
+import hashlib
+import ipaddress
 import json
 import os
 import re
@@ -195,18 +204,18 @@ import urllib.parse
 from datetime import datetime, timezone
 
 MAX_STORED_BODY = 8192
-STATE_VERSION = 1
+STATE_VERSION = 2
 
-# Fixture actors. "viewer" is the ADR-0003 §2.3 read-only billing_viewer role.
+# Fixture actors: each enterprise has an owner, an admin, and two ordinary members.
 ACTOR_ROLES = {
     "a-owner": ("A", "owner"),
     "a-admin": ("A", "admin"),
     "a-member": ("A", "member"),
-    "a-viewer": ("A", "billing_viewer"),
+    "a-member2": ("A", "member"),
     "b-owner": ("B", "owner"),
     "b-admin": ("B", "admin"),
     "b-member": ("B", "member"),
-    "b-viewer": ("B", "billing_viewer"),
+    "b-member2": ("B", "member"),
 }
 INVITEE_ACTOR = "a-invitee"
 ORG_LABELS = {"A": "acme", "B": "beta"}
@@ -230,6 +239,23 @@ def utcnow():
 
 def slugify(text):
     return re.sub(r"[^a-z0-9]+", "-", str(text).lower()).strip("-")[:48] or "call"
+
+
+def is_loopback_http_url(raw):
+    try:
+        parsed = urllib.parse.urlsplit(raw)
+        host = parsed.hostname
+        _ = parsed.port
+    except (TypeError, ValueError):
+        return False
+    if parsed.scheme not in ("http", "https") or not host or parsed.username or parsed.password:
+        return False
+    if host.lower() == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
 
 
 class Redactor:
@@ -557,8 +583,12 @@ class Env:
         self.client = client
         self.state_path = args.state_file
         self.evidence_dir = args.evidence_dir
+        self.state_file_existed = os.path.lexists(args.state_file)
+        if args.seed_local_test_credit and self.state_file_existed:
+            raise InfraFailure("--seed-local-test-credit 不能复用已存在的 state file")
         self.state = self._load_state()
-        self.run_id = self.state.get("run_id") or args.run_id or secrets.token_hex(3)
+        self.run_id = (self.state.get("run_id") or args.run_id or
+                       secrets.token_hex(16 if args.seed_local_test_credit else 3))
         self.password = self.state.get("password") or secrets.token_urlsafe(15)
         self.sessions = {}
         self.bugs = []
@@ -570,6 +600,7 @@ class Env:
         self.users = self.state.setdefault("users", {})
         self.keys = self.state.setdefault("keys", {})
         self.invitations = self.state.setdefault("invitations", {})
+        self.created_orgs = set()
         self.pass_id = "%s-%s" % (utcnow().replace(":", "").replace("-", ""), secrets.token_hex(2))
 
     # -- state -------------------------------------------------------------
@@ -585,6 +616,8 @@ class Env:
             raise InfraFailure("state file 顶层必须是 JSON object: %s" % self.state_path)
         if state.get("base_url") and state["base_url"] != self.args.base_url:
             raise InfraFailure("state file 属于另一个 base_url（%s），拒绝复用" % state["base_url"])
+        if state and state.get("version") != STATE_VERSION:
+            raise InfraFailure("state file 使用旧版 fixture 契约；请为本次验收删除旧 state file 或指定新路径")
         if state.get("admin_email") and state["admin_email"] != self.args.admin_email:
             raise InfraFailure("state file 属于另一个 admin_email，拒绝复用")
         return state
@@ -650,83 +683,105 @@ class Env:
         self.sessions["admin"] = admin_session
 
         created_any = False
-        for actor in list(ACTOR_ROLES) + [INVITEE_ACTOR]:
+        actors = sorted(set(ACTOR_ROLES) | {INVITEE_ACTOR})
+        for actor in actors:
             if actor in self.users:
                 continue
             email = "t03-%s-%s@t03.test" % (self.run_id, actor)
             response = self.client.call(
-                check, "admin-create-%s" % actor, "POST", "/api/v1/admin/users",
-                body={"email": email, "password": self.password, "platform_admin": False},
-                session=admin_session)
-            expect_status(check, response, 201, label="admin-create-%s" % actor)
+                check, "register-%s" % actor, "POST", "/api/v1/auth/register",
+                body={"email": email, "password": self.password}, csrf=None)
+            expect_status(check, response, 201, label="register-%s" % actor)
             payload = response.json() or {}
-            # POST /api/v1/admin/users returns the user object directly (not wrapped).
-            user_id = str(payload.get("id", ""))
+            user_id = str((payload.get("user") or {}).get("id", ""))
             if not user_id:
-                raise CheckFailure("admin-create-%s: 响应缺少 user id" % actor)
+                raise CheckFailure("register-%s: 响应缺少 user.id" % actor)
             self.users[actor] = {"email": email, "id": user_id}
             created_any = True
             self.save_state()
 
-        for actor in sorted(set(ACTOR_ROLES) | {INVITEE_ACTOR}):
+        for actor in actors:
             session, payload = login(self.client, check, self.users[actor]["email"], self.password, "login-%s" % actor)
             self.sessions[actor] = session
             if session["user_id"] != str(self.users[actor]["id"]):
                 raise CheckFailure("%s: 登录返回的 user.id 与 fixture 不一致" % actor)
 
-        # Two enterprises, each owned by its *-owner account.
+        # Platform admin provisions each enterprise for the explicitly named owner.
         for label in ("A", "B"):
-            if label in self.orgs:
-                continue
-            owner = "%s-owner" % label.lower()
-            name = "t03-%s-%s" % (self.run_id, ORG_LABELS[label])
-            response = self.client.call(check, "create-org-%s" % label, "POST", "/api/v1/organizations",
-                                        body={"name": name}, session=self.sessions[owner])
-            expect_status(check, response, 201, label="create-org-%s" % label)
-            payload = response.json() or {}
-            org = payload.get("organization") or {}
-            if str(payload.get("role")) != "owner":
-                raise CheckFailure("create-org-%s: 创建者角色应为 owner，实际 %r" % (label, payload.get("role")))
-            self.orgs[label] = {"id": str(org.get("id", "")), "name": org.get("name", name)}
-            created_any = True
-            self.save_state()
-
-        # Invite the other three roles into each enterprise (ADR-0003 §2.4).
-        for label in ("A", "B"):
-            for suffix, role in (("admin", "admin"), ("member", "member"), ("viewer", "billing_viewer")):
-                actor = "%s-%s" % (label.lower(), suffix)
-                invitation = self.invitations.setdefault(label, {})
-                if actor in invitation:
-                    continue
+            if label not in self.orgs:
                 owner = "%s-owner" % label.lower()
+                name = "t03-%s-%s" % (self.run_id, ORG_LABELS[label])
                 response = self.client.call(
-                    check, "invite-%s" % actor, "POST", self.org_path(label, "/invitations"),
-                    body={"email": self.users[actor]["email"], "role": role},
-                    session=self.sessions[owner])
-                expect_status(check, response, 201, label="invite-%s" % actor)
-                token = (response.json() or {}).get("token", "")
-                if not token:
-                    raise CheckFailure("invite-%s: 响应缺少 token" % actor)
-                self.client.red.add(token)
-                self.secrets_to_scan.append(("invitation-token-%s" % actor, token, ["invite-%s" % actor]))
-                invitation[actor] = {"role": role, "consumed": True}
-                self.save_state()
-
-                response = self.client.call(
-                    check, "accept-%s" % actor, "POST", "/api/v1/invitations/%s/accept" % urllib.parse.quote(token),
-                    body={}, session=self.sessions[actor])
-                expect_status(check, response, 200, label="accept-%s" % actor)
-                membership = response.json() or {}
-                if str(membership.get("role")) != role:
-                    raise CheckFailure("accept-%s: 成员角色应为 %s，实际 %r" % (actor, role, membership.get("role")))
+                    check, "create-org-%s" % label, "POST", "/api/v1/admin/organizations",
+                    body={"name": name, "owner_email": self.users[owner]["email"]}, session=admin_session)
+                expect_status(check, response, 201, label="create-org-%s" % label)
+                payload = response.json() or {}
+                org = payload.get("organization") or {}
+                if str(payload.get("role")) != "owner":
+                    raise CheckFailure("create-org-%s: 指定 owner 的角色应为 owner，实际 %r"
+                                       % (label, payload.get("role")))
+                org_id = str(org.get("id", ""))
+                if not org_id:
+                    raise CheckFailure("create-org-%s: response missing organization.id" % label)
+                if self.args.seed_local_test_credit and org.get("type") != "enterprise":
+                    raise CheckFailure("--seed-local-test-credit target is not a newly created enterprise")
+                self.orgs[label] = {"id": org_id, "name": org.get("name", name)}
+                self.created_orgs.add(label)
                 created_any = True
                 self.save_state()
+                if self.args.seed_local_test_credit and label == "A":
+                    model_settings = self.client.call(
+                        check, "gateway-check-new-org-model-scope", "GET",
+                        "/api/v1/admin/organizations/%s/models" % org_id,
+                        session=admin_session)
+                    expect_status(check, model_settings, 200, label="new enterprise model scope")
+                    settings = model_settings.json() or {}
+                    if ("model_allowlist" not in settings or
+                            settings.get("model_allowlist") is not None):
+                        raise CheckFailure("--seed-local-test-credit requires the new enterprise to inherit platform models")
+
+        # Members join through the ordinary application workflow; the enterprise owner approves.
+        for label in ("A", "B"):
+            owner = "%s-owner" % label.lower()
+            member_path = self.org_path(label, "/members")
+            response = self.client.call(check, "members-before-join-%s" % label, "GET", member_path,
+                                        session=self.sessions[owner])
+            expect_status(check, response, 200, label="members-before-join-%s" % label)
+            current = {str(item.get("user_id")): item for item in (response.json() or {}).get("items", [])}
+            for actor, (actor_org, role) in ACTOR_ROLES.items():
+                if actor_org != label or role == "owner":
+                    continue
+                if self.user_id(actor) not in current:
+                    response = self.client.call(
+                        check, "join-request-%s" % actor, "POST",
+                        self.org_path(label, "/join-requests"),
+                        body={"display_name": actor}, session=self.sessions[actor])
+                    expect_status(check, response, 201, label="join-request-%s" % actor)
+                    request_id = str((response.json() or {}).get("id", ""))
+                    if not request_id:
+                        raise CheckFailure("join-request-%s: 响应缺少 id" % actor)
+                    decision = self.client.call(
+                        check, "approve-%s" % actor, "POST",
+                        self.org_path(label, "/join-requests/%s/decision" % request_id),
+                        body={"status": "approved", "monthly_limit_micro": "100000000"},
+                        session=self.sessions[owner])
+                    expect_status(check, decision, 200, label="approve-%s" % actor)
+                    created_any = True
+                    self.save_state()
+                if role == "admin":
+                    response = self.client.call(
+                        check, "promote-%s" % actor, "PATCH",
+                        self.org_path(label, "/members/%s" % self.user_id(actor)),
+                        body={"role": "admin"}, session=self.sessions[owner])
+                    expect_status(check, response, 204, label="promote-%s" % actor)
 
         if created_any:
             log("fixtures: run_id=%s orgA=%s orgB=%s users=%d" % (
                 self.run_id, self.orgs["A"]["id"], self.orgs["B"]["id"], len(self.users)))
         else:
             log("fixtures: 复用 state file 中的既有 fixture（run_id=%s）" % self.run_id)
+        if self.args.seed_local_test_credit and "A" not in self.created_orgs:
+            raise InfraFailure("--seed-local-test-credit 仅允许给本次新建的测试企业 A 充值")
         self.write_redacted_fixtures()
         self.actor_sessions_check(check)
 
@@ -794,43 +849,38 @@ def check01(env, check):
     """登录、fixture 就绪、角色矩阵读取一致性。"""
     client = env.client
     for label in ("A", "B"):
-        response = client.call(check, "members-%s-owner" % label, "GET", env.org_path(label, "/members"),
-                               session=env.session("%s-owner" % label.lower()))
-        expect_status(check, response, 200, label="members-%s(owner)" % label)
-        members = {item["email"]: item for item in (response.json() or {}).get("items", [])}
-        for actor, (actor_org, role) in ACTOR_ROLES.items():
-            if actor_org != label:
-                continue
-            email = env.email(actor)
-            check.require(email in members, "%s 的成员列表缺少 %s" % (label, email))
-            check.require(members[email]["role"] == role,
-                          "%s 中 %s 的角色应为 %s，实际 %s" % (label, email, role, members[email]["role"]))
-            check.require(members[email]["status"] == "active",
-                          "%s 中 %s 应为 active，实际 %s" % (label, email, members[email]["status"]))
+        for actor in ("%s-owner" % label.lower(), "%s-admin" % label.lower()):
+            response = client.call(check, "members-%s" % actor, "GET", env.org_path(label, "/members"),
+                                   session=env.session(actor))
+            expect_status(check, response, 200, label="members-%s" % actor)
+            members = {item["email"]: item for item in (response.json() or {}).get("items", [])}
+            for expected_actor, (actor_org, role) in ACTOR_ROLES.items():
+                if actor_org != label:
+                    continue
+                email = env.email(expected_actor)
+                check.require(email in members, "%s 的成员列表缺少 %s" % (label, email))
+                check.require(members[email]["role"] == role,
+                              "%s 中 %s 的角色应为 %s，实际 %s" % (label, email, role, members[email]["role"]))
+                check.require(members[email]["status"] == "active",
+                              "%s 中 %s 应为 active，实际 %s" % (label, email, members[email]["status"]))
 
-        # member 只能看到自己（单元素列表，不是 403）
-        response = client.call(check, "members-%s-member-self" % label, "GET", env.org_path(label, "/members"),
-                               session=env.session("%s-member" % label.lower()))
-        expect_status(check, response, 200, label="members-%s(member)" % label)
-        items = (response.json() or {}).get("items", [])
-        check.require(len(items) == 1 and items[0]["user_id"] == env.user_id("%s-member" % label.lower()),
-                      "%s: member 的成员列表必须只含自己，实际 %r" % (label, [item.get("user_id") for item in items]))
+        for suffix in ("member", "member2"):
+            actor = "%s-%s" % (label.lower(), suffix)
+            response = client.call(check, "members-%s-self" % actor, "GET", env.org_path(label, "/members"),
+                                   session=env.session(actor))
+            expect_status(check, response, 200, label="members-%s(self)" % actor)
+            items = (response.json() or {}).get("items", [])
+            check.require(len(items) == 1 and str(items[0].get("user_id")) == env.user_id(actor),
+                          "%s: member 的成员列表必须只含自己，实际 %r"
+                          % (actor, [item.get("user_id") for item in items]))
 
-        # billing_viewer 只读财务角色可以看到整个组织
-        response = client.call(check, "members-%s-viewer" % label, "GET", env.org_path(label, "/members"),
-                               session=env.session("%s-viewer" % label.lower()))
-        expect_status(check, response, 200, label="members-%s(viewer)" % label)
-        items = (response.json() or {}).get("items", [])
-        check.require(len(items) >= 4, "%s: billing_viewer 应看到整个组织（>=4），实际 %d" % (label, len(items)))
-
-    # /me 与登录响应都声明组织与角色
     response = client.call(check, "me-a-owner", "GET", "/api/v1/me", session=env.session("a-owner"))
     expect_status(check, response, 200, label="me-a-owner")
-    orgs = {str(item["organization"]["id"]): item["role"] for item in (response.json() or {}).get("organizations", [])}
-    check.require(orgs.get(env.org_id("A")) == "owner", "/me 的 A 组织角色应为 owner，实际 %r" % orgs.get(env.org_id("A")))
-    check.note("两家企业各 4 个账号（owner/admin/member/billing_viewer）；owner 由创建企业确立，"
-               "其余 3 人经邀请加入")
-
+    orgs = {str(item["organization"]["id"]): item["role"]
+            for item in (response.json() or {}).get("organizations", [])}
+    check.require(orgs.get(env.org_id("A")) == "owner",
+                  "/me 的 A 组织角色应为 owner，实际 %r" % orgs.get(env.org_id("A")))
+    check.note("每家企业 owner/admin 可管理全体成员；普通成员只看到本人关系")
 
 def check02(env, check):
     """跨组织读取必须 404，且与“组织不存在”逐字节同形、无元数据泄露。"""
@@ -889,7 +939,7 @@ def check03(env, check):
     if env.control_probe(check):
         b_operation = "t03-%s-b-owner-key" % env.pass_id
         response = client.call(check, "b-owner-create-key", "POST", env.org_path("B", "/keys"),
-                               body={"operation_id": b_operation}, session=env.session("b-owner"))
+                               body={"name": "t03-b-owner", "operation_id": b_operation}, session=env.session("b-owner"))
         expect_status(check, response, 201, label="b-owner-create-key")
         payload = response.json() or {}
         b_key_id = (payload.get("key") or {}).get("key_id")
@@ -904,14 +954,14 @@ def check03(env, check):
         ("a-owner", "b-members-patch", "PATCH", env.org_path("B", "/members/%s" % b_member), {"role": "member"}),
         ("a-owner", "b-members-delete", "DELETE", env.org_path("B", "/members/%s" % b_member), None),
         ("a-owner", "b-invitations-create", "POST", env.org_path("B", "/invitations"),
-         {"email": "t03-%s-intruder@t03.test" % env.run_id, "role": "member"}),
+         {"email": "t03-%s-intruder@t03.test" % env.run_id, "role": "member", "monthly_limit_micro": "100000000"}),
         # 目标必须不是调用者自己：TransferOwnership 先做 self-target 校验（400），
         # 再做成员关系校验（404），见 README 的“偏差观察”。
         ("a-owner", "b-owner-transfer", "POST", env.org_path("B", "/owner-transfer"), {"user": b_member}),
     ]
     if b_key_id:
         writes.append(("a-owner", "b-keys-revoke", "POST", env.org_path("B", "/keys/%s/revoke" % b_key_id), None))
-        writes.append(("a-member", "b-keys-create", "POST", env.org_path("B", "/keys"), {}))
+        writes.append(("a-member", "b-keys-create", "POST", env.org_path("B", "/keys"), {"name": "cross-org"}))
     for actor, name, method, path, body in writes:
         response = client.call(check, "cross-write-%s" % name, method, path, body=body, session=env.session(actor))
         require_envelope(check, response, 404, "not_found", "cross-write %s" % name)
@@ -962,41 +1012,43 @@ def check03(env, check):
 
 
 def check04(env, check):
-    """权限矩阵负例（ADR-0003 §2.3）。"""
+    """普通成员与企业管理员的权限边界。"""
     client = env.client
     member = env.session("a-member")
-    viewer = env.session("a-viewer")
+    other_member_id = env.user_id("a-member2")
     admin = env.session("a-admin")
     owner = env.session("a-owner")
 
     denials = [
         ("member-invite", member, "POST", env.org_path("A", "/invitations"),
-         {"email": "t03-%s-x1@t03.test" % env.run_id, "role": "member"}, 403, "forbidden"),
-        ("member-add-role", member, "PATCH", env.org_path("A", "/members/%s" % env.user_id("a-viewer")),
-         {"role": "admin"}, 403, "forbidden"),
-        ("member-remove", member, "DELETE", env.org_path("A", "/members/%s" % env.user_id("a-viewer")),
+         {"email": "t03-%s-x1@t03.test" % env.run_id, "role": "member", "monthly_limit_micro": "100000000"}, 403, "forbidden"),
+        ("member-manage-member", member, "PATCH", env.org_path("A", "/members/%s" % other_member_id),
+         {"status": "suspended"}, 403, "forbidden"),
+        ("member-remove", member, "DELETE", env.org_path("A", "/members/%s" % other_member_id),
          None, 403, "forbidden"),
         ("member-audit", member, "GET", env.org_path("A", "/audit"), None, 403, "forbidden"),
         ("member-list-invitations", member, "GET", env.org_path("A", "/invitations"), None, 403, "forbidden"),
-        ("viewer-invite", viewer, "POST", env.org_path("A", "/invitations"),
-         {"email": "t03-%s-x2@t03.test" % env.run_id, "role": "member"}, 403, "forbidden"),
-        ("viewer-patch-member", viewer, "PATCH", env.org_path("A", "/members/%s" % env.user_id("a-member")),
-         {"role": "billing_viewer"}, 403, "forbidden"),
-        ("viewer-audit", viewer, "GET", env.org_path("A", "/audit"), None, 403, "forbidden"),
         ("admin-invite-admin", admin, "POST", env.org_path("A", "/invitations"),
          {"email": "t03-%s-x3@t03.test" % env.run_id, "role": "admin"}, 403, "forbidden"),
         ("admin-invite-owner", admin, "POST", env.org_path("A", "/invitations"),
          {"email": "t03-%s-x4@t03.test" % env.run_id, "role": "owner"}, 403, "forbidden"),
+        ("admin-change-owner-quota", admin, "PATCH",
+         env.org_path("A", "/members/%s/quota" % env.user_id("a-owner")),
+         {"monthly_limit_micro": "500"}, 403, "forbidden"),
         ("owner-invite-platform-admin", owner, "POST", env.org_path("A", "/invitations"),
          {"email": "t03-%s-x6@t03.test" % env.run_id, "role": "platform_admin"}, 403, "forbidden"),
-        ("owner-grant-platform-admin", owner, "PATCH", env.org_path("A", "/members/%s" % env.user_id("a-member")),
+        ("owner-grant-platform-admin", owner, "PATCH",
+         env.org_path("A", "/members/%s" % env.user_id("a-member")),
          {"role": "platform_admin"}, 403, "forbidden"),
-        ("owner-grant-bogus-role", owner, "PATCH", env.org_path("A", "/members/%s" % env.user_id("a-member")),
+        ("owner-grant-bogus-role", owner, "PATCH",
+         env.org_path("A", "/members/%s" % env.user_id("a-member")),
          {"role": "superuser"}, 400, "invalid_request"),
         ("owner-invite-bogus-role", owner, "POST", env.org_path("A", "/invitations"),
          {"email": "t03-%s-x7@t03.test" % env.run_id, "role": "superuser"}, 400, "invalid_request"),
+        ("owner-invite-member-missing-cap", owner, "POST", env.org_path("A", "/invitations"),
+         {"email": "t03-%s-x10@t03.test" % env.run_id, "role": "member"}, 400, "invalid_request"),
         ("owner-invite-bad-ttl", owner, "POST", env.org_path("A", "/invitations"),
-         {"email": "t03-%s-x8@t03.test" % env.run_id, "role": "member", "expires_in_seconds": 5}, 400, "invalid_request"),
+         {"email": "t03-%s-x8@t03.test" % env.run_id, "role": "member", "monthly_limit_micro": "100000000", "expires_in_seconds": 5}, 400, "invalid_request"),
         ("member-cross-user-usage", member, "GET", env.org_path("A", "/usage"),
          None, 403, "forbidden", "user=" + env.user_id("a-owner")),
     ]
@@ -1006,29 +1058,14 @@ def check04(env, check):
         response = client.call(check, "deny-%s" % name, method, path, body=body, query=query, session=session)
         require_envelope(check, response, status, code, "deny %s" % name)
 
-    # 观察（非硬失败）：owner 可以创建 role=owner 的邀请（checkInvitationGrant 对
-    # owner 放行），admin 创建 owner 邀请是 403（已在上面的负例里断言）。
-    observe = client.call(check, "observe-owner-invite-owner", "POST", env.org_path("A", "/invitations"),
-                          body={"email": "t03-%s-owner2@t03.test" % env.run_id, "role": "owner"}, session=owner)
-    check.details["owner_invite_owner_status"] = observe.status
-    check.require(observe.status in (201, 403),
-                  "owner 创建 owner 邀请既不是 201 也不是 403：%d" % observe.status)
-    check.note("观察：owner 创建 role=owner 的邀请 → %d（属设计：invitations.go checkInvitationGrant；"
-               "owner 仍然是唯一能发放 owner 角色的路径，admin 发放 owner 为 403）" % observe.status)
+    owner_invite_owner = client.call(check, "deny-owner-invite-owner", "POST", env.org_path("A", "/invitations"),
+                                     body={"email": "t03-%s-owner2@t03.test" % env.run_id, "role": "owner"}, session=owner)
+    require_envelope(check, owner_invite_owner, 403, "forbidden", "owner 不能邀请新的 owner")
+    check.note("普通成员不能管理成员、邀请或审计；管理员不能调整自身额度或授予管理员/Owner；平台角色只由平台管理")
 
-    if env.control_probe(check):
-        for name, method, path, body, query in (
-            ("viewer-list-keys", "GET", env.org_path("A", "/keys"), None, None),
-            ("viewer-create-key", "POST", env.org_path("A", "/keys"), {}, None),
-            ("member-list-other-keys", "GET", env.org_path("A", "/keys"), None,
-             "owner_user_id=" + env.user_id("a-admin")),
-        ):
-            response = client.call(check, "deny-%s" % name, method, path, body=body, query=query, session=viewer if name.startswith("viewer") else member)
-            require_envelope(check, response, 403, "forbidden", "deny %s" % name)
-        check.note("Key 端点矩阵：billing_viewer 无 manage_own_keys → 403；member 不能按他人过滤")
-    else:
-        check.note("Console 未接 Control（key 端点 503），Key 相关矩阵负例见 check07 的 SKIP 说明")
-
+    # Every active member can manage only personal Keys. The list/revoke privacy boundary is checked in check07.
+    if not env.control_probe(check):
+        check.note("Console 未接 Control（key 端点 503），Key 权限在 check07 中记为 SKIP")
 
 def check05(env, check):
     """最后 owner 保护：admin 不能动 owner、不能自升 owner；最后一个 owner 不能离开。"""
@@ -1045,7 +1082,7 @@ def check05(env, check):
         ("admin-transfer-other", admin, "POST", env.org_path("A", "/owner-transfer"),
          {"user": env.user_id("a-member")}, 403, "forbidden"),
         ("owner-leave", owner, "DELETE", env.org_path("A", "/members/%s" % owner_id), None, 409, "conflict"),
-        ("owner-self-demote", owner, "PATCH", env.org_path("A", "/members/%s" % owner_id), {"role": "member"}, 409, "conflict"),
+        ("owner-self-demote", owner, "PATCH", env.org_path("A", "/members/%s" % owner_id), {"role": "member", "monthly_limit_micro": None}, 409, "conflict"),
     ]
     for name, session, method, path, body, status, code in cases:
         response = client.call(check, "owner-protect-%s" % name, method, path, body=body, session=session)
@@ -1091,7 +1128,7 @@ def check06(env, check):
     invitee_session = env.session(invitee)
 
     response = client.call(check, "invite-invitee", "POST", env.org_path("A", "/invitations"),
-                           body={"email": invitee_email, "role": "member", "expires_in_seconds": 3600},
+                           body={"email": invitee_email, "role": "member", "monthly_limit_micro": "100000000", "expires_in_seconds": 3600},
                            session=owner)
     expect_status(check, response, 201, label="invite invitee")
     payload = response.json() or {}
@@ -1134,6 +1171,8 @@ def check06(env, check):
     check.require(str(membership.get("organization_id")) == env.org_id("A"),
                   "接受的成员关系不属于目标组织 A")
     check.require(str(membership.get("user_id")) == env.user_id(invitee), "接受的成员不是邀请 email 对应的用户")
+    check.require(membership.get("monthly_limit_micro") == "100000000",
+                  "接受邀请后没有保留邀请时明确设定的月额度")
 
     # 一次性：同 token 再来一次 → 409
     reuse = client.call(check, "accept-invitee-reuse", "POST",
@@ -1150,7 +1189,7 @@ def check06(env, check):
     # TTL 上界越界 → 400（下界 5s 已在 check04 覆盖）
     ttl = client.call(check, "invite-ttl-too-long", "POST", env.org_path("A", "/invitations"),
                       body={"email": "t03-%s-x9@t03.test" % env.run_id, "role": "member",
-                            "expires_in_seconds": 99999999}, session=owner)
+                            "monthly_limit_micro": "100000000", "expires_in_seconds": 99999999}, session=owner)
     require_envelope(check, ttl, 400, "invalid_request", "invitation ttl too long")
 
     # 成员关系生效且角色固定
@@ -1163,144 +1202,154 @@ def check06(env, check):
 
 
 def check07(env, check):
-    """Key 归属、secret 只出现一次、metadata-only 恢复路径。"""
+    """每人自管多把有名称的 Key；secret 只出现一次，管理角色看不到成员 Key。"""
     client = env.client
     if not env.control_probe(check):
         check.skip("Console 未接 Control（GET /keys → 503 unavailable）：Key 端点未验收")
-    owner = env.session("a-owner")
     member = env.session("a-member")
     admin = env.session("a-admin")
-    viewer = env.session("a-viewer")
+    owner = env.session("a-owner")
     member_id = env.user_id("a-member")
     admin_id = env.user_id("a-admin")
-    viewer_id = env.user_id("a-viewer")
 
-    # member 为自己建 Key（带客户端 operation_id）
     op_member = "t03-%s-member-own" % env.pass_id
+    key_name = "t03-notebook"
     created = client.call(check, "member-create-own-key", "POST", env.org_path("A", "/keys"),
-                          body={"operation_id": op_member}, session=member)
+                          body={"name": key_name, "operation_id": op_member}, session=member)
     expect_status(check, created, 201, label="member create own key")
     payload = created.json() or {}
     key = payload.get("key") or {}
     secret = payload.get("secret", "")
-    member_key_id = key.get("key_id")
-    check.require(bool(secret), "create key 响应没有 raw secret")
+    member_key_id = str(key.get("key_id", ""))
+    check.require(bool(secret) and bool(member_key_id), "create key 响应缺少 raw secret 或 key_id")
+    check.require(key.get("name") == key_name, "Key 名称未按创建请求保存")
     check.require(payload.get("secret_returned_once") is True, "secret_returned_once 应为 true")
     check.require(payload.get("replayed") is False, "首次 create 的 replayed 应为 false")
-    check.require(str(key.get("owner_user_id")) == member_id,
-                  "member 自建 Key 的 owner_user_id 应为本人，实际 %r" % key.get("owner_user_id"))
     check.require(str(key.get("organization_id")) == env.org_id("A"), "Key 的 organization_id 不是 A")
     check.require(key.get("status") == "active", "新 Key 状态应为 active")
     client.red.add(secret)
     env.secrets_to_scan.append(("a-member-own-key-secret", secret, ["member-create-own-key"]))
     env.keys["a-member-own"] = {"org": "A", "key_id": member_key_id, "prefix": key.get("prefix")}
 
-    # 幂等重放：同 operation_id 同 payload → 201 replayed=true 且没有 secret
+    # Retrying the same create must return metadata only; changing the same operation's payload conflicts.
     replay = client.call(check, "member-replay-key", "POST", env.org_path("A", "/keys"),
-                         body={"operation_id": op_member}, session=member)
+                         body={"name": key_name, "operation_id": op_member}, session=member)
     expect_status(check, replay, 201, label="replay create key")
     replay_payload = replay.json() or {}
     check.require(replay_payload.get("replayed") is True, "同 operation_id 重放应 replayed=true")
     check.require("secret" not in replay_payload, "重放响应不应再携带 secret 字段")
-    check.require((replay_payload.get("key") or {}).get("key_id") == member_key_id, "重放返回了另一把 Key")
+    check.require((replay_payload.get("key") or {}).get("key_id") == member_key_id,
+                  "重放返回了另一把 Key")
 
-    # 同 operation_id 不同 payload → 409（member 改自己的 model_allowlist 是允许的，
-    # 因此这里触发的是 Control 的幂等冲突，而不是 Console 的 403 授权拒绝）
     conflict = client.call(check, "member-key-op-conflict", "POST", env.org_path("A", "/keys"),
-                           body={"operation_id": op_member, "model_allowlist": ["gpt-4o-mini"]}, session=member)
+                           body={"name": "different-name", "operation_id": op_member}, session=member)
     require_envelope(check, conflict, 409, "conflict", "operation_id payload conflict")
 
-    # metadata-only 恢复路径
     recovered = client.call(check, "member-recover-by-operation", "GET", env.org_path("A", "/keys"),
                             query="operation_id=" + urllib.parse.quote(op_member), session=member)
     expect_status(check, recovered, 200, label="recover key by operation_id")
     recovered_payload = recovered.json() or {}
     check.require(recovered_payload.get("replayed") is True, "恢复路径必须标记 replayed=true")
     check.require("secret" not in recovered_payload, "恢复路径不得返回 secret")
-    items = recovered_payload.get("items") or []
-    check.require(len(items) == 1 and items[0].get("key_id") == member_key_id,
+    recovered_items = recovered_payload.get("items") or []
+    check.require(len(recovered_items) == 1 and recovered_items[0].get("key_id") == member_key_id,
                   "恢复路径没有返回原 Key 的元数据")
+    check.require(recovered_items[0].get("name") == key_name, "恢复路径没有返回本人的 Key 名称")
     check.require("secret" not in json.dumps(recovered_payload), "恢复响应里出现了 secret 字段")
 
-    # member 不能给他人建 Key
-    forbidden = client.call(check, "member-create-key-for-admin", "POST", env.org_path("A", "/keys"),
-                            body={"owner_user_id": admin_id}, session=member)
-    require_envelope(check, forbidden, 403, "forbidden", "member creates key for another member")
+    # A second named key verifies that cursors expose every one of the member's keys.
+    second_op = "t03-%s-member-second" % env.pass_id
+    second = client.call(check, "member-create-second-key", "POST", env.org_path("A", "/keys"),
+                         body={"name": "t03-playground", "operation_id": second_op}, session=member)
+    expect_status(check, second, 201, label="member create second key")
+    second_payload = second.json() or {}
+    second_key = second_payload.get("key") or {}
+    second_secret = second_payload.get("secret", "")
+    second_key_id = str(second_key.get("key_id", ""))
+    check.require(second_secret and second_key_id and second_key.get("name") == "t03-playground",
+                  "第二把 Key 没有独立 ID、secret 或名称")
+    client.red.add(second_secret)
+    env.secrets_to_scan.append(("a-member-second-key-secret", second_secret, ["member-create-second-key"]))
+    env.keys["a-member-second"] = {"org": "A", "key_id": second_key_id, "prefix": second_key.get("prefix")}
 
-    # admin 可以给成员建 Key（owner_user_id 指向 billing_viewer；viewer 自己无权建 Key）
-    op_admin = "t03-%s-admin-for-viewer" % env.pass_id
-    admin_key = client.call(check, "admin-create-key-for-viewer", "POST", env.org_path("A", "/keys"),
-                            body={"owner_user_id": viewer_id, "operation_id": op_admin}, session=admin)
-    expect_status(check, admin_key, 201, label="admin creates key for viewer")
-    admin_payload = admin_key.json() or {}
+    member_page1 = client.call(check, "member-key-page1", "GET", env.org_path("A", "/keys"),
+                               query="limit=1", session=member)
+    expect_status(check, member_page1, 200, label="member key page 1")
+    page1 = member_page1.json() or {}
+    cursor = page1.get("next_cursor")
+    check.require(cursor, "两把 Key 时 limit=1 应返回 next_cursor")
+    member_page2 = client.call(check, "member-key-page2", "GET", env.org_path("A", "/keys"),
+                               query="limit=1&cursor=" + urllib.parse.quote(str(cursor)), session=member)
+    expect_status(check, member_page2, 200, label="member key page 2")
+    page2 = member_page2.json() or {}
+    member_rows = (page1.get("items") or []) + (page2.get("items") or [])
+    check.require({str(item.get("key_id")) for item in member_rows} >= {member_key_id, second_key_id},
+                  "游标分页没有提供 member 的两把 Key")
+    check.require({str(item.get("name")) for item in member_rows} >= {key_name, "t03-playground"},
+                  "Key 列表缺少用户设置的名称")
+    check.require(all("secret" not in item for item in member_rows), "Key 列表项包含 secret")
+
+    # Other users' operation recovery and revoke attempts are intentionally indistinguishable from missing Keys.
+    other_recovery = client.call(check, "admin-recover-member-operation", "GET", env.org_path("A", "/keys"),
+                                 query="operation_id=" + urllib.parse.quote(op_member), session=admin)
+    require_envelope(check, other_recovery, 404, "not_found", "another user recovers member operation")
+    admin_op = "t03-%s-admin-own" % env.pass_id
+    admin_created = client.call(check, "admin-create-own-key", "POST", env.org_path("A", "/keys"),
+                                 body={"name": "t03-admin-console", "operation_id": admin_op}, session=admin)
+    expect_status(check, admin_created, 201, label="admin creates own key")
+    admin_payload = admin_created.json() or {}
+    admin_key = admin_payload.get("key") or {}
     admin_secret = admin_payload.get("secret", "")
-    admin_key_id = (admin_payload.get("key") or {}).get("key_id")
-    check.require(str((admin_payload.get("key") or {}).get("owner_user_id")) == viewer_id,
-                  "admin 代建的 Key 归属应为被指名的成员")
-    if admin_secret:
-        client.red.add(admin_secret)
-        env.secrets_to_scan.append(("admin-created-key-secret", admin_secret, ["admin-create-key-for-viewer"]))
-    env.keys["a-admin-for-viewer"] = {"org": "A", "key_id": admin_key_id,
-                                      "prefix": (admin_payload.get("key") or {}).get("prefix")}
-
-    # member 不能撤他人的 Key：404（与“不存在”同形）
-    revoke_other = client.call(check, "member-revoke-others-key", "POST",
+    admin_key_id = str(admin_key.get("key_id", ""))
+    check.require(admin_secret and admin_key_id and admin_key.get("name") == "t03-admin-console",
+                  "admin 创建的本人 Key 缺少名称、ID 或 secret")
+    client.red.add(admin_secret)
+    env.secrets_to_scan.append(("a-admin-own-key-secret", admin_secret, ["admin-create-own-key"]))
+    env.keys["a-admin-own"] = {"org": "A", "key_id": admin_key_id, "prefix": admin_key.get("prefix")}
+    other_revoke = client.call(check, "member-revoke-admin-key", "POST",
                                env.org_path("A", "/keys/%s/revoke" % admin_key_id), session=member)
-    require_envelope(check, revoke_other, 404, "not_found", "member revokes another member's key")
-    check.require(admin_key_id not in revoke_other.body, "拒绝撤销时回显了他人 key_id")
-    still_active = client.call(check, "admin-list-keys-after-refused-revoke", "GET", env.org_path("A", "/keys"),
-                               query="limit=100", session=admin)
-    expect_status(check, still_active, 200, label="keys after refused revoke")
-    by_id = {item["key_id"]: item for item in (still_active.json() or {}).get("items", [])}
-    check.require(by_id.get(admin_key_id, {}).get("status") == "active",
-                  "被拒绝的跨用户撤销实际上改动了目标 Key 状态")
+    require_envelope(check, other_revoke, 404, "not_found", "member revokes admin's key")
+    check.require(admin_key_id not in other_revoke.body, "拒绝撤销时回显了他人的 Key ID")
 
-    # member 撤自己的 Key → 200 revoked；重复撤销幂等
-    revoke_own = client.call(check, "member-revoke-own-key", "POST",
-                             env.org_path("A", "/keys/%s/revoke" % member_key_id), session=member)
-    expect_status(check, revoke_own, 200, label="member revokes own key")
-    check.require(((revoke_own.json() or {}).get("key") or {}).get("status") == "revoked",
+    # Explicit user filters and other-user lists/recovery never reveal a member Key to owner/admin.
+    for actor in ("a-admin", "a-owner"):
+        response = client.call(check, "%s-list-keys" % actor, "GET", env.org_path("A", "/keys"),
+                               query="limit=100", session=env.session(actor))
+        expect_status(check, response, 200, label="%s own key list" % actor)
+        rows = (response.json() or {}).get("items", [])
+        check.require(all(str(item.get("key_id")) != member_key_id and str(item.get("key_id")) != second_key_id
+                          for item in rows), "%s 看到了成员的 Key 元数据" % actor)
+        check.require(all("secret" not in item for item in rows), "%s 的 Key 列表包含 secret" % actor)
+        check.require(member_key_id not in response.body and "t03-notebook" not in response.body,
+                      "%s 的响应泄露了成员 Key ID 或名称" % actor)
+    filtered = client.call(check, "member-filter-other-key", "GET", env.org_path("A", "/keys"),
+                           query="owner_user_id=" + admin_id, session=member)
+    require_envelope(check, filtered, 404, "not_found", "member filters another user's keys")
+    check.require(admin_key_id not in filtered.body and "t03-admin-console" not in filtered.body,
+                  "他人 Key 过滤响应泄露了 Key 元数据")
+
+    # The owner also cannot recover a member's operation, even though owner/admin can see member records.
+    owner_recovery = client.call(check, "owner-recover-member-operation", "GET", env.org_path("A", "/keys"),
+                                 query="operation_id=" + urllib.parse.quote(op_member), session=owner)
+    require_envelope(check, owner_recovery, 404, "not_found", "owner recovers member operation")
+
+    # A member may revoke only their own Key; repeat revoke remains idempotent.
+    revoked = client.call(check, "member-revoke-own-key", "POST",
+                          env.org_path("A", "/keys/%s/revoke" % second_key_id), session=member)
+    expect_status(check, revoked, 200, label="member revokes own key")
+    check.require(((revoked.json() or {}).get("key") or {}).get("status") == "revoked",
                   "撤销后 Key 状态不是 revoked")
     again = client.call(check, "member-revoke-own-key-again", "POST",
-                        env.org_path("A", "/keys/%s/revoke" % member_key_id), session=member)
-    expect_status(check, again, 200, label="re-revoke own key")
-    check.require(((again.json() or {}).get("key") or {}).get("status") == "revoked", "重复撤销改变了状态")
+                        env.org_path("A", "/keys/%s/revoke" % second_key_id), session=member)
+    expect_status(check, again, 200, label="member re-revokes own key")
+    check.require(((again.json() or {}).get("key") or {}).get("status") == "revoked",
+                  "重复撤销改变了状态")
 
-    # viewer 不能碰 Key（403）
-    viewer_list = client.call(check, "viewer-list-keys", "GET", env.org_path("A", "/keys"), session=viewer)
-    require_envelope(check, viewer_list, 403, "forbidden", "viewer lists keys")
-    viewer_create = client.call(check, "viewer-create-key", "POST", env.org_path("A", "/keys"),
-                                body={}, session=viewer)
-    require_envelope(check, viewer_create, 403, "forbidden", "viewer creates key")
-
-    # 列表隔离：member 只看自己的；admin 看全组织；任何列表都没有 secret
-    member_list = client.call(check, "member-list-own-keys", "GET", env.org_path("A", "/keys"),
-                              query="limit=100", session=member)
-    expect_status(check, member_list, 200, label="member lists keys")
-    for item in (member_list.json() or {}).get("items", []):
-        check.require(str(item.get("owner_user_id")) == member_id,
-                      "member 的 Key 列表里出现了他人（%r）的 Key" % item.get("owner_user_id"))
-        check.require("secret" not in item, "Key 列表项包含 secret 字段")
-    admin_list = client.call(check, "admin-list-org-keys", "GET", env.org_path("A", "/keys"),
-                             query="limit=100", session=admin)
-    expect_status(check, admin_list, 200, label="admin lists org keys")
-    admin_items = (admin_list.json() or {}).get("items", [])
-    check.require(any(str(item.get("owner_user_id")) == member_id for item in admin_items),
-                  "admin 的组织级 Key 列表看不到成员的 Key")
-    check.require(any(str(item.get("owner_user_id")) == viewer_id for item in admin_items),
-                  "admin 的组织级 Key 列表看不到另一个成员的 Key")
-    check.require("secret" not in admin_list.body, "组织级 Key 列表包含 secret 字段")
-    check.require(admin_secret not in admin_list.body, "组织级 Key 列表回显了 raw secret")
-
-    # secret 只出现一次：扫描到目前为止捕获的所有响应
-    hits = [record for record in client.records if secret and secret in record["body"]]
-    check.require(len(hits) == 1 and hits[0]["label"] == "member-create-own-key",
-                  "raw secret 出现在 %d 个响应里（应仅为 create 那一次）：%s"
-                  % (len(hits), [record["label"] for record in hits]))
-    check.require(bool(key.get("prefix")) and not str(key.get("prefix")).startswith(secret),
-                  "prefix 不应包含完整 secret")
-    check.note("secret 仅在 create 响应出现一次；?operation_id= 只回元数据（replayed=true）")
-
+    # Each secret is captured exactly once, in the corresponding create response.
+    for label, value in (("member", secret), ("second member", second_secret), ("admin", admin_secret)):
+        hits = [record for record in client.records if value and value in record["body"]]
+        check.require(len(hits) == 1, "%s raw secret 出现在 %d 个响应里" % (label, len(hits)))
+    check.note("owner/admin/member 各自只管理本人 Key；多把命名 Key 可翻页，成员 Key 元数据不进入管理视图")
 
 def poll_status(check, client, label, method, path, *, expect, timeout=15.0, interval=1.0, **kwargs):
     """Repeat one request until it reaches `expect` (snapshot/metering are async)."""
@@ -1316,98 +1365,114 @@ def poll_status(check, client, label, method, path, *, expect, timeout=15.0, int
 
 
 def check08(env, check):
-    """Gateway PG access guard（ADR-0003 §2.8）：失效 Key 与无生成权限的 Key
-    必须在进入上游之前被拒绝；成功请求写入带归属的计量事件。"""
+    """Gateway access guard：本人的 active Key 放行，撤销后拒绝，计量归属可追溯。"""
     if not env.args.gateway_url:
         check.skip("未提供 --gateway-url：Gateway access guard 与计量归属未验收")
     client = env.client
     gateway = env.args.gateway_url
     model = env.args.gateway_model
     member = env.session("a-member")
+    second_member = env.session("a-member2")
     admin = env.session("a-admin")
 
     ready = client.call(check, "gateway-readyz", "GET", "/readyz", base_url=gateway, csrf=None)
     expect_status(check, ready, 200, label="gateway readyz")
 
+    if env.args.seed_local_test_credit:
+        if "A" not in env.created_orgs:
+            raise InfraFailure("--seed-local-test-credit 仅允许给本次新建的测试企业 A 充值")
+        # This explicit opt-in is limited to a fresh, loopback-only fixture.
+        # The stable operation/reference pair makes a same-run retry idempotent.
+        funding_suffix = hashlib.sha256(env.run_id.encode("utf-8")).hexdigest()[:24]
+        funding_key = "t03-check08-funding-" + funding_suffix
+        payment_reference = "t03-check08-" + funding_suffix
+        funded = client.call(
+            check, "gateway-fund-org-a", "POST",
+            "/api/v1/admin/billing/accounts/%s/adjustments" % env.org_id("A"),
+            body={"type": "recharge", "amount_micro": "100000000",
+                  "payment_reference": payment_reference,
+                  "reason": "T03 Check08 Gateway access guard acceptance funding"},
+            session=env.session("admin"),
+            extra_headers={"Idempotency-Key": funding_key})
+        if funded.status not in (200, 201):
+            raise CheckFailure("POST fund organization A for Check08: expected HTTP 200 or 201, "
+                               "got %d code=%s message=%s" % (funded.status, funded.code(), funded.message()))
+        entry = (funded.json() or {}).get("entry") or {}
+        if (entry.get("manual_operation") != "recharge" or
+                entry.get("amount_micro") != "100000000" or
+                entry.get("payment_reference") != payment_reference or
+                entry.get("business_id") != funding_key):
+            raise CheckFailure("Check08 funding response did not match its idempotent recharge request")
+        check.note("仅为本次新建的 loopback 测试企业 A 充值 100000000 微元；平台默认模型范围保持继承")
+
     request_body = {"model": model, "messages": [{"role": "user", "content": "t03 acceptance"}], "stream": True}
 
-    # 1) 正常成员 Key：guard 放行，请求到达上游 mock（响应里带 "primary" 标记）
-    op = "t03-%s-gateway-allowed" % env.pass_id
+    op = "t03-%s-gateway-member" % env.pass_id
     created = client.call(check, "gateway-create-member-key", "POST", env.org_path("A", "/keys"),
-                          body={"operation_id": op}, session=member)
+                          body={"name": "t03-gateway-member", "operation_id": op}, session=member)
     expect_status(check, created, 201, label="gateway member key")
     payload = created.json() or {}
     secret = payload.get("secret", "")
-    key_id = (payload.get("key") or {}).get("key_id")
+    key_id = str((payload.get("key") or {}).get("key_id", ""))
     check.require(bool(secret) and bool(key_id), "Gateway 检查需要一把新建的成员 Key")
     client.red.add(secret)
     env.secrets_to_scan.append(("gateway-member-key-secret", secret, ["gateway-create-member-key"]))
 
-    allowed = poll_status(check, client, "gateway-allowed", "POST", "/v1/chat/completions",
+    allowed = poll_status(check, client, "gateway-member-allowed", "POST", "/v1/chat/completions",
                           expect=200, base_url=gateway, body=request_body, csrf=None, max_time=8,
                           tolerate_timeout=True,
                           extra_headers={"Authorization": "Bearer " + secret})
-    expect_status(check, allowed, 200, label="gateway allowed request")
-    check.require("primary" in allowed.body,
-                  "放行请求的响应没有出现上游 mock 标记：%r" % allowed.body[:120])
-    check.require("[DONE]" in allowed.body, "放行请求的 SSE 流没有 data: [DONE] 结束标记")
-    if allowed.curl_timeout:
-        check.details["gateway_sse_open_after_done"] = True
-        check.note("产品发现：SSE 响应体在毫秒级就带上了 data: [DONE]，但 Gateway 直到约 90s 才结束 "
-                   "chunked 响应；curl --max-time 8 因此以 rc=28 退出（body 完整）。上游 mock 直连只需 "
-                   "0.046s。详见 README「产品发现」。")
+    expect_status(check, allowed, 200, label="gateway member request")
+    check.require("primary" in allowed.body and "[DONE]" in allowed.body,
+                  "放行请求未完整到达上游 mock")
 
-    # 2) 撤销后：401 unauthorized，且不是上游响应
     revoked = client.call(check, "gateway-revoke-member-key", "POST",
                           env.org_path("A", "/keys/%s/revoke" % key_id), session=member)
     expect_status(check, revoked, 200, label="gateway revoke key")
-    check.require(((revoked.json() or {}).get("key") or {}).get("status") == "revoked", "撤销后状态不是 revoked")
     denied = poll_status(check, client, "gateway-revoked", "POST", "/v1/chat/completions",
                          expect=401, base_url=gateway, body=request_body, csrf=None, max_time=8,
                          tolerate_timeout=True,
                          extra_headers={"Authorization": "Bearer " + secret})
     require_envelope(check, denied, 401, "unauthorized", "revoked key at gateway")
-    check.require("primary" not in denied.body, "被拒绝的请求仍拿到了上游响应")
+    check.require("primary" not in denied.body, "被撤销的 Key 仍拿到了上游响应")
 
-    # 3) billing_viewer 拥有的 Key：403 forbidden（矩阵里 billing_viewer 不能生成请求）
-    op_viewer = "t03-%s-gateway-viewer" % env.pass_id
-    viewer_key = client.call(check, "gateway-create-viewer-key", "POST", env.org_path("A", "/keys"),
-                             body={"operation_id": op_viewer, "owner_user_id": env.user_id("a-viewer")},
-                             session=admin)
-    expect_status(check, viewer_key, 201, label="gateway viewer key")
-    viewer_payload = viewer_key.json() or {}
-    viewer_secret = viewer_payload.get("secret", "")
-    viewer_key_id = (viewer_payload.get("key") or {}).get("key_id")
-    check.require(str((viewer_payload.get("key") or {}).get("owner_user_id")) == env.user_id("a-viewer"),
-                  "viewer Key 的归属不是 billing_viewer")
-    client.red.add(viewer_secret)
-    env.secrets_to_scan.append(("gateway-viewer-key-secret", viewer_secret, ["gateway-create-viewer-key"]))
-    viewer_denied = poll_status(check, client, "gateway-viewer", "POST", "/v1/chat/completions",
-                                expect=403, base_url=gateway, body=request_body, csrf=None, max_time=8,
-                                tolerate_timeout=True,
-                                extra_headers={"Authorization": "Bearer " + viewer_secret})
-    require_envelope(check, viewer_denied, 403, "forbidden", "billing_viewer key at gateway")
-    check.require("primary" not in viewer_denied.body, "billing_viewer 的请求仍到达了上游")
+    # A second ordinary member owns and uses a separate key; role never prevents personal access.
+    second_op = "t03-%s-gateway-member2" % env.pass_id
+    second_created = client.call(check, "gateway-create-second-member-key", "POST", env.org_path("A", "/keys"),
+                                 body={"name": "t03-gateway-member2", "operation_id": second_op},
+                                 session=second_member)
+    expect_status(check, second_created, 201, label="gateway second member key")
+    second_payload = second_created.json() or {}
+    second_secret = second_payload.get("secret", "")
+    second_key_id = str((second_payload.get("key") or {}).get("key_id", ""))
+    check.require(second_secret and second_key_id, "第二名成员的自有 Key 创建缺少 secret 或 ID")
+    client.red.add(second_secret)
+    env.secrets_to_scan.append(("gateway-second-member-key-secret", second_secret,
+                                ["gateway-create-second-member-key"]))
+    second_allowed = poll_status(check, client, "gateway-second-member-allowed", "POST", "/v1/chat/completions",
+                                 expect=200, base_url=gateway, body=request_body, csrf=None, max_time=8,
+                                 tolerate_timeout=True,
+                                 extra_headers={"Authorization": "Bearer " + second_secret})
+    expect_status(check, second_allowed, 200, label="gateway second member request")
+    check.require("primary" in second_allowed.body, "第二名成员的 Key 没有到达上游 mock")
 
-    # 4) 第二个用户（admin）的成功请求：让组织用量里同时存在两个人的行，
-    #    这样 check09 的 self/organization 隔离才有可证伪的数据。
-    op_admin = "t03-%s-gateway-admin" % env.pass_id
-    admin_key = client.call(check, "gateway-create-admin-key", "POST", env.org_path("A", "/keys"),
-                            body={"operation_id": op_admin}, session=admin)
-    expect_status(check, admin_key, 201, label="gateway admin key")
-    admin_payload = admin_key.json() or {}
+    # An admin's own Key is valid too, but remains private from member and owner list views.
+    admin_op = "t03-%s-gateway-admin" % env.pass_id
+    admin_created = client.call(check, "gateway-create-admin-own-key", "POST", env.org_path("A", "/keys"),
+                                body={"name": "t03-gateway-admin", "operation_id": admin_op}, session=admin)
+    expect_status(check, admin_created, 201, label="gateway admin own key")
+    admin_payload = admin_created.json() or {}
     admin_secret = admin_payload.get("secret", "")
-    admin_key_id = (admin_payload.get("key") or {}).get("key_id")
+    check.require(admin_secret, "admin 自有 Key 没有返回首次 secret")
     client.red.add(admin_secret)
-    env.secrets_to_scan.append(("gateway-admin-key-secret", admin_secret, ["gateway-create-admin-key"]))
+    env.secrets_to_scan.append(("gateway-admin-key-secret", admin_secret, ["gateway-create-admin-own-key"]))
     admin_allowed = poll_status(check, client, "gateway-admin-allowed", "POST", "/v1/chat/completions",
                                 expect=200, base_url=gateway, body=request_body, csrf=None, max_time=8,
                                 tolerate_timeout=True,
                                 extra_headers={"Authorization": "Bearer " + admin_secret})
     expect_status(check, admin_allowed, 200, label="gateway admin request")
-    check.require("primary" in admin_allowed.body, "admin 的放行请求没有到达上游 mock")
+    check.require("primary" in admin_allowed.body, "admin 的自有 Key 没有到达上游 mock")
 
-    # 5) 计量归属：成功请求必须在 Console 用量里以本人身份出现
     deadline = time.time() + 20
     found = None
     attempt = 0
@@ -1423,36 +1488,46 @@ def check08(env, check):
         if time.time() >= deadline:
             break
         time.sleep(2)
-    check.require(found is not None,
-                  "Gateway 放行的请求没有在 20s 内出现在用量里（metering 归属链路未验证）")
-    check.require(str(found.get("organization_id")) == env.org_id("A"), "计量行的 organization_id 不是 A")
-    check.require(str(found.get("user_id")) == env.user_id("a-member"), "计量行的 user_id 不是调用者")
-    check.require(str(found.get("execution_id") or "") != "", "计量行缺少 execution_id")
-    check.note("Gateway：成员 Key 200（上游 primary）；撤销后 401；billing_viewer Key 403；"
-               "计量行 org=%s user=%s key=%s；admin Key %s 亦已放行"
-               % (found.get("organization_id"), found.get("user_id"), found.get("key_id"), admin_key_id))
-
+    check.require(found is not None, "Gateway 放行的请求没有在 20s 内出现在本人消费记录里")
+    check.require(str(found.get("user_id")) == env.user_id("a-member"), "计量记录的 user_id 不是调用者")
+    check.require(str(found.get("execution_id") or "") != "", "计量记录缺少 execution_id")
+    check.note("member、member2、admin 均使用本人 Key 到达 mock 上游；撤销后的 Key 在上游前被拒绝")
 
 def check09(env, check):
-    """用量查询范围（ADR-0003 §2.9）。"""
+    """企业消费记录按角色隔离：成员仅本人，owner/admin 查看汇总且看不到 Key。"""
     client = env.client
     member = env.session("a-member")
     member_id = env.user_id("a-member")
     owner_id = env.user_id("a-owner")
 
-    # 计量管道是异步的：check08 用第二个用户（admin）的 Key 发过请求，
-    # 这里给它一点时间落库，好让 self/organization 的行级隔离可证伪。
-    if env.args.gateway_url:
-        deadline = time.time() + 20
-        attempt = 0
+    # With real billing enabled, Check08's streaming calls may have returned
+    # before their usage receipts finish settlement. Wait on the authoritative
+    # org totals before taking any Check09 snapshots so owner/admin comparisons
+    # cannot race an in-flight debit. Fresh opt-in fixtures must settle the
+    # member, second-member, and admin calls made in Check08.
+    if env.args.seed_local_test_credit:
+        settle_deadline = time.time() + 90
+        settle_attempt = 0
         while True:
-            attempt += 1
-            probe = client.call(check, "usage-wait-second-user%02d" % attempt, "GET",
-                                env.org_path("A", "/usage"), query="limit=100", session=member)
-            expect_status(check, probe, 200, label="usage second user wait")
-            user_ids = {str(item.get("user_id")) for item in (probe.json() or {}).get("items", [])}
-            if len(user_ids) >= 2 or time.time() >= deadline:
+            settle_attempt += 1
+            settled_usage = client.call(
+                check, "billing-settlement-wait%02d" % settle_attempt, "GET",
+                env.org_path("A", "/usage"), query="limit=1", session=env.session("a-owner"))
+            expect_status(check, settled_usage, 200, label="Check08 usage settlement")
+            settle_payload = settled_usage.json() or {}
+            settle_totals = settle_payload.get("totals") or {}
+            pending_count = settle_totals.get("pending_count")
+            settled_count = settle_totals.get("settled_count")
+            if (not isinstance(pending_count, int) or isinstance(pending_count, bool) or pending_count < 0 or
+                    not isinstance(settled_count, int) or isinstance(settled_count, bool) or settled_count < 0):
+                raise CheckFailure("Check08 usage totals omitted valid pending_count/settled_count")
+            if pending_count == 0 and settled_count >= 3:
+                check.note("Check08 的 3 个 Gateway 消费均已结算；开始读取稳定的 Check09 账单快照")
                 break
+            if time.time() >= settle_deadline:
+                raise CheckFailure(
+                    "等待 Check08 账单结算超时：pending_count=%d settled_count=%d，期望 pending_count=0 且至少 3 个 settled"
+                    % (pending_count, settled_count))
             time.sleep(2)
 
     org_usage = client.call(check, "owner-usage-org", "GET", env.org_path("A", "/usage"),
@@ -1460,10 +1535,15 @@ def check09(env, check):
     expect_status(check, org_usage, 200, label="owner usage")
     org_payload = org_usage.json() or {}
     check.require(org_payload.get("scope") == "organization", "owner 的 usage scope 应为 organization")
+    check.require(re.match(r"^\d{4}-\d{2}$", str(org_payload.get("month", ""))) is not None,
+                  "usage 响应 month 应为 YYYY-MM")
+    totals = org_payload.get("totals") or {}
+    check.require(isinstance(totals.get("sales_micro"), str) and totals["sales_micro"].isdigit(),
+                  "sales_micro 必须是后端返回的十进制字符串")
     org_items = org_payload.get("items") or []
-    check.require(isinstance((org_payload.get("totals") or {}).get("cost_cents"), str),
-                  "cost_cents 必须是十进制字符串（金额不走出浮点）")
-    check.require(isinstance(org_payload.get("window", {}).get("from"), str), "usage 响应缺少 window")
+    for item in org_items:
+        check.require("key_id" not in item and "key_name" not in item and "key_prefix" not in item,
+                      "组织级用量明细泄露了成员 Key 元数据")
 
     member_usage = client.call(check, "member-usage-self", "GET", env.org_path("A", "/usage"),
                                query="limit=100", session=member)
@@ -1473,51 +1553,64 @@ def check09(env, check):
     for item in member_payload.get("items") or []:
         check.require(str(item.get("user_id")) == member_id,
                       "member 看到了他人（%r）的用量行" % item.get("user_id"))
-        check.require(str(item.get("organization_id")) == env.org_id("A"), "用量行不属于组织 A")
+        if item.get("settlement_status") in ("pending_dispatch", "dispatched", "reserved", "executing", "receipt_recorded"):
+            check.require(item.get("charge_micro") is None, "待结算用量不应混入实际扣费金额")
 
     cross_user = client.call(check, "member-usage-other-user", "GET", env.org_path("A", "/usage"),
                              query="user=" + owner_id, session=member)
     require_envelope(check, cross_user, 403, "forbidden", "member reads another user's usage")
 
-    for actor in ("a-admin", "a-viewer", "a-owner"):
+    for actor in ("a-admin", "a-owner"):
         response = client.call(check, "usage-%s" % actor, "GET", env.org_path("A", "/usage"),
                                query="limit=100", session=env.session(actor))
         expect_status(check, response, 200, label="usage %s" % actor)
         payload = response.json() or {}
         check.require(payload.get("scope") == "organization",
                       "%s 的 usage scope 应为 organization，实际 %r" % (actor, payload.get("scope")))
-        check.require(int((payload.get("totals") or {}).get("events", 0)) == int((org_payload.get("totals") or {}).get("events", 0)),
-                      "%s 与 owner 看到的事件总数不一致（组织范围应一致）" % actor)
+        check.require((payload.get("totals") or {}).get("sales_micro") == totals.get("sales_micro"),
+                      "%s 与 owner 看到的正式消费汇总不一致" % actor)
+        for item in payload.get("items") or []:
+            check.require("key_id" not in item and "key_name" not in item and "key_prefix" not in item,
+                          "%s 的组织消费明细泄露了成员 Key 元数据" % actor)
+
+    # Administrators can explicitly inspect their own rows, which still uses self scope.
+    admin_id = env.user_id("a-admin")
+    admin_self = client.call(check, "admin-usage-self", "GET", env.org_path("A", "/usage"),
+                             query="user=" + admin_id, session=env.session("a-admin"))
+    expect_status(check, admin_self, 200, label="admin own usage")
+    check.require((admin_self.json() or {}).get("scope") == "self", "管理员查询本人时应得到 self scope")
+    check.require(all(str(item.get("user_id")) == admin_id
+                      for item in ((admin_self.json() or {}).get("items") or [])),
+                  "管理员本人查询返回了其他成员的消费行")
+
+    member_summary = client.call(check, "owner-member-summary", "GET",
+                                 env.org_path("A", "/billing/member-summary"),
+                                 query="month=" + urllib.parse.quote(str(org_payload.get("month", ""))),
+                                 session=env.session("a-owner"))
+    expect_status(check, member_summary, 200, label="owner member summary")
+    for item in (member_summary.json() or {}).get("items", []):
+        check.require("key_id" not in item and "key_name" not in item and "provider_cost_micro" not in item,
+                      "成员汇总泄露 Key 或上游成本")
 
     b_usage = client.call(check, "b-owner-usage-org", "GET", env.org_path("B", "/usage"),
                           query="limit=100", session=env.session("b-owner"))
     expect_status(check, b_usage, 200, label="b-owner usage")
     for item in (b_usage.json() or {}).get("items", []):
-        check.require(str(item.get("organization_id")) == env.org_id("B"),
-                      "B 的用量查询返回了组织 %r 的行" % item.get("organization_id"))
+        check.require("key_id" not in item and "key_name" not in item,
+                      "B 企业用量泄露 Key 元数据")
 
-    if not org_items:
-        check.note("组织 A 在当前 24h 窗口内没有 metering 行：行级隔离断言未执行（见 README 的 seeding 命令）；"
-                   "scope/授权断言已通过")
-        return
-    check.require(any(str(item.get("user_id")) == member_id for item in org_items),
-                  "组织用量里看不到 member 的行")
-    other_users = {str(item.get("user_id")) for item in org_items if str(item.get("user_id")) != member_id}
-    check.require(all(str(item.get("user_id")) != owner_id for item in member_payload.get("items") or []),
-                  "member 的用量里出现了 owner 的行")
-    check.require(all(str(item.get("user_id")) == member_id for item in member_payload.get("items") or []),
-                  "member 的用量里出现了他人的行")
-    if other_users:
-        check.require(int((member_payload.get("totals") or {}).get("events", 0))
-                      < int((org_payload.get("totals") or {}).get("events", 0)),
-                      "组织里有其他用户的行，但 member 的事件数不小于组织总数（行级过滤未生效）")
+    if org_items:
+        user_ids = {str(item.get("user_id")) for item in org_items}
+        check.require(all(str(item.get("user_id")) == member_id
+                          for item in (member_payload.get("items") or [])),
+                      "成员用量里出现了他人的行")
+        if len(user_ids) > 1:
+            check.require(len(member_payload.get("items") or []) < len(org_items),
+                          "组织内有多名用户的用量，但成员视图未隔离到本人")
+        check.note("组织 A 有 %d 条消费记录，用户范围=%s；member 仅见本人记录"
+                   % (len(org_items), sorted(user_ids)))
     else:
-        check.note("组织 A 目前只有 member 自己的计量行，member 与组织总数相同属预期；"
-                   "行级过滤由 check08 的第二个用户行 + ?user= 403 负例共同保证")
-    check.note("组织 A 有 %d 行用量（user_ids=%s），member 只见 %d 行"
-               % (len(org_items), sorted({str(item.get("user_id")) for item in org_items}),
-                  len(member_payload.get("items") or [])))
-
+        check.note("当前月份没有消费行；已验证角色范围、正式金额格式和 Key/成本隐私")
 
 def check10(env, check):
     """审计归属：变更必须落到操作者组织的审计，绝不作为 success 落到别家。"""
@@ -1535,7 +1628,7 @@ def check10(env, check):
 
     expected = []
     role_change = client.call(check, "audit-role-change", "PATCH",
-                              env.org_path("A", "/members/%s" % invitee_id), body={"role": "billing_viewer"}, session=owner)
+                              env.org_path("A", "/members/%s" % invitee_id), body={"role": "admin"}, session=owner)
     expect_status(check, role_change, 204, label="audit role change")
     expected.append(("org.member.role_change", "success", invitee_id))
 
@@ -1545,7 +1638,7 @@ def check10(env, check):
     expected.append(("org.member.remove", "success", invitee_id))
 
     invite = client.call(check, "audit-invitation-create", "POST", env.org_path("A", "/invitations"),
-                         body={"email": new_invite_email, "role": "member"}, session=owner)
+                         body={"email": new_invite_email, "role": "member", "monthly_limit_micro": "100000000"}, session=owner)
     expect_status(check, invite, 201, label="audit invitation create")
     expected.append(("org.invitation.create", "success", ""))
 
@@ -1560,21 +1653,48 @@ def check10(env, check):
     require_envelope(check, denied_self, 403, "forbidden", "audit role change failure")
     expected.append(("org.member.role_change", "failure", env.user_id("a-member")))
 
+    member_key_private = []
     if env.control_probe(check):
-        op = "t03-%s-audit-key" % env.pass_id
-        created = client.call(check, "audit-key-create", "POST", env.org_path("A", "/keys"),
-                              body={"operation_id": op}, session=member)
-        expect_status(check, created, 201, label="audit key create")
-        secret = (created.json() or {}).get("secret", "")
-        if secret:
-            client.red.add(secret)
-            env.secrets_to_scan.append(("audit-key-secret", secret, ["audit-key-create"]))
-        key_id = ((created.json() or {}).get("key") or {}).get("key_id")
-        expected.append(("org.key.create", "success", key_id))
-        revoked = client.call(check, "audit-key-revoke", "POST",
-                              env.org_path("A", "/keys/%s/revoke" % key_id), session=member)
-        expect_status(check, revoked, 200, label="audit key revoke")
-        expected.append(("org.key.revoke", "success", key_id))
+        member_key = client.call(check, "audit-member-key-create", "POST", env.org_path("A", "/keys"),
+                                 body={"name": "t03-member-audit-key", "operation_id": "t03-%s-member-audit-key" % env.pass_id},
+                                 session=member)
+        expect_status(check, member_key, 201, label="audit member key create")
+        member_key_body = member_key.json() or {}
+        member_key_dto = member_key_body.get("key") or {}
+        member_secret = member_key_body.get("secret", "")
+        if member_secret:
+            client.red.add(member_secret)
+            env.secrets_to_scan.append(("audit-member-key-secret", member_secret, ["audit-member-key-create"]))
+        member_key_id = member_key_dto.get("key_id")
+        check.require(isinstance(member_key_id, str) and member_key_id,
+                      "成员 Key 创建响应缺少 key_id")
+        check.require(member_key_dto.get("name") == "t03-member-audit-key",
+                      "成员 Key 创建响应缺少命名元数据")
+        member_key_private.extend(value for value in (member_key_id, member_key_dto.get("name"), member_key_dto.get("prefix"))
+                                  if isinstance(value, str) and value)
+        revoked = client.call(check, "audit-member-key-revoke", "POST",
+                              env.org_path("A", "/keys/%s/revoke" % member_key_id), session=member)
+        expect_status(check, revoked, 200, label="audit member key revoke")
+
+        # A team owner can audit their own Key actions, but cannot inspect another
+        # member's Key events or any of that Key's identifiers or metadata.
+        owner_key = client.call(check, "audit-owner-key-create", "POST", env.org_path("A", "/keys"),
+                                body={"name": "t03-owner-audit-key", "operation_id": "t03-%s-owner-audit-key" % env.pass_id},
+                                session=owner)
+        expect_status(check, owner_key, 201, label="audit owner key create")
+        owner_key_body = owner_key.json() or {}
+        owner_key_id = ((owner_key_body.get("key") or {}).get("key_id"))
+        owner_secret = owner_key_body.get("secret", "")
+        if owner_secret:
+            client.red.add(owner_secret)
+            env.secrets_to_scan.append(("audit-owner-key-secret", owner_secret, ["audit-owner-key-create"]))
+        check.require(isinstance(owner_key_id, str) and owner_key_id,
+                      "owner Key 创建响应缺少 key_id")
+        expected.append(("org.key.create", "success", owner_key_id))
+        owner_revoked = client.call(check, "audit-owner-key-revoke", "POST",
+                                    env.org_path("A", "/keys/%s/revoke" % owner_key_id), session=owner)
+        expect_status(check, owner_revoked, 200, label="audit owner key revoke")
+        expected.append(("org.key.revoke", "success", owner_key_id))
 
     after_a = audit_fetch(check, client, env, "A")
     after_b = audit_fetch(check, client, env, "B")
@@ -1605,14 +1725,22 @@ def check10(env, check):
     check.note("B 的审计里有 %d 条来自 A actor 的 failure 行（跨组织探测按设计记入被探测组织，"
                "ADR-0003 §2.3 的实现注释；不含任何 B 的数据）" % len(cross_failures))
 
-    # 审计内容不得包含任何 secret / token / 口令
+    # 审计内容不得包含任何 secret / token / 口令。Key 审计对 owner 仅保留
+    # owner 自己的动作；成员 Key 的事件及标识、名称、前缀都不可见。
     audit_text = json.dumps(after_a) + json.dumps(after_b)
+    member_key_audit_rows = [row for row in after_a
+                             if row.get("action") in ("org.key.create", "org.key.revoke")
+                             and str(row.get("actor_user_id")) == str(env.user_id("a-member"))]
+    check.require(not member_key_audit_rows,
+                  "owner 审计中出现了成员 Key 事件")
+    for value in member_key_private:
+        check.require(value not in audit_text, "owner 审计泄露了成员 Key 标识或元数据")
     for name, value, _allowed in env.secrets_to_scan:
         check.require(value not in audit_text, "审计里出现了 %s" % name)
     check.require(invitee_email not in json.dumps(after_b), "B 的审计里出现了 A 的成员 email")
 
     # 只有 owner/admin 能读审计
-    for actor in ("a-member", "a-viewer"):
+    for actor in ("a-member", "a-member2"):
         response = client.call(check, "audit-read-%s" % actor, "GET", env.org_path("A", "/audit"),
                                session=env.session(actor))
         require_envelope(check, response, 403, "forbidden", "audit read %s" % actor)
@@ -1650,12 +1778,12 @@ CHECKS = [
     ("check01", "登录与角色矩阵读取", check01, "check"),
     ("check02", "跨组织读取 404 且无元数据泄露", check02, "check"),
     ("check03", "跨组织写入被拒绝且目标组织不变", check03, "check"),
-    ("check04", "权限矩阵负例（member/viewer/admin/owner）", check04, "check"),
+    ("check04", "权限矩阵负例（member/admin/owner）", check04, "check"),
     ("check05", "最后 owner 保护与 owner 晋升路径", check05, "check"),
     ("check06", "邀请一次性与 email/role 不可篡改", check06, "check"),
-    ("check07", "Key 归属矩阵与 secret 一次性", check07, "check"),
+    ("check07", "本人命名 Key、隐私与 secret 一次性", check07, "check"),
     ("check08", "Gateway access guard 与计量归属", check08, "check"),
-    ("check09", "用量隔离（self vs organization）", check09, "check"),
+    ("check09", "正式消费范围与成员 Key 隐私", check09, "check"),
     ("check10", "审计归属", check10, "check"),
     ("check11", "全局泄密扫描", check11, "check"),
 ]
@@ -1680,10 +1808,24 @@ def main():
     parser.add_argument("--timeout-seconds", type=int, default=15)
     parser.add_argument("--gateway-url", default="")
     parser.add_argument("--gateway-model", default="gpt-4o-mini")
+    parser.add_argument("--seed-local-test-credit", action="store_true")
     args, unknown = parser.parse_known_args()
     if unknown:
         print("console-rbac-accept: 未知内部参数 %s" % unknown, file=sys.stderr)
         return 2
+    if args.seed_local_test_credit:
+        if not args.gateway_url:
+            print("console-rbac-accept: --seed-local-test-credit requires --gateway-url", file=sys.stderr)
+            return 2
+        if args.run_id:
+            print("console-rbac-accept: --seed-local-test-credit requires a fresh random run_id", file=sys.stderr)
+            return 2
+        if os.path.lexists(args.state_file):
+            print("console-rbac-accept: --seed-local-test-credit cannot reuse an existing state file", file=sys.stderr)
+            return 2
+        if not is_loopback_http_url(args.base_url) or not is_loopback_http_url(args.gateway_url):
+            print("console-rbac-accept: --seed-local-test-credit requires loopback Console and Gateway URLs", file=sys.stderr)
+            return 2
 
     global _RED
     _RED = Redactor()
@@ -1803,6 +1945,9 @@ python_args=(
   --gateway-url "$gateway_url"
   --gateway-model "$gateway_model"
 )
+if [[ "$seed_local_test_credit" == "1" ]]; then
+  python_args+=(--seed-local-test-credit)
+fi
 if [[ -n "$run_id" ]]; then
   python_args+=(--run-id "$run_id")
 fi

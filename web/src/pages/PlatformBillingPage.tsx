@@ -1,433 +1,301 @@
-/**
- * Platform billing operations (`/platform/billing`).
- *
- * Two platform-only capabilities of the frozen contract:
- *   - `POST /api/v1/admin/billing/accounts/{org}/adjustments` — an **admin
- *     credit adjustment**. It is explicitly *not* a payment: it is a manual
- *     posting with a mandatory reason, a client-supplied `Idempotency-Key`, and
- *     a before/after view of the account projection.
- *   - `POST /api/v1/admin/billing/exceptions/{exception}/resolution` — an
- *     audited decision on one durable money exception (mandatory note).
- *
- * Organization roles (even `owner`) hold no `platform_admin_ops`, so the whole
- * page is behind `users.platform_admin` and every write also needs the
- * session-bound CSRF token.
- */
-
-import { useCallback, useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import {
   Alert,
   App as AntdApp,
   Button,
   Card,
   Col,
-  Descriptions,
+  DatePicker,
   Form,
   Input,
+  Popconfirm,
   Result,
   Row,
   Select,
   Space,
-  Table,
+  Statistic,
   Tag,
   Typography,
 } from 'antd';
-import { ReloadOutlined } from '@ant-design/icons';
+import dayjs, { type Dayjs } from 'dayjs';
 
-import { useAdjustBillingAccount, useBillingAccount } from '../api/queries';
-import type { AdjustmentResponse, BillingAccount, BillingDirection } from '../api/types';
-import { ReviewQueueSection } from '../components/ReviewQueue';
+import { consoleApi } from '../api/client';
+import { useAdjustBillingAccount, useBillingAccount, usePlatformBillingSummary } from '../api/queries';
+import type { AdjustmentRequest, PlatformOrganization } from '../api/types';
 import { BillingExceptionsSection } from '../components/BillingSections';
-import { MicroYuan, SignedMicroYuan } from '../components/Money';
-import { ContractGap, PageHeader } from '../components/PageHeader';
-import { ErrorView, errorSummary } from '../components/states';
+import { ReviewQueueSection } from '../components/ReviewQueue';
+import { DataState, ErrorView, errorSummary } from '../components/states';
+import { PageHeader } from '../components/PageHeader';
 import { useSession } from '../session/SessionProvider';
-import { formatTimestamp } from '../utils/format';
+import { beijingMonthOf, formatMicroYuan, formatTimestamp, microToYuanInput, yuanToMicro } from '../utils/format';
 
-const POSITIVE_INT = /^[1-9][0-9]*$/;
-const ORG_ID = /^[1-9][0-9]*$/;
-
-interface AdjustmentForm {
-  org: string;
-  direction: BillingDirection;
-  amount_micro: string;
+interface PaymentFormValues {
+  organization_id: string;
+  type: 'recharge' | 'reversal';
+  amount_yuan: string;
+  payment_reference?: string;
+  reverse_of?: string;
   reason: string;
-  idempotency_key: string;
 }
 
-/** A fresh, human-readable idempotency key: `adj-<utc>-<random>`. */
-function newIdempotencyKey(): string {
-  const stamp = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);
-  const random =
-    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-      ? crypto.randomUUID().slice(0, 8)
-      : Math.random().toString(36).slice(2, 10);
-  return `adj-${stamp}-${random}`;
+function freshIdempotencyKey(): string {
+  return `payment-${crypto.randomUUID()}`;
 }
 
-function AccountSnapshot({ title, account }: { title: string; account: BillingAccount }): ReactNode {
-  return (
-    <Descriptions size="small" column={1} bordered title={title}>
-      <Descriptions.Item label="已入账 posted_balance_micro">
-        <MicroYuan value={account.posted_balance_micro} />
-      </Descriptions.Item>
-      <Descriptions.Item label="预占 reserved_micro">
-        <MicroYuan value={account.reserved_micro} />
-      </Descriptions.Item>
-      <Descriptions.Item label="可用 available_micro">
-        <MicroYuan value={account.available_micro} />
-      </Descriptions.Item>
-      <Descriptions.Item label="status / version">
-        <Tag color={account.status === 'active' ? 'green' : 'red'}>{account.status}</Tag>
-        <Tag>v{account.version}</Tag>
-      </Descriptions.Item>
-      <Descriptions.Item label="updated_at">
-        {formatTimestamp(account.updated_at)}
-      </Descriptions.Item>
-    </Descriptions>
-  );
+function hasPositiveAmount(value: string): boolean {
+  const micro = yuanToMicro(value);
+  return micro !== null && micro !== '0';
 }
 
 export function PlatformBillingPage(): ReactNode {
   const { me } = useSession();
   const { message } = AntdApp.useApp();
-  const [form] = Form.useForm<AdjustmentForm>();
-  const adjust = useAdjustBillingAccount();
-
-  /** Organization whose account/exceptions are being inspected. */
-  const [inspectOrg, setInspectOrg] = useState('');
-  const account = useBillingAccount(
-    inspectOrg === '' ? null : inspectOrg,
-    me?.user.platform_admin === true && inspectOrg !== '',
-  );
-
-  const [before, setBefore] = useState<BillingAccount | null>(null);
-  const [result, setResult] = useState<AdjustmentResponse | null>(null);
-
+  const [form] = Form.useForm<PaymentFormValues>();
+  const [month, setMonth] = useState(() => beijingMonthOf());
+  const [inspectOrg, setInspectOrg] = useState<string | null>(null);
+  const [operationKey, setOperationKey] = useState(() => freshIdempotencyKey());
+  const [retryRequired, setRetryRequired] = useState(false);
+  const type = Form.useWatch('type', form) ?? 'recharge';
+  const selectedOrg = Form.useWatch('organization_id', form) ?? inspectOrg;
   const isPlatformAdmin = me?.user.platform_admin === true;
 
-  const refreshAccount = useCallback(
-    (org: string) => {
-      setInspectOrg(org);
-      void account.refetch();
-    },
-    [account],
-  );
+  const organizations = useInfiniteQuery({
+    queryKey: ['platform', 'organizations', 'billing-picker'],
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) => consoleApi.listPlatformOrganizations({
+      limit: 100,
+      ...(pageParam ? { cursor: pageParam } : {}),
+    }),
+    getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
+    enabled: isPlatformAdmin,
+  });
+  const summary = usePlatformBillingSummary(month, isPlatformAdmin);
+  const account = useBillingAccount(selectedOrg, isPlatformAdmin && selectedOrg !== null, true);
+  const entries = useInfiniteQuery({
+    queryKey: ['platform', 'billing', selectedOrg ?? '', 'entry-pages'],
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) => consoleApi.listPlatformBillingEntries(selectedOrg as string, {
+      limit: 100,
+      ...(pageParam ? { cursor: pageParam } : {}),
+    }),
+    getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
+    enabled: isPlatformAdmin && selectedOrg !== null,
+  });
+  const entryItems = entries.data?.pages.flatMap((page) => page.items) ?? [];
+  const adjust = useAdjustBillingAccount();
+
+  const reversedEntryIds = useMemo(() => new Set(
+    entryItems
+      .map((entry) => entry.reversal_of_entry_id)
+      .filter((id): id is string => typeof id === 'string'),
+  ), [entryItems]);
+  const rechargeOptions = entryItems
+    .filter((entry) => entry.manual_operation === 'recharge' && !reversedEntryIds.has(entry.id))
+    .map((entry) => ({
+      value: entry.id,
+      label: `流水 ${entry.id} · ${formatMicroYuan(entry.amount_micro)} 元 · ${entry.payment_reference || '未填写凭据'} · ${formatTimestamp(entry.posted_at)}`,
+    }));
 
   if (me && !isPlatformAdmin) {
-    return (
-      <Result
-        status="403"
-        title="需要平台管理员权限"
-        subTitle="额度调整（/api/v1/admin/billing/accounts/{org}/adjustments）与异常决定（/admin/billing/exceptions/{exception}/resolution）都要求 users.platform_admin + CSRF；组织角色（含 owner）没有 platform_admin_ops。"
-      />
-    );
+    return <Result status="warning" title="此工作区仅供平台管理员使用" subTitle="请切换到个人或企业账户继续工作。" />;
   }
 
   const submit = async (): Promise<void> => {
     const values = await form.validateFields();
-    const org = values.org.trim();
-    // Snapshot the projection *before* the posting so the page can show a real
-    // before/after instead of asserting one.
-    setBefore(account.data ?? null);
+    const amountMicro = yuanToMicro(values.amount_yuan);
+    if (!amountMicro || amountMicro === '0') {
+      message.error('请输入大于 0、最多精确到小数点后 6 位的金额。');
+      return;
+    }
+    let body: AdjustmentRequest;
+    if (values.type === 'recharge') {
+      body = {
+        amount_micro: amountMicro,
+        type: 'recharge',
+        reason: values.reason.trim(),
+        payment_reference: values.payment_reference?.trim() ?? '',
+      };
+    } else if (values.reverse_of) {
+      body = { amount_micro: amountMicro, type: 'reversal', reason: values.reason.trim(), reverse_of: values.reverse_of };
+    } else {
+      message.error('请选择要冲正的原入账记录。');
+      return;
+    }
     try {
-      const response = await adjust.mutateAsync({
-        org,
-        body: {
-          amount_micro: values.amount_micro.trim(),
-          direction: values.direction,
-          reason: values.reason.trim(),
-        },
-        idempotencyKey: values.idempotency_key.trim(),
-      });
-      setResult(response);
-      setInspectOrg(org);
-      message.success(
-        response.replayed
-          ? '幂等键重放：这次调用没有再次移动资金（200 OK）'
-          : `已记账：${response.entry.direction} ${response.entry.amount_micro} µ¥`,
-      );
-      // A new key for the next, genuinely new posting: reusing this one would be
-      // a replay by design.
-      form.setFieldsValue({ idempotency_key: newIdempotencyKey() });
+      await adjust.mutateAsync({ org: values.organization_id, body, idempotencyKey: operationKey });
+      message.success(values.type === 'recharge' ? '已记录入账' : '已完成冲正');
+      form.resetFields();
+      form.setFieldValue('type', 'recharge');
+      setInspectOrg(null);
+      setOperationKey(freshIdempotencyKey());
+      setRetryRequired(false);
     } catch (error) {
-      setResult(null);
-      message.error(`额度调整失败 — ${errorSummary(error)}`);
+      setRetryRequired(true);
+      message.error(`未能确认资金变动结果：${errorSummary(error)}。请用同一请求编号重试，或先核对所选账户的流水。`);
     }
   };
+
+  const organizationItems = organizations.data?.pages.flatMap((page) => page.items) ?? [];
+  const organizationOptions = organizationItems.map((item: PlatformOrganization) => ({
+    value: item.id,
+    label: `${item.name}（${item.type === 'personal' ? '个人账户' : '企业账户'} · ${item.owner_email}）`,
+  }));
 
   return (
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
       <PageHeader
-        title="平台计费运维"
-        description="额度调整（管理员记账）与资金异常决定 · 全部需要平台管理员 + CSRF，并各自写审计行。"
+        title="平台账务"
+        description="按月查看实际结算收入与已知上游成本，并为个人或企业账户记录入账和冲正。"
+        extra={
+          <DatePicker
+            picker="month"
+            value={dayjs(`${month}-01`)}
+            allowClear={false}
+            onChange={(value: Dayjs | null) => value && setMonth(value.format('YYYY-MM'))}
+            aria-label="消费月份"
+          />
+        }
       />
+      {organizations.isError ? <ErrorView error={organizations.error} title="账户列表未加载" /> : null}
 
-      <Alert
-        type="warning"
-        showIcon
-        message="「额度调整」是管理员记账，不是真实充值/支付"
-        description="本版本没有接任何支付渠道：这里写入的是一条 append-only 的 adjustment 分录（含必填 reason、operator_user_id、request_id）。它不会伪装成微信/支付宝/PayPal 支付，也不产生发票。"
-      />
-
-      <ReviewQueueSection />
-
-      <Card
-        size="small"
-        title="额度调整（POST /api/v1/admin/billing/accounts/{org}/adjustments）"
-        data-testid="platform-adjustment-card"
-      >
-        <Row gutter={[24, 16]}>
-          <Col xs={24} lg={13}>
-            <Form<AdjustmentForm>
-              form={form}
-              layout="vertical"
-              initialValues={{
-                direction: 'credit',
-                amount_micro: '1000000',
-                idempotency_key: newIdempotencyKey(),
-              }}
-            >
-              <Row gutter={[16, 0]}>
-                <Col xs={24} md={10}>
-                  <Form.Item
-                    name="org"
-                    label="organization_id"
-                    rules={[
-                      { required: true },
-                      { pattern: ORG_ID, message: '十进制字符串 id（例如 2）' },
-                    ]}
-                  >
-                    <Input placeholder="2" inputMode="numeric" aria-label="调整目标组织 id" />
-                  </Form.Item>
-                </Col>
-                <Col xs={24} md={14}>
-                  <Form.Item name="direction" label="direction" rules={[{ required: true }]}>
-                    <Select<BillingDirection>
-                      options={[
-                        { value: 'credit', label: 'credit（增加 posted 余额）' },
-                        { value: 'debit', label: 'debit（减少；可为负，形成应收）' },
-                      ]}
-                    />
-                  </Form.Item>
-                </Col>
-                <Col xs={24} md={12}>
-                  <Form.Item
-                    name="amount_micro"
-                    label="amount_micro（严格正整数 µ¥）"
-                    rules={[
-                      { required: true },
-                      {
-                        pattern: POSITIVE_INT,
-                        message:
-                          '必须是严格正整数字符串；符号只由 direction 决定，JSON number 会被 400 拒绝',
-                      },
-                    ]}
-                  >
-                    <Input placeholder="1500000（= 1.5 元）" inputMode="numeric" />
-                  </Form.Item>
-                </Col>
-                <Col xs={24} md={12}>
-                  <Form.Item
-                    name="idempotency_key"
-                    label="Idempotency-Key（1..200 字符，写入 business_id）"
-                    rules={[{ required: true, max: 200, message: '必填，最长 200 字符' }]}
-                    extra="同一个键 + 同样的 payload = 重放（200，replayed=true，不再移动资金）；换 payload 复用同键 = 409。"
-                  >
-                    <Input
-                      aria-label="幂等键"
-                      addonAfter={
-                        <Button
-                          size="small"
-                          type="link"
-                          onClick={() =>
-                            form.setFieldsValue({ idempotency_key: newIdempotencyKey() })
-                          }
-                        >
-                          重新生成
-                        </Button>
-                      }
-                    />
-                  </Form.Item>
-                </Col>
-                <Col xs={24}>
-                  <Form.Item
-                    name="reason"
-                    label="reason（必填，写进分录与审计）"
-                    rules={[{ required: true, min: 1, max: 512, message: '必须写明理由' }]}
-                  >
-                    <Input.TextArea
-                      rows={2}
-                      maxLength={512}
-                      showCount
-                      placeholder="例如：goodwill credit for incident INC-42"
-                    />
-                  </Form.Item>
-                </Col>
-              </Row>
-              <Space size={8} wrap>
-                <Button type="primary" loading={adjust.isPending} onClick={() => void submit()}>
-                  提交额度调整
-                </Button>
-                <Button
-                  icon={<ReloadOutlined />}
-                  onClick={() => {
-                    const org = form.getFieldValue('org');
-                    if (typeof org === 'string' && ORG_ID.test(org.trim())) {
-                      refreshAccount(org.trim());
-                    } else {
-                      message.warning('先填写合法的 organization_id');
-                    }
-                  }}
-                >
-                  读取该组织当前账户
-                </Button>
-              </Space>
-            </Form>
-            {adjust.isError ? (
-              <div style={{ marginTop: 12 }}>
-                <ErrorView error={adjust.error} title="额度调整失败" />
-              </div>
-            ) : null}
-          </Col>
-
-          <Col xs={24} lg={11}>
-            <Space direction="vertical" size={12} style={{ width: '100%' }}>
-              {result ? (
-                <Alert
-                  type={result.replayed ? 'warning' : 'success'}
-                  showIcon
-                  message={
-                    result.replayed
-                      ? '幂等键重放：资金没有再次移动（HTTP 200）'
-                      : '已记账：新分录（HTTP 201）'
-                  }
-                  description={
-                    <Space direction="vertical" size={2}>
-                      <span>
-                        entry #{result.entry.id} · {result.entry.kind} ·{' '}
-                        <SignedMicroYuan
-                          amountMicro={result.entry.amount_micro}
-                          direction={result.entry.direction}
-                        />{' '}
-                        元
-                      </span>
-                      <span>
-                        business_id=
-                        <Typography.Text code>{result.entry.business_id}</Typography.Text>
-                      </span>
-                      <span>
-                        posted_at={formatTimestamp(result.entry.posted_at)} · operator=
-                        {result.entry.operator_user_id ?? '—'} · request_id=
-                        {result.entry.request_id ?? '—'}
-                      </span>
-                      <span>replayed={String(result.replayed)}</span>
-                    </Space>
-                  }
-                />
-              ) : (
-                <Alert
-                  type="info"
-                  showIcon
-                  message="提交后这里显示真实的前后账户快照"
-                  description="「调整前」是提交瞬间页面上已有的账户投影（若还没读取过则为空），「调整后」是服务端在同一个事务里返回的投影。不使用客户端算出来的余额。"
-                />
-              )}
-
-              {account.data ? (
-                <AccountSnapshot
-                  title={`当前账户（GET /orgs/${inspectOrg}/billing/account）`}
-                  account={account.data}
-                />
-              ) : null}
-              {before ? <AccountSnapshot title="调整前（before）" account={before} /> : null}
-              {result ? (
-                <AccountSnapshot title="调整后（after）" account={result.account} />
-              ) : null}
-              {!before && !result && inspectOrg !== '' ? (
-                <Typography.Text type="secondary">
-                  正在观察组织 {inspectOrg} 的账户（GET /orgs/{inspectOrg}/billing/account）。
-                </Typography.Text>
-              ) : null}
-            </Space>
-          </Col>
-        </Row>
+      <Card title={`${month} 平台消费`} data-testid="platform-billing-summary">
+        <DataState query={summary}>
+          {(data) => <>
+            <Row gutter={[16, 16]}>
+              <Col xs={12} md={6}><Statistic title="已结算销售额" value={`${formatMicroYuan(data.sales_micro)} 元`} /></Col>
+              <Col xs={12} md={6}><Statistic title="已知上游成本" value={`${formatMicroYuan(data.known_provider_cost_micro)} 元`} /></Col>
+              <Col xs={12} md={6}><Statistic title="待结算" value={data.pending_count} /></Col>
+              <Col xs={12} md={6}><Statistic title="已释放预占" value={data.released_count} /></Col>
+              <Col xs={12} md={6}><Statistic title="需要核对" value={data.review_required_count} /></Col>
+            </Row>
+            <Row gutter={[16, 16]} style={{ marginTop: 8 }}>
+              <Col xs={12} md={6}><Statistic title="已结算 Token" value={data.total_tokens.toLocaleString('en-US')} /></Col>
+              <Col xs={12} md={6}><Statistic title="输入 Token" value={data.prompt_tokens.toLocaleString('en-US')} /></Col>
+              <Col xs={12} md={6}><Statistic title="输出 Token" value={data.completion_tokens.toLocaleString('en-US')} /></Col>
+              <Col xs={12} md={6}><Statistic title="成本未知的调用" value={data.unknown_provider_cost_count} /></Col>
+            </Row>
+            <Typography.Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0 }}>
+              统计按调用开始时所属的北京时间月份归集。平台成本与 Token 统计包含已释放预占的请求；销售额只计入已结算的实际扣款。未知成本单独计数，不按零处理。
+            </Typography.Paragraph>
+          </>}
+        </DataState>
       </Card>
 
-      <Card
-        size="small"
-        title="按组织查看资金异常并做决定（跨组织，平台视角）"
-        data-testid="platform-exceptions-card"
-      >
+      <Card title="记录账户入账或冲正" data-testid="platform-adjustment-card">
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message="每笔资金变动都会留下操作记录。"
+          description="入账需要填写付款凭据；冲正必须关联尚未冲正的原入账，并按原金额全额冲回。"
+        />
+        <Form<PaymentFormValues>
+          form={form}
+          layout="vertical"
+          initialValues={{ type: 'recharge' }}
+          onValuesChange={(changed) => {
+            if (retryRequired) return;
+            if (typeof changed.organization_id === 'string') {
+              setInspectOrg(changed.organization_id);
+              form.resetFields(['reverse_of', 'amount_yuan']);
+            }
+            if (typeof changed.reverse_of === 'string') {
+              const original = entryItems.find((entry) => entry.id === changed.reverse_of);
+              if (original) form.setFieldValue('amount_yuan', microToYuanInput(original.amount_micro));
+            }
+          }}
+        >
+          <Row gutter={[16, 0]}>
+            <Col xs={24} md={12}>
+              <Form.Item name="organization_id" label="账户" rules={[{ required: true, message: '请选择个人或企业账户' }]}>
+                <Select disabled={retryRequired} showSearch optionFilterProp="label" options={organizationOptions} placeholder="选择账户" />
+              </Form.Item>
+              {organizations.hasNextPage ? <Button size="small" type="link" loading={organizations.isFetchingNextPage} onClick={() => void organizations.fetchNextPage()}>加载更多账户（已载入 {organizationItems.length} 个）</Button> : null}
+            </Col>
+            <Col xs={24} md={12}>
+              <Form.Item name="type" label="资金变动" rules={[{ required: true }]}>
+                <Select disabled={retryRequired} options={[{ value: 'recharge', label: '记录入账' }, { value: 'reversal', label: '冲正一笔入账' }]} />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={12}>
+              <Form.Item
+                name="amount_yuan"
+                label="金额（元）"
+                rules={[{ required: true }, { validator: async (_, value: string) => hasPositiveAmount(value ?? '') ? undefined : Promise.reject(new Error('请输入大于 0、最多 6 位小数的金额')) }]}
+                extra="最多精确到 0.000001 元。"
+              >
+                <Input inputMode="decimal" disabled={retryRequired || type === 'reversal'} placeholder="例如 100.50" />
+              </Form.Item>
+            </Col>
+            {type === 'recharge' ? (
+              <Col xs={24} md={12}>
+                <Form.Item name="payment_reference" label="付款凭据" rules={[{ required: true, whitespace: true, message: '请填写转账单号或其他可追溯凭据' }, { max: 256 }]}>
+                  <Input disabled={retryRequired} placeholder="转账单号、收款记录编号等" />
+                </Form.Item>
+              </Col>
+            ) : (
+              <Col xs={24} md={12}>
+                {entries.isError ? <div style={{ marginBottom: 8 }}><ErrorView error={entries.error} title="资金流水未加载" /></div> : null}
+                <Form.Item name="reverse_of" label="原入账记录" rules={[{ required: true, message: '请选择一笔可冲正的入账' }]}>
+                  <Select disabled={retryRequired} showSearch optionFilterProp="label" options={rechargeOptions} placeholder={selectedOrg ? '选择原入账' : '请先选择账户'} />
+                </Form.Item>
+                {entries.hasNextPage ? <Button size="small" type="link" loading={entries.isFetchingNextPage} onClick={() => void entries.fetchNextPage()}>加载更早的资金流水（已载入 {entryItems.length} 条）</Button> : null}
+              </Col>
+            )}
+            <Col span={24}>
+              <Form.Item name="reason" label="操作说明" rules={[{ required: true, whitespace: true, message: '请说明本次操作原因' }, { max: 512 }]}>
+                <Input.TextArea disabled={retryRequired} rows={2} maxLength={512} showCount />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Button type="primary" loading={adjust.isPending} onClick={() => void submit()}>
+            {retryRequired ? '使用同一请求编号重试' : type === 'recharge' ? '确认记录入账' : '确认冲正'}
+          </Button>
+          {retryRequired ? <Popconfirm
+            title="开始新操作？"
+            description="上一次请求的结果可能尚未确认。新操作会使用不同编号；请先确认资金流水，避免重复入账。"
+            okText="确认开始新操作"
+            cancelText="继续核对原操作"
+            onConfirm={() => { setOperationKey(freshIdempotencyKey()); setRetryRequired(false); }}
+          ><Button>放弃并开始新操作</Button></Popconfirm> : null}
+        </Form>
+        {retryRequired ? <Alert type="warning" showIcon style={{ marginTop: 12 }} message="上次提交结果尚未确认" description="表单已锁定。再次提交会用相同请求编号核对同一笔操作；如需改动，请先确认流水后再明确开始新操作。" /> : null}
+        {adjust.isError ? <div style={{ marginTop: 12 }}><ErrorView error={adjust.error} title="未能确认资金变动结果" /></div> : null}
+        {selectedOrg ? (
+          <Card size="small" title="所选账户当前余额" style={{ marginTop: 16 }}>
+            <DataState query={account}>
+              {(data) => <Row gutter={[16, 16]}>
+                <Col xs={12} md={6}><Statistic title="可用余额" value={`${formatMicroYuan(data.available_micro)} 元`} /></Col>
+                <Col xs={12} md={6}><Statistic title="账户余额" value={`${formatMicroYuan(data.posted_balance_micro)} 元`} /></Col>
+                <Col xs={12} md={6}><Statistic title="处理中预占" value={`${formatMicroYuan(data.reserved_micro)} 元`} /></Col>
+                <Col xs={12} md={6}><Tag color={data.status === 'active' ? 'green' : 'red'}>{data.status === 'active' ? '正常' : '已暂停'}</Tag></Col>
+              </Row>}
+            </DataState>
+          </Card>
+        ) : null}
+      </Card>
+
+      <Card title="资金核对队列" data-testid="platform-recovery-card">
+        <Typography.Paragraph type="secondary">无法自动确认的结算会进入此队列。请核实用量后再决定是否结算或释放预占。</Typography.Paragraph>
+        <ReviewQueueSection />
+      </Card>
+
+      <Card title="账户消费核对" data-testid="platform-exceptions-card">
         <Space direction="vertical" size={12} style={{ width: '100%' }}>
-          <Space size={8} wrap>
-            <Input
-              style={{ width: 220 }}
-              placeholder="organization_id（例如 2）"
-              aria-label="异常查询组织 id"
-              value={inspectOrg}
-              onChange={(event) => setInspectOrg(event.target.value.trim())}
-              onPressEnter={() => refreshAccount(inspectOrg)}
-            />
-            <Button icon={<ReloadOutlined />} onClick={() => refreshAccount(inspectOrg)}>
-              加载该组织
-            </Button>
-            <Typography.Text type="secondary">
-              异常列表是组织作用域的（`view_org_usage`）；平台管理员对任意组织都可读，但决定端点没有组织路径参数。
-            </Typography.Text>
-          </Space>
-          {inspectOrg === '' ? (
-            <Alert
-              type="info"
-              showIcon
-              message="先输入 organization_id"
-              description="契约没有平台级的异常总表（没有 GET /admin/billing/exceptions），所以平台视角必须按组织查询；这里不伪造跨组织列表或 DLQ 总数。"
-            />
-          ) : (
-            <BillingExceptionsSection org={inspectOrg} canResolve />
-          )}
+          <Select
+            showSearch
+            optionFilterProp="label"
+            options={organizationOptions}
+            {...(inspectOrg === null ? {} : { value: inspectOrg })}
+            onChange={setInspectOrg}
+            placeholder="选择要核对的账户"
+            style={{ maxWidth: 520, width: '100%' }}
+          />
+          {organizations.hasNextPage ? <Button size="small" type="link" loading={organizations.isFetchingNextPage} onClick={() => void organizations.fetchNextPage()}>加载更多账户（已载入 {organizationItems.length} 个）</Button> : null}
+          {inspectOrg ? <BillingExceptionsSection org={inspectOrg} canResolve platformAdminOnly /> : <Typography.Text type="secondary">选择账户后查看需要人工核对的记录。</Typography.Text>}
         </Space>
       </Card>
-
-      <Card size="small" title="审计与回溯">
-        <Table<{ key: string; action: string; note: string }>
-          size="small"
-          rowKey="key"
-          pagination={false}
-          dataSource={[
-            {
-              key: 'billing.adjustment',
-              action: 'billing.adjustment',
-              note: '每次额度调整与它的分录在同一个 PostgreSQL 事务里写入；重放不新增审计行。',
-            },
-            {
-              key: 'admin.price.create',
-              action: 'admin.price.create',
-              note: '价格版本发布写入审计；端点见「价格版本」页。',
-            },
-          ]}
-          columns={[
-            {
-              title: '审计动作',
-              dataIndex: 'action',
-              render: (value: string) => <Typography.Text code>{value}</Typography.Text>,
-            },
-            { title: '说明', dataIndex: 'note' },
-          ]}
-        />
-        <Typography.Text type="secondary">
-          当前身份：{me?.user.email ?? '—'}（user_id={me?.user.id ?? '—'}）· 组织作用域审计在「审计」页可见；
-          平台级全局审计列表端点不存在。
-        </Typography.Text>
-      </Card>
-
-      <ContractGap title="平台视角缺的端点（明确列出，不做假界面）">
-        1) 没有 `GET /api/v1/admin/users`：无法枚举用户，只能凭已知 user_id 改状态。
-        2) 没有组织列表的管理端点（`GET /api/v1/organizations` 只返回调用者自己的成员关系），平台无法在界面里浏览全部组织。
-        3) 没有 Provider 凭据引用端点：无法列出 `provider_credentials` 的引用/版本/轮换状态（明文更不会出现在前端）。
-        4) 没有 Gateway 配置状态端点：`persisted / applied / rejected / stale` 无法从 API 读取，所以本版本不显示任何“active”配置徽标（多实例聚合属于 T09）。
-        5) 没有平台级异常总表与 DLQ 查询端点：只有按组织的异常分页；Redis DLQ 仍然只是有界诊断缓存，不是资金事实。
-      </ContractGap>
     </Space>
   );
 }

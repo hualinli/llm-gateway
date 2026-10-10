@@ -16,51 +16,87 @@ import (
 // a raw path carries unbounded user input and would explode Prometheus
 // cardinality. Unknown or unmatched paths collapse into RouteOther.
 const (
-	RouteAuthLogin             = "auth_login"
-	RouteAuthLogout            = "auth_logout"
-	RouteMe                    = "me"
-	RouteOrganizationsList     = "organizations_list"
-	RouteOrganizationsGet      = "organizations_get"
-	RouteOrganizationsCreate   = "organizations_create"
-	RouteAdminUsersCreate      = "admin_users_create"
-	RouteAdminUsersSetStatus   = "admin_users_status"
-	RouteOrgMembersList        = "org_members_list"
-	RouteOrgMemberUpdate       = "org_member_update"
-	RouteOrgMemberDelete       = "org_member_delete"
-	RouteOrgInvitationsList    = "org_invitations_list"
-	RouteOrgInvitationsNew     = "org_invitations_create"
-	RouteInvitationsAccept     = "invitations_accept"
-	RouteOrgOwnerTransfer      = "org_owner_transfer"
-	RouteOrgAuditList          = "org_audit_list"
-	RouteOrgBillingStatement   = "org_billing_statement"
-	RouteOrgBillingExceptions  = "org_billing_exceptions"
-	RouteOrgBillingException   = "org_billing_exception"
-	RouteAdminExceptionResolve = "admin_billing_exception_resolution"
-	RouteHealth                = "health"
-	RouteMetrics               = "metrics"
-	RouteOther                 = "other"
+	RouteAuthLogin                  = "auth_login"
+	RouteAuthRegister               = "auth_register"
+	RouteMePassword                 = "me_password"
+	RouteAuthLogout                 = "auth_logout"
+	RouteMe                         = "me"
+	RouteOrganizationsList          = "organizations_list"
+	RouteOrganizationsGet           = "organizations_get"
+	RouteOrganizationsActivate      = "organizations_activate"
+	RouteAdminActivationCodesList   = "admin_activation_codes_list"
+	RouteAdminActivationCodesCreate = "admin_activation_codes_create"
+	RouteMeJoinRequests             = "me_join_requests"
+	RouteOrgJoinRequestsList        = "org_join_requests_list"
+	RouteOrgJoinRequestsCreate      = "org_join_requests_create"
+	RouteOrgJoinRequestDecision     = "org_join_request_decision"
+	RouteAdminUsersCreate           = "admin_users_create"
+	RouteAdminUsersSetStatus        = "admin_users_status"
+	RouteOrgMembersList             = "org_members_list"
+	RouteOrgMemberUpdate            = "org_member_update"
+	RouteOrgMemberDelete            = "org_member_delete"
+	RouteOrgInvitationsList         = "org_invitations_list"
+	RouteOrgInvitationsNew          = "org_invitations_create"
+	RouteInvitationsAccept          = "invitations_accept"
+	RouteOrgOwnerTransfer           = "org_owner_transfer"
+	RouteOrgAuditList               = "org_audit_list"
+	RouteOrgBillingStatement        = "org_billing_statement"
+	RouteOrgBillingExceptions       = "org_billing_exceptions"
+	RouteOrgBillingException        = "org_billing_exception"
+	RouteAdminExceptionResolve      = "admin_billing_exception_resolution"
+	RouteHealth                     = "health"
+	RouteMetrics                    = "metrics"
+	RouteOther                      = "other"
 )
 
 // RouteClass maps a matched Hertz route pattern plus the request method to the
 // bounded `route` label.
 //
-// The method is part of the mapping because two different operations share one
-// path pattern: GET /api/v1/organizations lists, POST /api/v1/organizations
-// creates. Collapsing them would make the route label lie about which handler
-// produced the result class.
+// The method is part of the mapping because several read/write operations share
+// a bounded route pattern. Unregistered verbs collapse into RouteOther.
 func RouteClass(method, fullPath string) string {
 	switch fullPath {
 	case PathLogin:
 		return RouteAuthLogin
+	case PathRegister:
+		return RouteAuthRegister
 	case PathLogout:
 		return RouteAuthLogout
 	case PathMe:
 		return RouteMe
+	case PathMePassword:
+		return RouteMePassword
 	case PathOrganizations:
-		if method == string(consts.MethodPost) {
-			return RouteOrganizationsCreate
+		if method == string(consts.MethodGet) {
+			return RouteOrganizationsList
 		}
-		return RouteOrganizationsList
+		return RouteOther
+	case PathOrganizationsActivate:
+		if method == string(consts.MethodPost) {
+			return RouteOrganizationsActivate
+		}
+	case PathAdminActivationCodes:
+		if method == string(consts.MethodPost) {
+			return RouteAdminActivationCodesCreate
+		}
+		if method == string(consts.MethodGet) {
+			return RouteAdminActivationCodesList
+		}
+	case PathMeJoinRequests:
+		if method == string(consts.MethodGet) {
+			return RouteMeJoinRequests
+		}
+	case PathOrgJoinRequests:
+		if method == string(consts.MethodPost) {
+			return RouteOrgJoinRequestsCreate
+		}
+		if method == string(consts.MethodGet) {
+			return RouteOrgJoinRequestsList
+		}
+	case PathOrgJoinRequestDecision:
+		if method == string(consts.MethodPost) {
+			return RouteOrgJoinRequestDecision
+		}
 	case PathOrganization:
 		return RouteOrganizationsGet
 	case PathAdminUsers:
@@ -100,6 +136,7 @@ func RouteClass(method, fullPath string) string {
 	default:
 		return RouteOther
 	}
+	return RouteOther
 }
 
 // accessMetrics records exactly one console_entry_requests_total sample per

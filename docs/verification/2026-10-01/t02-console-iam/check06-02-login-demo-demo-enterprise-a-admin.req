@@ -1,6 +1,0 @@
-POST /api/v1/auth/login HTTP/1.1
-X-Request-ID: acc-check06-02
-Accept: application/json
-Content-Type: application/json
-
-{"email": "demo-enterprise-a-admin@example.com", "password": "wxUD…<redacted:18>"}

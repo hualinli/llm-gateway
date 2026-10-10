@@ -1,9 +1,0 @@
-HTTP 403 (0.002s)
-Content-Type: application/json
-X-Content-Type-Options: nosniff
-X-Request-Id: t03-check08-07
-X-Trace-Id: 9ae006c841e201f31a07a8305043ecee
-Date: Wed, 30 Sep 2026 22:50:33 GMT
-Content-Length: 90
-
-{"error":{"code":"forbidden","message":"access forbidden","request_id":"t03-check08-07"}}

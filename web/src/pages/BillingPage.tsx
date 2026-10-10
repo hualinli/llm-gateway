@@ -1,90 +1,110 @@
-/**
- * Organization billing (`/orgs/:org/billing`) — the T08 "资金与结算" surface.
- *
- * Read scope is the server-side `view_org_usage` action: owner, admin and the
- * read-only `billing_viewer`. A plain `member` is `403 forbidden` **by the
- * permission matrix**, and this page proves it instead of hiding the tabs: the
- * requests are still issued and the real `403` is rendered.
- *
- * No number on this page is derived client-side. Totals come from the server's
- * `totals` block, the ledger is append-only, and the frozen wording fields are
- * shown verbatim.
- */
+import { useState, type ReactNode } from 'react';
+import { DatePicker, Card, Col, Row, Space, Statistic, Table, Tag, Typography } from 'antd';
+import dayjs, { type Dayjs } from 'dayjs';
 
-import type { ReactNode } from 'react';
-import { Alert, Card, Space, Tag, Typography } from 'antd';
-
-import { ContractGap, PageHeader } from '../components/PageHeader';
-import {
-  BillingAccountCard,
-  BillingEntriesSection,
-  BillingExceptionsSection,
-  BillingStatementSection,
-} from '../components/BillingSections';
+import type { BillingStatementLine } from '../api/types';
+import { useBillingAccount, useBillingStatement } from '../api/queries';
+import { DataState } from '../components/states';
+import { PageHeader } from '../components/PageHeader';
 import { useActiveOrg } from '../session/SessionProvider';
-import { CAN, ROLE_LABELS } from '../utils/permissions';
+import { CAN } from '../utils/permissions';
+import { beijingMonthOf, formatMicroYuan, formatTimestamp, shortId } from '../utils/format';
+
+const ENTRY_LABELS: Record<string, string> = {
+  credit: '入账',
+  debit: '模型消费',
+  adjustment: '冲正或调整',
+  reservation: '调用预占',
+  release: '额度释放',
+};
 
 export function BillingPage(): ReactNode {
-  const { orgId, role } = useActiveOrg();
-  const canRead = CAN.viewOrgUsage(role);
+  const { orgId, membership } = useActiveOrg();
+  const [month, setMonth] = useState(() => beijingMonthOf());
+  const canRead = CAN.manageBilling(membership);
+  const account = useBillingAccount(orgId, canRead && orgId !== null);
+  const statement = useBillingStatement(
+    orgId,
+    { month, limit: 50 },
+    canRead && orgId !== null,
+  );
+
+  if (!canRead) {
+    return (
+      <Space direction="vertical" size={16} style={{ width: '100%' }}>
+        <PageHeader title="账户流水" description="查看账户余额和资金变动。" />
+        <Card>
+          <Typography.Text>企业普通成员可以查看自己的消费与额度；账户余额和资金流水由企业负责人或管理员查看。</Typography.Text>
+        </Card>
+      </Space>
+    );
+  }
 
   return (
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
       <PageHeader
-        title="资金与结算"
-        description={`组织 ${orgId ?? '—'} · 角色 ${role ? ROLE_LABELS[role] : '—'} · 金额全部是 µ¥ 十进制字符串（1 元 = 1,000,000 µ¥）`}
+        title="账户流水"
+        description="余额与资金变动按实际入账时间统计；模型消费请查看“消费”页面。"
         extra={
-          <Space size={4} wrap>
-            <Tag color={canRead ? 'green' : 'red'}>
-              view_org_usage {canRead ? '允许' : '不允许'}
-            </Tag>
-            {role === 'billing_viewer' ? <Tag color="purple">只读（billing_viewer）</Tag> : null}
-          </Space>
+          <DatePicker
+            picker="month"
+            value={dayjs(`${month}-01`)}
+            allowClear={false}
+            onChange={(value: Dayjs | null) => value && setMonth(value.format('YYYY-MM'))}
+            aria-label="入账月份"
+          />
         }
       />
 
-      {!canRead ? (
-        <Alert
-          type="warning"
-          showIcon
-          message="普通成员没有组织账单读取权限（服务端 403）"
-          description="ADR-0003 §2.3 的矩阵把资金读取限定为 owner / admin / billing_viewer。下面每个卡片都会发出真实请求并显示服务端返回的 403 forbidden（含 code 与 request_id）——这正是 RBAC 的证明：隐藏卡片不是授权，服务端才是唯一执行点。成员自己的消费与请求明细在「用量」页（scope=self）。"
-        />
-      ) : null}
-
-      <BillingAccountCard org={orgId} enabled={orgId !== null} />
-
-      <BillingStatementSection org={orgId} />
-
-      <BillingEntriesSection org={orgId} />
-
-      <BillingExceptionsSection org={orgId} canResolve={false} />
-
-      <Card size="small" title="本页标签与口径">
-        <Space direction="vertical" size={4}>
-          <Typography.Text>
-            <strong>posted_balance_micro</strong>：所有已入账分录之和，可为负（显式债务，admission 拒绝从其消费）。
-          </Typography.Text>
-          <Typography.Text>
-            <strong>reserved_micro</strong>：在途执行按 T06 预占的资金，永不为负。
-          </Typography.Text>
-          <Typography.Text>
-            <strong>available_micro</strong> = posted − reserved，服务端回显，客户端不重算。
-          </Typography.Text>
-          <Typography.Text>
-            <strong>occurred_at vs posted_at</strong>：前者是用量发生的时刻（用量分析），后者是钱移动的时刻（本页唯一的合计轴）；迟到结算记入实际 posted 月，并单独标出 late_entries/late_days。
-          </Typography.Text>
-        </Space>
+      <Card title="当前余额" data-testid="billing-account-card">
+        <DataState query={account}>
+          {(data) => (
+            <Row gutter={[16, 16]}>
+              <Col xs={12} md={6}><Statistic title="可用余额" value={`${formatMicroYuan(data.available_micro)} 元`} /></Col>
+              <Col xs={12} md={6}><Statistic title="账户余额" value={`${formatMicroYuan(data.posted_balance_micro)} 元`} /></Col>
+              <Col xs={12} md={6}><Statistic title="处理中预占" value={`${formatMicroYuan(data.reserved_micro)} 元`} /></Col>
+              <Col xs={12} md={6}><Statistic title="状态" value={data.status === 'active' ? '正常' : '已暂停'} /></Col>
+              <Col span={24}><Typography.Text type="secondary">可用余额会扣除尚未完成的调用预占。暂停状态影响整个账户；成员单独暂停不会改变账户状态。</Typography.Text></Col>
+            </Row>
+          )}
+        </DataState>
       </Card>
 
-      <ContractGap title="没有「单次请求结算状态」与「组织可见价目」端点">
-        {'1) 契约没有 `GET /executions/{id}` 之类的执行详情端点：请求详情无法查询一次执行最终被记了多少钱、receipt 处于哪个状态；账本里的 settlement 分录 `business_id` 形如 '}
-        <code>billing_receipt:debit:&#123;execution&#125;</code>
-        {'，但 entries 端点只有 kind 过滤，没有 execution 过滤，因此客户端无法可靠关联（不做遍历猜测）。'}
-        {' 2) 价格端点 '}
-        <code>/api/v1/admin/prices</code>
-        {' 仅平台管理员可用（其它角色固定 403），所以组织视角看不到本组织模型的价目，只能由平台管理员在「平台管理 → 价格版本」查看。'}
-      </ContractGap>
+      <Card title={`${month} 入账流水`} data-testid="billing-statement-card">
+        <DataState query={statement} loadingRows={5} showStaleBanner>
+          {(data) => (
+            <>
+              <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+                <Col xs={12} md={6}><Statistic title="增加" value={`${formatMicroYuan(data.totals.credit_micro)} 元`} /></Col>
+                <Col xs={12} md={6}><Statistic title="扣除" value={`${formatMicroYuan(data.totals.debit_micro)} 元`} /></Col>
+                <Col xs={12} md={6}><Statistic title="净变动" value={`${formatMicroYuan(data.totals.net_micro)} 元`} /></Col>
+                <Col xs={12} md={6}><Statistic title="迟到入账" value={`${data.totals.late_entries} 笔`} /></Col>
+              </Row>
+              <Typography.Paragraph type="secondary">
+                本表按北京时间的入账月份统计。跨月后完成结算的消费仍归入实际入账月份；“消费”页面按调用开始时的业务月份统计。
+              </Typography.Paragraph>
+              <Table<BillingStatementLine>
+                data-testid="billing-entries-card"
+                size="small"
+                rowKey="id"
+                dataSource={data.items}
+                pagination={false}
+                scroll={{ x: 900 }}
+                locale={{ emptyText: '本月还没有资金变动' }}
+                columns={[
+                  { title: '入账时间', dataIndex: 'posted_at', render: (value: string) => formatTimestamp(value) },
+                  { title: '类型', dataIndex: 'kind', render: (value: string, row) => <Space><Tag color={row.direction === 'credit' ? 'green' : 'blue'}>{ENTRY_LABELS[value] ?? '资金变动'}</Tag>{row.manual_operation ? <Tag color="purple">{row.manual_operation === 'recharge' ? '人工入账' : '冲正'}</Tag> : null}</Space> },
+                  { title: '金额', dataIndex: 'amount_micro', render: (value: string, row) => <Typography.Text style={{ color: row.direction === 'credit' ? '#389e0d' : '#cf1322' }}>{row.direction === 'credit' ? '+' : '−'}{formatMicroYuan(value)} 元</Typography.Text> },
+                  { title: '说明', dataIndex: 'reason', render: (value: string | null) => value || '—' },
+                  { title: '付款凭据', dataIndex: 'payment_reference', render: (value?: string | null) => value || '—' },
+                  { title: '关联冲正', dataIndex: 'reversal_of_entry_id', render: (value?: string | null) => value ? `流水 ${shortId(value)}` : '—' },
+                  { title: '消费发生时间', dataIndex: 'occurred_at', render: (value: string | null, row) => <Space>{value ? formatTimestamp(value) : '—'}{row.late_posted ? <Tag color="orange">迟到入账</Tag> : null}</Space> },
+                ]}
+              />
+            </>
+          )}
+        </DataState>
+      </Card>
     </Space>
   );
 }

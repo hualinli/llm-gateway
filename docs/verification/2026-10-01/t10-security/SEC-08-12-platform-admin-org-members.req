@@ -1,6 +1,0 @@
-GET http://127.0.0.1:58872/api/v1/orgs/4/members
-X-Request-ID: t10-SEC-08-12
-Accept: application/json
-Cookie: gw_session=kKMm…<redacted:18>; gw_csrf=J-gY…<redacted:18>
-X-CSRF-Token: J-gY…<redacted:18>
-

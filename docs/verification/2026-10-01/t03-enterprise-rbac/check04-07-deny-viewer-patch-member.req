@@ -1,8 +1,0 @@
-PATCH http://127.0.0.1:18092/api/v1/orgs/12/members/4
-X-Request-ID: t03-check04-07
-Accept: application/json
-Cookie: gw_session=RILR…<redacted:18>; gw_csrf=gpB2…<redacted:18>
-X-CSRF-Token: gpB2…<redacted:18>
-Content-Type: application/json
-
-{"role": "billing_viewer"}

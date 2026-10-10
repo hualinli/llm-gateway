@@ -1,5 +1,0 @@
-GET /api/v1/organizations/9223372036854775807 HTTP/1.1
-X-Request-ID: acc-check06-04
-Accept: application/json
-Cookie: gw_session=fxbN…<redacted:18>; gw_csrf=cUGW…<redacted:18>
-X-CSRF-Token: cUGW…<redacted:18>

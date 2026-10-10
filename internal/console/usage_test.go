@@ -15,34 +15,26 @@ import (
 // the real OrganizationService contract, and the assertion is always made on
 // the query the store actually received.
 
+type usageBodyItem struct {
+	ExecutionID      string  `json:"execution_id"`
+	UserID           *string `json:"user_id"`
+	KeyID            *string `json:"key_id"`
+	ChargeMicro      *string `json:"charge_micro"`
+	SettlementStatus string  `json:"settlement_status"`
+}
+
 type usageBody struct {
-	Items []struct {
-		ID             string  `json:"id"`
-		OccurredAt     string  `json:"occurred_at"`
-		OrganizationID *string `json:"organization_id"`
-		UserID         *string `json:"user_id"`
-		KeyID          *string `json:"key_id"`
-		ExecutionID    *string `json:"execution_id"`
-		TenantID       string  `json:"tenant_id"`
-		Model          string  `json:"model"`
-		PromptTokens   int64   `json:"prompt_tokens"`
-		TotalTokens    int64   `json:"total_tokens"`
-		CostCents      string  `json:"cost_cents"`
-		Attribution    string  `json:"attribution"`
-	} `json:"items"`
-	NextCursor *string `json:"next_cursor"`
+	Items      []usageBodyItem `json:"items"`
+	NextCursor *string         `json:"next_cursor"`
 	Totals     struct {
-		Events       int64  `json:"events"`
-		TotalTokens  int64  `json:"total_tokens"`
-		CostCents    string `json:"cost_cents"`
-		CostKind     string `json:"cost_kind"`
-		CostNote     string `json:"cost_note"`
-		PromptTokens int64  `json:"prompt_tokens"`
+		SalesMicro        string `json:"sales_micro"`
+		SettledCount      int64  `json:"settled_count"`
+		PromptTokens      int64  `json:"prompt_tokens"`
+		CompletionTokens  int64  `json:"completion_tokens"`
+		TotalTokens       int64  `json:"total_tokens"`
+		UnknownUsageCount int64  `json:"unknown_usage_count"`
 	} `json:"totals"`
-	Window struct {
-		From string `json:"from"`
-		To   string `json:"to"`
-	} `json:"window"`
+	Month string `json:"month"`
 	Scope string `json:"scope"`
 }
 
@@ -72,7 +64,6 @@ func TestUsageScopePerRole(t *testing.T) {
 		wantSelf  bool
 	}{
 		{"member sees only their own rows", 10, "self", true},
-		{"billing_viewer sees the organization", 12, "organization", false},
 		{"admin sees the organization", 11, "organization", false},
 		{"owner sees the organization", 13, "organization", false},
 	}
@@ -84,7 +75,7 @@ func TestUsageScopePerRole(t *testing.T) {
 			if rec.Code != http.StatusOK {
 				t.Fatalf("usage = %d, want 200 (body=%s)", rec.Code, rec.Body.String())
 			}
-			query := h.usage.last(t)
+			query := h.usage.lastPaid(t)
 			if query.OrgID != 2 {
 				t.Fatalf("org=%d, want 2", query.OrgID)
 			}
@@ -104,6 +95,18 @@ func TestUsageScopePerRole(t *testing.T) {
 	}
 }
 
+func TestLegacyBillingViewerRoleIsNoLongerAuthorized(t *testing.T) {
+	h := usageHarness(t)
+	legacy := h.t03Session(12, "legacy-viewer@example.com")
+	rec := h.orgReq(http.MethodGet, "/api/v1/orgs/2/usage", "", legacy, false)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("legacy billing_viewer role usage = %d, want 403 (body=%s)", rec.Code, rec.Body.String())
+	}
+	if h.usage.paidCount() != 0 {
+		t.Fatal("an unsupported legacy role reached the billing reports store")
+	}
+}
+
 func TestUsageMemberCannotReadAnotherUser(t *testing.T) {
 	h := usageHarness(t)
 	member := h.t03Session(10, "member@example.com")
@@ -115,7 +118,7 @@ func TestUsageMemberCannotReadAnotherUser(t *testing.T) {
 	if body := decodeError(t, rec); body.Error.Code != "forbidden" {
 		t.Fatalf("code=%q, want forbidden", body.Error.Code)
 	}
-	if h.usage.count() != 0 {
+	if h.usage.paidCount() != 0 {
 		t.Fatal("a refused usage query reached the store")
 	}
 
@@ -124,7 +127,7 @@ func TestUsageMemberCannotReadAnotherUser(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("member usage of self = %d, want 200 (body=%s)", rec.Code, rec.Body.String())
 	}
-	if query := h.usage.last(t); query.UserID == nil || *query.UserID != 10 {
+	if query := h.usage.lastPaid(t); query.UserID == nil || *query.UserID != 10 {
 		t.Fatalf("user=%v, want 10", query.UserID)
 	}
 }
@@ -136,8 +139,40 @@ func TestUsageAdminCanFilterByUser(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("admin usage filtered by user = %d, want 200 (body=%s)", rec.Code, rec.Body.String())
 	}
-	if query := h.usage.last(t); query.UserID == nil || *query.UserID != 10 {
+	if query := h.usage.lastPaid(t); query.UserID == nil || *query.UserID != 10 {
 		t.Fatalf("user=%v, want 10", query.UserID)
+	}
+}
+
+func TestUsageAdminCanFilterOwnKeysOnlyInSelfScope(t *testing.T) {
+	h := usageHarness(t)
+	admin := h.t03Session(11, "admin@example.com")
+	rec := h.orgReq(http.MethodGet, "/api/v1/orgs/2/usage?user=11&key=key_own", "", admin, false)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("admin own-key usage = %d, want 200 (body=%s)", rec.Code, rec.Body.String())
+	}
+	query := h.usage.lastPaid(t)
+	if query.UserID == nil || *query.UserID != 11 || query.KeyID != "key_own" {
+		t.Fatalf("own-key query=%+v, want user=11 and key=key_own", query)
+	}
+	var body usageBody
+	decodeInto(t, rec, &body)
+	if body.Scope != "self" {
+		t.Fatalf("own-key scope=%q, want self", body.Scope)
+	}
+}
+
+func TestUsageOrganizationViewRejectsKeyFilters(t *testing.T) {
+	h := usageHarness(t)
+	admin := h.t03Session(11, "admin@example.com")
+	for _, query := range []string{"?key=key_other", "?user=10&key=key_other"} {
+		rec := h.orgReq(http.MethodGet, "/api/v1/orgs/2/usage"+query, "", admin, false)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("admin usage%s = %d, want 400 (body=%s)", query, rec.Code, rec.Body.String())
+		}
+	}
+	if h.usage.paidCount() != 0 {
+		t.Fatal("an organization-view key filter reached the report store")
 	}
 }
 
@@ -148,53 +183,47 @@ func TestUsageCrossOrgIsNotFound(t *testing.T) {
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("cross-org usage = %d, want 404 (body=%s)", rec.Code, rec.Body.String())
 	}
-	if h.usage.count() != 0 {
+	if h.usage.paidCount() != 0 {
 		t.Fatal("a cross-org request reached the usage store")
 	}
 }
 
 func TestUsageWindowDefaultsAndBounds(t *testing.T) {
-	now := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
-
-	t.Run("defaults to the last 24 hours", func(t *testing.T) {
+	t.Run("defaults to the current Beijing month", func(t *testing.T) {
 		h := usageHarness(t)
 		admin := h.t03Session(11, "admin@example.com")
 		rec := h.orgReq(http.MethodGet, "/api/v1/orgs/2/usage", "", admin, false)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status=%d, want 200", rec.Code)
 		}
-		query := h.usage.last(t)
-		if !query.To.Equal(now) || !query.From.Equal(now.Add(-DefaultUsageWindow)) {
-			t.Fatalf("window=%s..%s, want %s..%s", query.From, query.To, now.Add(-DefaultUsageWindow), now)
+		query := h.usage.lastPaid(t)
+		if query.Month.Label != "2026-10" || query.Month.StartDate != "2026-10-01" {
+			t.Fatalf("month=%+v, want October 2026 in Asia/Shanghai", query.Month)
 		}
 		var body usageBody
 		decodeInto(t, rec, &body)
-		if body.Window.To != "2026-10-01T12:00:00Z" || body.Window.From != "2026-09-30T12:00:00Z" {
-			t.Fatalf("echoed window=%+v", body.Window)
+		if body.Month != "2026-10" {
+			t.Fatalf("echoed month=%q", body.Month)
 		}
 	})
 
-	t.Run("explicit window is honored", func(t *testing.T) {
+	t.Run("explicit month is honored", func(t *testing.T) {
 		h := usageHarness(t)
 		admin := h.t03Session(11, "admin@example.com")
-		from := url.QueryEscape("2026-09-25T00:00:00Z")
-		to := url.QueryEscape("2026-09-26T00:00:00Z")
-		rec := h.orgReq(http.MethodGet, "/api/v1/orgs/2/usage?from="+from+"&to="+to, "", admin, false)
+		rec := h.orgReq(http.MethodGet, "/api/v1/orgs/2/usage?month=2026-09", "", admin, false)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status=%d, want 200 (body=%s)", rec.Code, rec.Body.String())
 		}
-		query := h.usage.last(t)
-		if query.From.Format(time.RFC3339) != "2026-09-25T00:00:00Z" || query.To.Format(time.RFC3339) != "2026-09-26T00:00:00Z" {
-			t.Fatalf("window=%s..%s", query.From, query.To)
+		query := h.usage.lastPaid(t)
+		if query.Month.Label != "2026-09" || query.Month.StartDate != "2026-09-01" {
+			t.Fatalf("month=%+v", query.Month)
 		}
 	})
 
 	invalid := []string{
-		"?from=not-a-time",
-		"?to=not-a-time",
-		"?from=2026-10-02T00:00:00Z&to=2026-10-01T00:00:00Z",
-		"?from=2026-10-01T00:00:00Z&to=2026-10-01T00:00:00Z",
-		"?from=2026-08-01T00:00:00Z&to=2026-10-01T00:00:00Z",
+		"?month=not-a-month",
+		"?month=2026-13",
+		"?month=2026-9",
 	}
 	for _, query := range invalid {
 		h := usageHarness(t)
@@ -203,7 +232,7 @@ func TestUsageWindowDefaultsAndBounds(t *testing.T) {
 		if rec.Code != http.StatusBadRequest {
 			t.Errorf("usage%s = %d, want 400 (body=%s)", query, rec.Code, rec.Body.String())
 		}
-		if h.usage.count() != 0 {
+		if h.usage.paidCount() != 0 {
 			t.Errorf("usage%s reached the store despite being invalid", query)
 		}
 	}
@@ -215,32 +244,29 @@ func TestUsageFiltersLimitAndCursor(t *testing.T) {
 	occurredAt := time.Date(2026, 10, 1, 11, 30, 0, 0, time.UTC)
 	cursor := UsageCursor{OccurredAt: occurredAt, EventID: "evt-last"}
 
-	var lastQuery UsageQuery
-	h.usage.queryFn = func(_ context.Context, query UsageQuery) (UsagePage, error) {
+	var lastQuery PaidUsageQuery
+	charge, prompt, completion, total := int64(30), int64(10), int64(20), int64(30)
+	userID := int64(11)
+	keyID := "key_self"
+	h.usage.paidQueryFn = func(_ context.Context, query PaidUsageQuery) (PaidUsagePage, error) {
 		lastQuery = query
-		return UsagePage{
-			Rows: []UsageRow{{
-				EventID:          "evt-1",
-				OccurredAt:       occurredAt,
-				Model:            "gpt-4o",
-				Provider:         "primary",
-				PromptTokens:     10,
-				CompletionTokens: 20,
-				TotalTokens:      30,
-				CostCents:        30,
-				TenantID:         "org:2",
-				UserID:           versionPtrInt64(11),
+		return PaidUsagePage{
+			Items: []PaidUsageRow{{
+				ExecutionID: "exec-1", UserID: &userID, KeyID: &keyID, OccurredAt: occurredAt,
+				Model: "gpt-4o", SettlementStatus: "settled", ChargeMicro: &charge,
+				PromptTokens: &prompt, CompletionTokens: &completion, TotalTokens: &total,
 			}},
 			NextCursor: &cursor,
-			Totals:     UsageTotals{Events: 7, PromptTokens: 70, CompletionTokens: 140, TotalTokens: 210, CostCents: 210},
+			Totals: PaidUsageTotals{SalesMicro: 210, SettledCount: 7, PromptTokens: 70,
+				CompletionTokens: 140, TotalTokens: 210},
 		}, nil
 	}
 
-	rec := h.orgReq(http.MethodGet, "/api/v1/orgs/2/usage?model=gpt-4o&key=key_1&limit=1000", "", admin, false)
+	rec := h.orgReq(http.MethodGet, "/api/v1/orgs/2/usage?model=gpt-4o&limit=1000", "", admin, false)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status=%d, want 200 (body=%s)", rec.Code, rec.Body.String())
 	}
-	if lastQuery.Model != "gpt-4o" || lastQuery.KeyID != "key_1" {
+	if lastQuery.Model != "gpt-4o" || lastQuery.KeyID != "" {
 		t.Fatalf("filters lost: %+v", lastQuery)
 	}
 	if lastQuery.Limit != MaxListLimit {
@@ -252,24 +278,16 @@ func TestUsageFiltersLimitAndCursor(t *testing.T) {
 
 	var body usageBody
 	decodeInto(t, rec, &body)
-	if len(body.Items) != 1 || body.Items[0].ID != "evt-1" {
+	if len(body.Items) != 1 || body.Items[0].ExecutionID != "exec-1" {
 		t.Fatalf("unexpected items %+v", body.Items)
 	}
-	if body.Items[0].CostCents != "30" {
-		t.Fatalf("cost_cents=%q, want the decimal string \"30\"", body.Items[0].CostCents)
+	if body.Items[0].ChargeMicro == nil || *body.Items[0].ChargeMicro != "30" || body.Items[0].SettlementStatus != "settled" {
+		t.Fatalf("usage item=%+v", body.Items[0])
 	}
-	if body.Items[0].Attribution != "attributed" {
-		t.Fatalf("attribution=%q, want attributed", body.Items[0].Attribution)
-	}
-	if body.Totals.Events != 7 || body.Totals.CostCents != "210" || body.Totals.TotalTokens != 210 {
+	if body.Totals.SettledCount != 7 || body.Totals.SalesMicro != "210" || body.Totals.TotalTokens != 210 {
 		t.Fatalf("totals=%+v", body.Totals)
 	}
-	if body.Totals.CostKind != usageCostKind || body.Totals.CostNote == "" {
-		t.Fatalf("the legacy cost column must be labelled demo consumption: %+v", body.Totals)
-	}
-	// The cost is labelled demo consumption and is never exposed under a
-	// balance-shaped field name (the note may mention the word to say what it
-	// is not).
+	// Formal sales must never be confused with a wallet balance.
 	var named map[string]json.RawMessage
 	decodeInto(t, rec, &named)
 	for _, field := range []string{"balance", "balance_cents", "credit_cents"} {
@@ -281,7 +299,7 @@ func TestUsageFiltersLimitAndCursor(t *testing.T) {
 		t.Fatal("the next cursor must be rendered")
 	}
 
-	// The cursor round-trips: sending it back yields the same (occurred_at, id).
+	// The cursor round-trips: sending it back yields the same (occurred_at, execution_id).
 	rec = h.orgReq(http.MethodGet, "/api/v1/orgs/2/usage?cursor="+url.QueryEscape(*body.NextCursor), "", admin, false)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("second page = %d, want 200 (body=%s)", rec.Code, rec.Body.String())
@@ -294,43 +312,27 @@ func TestUsageFiltersLimitAndCursor(t *testing.T) {
 	badTimestamp := base64.RawURLEncoding.EncodeToString([]byte("not-a-time"))
 	badID := base64.RawURLEncoding.EncodeToString([]byte("evt-1"))
 	for _, bad := range []string{"?cursor=not-a-cursor", "?cursor=v1.YWJj.ZXZ0", "?cursor=" + url.QueryEscape("v1."+badTimestamp+"."+badID)} {
-		before := h.usage.count()
+		before := h.usage.paidCount()
 		rec := h.orgReq(http.MethodGet, "/api/v1/orgs/2/usage"+bad, "", admin, false)
 		if rec.Code != http.StatusBadRequest {
 			t.Errorf("usage%s = %d, want 400", bad, rec.Code)
 		}
-		if h.usage.count() != before {
+		if h.usage.paidCount() != before {
 			t.Errorf("usage%s reached the store despite a malformed cursor", bad)
 		}
 	}
 }
 
-func TestUsageLegacyAttributionIsExplicit(t *testing.T) {
+func TestUsageOrganizationScopeHidesAllKeys(t *testing.T) {
 	h := usageHarness(t)
 	admin := h.t03Session(11, "admin@example.com")
-	h.usage.queryFn = func(context.Context, UsageQuery) (UsagePage, error) {
-		orgID := int64(2)
-		executionID := "exec-9"
-		return UsagePage{Rows: []UsageRow{
-			{
-				// Attributed to the organization but with an unknown user: a key
-				// created before key-level ownership existed.
-				EventID:     "evt-legacy-user",
-				OccurredAt:  time.Date(2026, 10, 1, 10, 0, 0, 0, time.UTC),
-				OrgID:       &orgID,
-				TenantID:    "legacy-tenant",
-				TotalTokens: 5,
-				CostCents:   5,
-			},
-			{
-				EventID:     "evt-attributed",
-				OccurredAt:  time.Date(2026, 10, 1, 10, 5, 0, 0, time.UTC),
-				OrgID:       &orgID,
-				UserID:      versionPtrInt64(10),
-				ExecutionID: &executionID,
-				TotalTokens: 3,
-				CostCents:   3,
-			},
+	otherUser, viewer := int64(10), int64(11)
+	otherKey, ownKey, unknownKey := "key-other", "key-own", "key-unknown"
+	h.usage.paidQueryFn = func(context.Context, PaidUsageQuery) (PaidUsagePage, error) {
+		return PaidUsagePage{Items: []PaidUsageRow{
+			{ExecutionID: "exec-other", UserID: &otherUser, KeyID: &otherKey},
+			{ExecutionID: "exec-own", UserID: &viewer, KeyID: &ownKey},
+			{ExecutionID: "exec-unknown", KeyID: &unknownKey},
 		}}, nil
 	}
 	rec := h.orgReq(http.MethodGet, "/api/v1/orgs/2/usage", "", admin, false)
@@ -339,17 +341,60 @@ func TestUsageLegacyAttributionIsExplicit(t *testing.T) {
 	}
 	var body usageBody
 	decodeInto(t, rec, &body)
-	if len(body.Items) != 2 {
-		t.Fatalf("items=%d, want 2", len(body.Items))
+	if len(body.Items) != 3 {
+		t.Fatalf("items=%d, want 3", len(body.Items))
 	}
-	if body.Items[0].Attribution != "legacy_unknown_user" || body.Items[0].UserID != nil {
-		t.Fatalf("legacy row must state the unknown user: %+v", body.Items[0])
+	if body.Scope != usageScopeOrganization {
+		t.Fatalf("scope=%q, want organization", body.Scope)
 	}
-	if body.Items[1].Attribution != "attributed" || body.Items[1].UserID == nil || *body.Items[1].UserID != "10" {
-		t.Fatalf("attributed row lost its user: %+v", body.Items[1])
+	for i, item := range body.Items {
+		if item.KeyID != nil {
+			t.Fatalf("organization scope row %d exposes key metadata: %+v", i, item)
+		}
 	}
-	if body.Items[1].ExecutionID == nil || *body.Items[1].ExecutionID != "exec-9" {
-		t.Fatalf("execution id lost: %+v", body.Items[1])
+	if body.Items[1].UserID == nil || *body.Items[1].UserID != "11" {
+		t.Fatalf("organization response should retain the admin's own usage row: %+v", body.Items[1])
+	}
+	if body.Items[2].UserID != nil {
+		t.Fatalf("unknown-owner row unexpectedly has user metadata: %+v", body.Items[2])
+	}
+
+	// The explicit own-user view has self scope and may include that user's key.
+	// A filtered view for another user remains redacted even to an organization admin.
+	for _, testCase := range []struct {
+		query      string
+		wantUserID string
+		wantKey    *string
+		wantScope  string
+	}{
+		{query: "?user=11", wantUserID: "11", wantKey: &ownKey, wantScope: usageScopeSelf},
+		{query: "?user=10", wantUserID: "10", wantScope: usageScopeOrganization},
+	} {
+		rec = h.orgReq(http.MethodGet, "/api/v1/orgs/2/usage"+testCase.query, "", admin, false)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("usage%s status=%d body=%s", testCase.query, rec.Code, rec.Body.String())
+		}
+		decodeInto(t, rec, &body)
+		if body.Scope != testCase.wantScope || len(body.Items) != 3 {
+			t.Fatalf("usage%s response scope/items=%s/%d", testCase.query, body.Scope, len(body.Items))
+		}
+		var selected *usageBodyItem
+		for i := range body.Items {
+			if body.Items[i].UserID != nil && *body.Items[i].UserID == testCase.wantUserID {
+				selected = &body.Items[i]
+				break
+			}
+		}
+		if selected == nil {
+			t.Fatalf("usage%s response missing user %s: %+v", testCase.query, testCase.wantUserID, body.Items)
+		}
+		if testCase.wantKey == nil {
+			if selected.KeyID != nil {
+				t.Fatalf("usage%s exposed another user's key: %+v", testCase.query, *selected)
+			}
+		} else if selected.KeyID == nil || *selected.KeyID != *testCase.wantKey {
+			t.Fatalf("usage%s own key=%v, want %s", testCase.query, selected.KeyID, *testCase.wantKey)
+		}
 	}
 }
 
@@ -358,8 +403,8 @@ func TestUsageWithoutAStoreIsAnError(t *testing.T) {
 	h.orgs.memberships = twoEnterpriseMemberships()
 	admin := h.t03Session(11, "admin@example.com")
 	rec := h.orgReq(http.MethodGet, "/api/v1/orgs/2/usage", "", admin, false)
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("status=%d, want 500: a missing store must not look like an empty window (body=%s)", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status=%d, want 503: a missing report store must not look like zero consumption (body=%s)", rec.Code, rec.Body.String())
 	}
 }
 
@@ -409,13 +454,13 @@ func TestUsageWindowValidation(t *testing.T) {
 func TestUsageResponseJSONShape(t *testing.T) {
 	h := usageHarness(t)
 	admin := h.t03Session(11, "admin@example.com")
-	h.usage.queryFn = func(context.Context, UsageQuery) (UsagePage, error) {
-		return UsagePage{Rows: []UsageRow{}, Totals: UsageTotals{Events: 3, CostCents: 42}}, nil
+	h.usage.paidQueryFn = func(context.Context, PaidUsageQuery) (PaidUsagePage, error) {
+		return PaidUsagePage{Items: []PaidUsageRow{}, Totals: PaidUsageTotals{SettledCount: 3, SalesMicro: 42}}, nil
 	}
 	rec := h.orgReq(http.MethodGet, "/api/v1/orgs/2/usage", "", admin, false)
 	var raw map[string]json.RawMessage
 	decodeInto(t, rec, &raw)
-	for _, field := range []string{"items", "next_cursor", "totals", "window", "scope"} {
+	for _, field := range []string{"items", "next_cursor", "totals", "month", "scope"} {
 		if _, ok := raw[field]; !ok {
 			t.Errorf("usage response is missing %q: %s", field, rec.Body.String())
 		}
@@ -424,11 +469,11 @@ func TestUsageResponseJSONShape(t *testing.T) {
 	if err := json.Unmarshal(raw["totals"], &totals); err != nil {
 		t.Fatalf("totals is not an object: %v", err)
 	}
-	if string(totals["cost_cents"]) != `"42"` {
-		t.Fatalf("cost_cents=%s, want a JSON string \"42\"", totals["cost_cents"])
+	if string(totals["sales_micro"]) != `"42"` {
+		t.Fatalf("sales_micro=%s, want a JSON string \"42\"", totals["sales_micro"])
 	}
-	if string(totals["events"]) != "3" {
-		t.Fatalf("events=%s, want the number 3", totals["events"])
+	if string(totals["settled_count"]) != "3" {
+		t.Fatalf("settled_count=%s, want the number 3", totals["settled_count"])
 	}
 	if _, ok := totals["balance"]; ok {
 		t.Fatal("the totals object must not expose a balance field")

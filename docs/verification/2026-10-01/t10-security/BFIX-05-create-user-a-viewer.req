@@ -1,8 +1,0 @@
-POST http://127.0.0.1:50436/api/v1/admin/users
-X-Request-ID: t10-BFIX-05
-Accept: application/json
-Cookie: gw_session=5bME…<redacted:18>; gw_csrf=VMd6…<redacted:18>
-X-CSRF-Token: VMd6…<redacted:18>
-Content-Type: application/json
-
-{"email": "t10-13427-a-viewer@t10.test", "password": "ynfM…<redacted:24>", "platform_admin": false}

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"llm-gateway/internal/gatewayguard"
 	"llm-gateway/internal/httperr"
 	"llm-gateway/internal/provider"
 )
@@ -18,6 +19,15 @@ func NewModelsHandler(registry *provider.Registry) http.Handler {
 			return
 		}
 		names := registry.Models()
+		if policy, scoped := gatewayguard.ModelPolicyFromContext(r.Context()); scoped {
+			allowed := make([]string, 0, len(names))
+			for _, name := range names {
+				if policy.Allows(name) {
+					allowed = append(allowed, name)
+				}
+			}
+			names = allowed
+		}
 		data := make([]map[string]string, 0, len(names))
 		for _, name := range names {
 			data = append(data, map[string]string{

@@ -286,6 +286,11 @@ func (a *billingAdapter) admit(w http.ResponseWriter, r *http.Request) (*billing
 			"billing admission requires a verified organization; this key has no organization attribution")
 		return nil, admissionRefused
 	}
+	if attribution.UserID <= 0 || attribution.MembershipID <= 0 {
+		a.refuse(w, r, http.StatusServiceUnavailable, httperr.CodeBillingUnavailable,
+			"billing admission requires a verified member-bound key")
+		return nil, admissionRefused
+	}
 
 	started := time.Now()
 	body, closer, ok := readBillingBody(r)
@@ -341,6 +346,7 @@ func (a *billingAdapter) admit(w http.ResponseWriter, r *http.Request) (*billing
 	reservation, err := a.store.Reserve(r.Context(), billing.ReserveParams{
 		ExecutionID:       attribution.ExecutionID,
 		OrgID:             attribution.OrgID,
+		MembershipID:      attribution.MembershipID,
 		UserID:            attribution.UserID,
 		KeyID:             attribution.KeyID,
 		GatewayID:         a.gatewayID,
@@ -702,6 +708,12 @@ func (a *billingAdapter) refuse(w http.ResponseWriter, r *http.Request, status i
 //	  request, never a silently unbilled one).
 func admissionRefusal(err error) (status int, code, message string) {
 	switch {
+	case errors.Is(err, billing.ErrMemberMonthlyLimit):
+		return http.StatusTooManyRequests, httperr.CodeRateLimited,
+			"the member's monthly usage limit has been reached"
+	case errors.Is(err, billing.ErrMembershipInactive), errors.Is(err, billing.ErrMembershipNotFound):
+		return http.StatusForbidden, httperr.CodeForbidden,
+			"this key's account membership is not active"
 	case errors.Is(err, billing.ErrInsufficientFunds):
 		return http.StatusPaymentRequired, httperr.CodeInsufficientBalance,
 			"the organization's available balance cannot cover the maximum cost of this request"
@@ -724,6 +736,10 @@ func admissionResultLabel(err error) string {
 		return "admitted"
 	case errors.Is(err, billing.ErrInsufficientFunds):
 		return "insufficient_balance"
+	case errors.Is(err, billing.ErrMemberMonthlyLimit):
+		return "monthly_limit"
+	case errors.Is(err, billing.ErrMembershipInactive), errors.Is(err, billing.ErrMembershipNotFound):
+		return "membership_inactive"
 	case errors.Is(err, billing.ErrAccountSuspended):
 		return "suspended"
 	case errors.Is(err, billing.ErrPriceNotFound):

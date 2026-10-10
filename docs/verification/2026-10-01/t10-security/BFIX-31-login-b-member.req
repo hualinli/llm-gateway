@@ -1,6 +1,0 @@
-POST http://127.0.0.1:50436/api/v1/auth/login
-X-Request-ID: t10-BFIX-31
-Accept: application/json
-Content-Type: application/json
-
-{"email": "t10-13427-b-member@t10.test", "password": "hDeG…<redacted:18>"}

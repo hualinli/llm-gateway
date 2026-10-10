@@ -1,8 +1,0 @@
-POST http://127.0.0.1:58872/api/v1/admin/users
-X-Request-ID: t10-FIX-07
-Accept: application/json
-Cookie: gw_session=nBg6…<redacted:18>; gw_csrf=lEAl…<redacted:18>
-X-CSRF-Token: lEAl…<redacted:18>
-Content-Type: application/json
-
-{"email": "t10-z9162-a-disabled@t10.test", "password": "wDCz…<redacted:24>", "platform_admin": false}

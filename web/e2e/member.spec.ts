@@ -1,144 +1,138 @@
-/**
- * Member perspective (T08 §"用户"): available/reserved/period consumption,
- * own keys, own usage and request detail, personal bills.
- *
- * The organization money views are **not** hidden from a member: the requests are
- * issued and the server's `403 forbidden` is asserted, because that is the proof
- * of the permission matrix — a hidden button is not a security control.
- *
- * The suite runs on a session captured by global-setup (`AUTH.member`) so the
- * Console's login throttle is not what is being measured; the first test below
- * still exercises the real login form once per run, from an empty browser.
- */
-
-import {
-  ANONYMOUS,
-  AUTH,
-  expect,
-  gotoOrg,
-  loadState,
-  login,
-  requireBackend,
-  test,
-} from './fixtures';
+import { ANONYMOUS, AUTH, button, expect, gotoOrg, loadState, login, requireBackend, test, visibleSelectOption } from './fixtures';
+import { beijingMonthOf } from '../src/utils/format';
 
 const state = loadState();
 
-test.describe('login form (fresh browser, no stored session)', () => {
+test.describe('account entry', () => {
   test.use({ storageState: ANONYMOUS });
 
-  test.beforeEach(() => {
-    requireBackend(state);
+  test.beforeEach(() => requireBackend(state));
+
+  test('a person can register, update their password, and sign in again', async ({ page }) => {
+    const suffix = Date.now().toString(36);
+    const email = 'web-e2e-register-' + suffix + '@example.com';
+    const originalPassword = 'register-' + suffix + '-pw';
+    const newPassword = 'updated-' + suffix + '-pw';
+
+    await page.goto('/register');
+    await page.getByLabel('邮箱').fill(email);
+    await page.getByLabel('密码', { exact: true }).fill(originalPassword);
+    await page.getByLabel('确认密码', { exact: true }).fill(originalPassword);
+    await page.getByRole('button', { name: '创建账号' }).click();
+    await expect(page).toHaveURL(/\/orgs\/[^/]+\/overview$/);
+    await expect(page.getByText('个人账户管理员')).toBeVisible();
+    await expect(page.getByTestId('overview-usage')).toBeVisible();
+
+    await page.goto('/settings');
+    await page.getByLabel('当前密码', { exact: true }).fill(originalPassword);
+    await page.getByLabel('新密码', { exact: true }).fill(newPassword);
+    await page.getByLabel('确认新密码', { exact: true }).fill(newPassword);
+    await page.getByRole('button', { name: '更新密码' }).click();
+    await expect(page).toHaveURL(/\/login$/);
+    await expect(page.getByText('密码已更新，请重新登录。')).toBeVisible();
+    await login(page, { email, password: newPassword });
+    await expect(page).toHaveURL(/\/orgs\/[^/]+\/overview$/);
   });
 
-  test('a real login through the form lands on the member overview', async ({ page }) => {
-    await login(page, state.member);
-    await gotoOrg(page, state.orgA.id, 'overview');
-
-    // The role comes from the server (`GET /me` → memberships), not from the URL.
-    await expect(page.getByText('成员', { exact: true }).first()).toBeVisible();
-
-    const funds = page.getByTestId('overview-funds-card');
-    await expect(funds).toBeVisible();
-    await expect(funds.getByText('服务端 403：当前角色没有组织资金读取权限')).toBeVisible();
-    // The 403 carries the T01A code and request id.
-    await expect(funds.getByText(/code=forbidden/)).toBeVisible();
-    // No fabricated balance is rendered for a member.
-    await expect(funds.getByText('可用 available')).toHaveCount(0);
-  });
-
-  test('a wrong password is refused without leaking whether the email exists', async ({
-    page,
-  }) => {
+  test('login does not reveal whether an email exists', async ({ page }) => {
     await page.goto('/login');
     await page.getByLabel('邮箱').fill(state.member.email);
-    await page.getByLabel('密码').fill('definitely-not-the-password');
-    await page.locator('button[type="submit"]').click();
-
-    await expect(page.getByText('邮箱或密码错误（401 unauthorized）')).toBeVisible();
+    await page.getByLabel('密码', { exact: true }).fill('incorrect-password-for-e2e');
+    await button(page, '登录').click();
+    await expect(page.getByText('邮箱或密码不正确。')).toBeVisible();
     await expect(page).toHaveURL(/\/login$/);
   });
 });
 
-test.describe('member perspective', () => {
+test.describe('member account', () => {
   test.use({ storageState: AUTH.member });
+  test.beforeEach(() => requireBackend(state));
 
-  test.beforeEach(() => {
-    requireBackend(state);
-  });
-
-  test('usage page is scope=self and explains the personal-bill boundary', async ({ page }) => {
-    await gotoOrg(page, state.orgA.id, 'usage');
-
-    await expect(page.getByText('个人账单口径：成员只有 scope=self 的用量')).toBeVisible();
-    await expect(page.getByTestId('usage-events-card')).toBeVisible();
-
-    // `totals.scope` is the server's answer; a member never gets the org scope.
-    await expect(page.getByText('scope=仅本人').first()).toBeVisible();
-
-    // Either real events exist, or the honest empty state is shown.
-    const rows = page.locator('[data-testid="usage-events-card"] tbody tr.ant-table-row');
-    if ((await rows.count()) === 0) {
-      await expect(page.getByText('该窗口内没有计量事件')).toBeVisible();
-      test.info().annotations.push({
-        type: 'note',
-        description:
-          '窗口内没有计量事件：本机未运行数据面/结算链路，请求详情用例只验证空态（用例保留）。',
-      });
-      return;
-    }
-
-    await rows.first().getByRole('button', { name: /查看请求详情/ }).click();
-    const drawer = page.getByTestId('request-detail-drawer');
-    await expect(drawer).toBeVisible();
-    await expect(drawer.getByText('结算状态：本版本无法按 execution 查询（契约缺口）')).toBeVisible();
-    await expect(drawer.getByText('attribution')).toBeVisible();
-    await expect(drawer.getByText('cost_cents')).toBeVisible();
-  });
-
-  test('billing page renders the real 403 instead of hiding the tabs', async ({ page }) => {
-    await gotoOrg(page, state.orgA.id, 'billing');
-
-    await expect(page.getByText('普通成员没有组织账单读取权限（服务端 403）')).toBeVisible();
-    // Every section still issues its request and renders the server's 403.
-    await expect(page.getByText('没有权限（403 forbidden）').first()).toBeVisible();
-    await expect(page.getByTestId('billing-statement-card').getByText('403 forbidden')).toBeVisible();
-    await expect(page.getByTestId('billing-entries-card').getByText('403 forbidden')).toBeVisible();
-    await expect(page.getByTestId('billing-exceptions-card').getByText('403 forbidden')).toBeVisible();
-    // The frozen wording about the missing per-execution endpoint is present.
-    await expect(page.getByText('没有「单次请求结算状态」与「组织可见价目」端点')).toBeVisible();
-  });
-
-  test('keys page never shows a fake empty list when the control channel is down', async ({
-    page,
-  }) => {
-    await gotoOrg(page, state.orgA.id, 'keys');
-
-    const card = page.getByTestId('keys-list-card');
-    await expect(card).toBeVisible();
-
-    const rows = card.locator('tbody tr.ant-table-row');
-    const errorAlert = card.locator('.ant-alert-error');
-    // One of the two real states must be present: rows from the API, or the
-    // server's error (this checkout has no Control channel, so it is `503`).
-    await expect
-      .poll(async () => (await rows.count()) > 0 || (await errorAlert.count()) > 0, {
-        message: 'Key 列表必须显示真实数据或真实错误，不能是假空态',
-      })
-      .toBe(true);
-  });
-
-  test('the organization switcher only offers organizations the member belongs to', async ({
-    page,
-  }) => {
+  test('the member sees their own real usage and current quota', async ({ page }) => {
     await gotoOrg(page, state.orgA.id, 'overview');
-    // The switcher is the server's `GET /organizations` list for this session.
-    await page.getByLabel('切换组织').click();
-    const dropdown = page.locator('.ant-select-dropdown');
-    await expect(dropdown.getByText('demo-enterprise-a').first()).toBeVisible();
-    // demo-enterprise-b belongs to the platform admin; the member is not in it.
-    await expect(dropdown.getByText('demo-enterprise-b')).toHaveCount(0);
-    // Creating an organization is available to every authenticated user.
-    await expect(page.getByRole('button', { name: '创建企业组织' })).toBeVisible();
+    await expect(page.getByTestId('overview-quota')).toBeVisible();
+    await expect(page.getByTestId('overview-quota').getByText('月度上限')).toBeVisible();
+    await expect(page.getByTestId('overview-quota')).not.toContainText('禁止消费');
+    await expect(page.getByTestId('overview-balance')).toHaveCount(0);
+
+    const quotaResponse = await page.request.get('/api/v1/orgs/' + state.orgA.id + '/quota');
+    expect(quotaResponse.status()).toBe(200);
+    expect(((await quotaResponse.json()) as { limit_micro: string | null }).limit_micro).toBe('100000000');
+
+    const usageResponse = await page.request.get(
+      '/api/v1/orgs/' + state.orgA.id + '/usage?month=' + beijingMonthOf(),
+    );
+    expect(usageResponse.status()).toBe(200);
+    const usage = (await usageResponse.json()) as {
+      scope: string;
+      items: Array<Record<string, unknown>>;
+      totals: { sales_micro: string };
+    };
+    expect(usage.scope).toBe('self');
+    expect(usage.totals.sales_micro).toMatch(/^\d+$/);
+    expect(usage.items.every((item) => item.key_id === undefined || typeof item.key_id === 'string')).toBe(true);
+    expect(JSON.stringify(usage)).not.toContain('provider_cost');
+
+    await gotoOrg(page, state.orgA.id, 'usage');
+    await expect(page.getByTestId('usage-events-card')).toBeVisible();
+    await expect(page.getByText('费用只包含已完成结算的实际扣款')).toBeVisible();
+  });
+
+  test('account switching clears the previous account test key and unsent prompt', async ({ page }) => {
+    test.skip(!state.member.personalAccountId, '注册返回中没有个人账户编号');
+    await gotoOrg(page, state.orgA.id, 'models');
+    await page.getByLabel('我的 API Key').fill('temporary-org-key');
+    await page.getByLabel('试用内容').fill('unsent private prompt');
+
+    const meResponse = await page.request.get('/api/v1/me');
+    expect(meResponse.status()).toBe(200);
+    const me = (await meResponse.json()) as {
+      organizations: Array<{ organization: { id: string; type: string; name: string } }>;
+    };
+    const personal = me.organizations.find((item) => item.organization.id === state.member.personalAccountId);
+    expect(personal).toBeTruthy();
+
+    await page.getByLabel('切换账户').click();
+    await visibleSelectOption(page, personal!.organization.name, false).click();
+    await expect(page).toHaveURL('/orgs/' + state.member.personalAccountId + '/overview');
+    await page.goto('/orgs/' + state.member.personalAccountId + '/models');
+    await expect(page.getByLabel('我的 API Key')).toHaveValue('');
+    await expect(page.getByLabel('试用内容')).toHaveValue('');
+
+    await page.getByLabel('切换账户').click();
+    await visibleSelectOption(page, state.orgB.name, false).click();
+    await expect(page).toHaveURL('/orgs/' + state.orgB.id + '/overview');
+    await page.goto('/orgs/' + state.orgB.id + '/models');
+    await expect(page.getByLabel('我的 API Key')).toHaveValue('');
+    await expect(page.getByLabel('试用内容')).toHaveValue('');
+  });
+
+  test('only the signed-in member can list and stop their own named Keys', async ({ page }) => {
+    test.skip(!state.controlAvailable, '完整 Key 工作流需要本地 Control 服务');
+    const response = await page.request.get('/api/v1/orgs/' + state.orgA.id + '/keys?limit=20');
+    expect(response.status()).toBe(200);
+    const result = (await response.json()) as {
+      items: Array<{ key_id: string; name: string; organization_id: string; owner_user_id: string | null }>;
+      next_cursor: string | null;
+    };
+    expect(result.items.map((item) => item.name)).toEqual(
+      expect.arrayContaining(['web-e2e first app', 'web-e2e second app']),
+    );
+    expect(result.items.every((item) => item.owner_user_id === state.member.userId && item.organization_id === state.orgA.id)).toBe(true);
+
+    const otherAccount = await page.request.get('/api/v1/orgs/' + state.orgB.id + '/keys?limit=100');
+    expect(otherAccount.status()).toBe(200);
+    const otherKeys = (await otherAccount.json()) as { items: Array<{ key_id: string; name: string; organization_id: string; owner_user_id: string | null }> };
+    expect(otherKeys.items.every((item) => item.organization_id === state.orgB.id && item.owner_user_id === state.member.userId)).toBe(true);
+    await gotoOrg(page, state.orgA.id, 'keys');
+    await expect(page.getByTestId('keys-list-card').getByText('web-e2e first app')).toBeVisible();
+    await expect(page.getByTestId('keys-list-card').getByText('web-e2e second app')).toBeVisible();
+    const nextPage = page.getByRole('button', { name: '下一页' });
+    await expect(nextPage).toBeEnabled();
+    await nextPage.click();
+    await expect(page.getByText('第 2 页')).toBeVisible();
+    await expect(page.getByRole('button', { name: '上一页' })).toBeEnabled();
+    await page.getByRole('button', { name: '上一页' }).click();
+    await expect(page.getByText('第 1 页')).toBeVisible();
   });
 });

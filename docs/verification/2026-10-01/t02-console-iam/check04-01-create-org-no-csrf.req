@@ -1,7 +1,0 @@
-POST /api/v1/organizations HTTP/1.1
-X-Request-ID: acc-check04-01
-Accept: application/json
-Cookie: gw_session=iPK3…<redacted:18>; gw_csrf=86aL…<redacted:18>
-Content-Type: application/json
-
-{"name": "accept-9e5c7e3c"}

@@ -1,5 +1,0 @@
-# With migrations.Version bumped to 13 (temporary verification only; the file was restored)
-$ go test ./... -count=1 (same env)
-exit=0
-ok packages: 26
-failures: 0

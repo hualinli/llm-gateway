@@ -14,7 +14,7 @@ export function PageHeader({
   return (
     <div className="page-header">
       <div className="page-header-text">
-        <Typography.Title level={4} style={{ marginBottom: 4 }}>
+        <Typography.Title level={2} style={{ margin: 0, marginBottom: 8 }}>
           {title}
         </Typography.Title>
         {description ? (
@@ -26,24 +26,6 @@ export function PageHeader({
           {extra}
         </Space>
       ) : null}
-    </div>
-  );
-}
-
-/** Honest placeholder for a capability the frozen API does not expose yet. */
-export function ContractGap({
-  title,
-  children,
-}: {
-  title: string;
-  children: ReactNode;
-}): ReactNode {
-  return (
-    <div className="contract-gap">
-      <Typography.Text strong>契约缺口：{title}</Typography.Text>
-      <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-        {children}
-      </Typography.Paragraph>
     </div>
   );
 }

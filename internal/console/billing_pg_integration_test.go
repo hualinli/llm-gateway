@@ -81,6 +81,11 @@ VALUES ($1, 'hash', 'active', true, 1, $2, $2) RETURNING id`, name+"@example.com
 VALUES ('enterprise', $1, 'active', $2, $3, $3) RETURNING id`, name, userID, now).Scan(&orgID); err != nil {
 		t.Fatalf("seed organization: %v", err)
 	}
+	if _, err := db.Exec(`INSERT INTO memberships
+  (org_id, user_id, role, status, created_at, updated_at)
+VALUES ($1, $2, 'owner', 'active', $3, $3)`, orgID, userID, now); err != nil {
+		t.Fatalf("seed owner membership: %v", err)
+	}
 	return orgID, userID
 }
 
@@ -114,7 +119,7 @@ func TestHTTPBillingReadsAreOrganizationScoped(t *testing.T) {
 	fixture := defaultFixture()
 	h.withSessionFixture(fixture)
 	h.orgs.memberships = map[int64]map[int64]string{
-		fixture.user.ID: {orgA: "billing_viewer"},
+		fixture.user.ID: {orgA: "admin"},
 	}
 	cookies := cookieHeader(fixture.rawToken, fixture.csrfToken)
 
@@ -204,7 +209,7 @@ func TestHTTPAdjustmentIdempotencyAgainstPostgres(t *testing.T) {
 	cookies := cookieHeader(fixture.rawToken, fixture.csrfToken)
 	csrf := hdr("X-CSRF-Token", fixture.csrfToken)
 	path := "/api/v1/admin/billing/accounts/" + formatID(orgID) + "/adjustments"
-	const body = `{"amount_micro":"1500000","direction":"credit","reason":"goodwill credit"}`
+	const body = `{"type":"recharge","amount_micro":"1500000","payment_reference":"bank-tx-http-1","reason":"goodwill credit"}`
 
 	rec := h.serve(http.MethodPost, path, jsonBody(body), cookies, csrf, hdr("Idempotency-Key", "http-adj-1"))
 	if rec.Code != http.StatusCreated {
@@ -227,7 +232,7 @@ func TestHTTPAdjustmentIdempotencyAgainstPostgres(t *testing.T) {
 	}
 
 	rec = h.serve(http.MethodPost, path,
-		jsonBody(`{"amount_micro":"1","direction":"debit","reason":"goodwill credit"}`),
+		jsonBody(`{"type":"recharge","amount_micro":"1","payment_reference":"bank-tx-http-1","reason":"goodwill credit"}`),
 		cookies, csrf, hdr("Idempotency-Key", "http-adj-1"))
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("conflict: status=%d body=%s, want 409", rec.Code, rec.Body.String())

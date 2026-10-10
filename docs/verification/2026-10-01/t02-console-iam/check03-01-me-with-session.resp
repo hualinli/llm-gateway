@@ -1,9 +1,0 @@
-HTTP 200
-Server: hertz
-Date: Wed, 30 Sep 2026 20:58:57 GMT
-Content-Type: application/json
-Content-Length: 904
-X-Request-Id: acc-check03-01
-X-Trace-Id: 32f7bfd2508cb718b9c2403757c8dcc3
-
-{"user":{"id":"1","email":"admin@accept.test","status":"active","platform_admin":true,"created_at":"2026-09-30T20:57:37Z","updated_at":"2026-09-30T20:57:37Z"},"organizations":[{"organization":{"id":"1","type":"personal","name":"admin@accept.test","status":"active","legacy_tenant_id":null,"created_at":"2026-09-30T20:57:37Z"},"role":"owner"},{"organization":{"id":"2","type":"enterprise","name":"demo-enterprise-a","status":"active","legacy_tenant_id":null,"created_at":"2026-09-30T20:57:37Z"},"role":"owner"},{"organization":{"id":"3","type":"enterprise","name":"demo-enterprise-b","status":"active","legacy_tenant_id":null,"created_at":"2026-09-30T20:57:38Z"},"role":"owner"},{"organization":{"id":"6","type":"enterprise","name":"accept-fd042726","status":"active","legacy_tenant_id":null,"created_at":"2026-09-30T20:58:07Z"},"role":"owner"}],"csrf_token":"86aL…<redacted:18>"}

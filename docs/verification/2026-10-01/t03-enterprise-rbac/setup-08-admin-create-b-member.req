@@ -1,8 +1,0 @@
-POST http://127.0.0.1:18092/api/v1/admin/users
-X-Request-ID: t03-setup-08
-Accept: application/json
-Cookie: gw_session=xL5C…<redacted:18>; gw_csrf=JI5n…<redacted:18>
-X-CSRF-Token: JI5n…<redacted:18>
-Content-Type: application/json
-
-{"email": "t03-17c0af-b-member@t03.test", "password": "iCmN…<redacted:20>", "platform_admin": false}

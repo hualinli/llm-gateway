@@ -1,9 +1,0 @@
-HTTP 201 (0.003s)
-Server: hertz
-Date: Wed, 30 Sep 2026 22:50:32 GMT
-Content-Type: application/json
-Content-Length: 166
-X-Request-Id: t03-setup-20
-X-Trace-Id: bb7fea58661f3d7e9d2fe2aaab58231a
-
-{"organization":{"id":"12","type":"enterprise","name":"t03-17c0af-acme","status":"active","legacy_tenant_id":null,"created_at":"2026-09-30T22:50:32Z"},"role":"owner"}

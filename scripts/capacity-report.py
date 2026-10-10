@@ -67,7 +67,7 @@ MODEL = "default"
 DSN_IN_CONTAINER = "postgres://gateway:gateway@postgres:5432/llm_gateway?sslmode=disable"
 PRICE_EFFECTIVE_AT = "2026-01-01 00:00:00+00"
 
-# Stream shape durations (docs/plans/BENCHMARK-AND-ACCEPTANCE-2026-10-01.md 3.1),
+# Stream shape durations (cmd/loadtest/README.md),
 # used only to size closed-loop -n and open-loop concurrency slots.
 SHAPE_SECONDS = {"s": 0.125, "m": 2.08, "l": 10.28}
 # A 50 KiB M stream at 1 KiB/s takes ~51s; at 10 KiB/s ~5s.
@@ -454,7 +454,7 @@ class Stack:
         return [PROFILE_MOCKS] + ([PROFILE_MULTI] if self.two_gateways else [])
 
     def compose(self, *extra, profiles=None):
-        args = ["docker", "compose", "-p", self.project, "-f", BASE_COMPOSE_NAME,
+        args = ["docker", "compose", "-p", self.project, "-f", BASE_COMPOSE_NAME, "-f", "docker-compose.mock.yml",
                 "-f", rel(self.override_path)]
         for profile in (profiles if profiles is not None else self.profiles()):
             args += ["--profile", profile]
@@ -2319,7 +2319,7 @@ def parse_args(argv=None):
         description="T11 capacity runner: isolated Compose project, billing-on load matrix, run-scoped reconciliation.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=("usage: python3 scripts/capacity-report.py --output DIR [--experiments LIST] [--no-build] [--keep]\n"
-                "       python3 scripts/capacity-report.py --output docs/verification/2026-10-01/t11-capacity \\\n"
+                "       python3 scripts/capacity-report.py --output data/verification/t11-capacity \\\n"
                 "         --work-dir data/benchmarks/t11-capacity --experiments smoke --step-seconds 12"))
     parser.add_argument("--output", required=True, help="report directory (small artifacts are copied here)")
     parser.add_argument("--work-dir", default="data/benchmarks/t11-capacity",

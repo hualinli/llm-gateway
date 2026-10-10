@@ -22,7 +22,8 @@ import (
 
 // Demo data contract (ADR-0002 §5): two enterprises, three members each. The
 // owner is the platform administrator; the other two are one `admin` and one
-// `billing_viewer`, so the T03 permission matrix has something to act on.
+// ordinary `member`. Trusted bootstrap AddMember writes a nil monthly cap, which
+// explicitly means unlimited here; member-facing HTTP assignment requires a cap.
 const (
 	demoEnterpriseA = "demo-enterprise-a"
 	demoEnterpriseB = "demo-enterprise-b"
@@ -46,11 +47,11 @@ func demoEnterprises() []demoEnterprise {
 	return []demoEnterprise{
 		{name: demoEnterpriseA, users: []demoUser{
 			{email: "demo-enterprise-a-admin@example.com", role: "admin"},
-			{email: "demo-enterprise-a-billing@example.com", role: "billing_viewer"},
+			{email: "demo-enterprise-a-member@example.com", role: "member"},
 		}},
 		{name: demoEnterpriseB, users: []demoUser{
 			{email: "demo-enterprise-b-admin@example.com", role: "admin"},
-			{email: "demo-enterprise-b-billing@example.com", role: "billing_viewer"},
+			{email: "demo-enterprise-b-member@example.com", role: "member"},
 		}},
 	}
 }
@@ -239,6 +240,10 @@ func bootstrap(ctx context.Context, users bootstrapUsers, orgs bootstrapOrganiza
 			} else {
 				result.DemoUsersReused++
 			}
+			if _, err := orgs.EnsurePersonalOrganization(ctx, user.user.ID, user.user.Email); err != nil {
+				return bootstrapResult{}, fmt.Errorf("ensure personal organization for %s: %w", demo.email, err)
+			}
+			// This trusted seed path deliberately keeps monthly_limit_micro nil (unlimited).
 			if _, err := orgs.AddMember(ctx, org.ID, user.user.ID, demo.role); err != nil {
 				return bootstrapResult{}, fmt.Errorf("add %s to %s: %w", demo.email, enterprise.name, err)
 			}

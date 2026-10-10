@@ -36,7 +36,7 @@ const (
 	sseDefaultMaxEventBytes = 4 << 20
 )
 
-// shapePreset mirrors docs/plans/BENCHMARK-AND-ACCEPTANCE-2026-10-01.md §3.1.
+// shapePreset mirrors cmd/loadtest/README.md.
 // The shape is expanded into the mock's per-request x_mock_* parameter fields,
 // so one mock process can serve the S/M/L matrix — including through the
 // Gateway, whose adapter keeps unknown request fields verbatim.

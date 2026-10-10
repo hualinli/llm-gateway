@@ -1,9 +1,0 @@
-HTTP 200 (0.002s)
-Server: hertz
-Date: Thu, 01 Oct 2026 06:44:39 GMT
-Content-Type: application/json
-Content-Length: 594
-X-Request-Id: t10-SEC-10-07
-X-Trace-Id: 3480b37d4dc3ab7b74c9feb98a79cb79
-
-{"user":{"id":"7","email":"t10-z9162-a-disabled@t10.test","status":"active","platform_admin":false,"created_at":"2026-10-01T06:44:31Z","updated_at":"2026-10-01T06:44:39Z"},"organizations":[{"organization":{"id":"4","type":"enterprise","name":"t10-z9162-acme","status":"active","legacy_tenant_id":null,"created_at":"2026-10-01T06:44:32Z"},"role":"member"},{"organization":{"id":"11","type":"personal","name":"t10-z9162-a-disabled@t10.test","status":"active","legacy_tenant_id":null,"created_at":"2026-10-01T06:44:33Z"},"role":"owner"}],"csrf_token":"ycL5…<redacted:18>"}

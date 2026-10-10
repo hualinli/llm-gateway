@@ -124,7 +124,7 @@ print_exports() {
 	echo "export CONSOLE_PUBLICATION_INTERVAL=15s"
 	echo "export PROVIDER_CREDENTIAL_MASTER_KEY_FILE=$abs/provider-credential-master-key"
 	echo ""
-	echo "生产 profile 还会校验 PostgreSQL/管理认证/诊断端口等，见 docs/decisions/ADR-0001-runtime-profiles.md。"
+	echo "生产 profile 还会校验 PostgreSQL/管理认证/诊断端口等，见 docs/decisions.md。"
 }
 
 if [ "$FORCE" -eq 0 ]; then

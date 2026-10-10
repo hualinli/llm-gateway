@@ -186,13 +186,13 @@ func TestCreateAdminPriceValidatesAndConflicts(t *testing.T) {
 }
 
 func TestOrgBillingAccountReadScope(t *testing.T) {
-	h, _, accounts, fixture := billingHarness(t, "billing_viewer")
+	h, _, accounts, fixture := billingHarness(t, "admin")
 	accounts.account = ptrAccount(sampleAccount(7))
 	cookies := cookieHeader(fixture.rawToken, fixture.csrfToken)
 
 	rec := h.serve(http.MethodGet, "/api/v1/orgs/7/billing/account", nil, cookies)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("billing_viewer: status=%d body=%s", rec.Code, rec.Body.String())
+		t.Fatalf("admin: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	var account struct {
 		OrganizationID     string `json:"organization_id"`
@@ -305,7 +305,7 @@ func TestAdjustBillingAccountIdempotency(t *testing.T) {
 	cookies := cookieHeader(fixture.rawToken, fixture.csrfToken)
 	csrf := hdr("X-CSRF-Token", fixture.csrfToken)
 	const path = "/api/v1/admin/billing/accounts/7/adjustments"
-	const body = `{"amount_micro":"1500000","direction":"credit","reason":"goodwill credit"}`
+	const body = `{"type":"recharge","amount_micro":"1500000","payment_reference":"bank-tx-1","reason":"goodwill credit"}`
 
 	// The Idempotency-Key header is mandatory.
 	rec := h.serve(http.MethodPost, path, jsonBody(body), cookies, csrf)
@@ -328,7 +328,7 @@ func TestAdjustBillingAccountIdempotency(t *testing.T) {
 
 	// A JSON number is not a valid amount string.
 	rec = h.serve(http.MethodPost, path,
-		jsonBody(`{"amount_micro":1500000,"direction":"credit","reason":"x"}`),
+		jsonBody(`{"type":"recharge","amount_micro":1500000,"payment_reference":"bank-tx-1","reason":"x"}`),
 		cookies, csrf, hdr("Idempotency-Key", "adj-1"))
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("numeric amount: status=%d, want 400", rec.Code)
@@ -336,7 +336,7 @@ func TestAdjustBillingAccountIdempotency(t *testing.T) {
 
 	// The reason is mandatory: an unexplained money movement is not acceptable.
 	rec = h.serve(http.MethodPost, path,
-		jsonBody(`{"amount_micro":"1500000","direction":"credit"}`),
+		jsonBody(`{"type":"recharge","amount_micro":"1500000","payment_reference":"bank-tx-1"}`),
 		cookies, csrf, hdr("Idempotency-Key", "adj-1"))
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("missing reason: status=%d, want 400", rec.Code)
@@ -357,10 +357,11 @@ func TestAdjustBillingAccountIdempotency(t *testing.T) {
 		t.Fatalf("adjust calls=%d", len(accounts.adjustCalls))
 	}
 	first := accounts.adjustCalls[0]
-	if first.BusinessID != "adj-1" || first.Kind != billing.KindAdjustment || first.ActorUserID != fixture.user.ID {
+	if first.BusinessID != "adj-1" || first.Kind != billing.KindCredit || first.ActorUserID != fixture.user.ID {
 		t.Fatalf("adjust call=%+v", first)
 	}
-	if first.PayloadDigest != billing.AdjustmentDigest(7, 1_500_000, billing.DirectionCredit, billing.KindAdjustment, "goodwill credit") {
+	if first.PayloadDigest != billing.ManualPaymentDigest(7, 1_500_000, billing.DirectionCredit, billing.KindCredit,
+		billing.ManualOperationRecharge, "bank-tx-1", 0, "goodwill credit") {
 		t.Fatalf("digest=%q is not the canonical payload digest", first.PayloadDigest)
 	}
 
@@ -387,7 +388,7 @@ func TestAdjustBillingAccountIdempotency(t *testing.T) {
 		return billing.AdjustmentResult{}, billing.ErrIdempotencyConflict
 	}
 	rec = h.serve(http.MethodPost, path,
-		jsonBody(`{"amount_micro":"999","direction":"credit","reason":"goodwill credit"}`),
+		jsonBody(`{"type":"recharge","amount_micro":"999","payment_reference":"bank-tx-1","reason":"goodwill credit"}`),
 		cookies, csrf, hdr("Idempotency-Key", "adj-1"))
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("conflict: status=%d body=%s, want 409", rec.Code, rec.Body.String())

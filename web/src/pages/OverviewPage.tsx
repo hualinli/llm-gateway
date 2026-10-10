@@ -1,401 +1,93 @@
-/**
- * Overview: identity, active organization, usage of the last 24 hours, the
- * funding state of the organization and the key inventory — every number read
- * from a real API response.
- *
- * "资金与结算" now has real endpoints (T05/T06/T07A): the account projection, the
- * current UTC month statement and the ledger live in `/orgs/{org}/billing/*`.
- * Amounts are decimal strings and are formatted without `Number()`; the server's
- * frozen `available_note` is shown verbatim. A plain `member` has no
- * `view_org_usage` grant, so the card renders the *server's* 403 rather than
- * hiding the capability.
- */
-
-import { useMemo, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  Alert,
-  Card,
-  Col,
-  Descriptions,
-  Row,
-  Space,
-  Statistic,
-  Table,
-  Tag,
-  Typography,
-} from 'antd';
+import { Alert, Button, Card, Collapse, Col, Row, Space, Statistic, Tag, Typography } from 'antd';
 
-import {
-  useBillingAccount,
-  useBillingStatement,
-  useKeys,
-  useOrganization,
-  useUsage,
-} from '../api/queries';
-import type { UsageEvent } from '../api/types';
-import { DataState, asApiError } from '../components/states';
-import { MicroYuan } from '../components/Money';
-import { ContractGap, PageHeader } from '../components/PageHeader';
+import { useAccountModels, useBillingAccount, useMonthlyUsage, useQuota } from '../api/queries';
+import { ArrowRightOutlined, KeyOutlined, TeamOutlined, WalletOutlined } from '@ant-design/icons';
+import { PageHeader } from '../components/PageHeader';
+import { DataState } from '../components/states';
 import { useActiveOrg, useSession } from '../session/SessionProvider';
-import {
-  formatCostCents,
-  formatMicroYuan,
-  formatNumber,
-  formatTimestamp,
-  shortId,
-  utcMonthOf,
-} from '../utils/format';
-import { CAN, ORG_TYPE_LABELS, ROLE_LABELS, ROLE_TAG_COLOR } from '../utils/permissions';
+import { beijingMonthOf, formatMicroYuan } from '../utils/format';
+import { CAN } from '../utils/permissions';
 
-/**
- * 24h window, computed once per organization so the query key stays stable
- * (a fresh `Date.now()` on every render would re-key the query forever).
- */
-function useLast24h(orgId: string | null): { from: string; to: string } {
-  return useMemo(() => {
-    const to = new Date();
-    const from = new Date(to.getTime() - 24 * 60 * 60 * 1000);
-    return { from: from.toISOString(), to: to.toISOString() };
-  }, [orgId]);
+function QuotaCard({ orgId, compact = false }: { orgId: string; compact?: boolean }): ReactNode {
+  const quota = useQuota(orgId, true);
+  const content = <Card title="我的月度额度" data-testid="overview-quota">
+    <DataState query={quota}>
+      {(data) => <Row gutter={[16, 16]}>
+        <Col xs={12} md={6}><Statistic title="本月最多可用" value={data.limit_micro === null ? '不限额' : data.limit_micro === '0' ? '禁止消费' : `${formatMicroYuan(data.limit_micro)} 元`} /></Col>
+        <Col xs={12} md={6}><Statistic title="已结算消费" value={`${formatMicroYuan(data.used_micro)} 元`} /></Col>
+        <Col xs={12} md={6}><Statistic title="调用中暂占" value={`${formatMicroYuan(data.reserved_micro)} 元`} /></Col>
+        <Col xs={12} md={6}><Statistic title="本月还能使用" value={data.remaining_micro === null ? '不限额' : `${formatMicroYuan(data.remaining_micro)} 元`} /></Col>
+      </Row>}
+    </DataState>
+    <Typography.Text type="secondary">这是企业为你设置的月度消费上限，不是独立余额。每月重新计算；实际费用由企业余额支付。</Typography.Text>
+  </Card>;
+  if (!compact) return content;
+  const limit = quota.data?.limit_micro;
+  const label = quota.isError ? '我的月度额度 · 暂时无法读取' : quota.isPending ? '我的月度额度 · 正在读取' : `我的月度额度 · ${limit === null ? '直接使用企业余额' : limit === '0' ? '禁止消费' : limit ? `${formatMicroYuan(limit)} 元` : '待确认'}`;
+  return <Collapse className="page-help" items={[{ key: 'quota', label, children: content }]} />;
 }
 
 export function OverviewPage(): ReactNode {
   const { me } = useSession();
   const { orgId, membership, role } = useActiveOrg();
-  const windowRange = useLast24h(orgId);
-
-  const usage = useUsage(orgId, { ...windowRange, limit: 5 }, orgId !== null);
-  // Server-side state of the active organization (404 for a non-member, which
-  // the contract uses instead of 403 so existence never leaks).
-  const organizationQuery = useOrganization(orgId);
-  const canSeeKeys = CAN.manageOwnKeys(role);
-  const keys = useKeys(orgId, { limit: 100 }, canSeeKeys && orgId !== null);
-
-  const organization = membership?.organization;
+  const month = beijingMonthOf();
+  const isPersonal = membership?.organization.type === 'personal';
+  const canSeeBalance = CAN.manageBilling(membership);
+  const usage = useMonthlyUsage(orgId, month, orgId !== null);
+  const account = useBillingAccount(orgId, canSeeBalance && orgId !== null);
+  const canUse = membership?.status === 'active' && membership.organization.status === 'active';
+  const enterpriseAdmin = !isPersonal && canSeeBalance;
+  const base = `/orgs/${encodeURIComponent(orgId ?? '')}`;
+  const models = useAccountModels(orgId, orgId !== null && canUse);
 
   return (
-    <Space direction="vertical" size={16} style={{ width: '100%' }}>
-      <PageHeader
-        title="概览"
-        description={`组织 ${organization?.name ?? '—'} · 角色 ${role ? ROLE_LABELS[role] : '—'}`}
-        extra={
-          <Link to={`/orgs/${encodeURIComponent(orgId ?? '')}/usage`}>查看完整用量</Link>
-        }
-      />
-
+    <Space className="responsive-page-content" direction="vertical" size={24} style={{ width: '100%' }}>
+      <PageHeader title={enterpriseAdmin ? '企业工作台' : '我的工作台'} description={enterpriseAdmin ? '查看企业余额和成员消费，处理团队的日常管理。' : isPersonal ? '用一个 API Key 接入模型，随时查看自己的消费。' : '查看自己的用量和企业分配的额度，管理自己的 API Key。'} />
+      <section className="workspace-hero">
+        <div><span className="workspace-eyebrow">{isPersonal ? '个人使用' : enterpriseAdmin ? '企业管理' : '企业成员'} · {membership?.organization.name}</span><h2>{enterpriseAdmin ? '查看企业余额，管理成员消费。' : '创建 Key，接入你常用的应用。'}</h2><p>{isPersonal ? '模型调用从你的个人账户扣费。每个应用都可以使用单独的 Key。' : enterpriseAdmin ? '成员用自己的 Key 调用模型，费用统一从企业余额扣除。' : '你的调用费用由企业支付。月度额度决定你本月最多可以消费多少。'}</p></div>
+        {canUse ? <Link to={`${base}/${enterpriseAdmin ? 'members' : 'keys'}`}><Button type="primary" size="large" icon={enterpriseAdmin ? <TeamOutlined /> : <KeyOutlined />}>{enterpriseAdmin ? '管理企业成员' : '获取 API Key'}</Button></Link> : null}
+      </section>
+      {membership?.organization.status === 'suspended' ? <Alert type="error" showIcon message={isPersonal ? '个人账户已暂停' : '企业账户已暂停'} description="此账户暂时不能发起新的模型调用。如需恢复，请联系平台管理员。" /> : null}
+      {membership?.organization.type === 'enterprise' && membership.status === 'suspended' ? <Alert type="warning" showIcon message="你在此企业中的成员资格已暂停" description="你仍可查看自己的历史消费与额度；如需恢复使用，请联系企业负责人或管理员。" /> : null}
       <Row gutter={[16, 16]}>
-        <Col xs={24} lg={12}>
-          <Card title="当前身份" size="small">
-            <Descriptions column={1} size="small" bordered>
-              <Descriptions.Item label="邮箱">{me?.user.email ?? '—'}</Descriptions.Item>
-              <Descriptions.Item label="user_id">{me?.user.id ?? '—'}</Descriptions.Item>
-              <Descriptions.Item label="状态">
-                {me?.user.status === 'active' ? <Tag color="green">active</Tag> : <Tag>disabled</Tag>}
-              </Descriptions.Item>
-              <Descriptions.Item label="平台管理员">
-                {me?.user.platform_admin ? <Tag color="gold">是</Tag> : <Tag>否</Tag>}
-              </Descriptions.Item>
-              <Descriptions.Item label="会话 CSRF">
-                {me?.csrf_token ? (
-                  <Tag color="green">已持有（仅内存，不写入 localStorage）</Tag>
-                ) : (
-                  <Tag color="orange">未返回</Tag>
-                )}
-              </Descriptions.Item>
-            </Descriptions>
-          </Card>
-        </Col>
-        <Col xs={24} lg={12}>
-          <Card title="当前组织（GET /organizations/{org}）" size="small">
-            <DataState query={organizationQuery} loadingRows={3}>
-              {(membershipRecord) => (
-                <Descriptions column={1} size="small" bordered>
-                  <Descriptions.Item label="名称">
-                    {membershipRecord.organization.name}
-                  </Descriptions.Item>
-                  <Descriptions.Item label="org_id">
-                    {membershipRecord.organization.id}
-                  </Descriptions.Item>
-                  <Descriptions.Item label="类型">
-                    {ORG_TYPE_LABELS[membershipRecord.organization.type] ??
-                      membershipRecord.organization.type}
-                  </Descriptions.Item>
-                  <Descriptions.Item label="状态">
-                    {membershipRecord.organization.status}
-                  </Descriptions.Item>
-                  <Descriptions.Item label="我的角色">
-                    <Tag color={ROLE_TAG_COLOR[membershipRecord.role]}>
-                      {ROLE_LABELS[membershipRecord.role]}
-                    </Tag>
-                  </Descriptions.Item>
-                  <Descriptions.Item label="legacy_tenant_id">
-                    {membershipRecord.organization.legacy_tenant_id ?? '（未映射）'}
-                  </Descriptions.Item>
-                </Descriptions>
-              )}
-            </DataState>
-          </Card>
-        </Col>
-      </Row>
-
-      <Card
-        title="用量（近 24 小时）"
-        size="small"
-        extra={
-          usage.data ? (
-            <Tag color={usage.data.scope === 'organization' ? 'blue' : 'default'}>
-              范围 scope={usage.data.scope === 'organization' ? '全组织' : '仅本人'}
-            </Tag>
-          ) : null
-        }
-      >
-        <DataState query={usage} loadingRows={3}>
-          {(page) => (
-            <Space direction="vertical" size={12} style={{ width: '100%' }}>
-              <Row gutter={[16, 16]}>
-                <Col xs={12} md={6}>
-                  <Statistic title="事件数" value={page.totals.events} />
-                </Col>
-                <Col xs={12} md={6}>
-                  <Statistic title="总 tokens" value={page.totals.total_tokens} />
-                </Col>
-                <Col xs={12} md={6}>
-                  <Statistic title="prompt tokens" value={page.totals.prompt_tokens} />
-                </Col>
-                <Col xs={12} md={6}>
-                  <Statistic title="completion tokens" value={page.totals.completion_tokens} />
-                </Col>
-              </Row>
-              <Alert
-                type="info"
-                showIcon
-                message={
-                  <Space size={8} wrap>
-                    <span>演示累计消费（{page.totals.cost_kind}）</span>
-                    <Tag color="orange">{formatCostCents(page.totals.cost_cents)}</Tag>
-                  </Space>
-                }
-                description={
-                  <Typography.Text type="secondary">
-                    {page.totals.cost_note} 服务端窗口：{formatTimestamp(page.window.from)} →{' '}
-                    {formatTimestamp(page.window.to)}。
-                  </Typography.Text>
-                }
-              />
-              <Table<UsageEvent>
-                size="small"
-                rowKey="id"
-                dataSource={page.items}
-                pagination={false}
-                locale={{ emptyText: '该窗口内没有计量事件' }}
-                columns={[
-                  {
-                    title: '时间',
-                    dataIndex: 'occurred_at',
-                    render: (value: string) => formatTimestamp(value),
-                  },
-                  { title: '模型', dataIndex: 'model' },
-                  {
-                    title: 'tokens',
-                    dataIndex: 'total_tokens',
-                    render: (value: number) => formatNumber(value),
-                  },
-                  {
-                    title: 'key',
-                    dataIndex: 'key_id',
-                    render: (value: string | null) => shortId(value),
-                  },
-                ]}
-              />
-            </Space>
-          )}
-        </DataState>
-      </Card>
-
-      <FundsCard orgId={orgId} />
-
-      <Card
-        title="API Keys"
-        size="small"
-        extra={<Link to={`/orgs/${encodeURIComponent(orgId ?? '')}/keys`}>打开 Key 管理</Link>}
-      >
-        {canSeeKeys ? (
-          <DataState query={keys} loadingRows={2}>
-            {(page) => {
-              const active = page.items.filter((key) => key.status === 'active').length;
-              const revoked = page.items.length - active;
-              return (
-                <Space size={24} wrap>
-                  <Statistic title="active" value={active} />
-                  <Statistic title="revoked" value={revoked} />
-                  <Typography.Text type="secondary">
-                    member 只列本人 Key；admin/owner 列全组织；billing_viewer 无 Key 权限。
-                  </Typography.Text>
-                </Space>
-              );
-            }}
-          </DataState>
-        ) : (
-          <Alert
-            type="info"
-            showIcon
-            message="当前角色（billing_viewer）没有 Key 权限"
-            description="服务端对 GET /api/v1/orgs/{org}/keys 返回 403 forbidden；这不是前端隐藏，而是权限矩阵的结果。"
-          />
-        )}
-      </Card>
-    </Space>
-  );
-}
-
-/* ---------------------------------------------------------- funds card */
-
-/**
- * "资金与结算" on the overview: the organization's projection, the current UTC
- * month's statement totals, and the honest status of what is *not* available.
- *
- * Every state is the server's: `403` when the role lacks `view_org_usage`,
- * `404` when no billing row exists yet, `loading`/`stale`/`error` from the
- * query. No field is derived, and no `Number()` ever touches an amount.
- */
-function FundsCard({ orgId }: { orgId: string | null }): ReactNode {
-  const { role } = useActiveOrg();
-  const canRead = CAN.viewOrgUsage(role);
-  const month = useMemo(() => utcMonthOf(), []);
-
-  const account = useBillingAccount(orgId, orgId !== null);
-  const statement = useBillingStatement(orgId, { month, limit: 5 }, canRead && orgId !== null);
-
-  const accountError = account.isError ? asApiError(account.error) : null;
-  const billingLink = `/orgs/${encodeURIComponent(orgId ?? '')}/billing`;
-
-  return (
-    <Card
-      title="资金与结算"
-      size="small"
-      extra={<Link to={billingLink}>打开完整账单（账户 / 流水 / 月度账单 / 异常）</Link>}
-      data-testid="overview-funds-card"
-    >
-      <Space direction="vertical" size={12} style={{ width: '100%' }}>
-        {accountError?.kind === 'forbidden' ? (
-          <Alert
-            type="warning"
-            showIcon
-            message="服务端 403：当前角色没有组织资金读取权限"
-            description={
-              <Space direction="vertical" size={2}>
-                <span>
-                  code={accountError.code} · request_id={accountError.requestId || '—'}。
-                  `view_org_usage` 只授予 owner / admin / billing_viewer；member 只能看自己的用量（scope=self），
-                  所以这里不显示组织余额，也不假装是 0。
-                </span>
-                <span>
-                  个人消费请查看 <Link to={`/orgs/${encodeURIComponent(orgId ?? '')}/usage`}>用量</Link>
-                  （scope=self）；组织账单页会把同一个 403 完整渲染出来。
-                </span>
-              </Space>
-            }
-          />
-        ) : accountError?.kind === 'not_found' ? (
-          <Alert
-            type="info"
-            showIcon
-            message="该组织还没有计费账户行（404 not_found）"
-            description="账户投影由第一次入账创建（平台额度调整，或 T06 admission 预占）；GET 不会创建它。非成员同样得到 404。"
-          />
-        ) : (
-          <DataState query={account} loadingRows={3} showStaleBanner>
-            {(data) => (
-              <Space direction="vertical" size={8} style={{ width: '100%' }}>
-                <Row gutter={[16, 8]}>
-                  <Col xs={12} md={6}>
-                    <Typography.Text type="secondary">可用 available</Typography.Text>
-                    <div>
-                      <MicroYuan value={data.available_micro} strong />
-                    </div>
-                  </Col>
-                  <Col xs={12} md={6}>
-                    <Typography.Text type="secondary">预占 reserved</Typography.Text>
-                    <div>
-                      <MicroYuan value={data.reserved_micro} strong />
-                    </div>
-                  </Col>
-                  <Col xs={12} md={6}>
-                    <Typography.Text type="secondary">已入账 posted</Typography.Text>
-                    <div>
-                      <MicroYuan value={data.posted_balance_micro} strong />
-                    </div>
-                  </Col>
-                  <Col xs={12} md={6}>
-                    <Space size={4} wrap>
-                      <Tag color={data.status === 'active' ? 'green' : 'red'}>{data.status}</Tag>
-                      <Tag>v{data.version}</Tag>
-                      <Typography.Text type="secondary">
-                        {formatTimestamp(data.updated_at)}
-                      </Typography.Text>
-                    </Space>
-                  </Col>
+        <Col xs={24} xl={canSeeBalance ? 12 : 24}>
+          <Card className="metric-panel" title={enterpriseAdmin ? '企业本月消费' : '我的本月消费'} data-testid="overview-usage">
+            <DataState query={usage}>
+              {(data) => <>
+                <Row gutter={[16, 16]}>
+                  <Col xs={12} md={6}><Statistic title="已消费" value={`${formatMicroYuan(data.totals.sales_micro)} 元`} /></Col>
+                  <Col xs={12} md={6}><Statistic title="已完成调用" value={data.totals.settled_count} /></Col>
+                  <Col xs={12} md={6}><Statistic title="正在处理" value={data.totals.pending_count} /></Col>
+                  <Col xs={12} md={6}><Statistic title="待确认的调用" value={data.totals.review_required_count} /></Col>
                 </Row>
-                <Alert
-                  type={data.available_micro.trim().startsWith('-') ? 'error' : 'info'}
-                  showIcon
-                  message="口径（服务端冻结文案，逐字显示）"
-                  description={<Typography.Text code>{data.available_note}</Typography.Text>}
-                />
-              </Space>
-            )}
-          </DataState>
-        )}
-
-        {canRead ? (
-          <Card size="small" type="inner" title={`本周期消费（UTC 月 ${month}，posted_at 口径）`}>
-            <DataState
-              query={statement}
-              loadingRows={2}
-              showStaleBanner={false}
-              isEmpty={(data) => data.totals.entries === '0'}
-              emptyDescription={`${month}（UTC）还没有任何账本分录：本月没有入账、扣费或预占`}
-            >
-              {(data) => (
-                <Space size={24} wrap>
-                  <Space direction="vertical" size={0}>
-                    <Typography.Text type="secondary">净额 net_micro</Typography.Text>
-                    <Typography.Text strong style={{ fontSize: 18 }}>
-                      {formatMicroYuan(data.totals.net_micro)} 元
-                    </Typography.Text>
-                  </Space>
-                  <Space direction="vertical" size={0}>
-                    <Typography.Text type="secondary">扣费 debit_micro</Typography.Text>
-                    <Typography.Text>{formatMicroYuan(data.totals.debit_micro)} 元</Typography.Text>
-                  </Space>
-                  <Space direction="vertical" size={0}>
-                    <Typography.Text type="secondary">入账 credit_micro</Typography.Text>
-                    <Typography.Text>{formatMicroYuan(data.totals.credit_micro)} 元</Typography.Text>
-                  </Space>
-                  <Space direction="vertical" size={0}>
-                    <Typography.Text type="secondary">分录 / 迟到结算</Typography.Text>
-                    <Space size={4} wrap>
-                      <Tag>{data.totals.entries} 条</Tag>
-                      <Tag color={data.totals.late_entries === '0' ? 'default' : 'orange'}>
-                        late {data.totals.late_entries}
-                      </Tag>
-                    </Space>
-                  </Space>
-                  <Typography.Text type="secondary">
-                    totals 覆盖整个月并忽略分页；负 net 是真实净支出。
-                  </Typography.Text>
-                </Space>
-              )}
+                {data.totals.unknown_usage_count > 0 ? <Typography.Text type="secondary">另有 {data.totals.unknown_usage_count} 条请求的用量待确认。</Typography.Text> : null}
+                {!isPersonal && role === 'member' ? <div style={{ marginTop: 12 }}><Tag color={data.scope === 'self' ? 'blue' : 'orange'}>仅显示本人消费</Tag></div> : null}
+              </>}
             </DataState>
           </Card>
-        ) : null}
-
-        <ContractGap title="最近请求成功/断流分类与结算延迟没有聚合端点">
-          “成功 / 断流 / 结算延迟 P99”属于 T06/T07 的指标，契约没有对应查询端点（没有 `/admin/metrics`
-          的应用层聚合，`/metrics` 是 Prometheus 文本且不属于 UI 契约）：本页只用真实返回的账本与用量字段，不推测。
-        </ContractGap>
-      </Space>
-    </Card>
+        </Col>
+        {canSeeBalance ? <Col xs={24} xl={12}>
+          <Card className="metric-panel" title={isPersonal ? '个人账户余额' : '企业可用余额'} data-testid="overview-balance">
+            <DataState query={account}>
+              {(data) => <Row gutter={[16, 16]}>
+                <Col xs={12} md={8}><Statistic title="可用余额" value={`${formatMicroYuan(data.available_micro)} 元`} /></Col>
+                <Col xs={12} md={8}><Statistic title="调用中暂占" value={`${formatMicroYuan(data.reserved_micro)} 元`} /></Col>
+                <Col xs={24} md={8}><Statistic title="账户状态" value={data.status === 'active' ? '正常' : '已暂停'} /></Col>
+              </Row>}
+            </DataState>
+          </Card>
+        </Col> : null}
+      </Row>
+      {!isPersonal && orgId ? <QuotaCard orgId={orgId} compact={enterpriseAdmin} /> : null}
+      <div><h3 className="section-heading">接下来要做什么？</h3><div className="action-grid">
+        {canUse ? <Link className="task-card" to={`${base}/keys`}><KeyOutlined /><h3>把模型接入应用</h3><p>为每个应用创建自己的 Key，复制调用地址并配置到聊天软件。</p><span>管理我的 Key <ArrowRightOutlined /></span></Link> : null}
+        {canUse ? <Link className="task-card" to={`${base}/models`}><ArrowRightOutlined /><h3>选择与试用模型</h3><p>查看账户已开通的模型和价格，发送一条消息试用。</p><span>查看可用模型 <ArrowRightOutlined /></span></Link> : null}
+        <Link className="task-card" to={`${base}/usage`}><WalletOutlined /><h3>{enterpriseAdmin ? '核对团队消费' : '看看费用花在哪里'}</h3><p>{enterpriseAdmin ? '按成员查看费用汇总，了解团队的模型用量。' : '按月查看自己的模型调用和已结算费用。'}</p><span>查看消费记录 <ArrowRightOutlined /></span></Link>
+      </div></div>
+      {canUse ? <Card title="当前可用模型" extra={<Link to={`${base}/models`}>查看模型与价格</Link>}><DataState query={models}>{data => <Space wrap>{data.effective_models.length ? data.effective_models.map(model => <Tag key={model.model}>{model.model}</Tag>) : <Typography.Text type="secondary">还没有开通模型，请联系平台管理员。</Typography.Text>}</Space>}</DataState></Card> : null}
+      {me?.user.platform_admin ? <Alert type="info" showIcon message="你正在查看使用账户" description={<span>管理上游、模型价格和平台账务，请<Link to="/platform/overview">进入平台管理</Link>。</span>} /> : null}
+    </Space>
   );
 }

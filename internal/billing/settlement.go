@@ -109,9 +109,9 @@ const (
 	// DefaultRedispatchMaxInterval caps the re-dispatch delay of a receipt that
 	// stays unsettled.
 	DefaultRedispatchMaxInterval = 15 * time.Minute
-	// DefaultMaxDispatchAttempts bounds *failed* deliveries. A successful
-	// publish never poisons a receipt: an unsettled-but-delivered receipt is
-	// re-dispatched on the re-dispatch schedule instead.
+	// DefaultMaxDispatchAttempts is retained for configuration compatibility.
+	// Transport failures retry indefinitely with bounded backoff; delivered but
+	// unsettled receipts are offered again on the re-dispatch schedule.
 	DefaultMaxDispatchAttempts = 8
 	// DefaultDispatchBackoffBase is the first retry delay after a failed publish.
 	DefaultDispatchBackoffBase = time.Second

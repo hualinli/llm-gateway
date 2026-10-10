@@ -9,7 +9,7 @@
  *     readable from JavaScript;
  *   - the companion CSRF token is *not* readable either: it is read from the
  *     login / `GET /api/v1/me` JSON body and echoed as `X-CSRF-Token` on every
- *     POST / PATCH / DELETE;
+ *     POST / PUT / PATCH / DELETE;
  *   - errors are parsed as the T01A envelope and surfaced with code, message and
  *     request id (see `errors.ts`);
  *   - a 401 clears the local session and notifies the app so it can redirect to
@@ -30,7 +30,11 @@ import type {
   AdjustmentRequest,
   AdjustmentResponse,
   ApiKeyPage,
+  AccountModelCatalog,
+  AccountModelSettings,
+  AccountQuota,
   AuditEventPage,
+  ActivationCodePage,
   BillingAccount,
   BillingEntriesQuery,
   BillingEntryPage,
@@ -43,33 +47,56 @@ import type {
   CreateApiKeyResponse,
   CreateInvitationRequest,
   CreateInvitationResponse,
+  CreateActivationCodeRequest,
+  CreateActivationCodeResponse,
+  CreatePlatformOrganizationRequest,
+  JoinRequest,
+  JoinRequestListQuery,
+  JoinRequestDecisionRequest,
+  JoinRequestPage,
+  RegisterResponse,
   CreatePriceVersionRequest,
   CreateUserRequest,
   InvitationPage,
   LoginResponse,
   MeResponse,
   MemberPage,
+  MemberUsageSummary,
+  MonthlyUsage,
   Membership,
   MembershipPage,
   MembershipRecord,
   OrgRole,
   OwnerTransferResponse,
   PriceQuery,
+  PlatformOrganization,
+  PlatformOrganizationPage,
+  PlatformModelCatalog,
+  ProviderConfiguration,
+  ProviderPage,
+  ProviderChangeResponse,
+  ProviderCredentialPage,
+  CreateProviderCredentialRequest,
+  CreateProviderCredentialResponse,
+  ModelRoutes,
+  UpdateModelRoutesRequest,
   PriceVersion,
   PriceVersionPage,
+  PlatformBillingSummary,
   ResolveExceptionRequest,
   ResolveExceptionResponse,
   RevokeApiKeyResponse,
-  UsagePage,
-  UsageQuery,
   User,
   UserStatus,
+  UpdateMemberRequest,
+  UpdatePlatformModelCatalogRequest,
+  UpdateAccountModelSettingsRequest,
 } from './types';
 
 export const CONSOLE_BASE_URL = '/api/v1';
 
-/** HTTP methods that require `X-CSRF-Token` (ADR-0002 §2.5). */
-export const UNSAFE_METHODS = ['POST', 'PATCH', 'DELETE'] as const;
+/** HTTP methods that require the session-bound `X-CSRF-Token`. */
+export const UNSAFE_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'] as const;
 export type HttpMethod = 'GET' | (typeof UNSAFE_METHODS)[number];
 
 export function isUnsafeMethod(method: string): boolean {
@@ -82,8 +109,8 @@ export interface ConsoleClientOptions {
   fetchImpl?: typeof fetch;
   /**
    * Called before an `unauthorized` error is thrown, so the app can clear the
-   * cached identity and navigate to the login route. Not called for the login
-   * endpoint itself (a wrong password is a form error, not an expired session).
+   * cached identity and navigate to the login route. Not called for public auth
+   * endpoints such as login and registration; their errors belong to the form.
    */
   onUnauthorized?: (error: ApiError) => void;
 }
@@ -96,7 +123,7 @@ interface RequestOptions {
    * `Idempotency-Key`; credentials never travel in a header this client adds.
    */
   headers?: Record<string, string>;
-  /** Skip the `onUnauthorized` callback (login/logout probes). */
+  /** Skip the `onUnauthorized` callback (public auth and logout requests). */
   silentUnauthorized?: boolean;
 }
 
@@ -217,6 +244,24 @@ export class ConsoleClient {
     return result;
   }
 
+  /** `POST /api/v1/auth/register` creates the user's personal account. */
+  async register(email: string, password: string): Promise<RegisterResponse> {
+    const result = await this.request<RegisterResponse>('POST', '/auth/register', {
+      body: { email, password },
+      silentUnauthorized: true,
+    });
+    this.setCsrfToken(result.csrf_token);
+    return result;
+  }
+
+  /** `POST /api/v1/me/password` changes the password and invalidates sessions. */
+  async changePassword(oldPassword: string, newPassword: string): Promise<void> {
+    await this.request<void>('POST', '/me/password', {
+      body: { old_password: oldPassword, new_password: newPassword },
+    });
+    this.clearCsrfToken();
+  }
+
   /** `POST /api/v1/auth/logout` — revokes the session server-side (204). */
   async logout(): Promise<void> {
     try {
@@ -245,8 +290,100 @@ export class ConsoleClient {
     return this.request<Membership>('GET', `/organizations/${encodeURIComponent(org)}`);
   }
 
-  async createOrganization(name: string): Promise<Membership> {
-    return this.request<Membership>('POST', '/organizations', { body: { name } });
+  async listPlatformOrganizations(params: { type?: 'personal' | 'enterprise'; limit?: number; cursor?: string } = {}): Promise<PlatformOrganizationPage> {
+    return this.request<PlatformOrganizationPage>('GET', '/admin/organizations', { query: { ...params } });
+  }
+
+  async createPlatformOrganization(body: CreatePlatformOrganizationRequest): Promise<Membership> {
+    return this.request<Membership>('POST', '/admin/organizations', { body });
+  }
+
+  async setOrganizationStatus(org: string, status: 'active' | 'suspended'): Promise<PlatformOrganization> {
+    return this.request<PlatformOrganization>('POST', `/admin/organizations/${encodeURIComponent(org)}/status`, { body: { status } });
+  }
+
+  async listActivationCodes(params: { limit?: number; cursor?: string } = {}): Promise<ActivationCodePage> {
+    return this.request<ActivationCodePage>('GET', '/admin/activation-codes', { query: { ...params } });
+  }
+
+  async createActivationCode(body: CreateActivationCodeRequest): Promise<CreateActivationCodeResponse> {
+    return this.request<CreateActivationCodeResponse>('POST', '/admin/activation-codes', { body });
+  }
+
+  async redeemActivationCode(code: string): Promise<Membership> {
+    return this.request<Membership>('POST', '/organizations/activate', { body: { code } });
+  }
+
+  async createJoinRequest(org: string, displayName: string): Promise<JoinRequest> {
+    return this.request<JoinRequest>('POST', `/orgs/${encodeURIComponent(org)}/join-requests`, { body: { display_name: displayName } });
+  }
+
+  async listMyJoinRequests(params: Omit<JoinRequestListQuery, 'status'> = {}): Promise<JoinRequestPage> {
+    return this.request<JoinRequestPage>('GET', '/me/join-requests', { query: { ...params } });
+  }
+
+  async listJoinRequests(org: string, params: JoinRequestListQuery = {}): Promise<JoinRequestPage> {
+    return this.request<JoinRequestPage>('GET', `/orgs/${encodeURIComponent(org)}/join-requests`, { query: { ...params } });
+  }
+
+  async decideJoinRequest(org: string, requestId: string, body: JoinRequestDecisionRequest): Promise<JoinRequest> {
+    return this.request<JoinRequest>('POST', `/orgs/${encodeURIComponent(org)}/join-requests/${encodeURIComponent(requestId)}/decision`, { body });
+  }
+
+  async getAccountModels(org: string): Promise<AccountModelCatalog> {
+    return this.request<AccountModelCatalog>('GET', `/orgs/${encodeURIComponent(org)}/models`);
+  }
+
+  async listPlatformModels(): Promise<PlatformModelCatalog> {
+    return this.request<PlatformModelCatalog>('GET', '/admin/models');
+  }
+
+  async updatePlatformModels(body: UpdatePlatformModelCatalogRequest): Promise<PlatformModelCatalog> {
+    return this.request<PlatformModelCatalog>('PUT', '/admin/models', { body });
+  }
+
+  async listProviders(): Promise<ProviderPage> {
+    return this.request<ProviderPage>('GET', '/admin/providers');
+  }
+
+  async createProvider(body: ProviderConfiguration): Promise<ProviderChangeResponse> {
+    return this.request<ProviderChangeResponse>('POST', '/admin/providers', { body });
+  }
+
+  async updateProvider(id: string, body: ProviderConfiguration): Promise<ProviderChangeResponse> {
+    return this.request<ProviderChangeResponse>('PUT', '/admin/providers/' + encodeURIComponent(id), { body });
+  }
+
+  async deleteProvider(id: string): Promise<void> {
+    await this.request<void>('DELETE', '/admin/providers/' + encodeURIComponent(id));
+  }
+
+  async listProviderCredentials(): Promise<ProviderCredentialPage> {
+    return this.request<ProviderCredentialPage>('GET', '/admin/provider-credentials');
+  }
+
+  async createProviderCredential(body: CreateProviderCredentialRequest): Promise<CreateProviderCredentialResponse> {
+    return this.request<CreateProviderCredentialResponse>('POST', '/admin/provider-credentials', { body });
+  }
+
+  async deleteProviderCredential(id: string): Promise<void> {
+    await this.request<void>('DELETE', '/admin/provider-credentials/' + encodeURIComponent(id));
+  }
+
+  async getModelRoutes(): Promise<ModelRoutes> {
+    return this.request<ModelRoutes>('GET', '/admin/routes');
+  }
+
+  async updateModelRoutes(body: UpdateModelRoutesRequest): Promise<ModelRoutes> {
+    return this.request<ModelRoutes>('PUT', '/admin/routes', { body });
+  }
+
+  async getAccountModelSettings(org: string): Promise<AccountModelSettings> {
+    return this.request<AccountModelSettings>('GET', `/admin/organizations/${encodeURIComponent(org)}/models`);
+  }
+
+  async updateAccountModelSettings(org: string, body: UpdateAccountModelSettingsRequest): Promise<AccountModelSettings> {
+    return this.request<AccountModelSettings>('PUT', `/admin/organizations/${encodeURIComponent(org)}/models`, { body });
   }
 
   /* ----------------------------------------------------------- members */
@@ -255,11 +392,12 @@ export class ConsoleClient {
     return this.request<MemberPage>('GET', `/orgs/${encodeURIComponent(org)}/members`);
   }
 
-  async changeMemberRole(org: string, user: string, role: OrgRole): Promise<void> {
+  async changeMemberRole(org: string, user: string, role: OrgRole | UpdateMemberRequest): Promise<void> {
+    const body = typeof role === 'string' ? { role } : role;
     await this.request<void>(
       'PATCH',
       `/orgs/${encodeURIComponent(org)}/members/${encodeURIComponent(user)}`,
-      { body: { role } },
+      { body },
     );
   }
 
@@ -318,7 +456,7 @@ export class ConsoleClient {
     });
   }
 
-  async createKey(org: string, body: CreateApiKeyRequest = {}): Promise<CreateApiKeyResponse> {
+  async createKey(org: string, body: CreateApiKeyRequest): Promise<CreateApiKeyResponse> {
     return this.request<CreateApiKeyResponse>('POST', `/orgs/${encodeURIComponent(org)}/keys`, {
       body,
     });
@@ -333,9 +471,42 @@ export class ConsoleClient {
 
   /* ------------------------------------------------------------- usage */
 
-  async listUsage(org: string, query: UsageQuery = {}): Promise<UsagePage> {
-    return this.request<UsagePage>('GET', `/orgs/${encodeURIComponent(org)}/usage`, {
-      query: { ...query },
+  /** Month is the Beijing admission month, including when settlement is late. */
+  async listMonthlyUsage(
+    org: string,
+    params: { month?: string; limit?: number; cursor?: string; user?: string } = {},
+  ): Promise<MonthlyUsage> {
+    return this.request<MonthlyUsage>('GET', `/orgs/${encodeURIComponent(org)}/usage`, {
+      query: { ...params },
+    });
+  }
+
+  async getQuota(org: string): Promise<AccountQuota> {
+    return this.request<AccountQuota>('GET', `/orgs/${encodeURIComponent(org)}/quota`);
+  }
+
+  async setMemberQuota(org: string, user: string, monthlyLimitMicro: string | null): Promise<void> {
+    await this.request<void>(
+      'PATCH',
+      `/orgs/${encodeURIComponent(org)}/members/${encodeURIComponent(user)}/quota`,
+      { body: { monthly_limit_micro: monthlyLimitMicro } },
+    );
+  }
+
+  async getMemberUsageSummary(
+    org: string,
+    params: { month?: string; limit?: number; cursor?: string } = {},
+  ): Promise<MemberUsageSummary> {
+    return this.request<MemberUsageSummary>(
+      'GET',
+      `/orgs/${encodeURIComponent(org)}/billing/member-summary`,
+      { query: { ...params } },
+    );
+  }
+
+  async getPlatformBillingSummary(month?: string): Promise<PlatformBillingSummary> {
+    return this.request<PlatformBillingSummary>('GET', '/admin/billing/summary', {
+      query: { month },
     });
   }
 
@@ -384,14 +555,14 @@ export class ConsoleClient {
 
   /* ------------------------------------------------------------- billing */
 
-  /**
-   * `GET /api/v1/orgs/{org}/billing/account` — requires the server-side
-   * `view_org_usage` action (owner/admin/billing_viewer). A plain member is
-   * `403`; a non-member and an organization without a billing row are both
-   * `404 not_found`.
-   */
+  /** Account balance and reserved funds; enterprise members cannot read the wallet. */
   async getBillingAccount(org: string): Promise<BillingAccount> {
     return this.request<BillingAccount>('GET', `/orgs/${encodeURIComponent(org)}/billing/account`);
+  }
+
+  /** Platform-only account inspection; does not rely on organization membership. */
+  async getPlatformBillingAccount(org: string): Promise<BillingAccount> {
+    return this.request<BillingAccount>('GET', `/admin/billing/accounts/${encodeURIComponent(org)}`);
   }
 
   /** `GET /api/v1/orgs/{org}/billing/entries` — the append-only ledger page. */
@@ -406,11 +577,18 @@ export class ConsoleClient {
     );
   }
 
-  /**
-   * `GET /api/v1/orgs/{org}/billing/statements?month=YYYY-MM` — live monthly
-   * consumption report over `posted_at` (UTC month). `totals` always covers the
-   * whole month and ignores `limit`/`cursor`.
-   */
+  async listPlatformBillingEntries(
+    org: string,
+    params: BillingEntriesQuery = {},
+  ): Promise<BillingEntryPage> {
+    return this.request<BillingEntryPage>(
+      'GET',
+      `/admin/billing/accounts/${encodeURIComponent(org)}/entries`,
+      { query: { ...params } },
+    );
+  }
+
+  /** Monthly ledger statement, grouped by posting time in Asia/Shanghai. */
   async getBillingStatement(
     org: string,
     params: BillingStatementQuery = {},
@@ -422,7 +600,7 @@ export class ConsoleClient {
     );
   }
 
-  /** `GET /api/v1/orgs/{org}/billing/exceptions` — the durable money queue. */
+  /** Account-level records that need a human review. */
   async listBillingExceptions(
     org: string,
     params: BillingExceptionsQuery = {},
@@ -434,11 +612,29 @@ export class ConsoleClient {
     );
   }
 
-  /** `GET /api/v1/orgs/{org}/billing/exceptions/{exception}` — with its trail. */
+  async listPlatformBillingExceptions(
+    org: string,
+    params: BillingExceptionsQuery = {},
+  ): Promise<BillingExceptionPage> {
+    return this.request<BillingExceptionPage>(
+      'GET',
+      `/admin/billing/accounts/${encodeURIComponent(org)}/exceptions`,
+      { query: { ...params } },
+    );
+  }
+
+  /** One review record and its change history. */
   async getBillingException(org: string, exception: string): Promise<BillingExceptionDetail> {
     return this.request<BillingExceptionDetail>(
       'GET',
       `/orgs/${encodeURIComponent(org)}/billing/exceptions/${encodeURIComponent(exception)}`,
+    );
+  }
+
+  async getPlatformBillingException(org: string, exception: string): Promise<BillingExceptionDetail> {
+    return this.request<BillingExceptionDetail>(
+      'GET',
+      `/admin/billing/accounts/${encodeURIComponent(org)}/exceptions/${encodeURIComponent(exception)}`,
     );
   }
 

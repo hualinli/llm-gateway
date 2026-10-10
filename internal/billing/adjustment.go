@@ -16,6 +16,11 @@ const MaxBusinessIDLength = 200
 // MaxReasonLength bounds the human reason stored with an adjustment.
 const MaxReasonLength = 512
 
+const (
+	ManualOperationRecharge = "recharge"
+	ManualOperationReversal = "reversal"
+)
+
 // AdjustParams is one idempotent balance adjustment.
 //
 // BusinessID and IdempotencyKey are the same string in T05: the platform
@@ -35,7 +40,12 @@ type AdjustParams struct {
 	BusinessID     string
 	IdempotencyKey string
 	PayloadDigest  string
-	RequestID      string
+	// ManualOperation is set only for an operator-entered recharge or its
+	// reversal. Automated settlement/adjustment paths leave these fields empty.
+	ManualOperation   string
+	PaymentReference  string
+	ReversalOfEntryID *int64
+	RequestID         string
 	// Now is posted_at/created_at. Zero means time.Now().UTC().
 	Now time.Time
 }
@@ -97,6 +107,25 @@ func ValidateAdjustment(params AdjustParams) error {
 	if len(params.PayloadDigest) != 64 {
 		return fmt.Errorf("%w: payload digest must be a sha256 hex string", ErrInvalidArgument)
 	}
+	switch params.ManualOperation {
+	case "":
+		if params.PaymentReference != "" || params.ReversalOfEntryID != nil {
+			return fmt.Errorf("%w: manual payment metadata requires a recharge or reversal operation", ErrInvalidArgument)
+		}
+	case ManualOperationRecharge:
+		if params.Kind != KindCredit || params.Direction != DirectionCredit ||
+			params.PaymentReference == "" || strings.TrimSpace(params.PaymentReference) != params.PaymentReference ||
+			len(params.PaymentReference) > 256 || params.ReversalOfEntryID != nil {
+			return fmt.Errorf("%w: recharge requires a credit, payment reference, and no reversal link", ErrInvalidArgument)
+		}
+	case ManualOperationReversal:
+		if params.Kind != KindAdjustment || params.Direction != DirectionDebit ||
+			params.PaymentReference != "" || params.ReversalOfEntryID == nil || *params.ReversalOfEntryID <= 0 {
+			return fmt.Errorf("%w: reversal requires a debit adjustment and original entry id", ErrInvalidArgument)
+		}
+	default:
+		return fmt.Errorf("%w: manual_operation must be recharge or reversal", ErrInvalidArgument)
+	}
 	return nil
 }
 
@@ -134,6 +163,22 @@ func AdjustmentDigest(orgID, amountMicro int64, direction, kind, reason string) 
 	writeDigestField(digest, "amount_micro", FormatMicro(amountMicro))
 	writeDigestField(digest, "direction", direction)
 	writeDigestField(digest, "entry_kind", kind)
+	writeDigestField(digest, "reason", reason)
+	return hex.EncodeToString(digest.Sum(nil))
+}
+
+// ManualPaymentDigest binds the payment classification and source entry to an
+// idempotent platform recharge/reversal posting.
+func ManualPaymentDigest(orgID, amountMicro int64, direction, kind, operation, reference string, reversalOf int64, reason string) string {
+	digest := sha256.New()
+	writeDigestField(digest, "kind", "manual_payment")
+	writeDigestField(digest, "org_id", FormatMicro(orgID))
+	writeDigestField(digest, "amount_micro", FormatMicro(amountMicro))
+	writeDigestField(digest, "direction", direction)
+	writeDigestField(digest, "entry_kind", kind)
+	writeDigestField(digest, "operation", operation)
+	writeDigestField(digest, "payment_reference", reference)
+	writeDigestField(digest, "reversal_of_entry_id", FormatMicro(reversalOf))
 	writeDigestField(digest, "reason", reason)
 	return hex.EncodeToString(digest.Sum(nil))
 }

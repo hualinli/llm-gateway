@@ -1,7 +1,0 @@
-2026/10/01 10:58:57 runtime profile=prod (production checks enforced)
-2026/10/01 10:58:57 metering production preflight failed:
-production profile requires 4 setting(s) to be fixed:
-METERING_REQUIRE_POSTGRES: must be true: production must not silently fall back to the in-memory ledger
-POSTGRES_DSN: must be set: METERING_REQUIRE_POSTGRES cannot be satisfied without a database URL
-METERING_ADMIN_TOKEN: must be at least 16 characters so /ledger/count, /ledger/balance and /reconcile are not anonymous
-METERING_DIAGNOSTICS_ADDR: must be set to a listener address different from the business address ":8091" so metrics/pprof are not exposed on the query listener

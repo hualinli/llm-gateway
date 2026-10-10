@@ -1,8 +1,0 @@
-POST /api/v1/admin/users HTTP/1.1
-X-Request-ID: acc-check08-03
-Accept: application/json
-Cookie: gw_session=fxbN…<redacted:18>; gw_csrf=cUGW…<redacted:18>
-X-CSRF-Token: cUGW…<redacted:18>
-Content-Type: application/json
-
-{"email": "accept-evil-05cd486b@accept.test", "password": "Ev1l…<redacted:18>"}

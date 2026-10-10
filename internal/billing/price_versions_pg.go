@@ -56,6 +56,11 @@ WHERE model = $1 AND effective_at <= $2
 ORDER BY effective_at DESC
 LIMIT 1`
 
+	queryEffectivePriceVersions = `SELECT DISTINCT ON (model) ` + priceVersionColumns + `
+FROM price_versions
+WHERE effective_at <= $1
+ORDER BY model, effective_at DESC`
+
 	queryGetPriceVersion = `SELECT ` + priceVersionColumns + `
 FROM price_versions
 WHERE id = $1`
@@ -156,6 +161,38 @@ func (s *PGPriceVersionStore) LatestPriceVersion(ctx context.Context, model stri
 	return version, nil
 }
 
+// ListEffectivePrices returns the latest already-effective price version for
+// each model. It reads the same immutable PriceBook used by admission; callers
+// should expose only the customer sale fields unless they are the platform
+// finance view.
+func (s *PGPriceVersionStore) ListEffectivePrices(ctx context.Context, at time.Time) ([]PriceVersion, error) {
+	if s == nil || s.DB == nil {
+		return nil, errors.New("billing: price version store is not configured")
+	}
+	if at.IsZero() {
+		at = time.Now().UTC()
+	}
+	ctx, cancel := s.withTimeout(ctx)
+	defer cancel()
+	rows, err := s.DB.QueryContext(ctx, queryEffectivePriceVersions, at.UTC())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]PriceVersion, 0)
+	for rows.Next() {
+		item, err := scanPriceVersion(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 // GetPriceVersion returns one version by id.
 func (s *PGPriceVersionStore) GetPriceVersion(ctx context.Context, id int64) (PriceVersion, error) {
 	if s == nil || s.DB == nil {
@@ -244,4 +281,11 @@ func nullableID(id int64) any {
 		return nil
 	}
 	return id
+}
+
+func nullableIDPointer(id *int64) any {
+	if id == nil {
+		return nil
+	}
+	return *id
 }

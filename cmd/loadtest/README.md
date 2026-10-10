@@ -1,8 +1,8 @@
 # cmd/loadtest — SSE load generator and its report contract
 
 `cmd/loadtest` is the load generator the isolated benchmark runner drives
-(`scripts/isolated-baseline.py`, T01A) and the tool the capacity experiments
-(B01/B06/B09, T11) use. It is deliberately small: arrival scheduling, SSE
+(`scripts/isolated-baseline.py`) and the tool the capacity experiments
+ use. It is deliberately small: arrival scheduling, SSE
 measurement, client-side pacing and one JSON report. It is not a generic load
 platform.
 
@@ -63,7 +63,7 @@ The per-request timeout default **exceeds the longest stream shape** (L ≈
 10.3 s), so a normal long stream is not misclassified as a timeout. The
 historical hardcoded 10 s is gone; `-timeout` is always available.
 
-### Stream shapes (§3.1 of `docs/plans/BENCHMARK-AND-ACCEPTANCE-2026-10-01.md`)
+### Stream shapes
 
 | `-shape` | first event | content events | interval | event line |
 |---|---|---|---|---|
@@ -176,29 +176,12 @@ rate below 99 % of the plan (the historical `fixed` mode trips this with zero
 drops — that is the point), `Abandoned > 0`, `NotScheduled > 0`, a mismatch
 between scheduled starts and recorded observations, and zero arrivals.
 
-## 5. B00 proof: drops are visible, the old mode hid them
-
-```bash
-# Long stream (L shape), c=2, target 100/s, no admission queue.
-go run ./cmd/upstream-mock -listen 127.0.0.1:18080 -ttft 300ms -token-interval 20ms -tokens 500 &
-go run ./cmd/loadtest -target http://127.0.0.1:18080/v1/chat/completions \
-  -mode open -c 2 -n 100 -rate 100 -admission-queue 0 -timeout 60s -json /tmp/open.json
-# -> scheduled=100 started=2 loadgen_dropped=98 (98%) peak_active=2
-#    arrival_rate≈100/s (schedule kept), capacity_round_valid=false
-```
-
-The same load with the historical scheduler (`-mode fixed`) reports
-`loadgen_dropped=0` while `arrival_rate` collapses to `c / stream duration`
-(e.g. 0.2/s for two 10 s streams) and `dispatch_lag`/`arrival_lag` grow without
-bound: the offered load was silently reduced, which is exactly the failure T01B
-removes. Both modes stay available so the comparison is reproducible.
-
-## 6. What this tool does not do
+## 5. What this tool does not do
 
 - No TLS/HTTP2 tuning, no connection statistics beyond what the report shows,
   no distributed load generation (use several hosts and compare `arrival_rate`).
 - No safety switches for production profiles; `x_mock_*` request fields only
   affect `cmd/upstream-mock`.
 - It measures one process's view. Capacity conclusions require the isolated
-  runner (T01A) with a fixed commit, a warm-up, several rounds, and generator
+  runner with a fixed commit, a warm-up, several rounds, and generator
   validity per round.

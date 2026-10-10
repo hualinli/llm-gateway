@@ -8,15 +8,15 @@ import (
 	"time"
 )
 
-// Member 是“组织成员 + 用户可见字段”的对外视图，不含 password_hash，也不含
-// 任何 Key/策略细节。Status 目前恒为 active（removed 的成员不会出现在任何
-// 列表里），保留字段是为了让 API 形状在后续任务里保持稳定。
+// Member 是“组织成员 + 用户可见字段”的对外视图，不含 password_hash、Key 或 Key 策略。
 type Member struct {
-	UserID    int64
-	Email     string
-	Role      string
-	Status    string
-	CreatedAt time.Time
+	MembershipID      int64
+	UserID            int64
+	Email             string
+	Role              string
+	Status            string
+	MonthlyLimitMicro *int64
+	CreatedAt         time.Time
 }
 
 // errNoChange 由 mutate 回调返回，表示“校验通过但无需写库”（幂等重复请求）。
@@ -25,8 +25,7 @@ var errNoChange = errors.New("organization: membership unchanged")
 
 // ListMembers 列出组织成员。
 //
-// 可见性规则（ADR-0003 §2.3）：owner/admin（manage_members）与 billing_viewer
-// （view_org_usage，只读财务）可以看到整个组织；member 只能看到自己——返回
+// 可见性规则：owner/admin 可以看到成员清单；member 只能看到自己——返回
 // **只含调用者本人**的单元素列表，而不是 403。这样普通成员可以确认自己的
 // 角色，又无法枚举同事（选“单元素列表”而非“拒绝”，因为它对 UI 更友好且不
 // 泄露任何额外信息）。非成员返回 ErrNotFound，不泄露组织存在性。
@@ -35,7 +34,13 @@ func (s *Service) ListMembers(ctx context.Context, actorUserID, orgID int64) ([]
 	if err != nil {
 		return nil, err
 	}
-	if !Allowed(actor.Role, ActionManageMembers) && !Allowed(actor.Role, ActionViewOrgUsage) {
+	// Verify membership before inspecting account type/status. This prevents a
+	// non-member from using personal-vs-enterprise behavior as an enumeration
+	// oracle for another user's account.
+	if err := ensureEnterprise(ctx, s.db, orgID); err != nil {
+		return nil, err
+	}
+	if !Allowed(actor.Role, ActionManageMembers) {
 		self, err := s.member(ctx, orgID, actorUserID)
 		if err != nil {
 			return nil, err
@@ -52,8 +57,13 @@ func (s *Service) ListMembers(ctx context.Context, actorUserID, orgID int64) ([]
 	items := make([]Member, 0, 8)
 	for rows.Next() {
 		var m Member
-		if err := rows.Scan(&m.UserID, &m.Email, &m.Role, &m.Status, &m.CreatedAt); err != nil {
+		var cap sql.NullInt64
+		if err := rows.Scan(&m.MembershipID, &m.UserID, &m.Email, &m.Role, &m.Status, &cap, &m.CreatedAt); err != nil {
 			return nil, err
+		}
+		if cap.Valid {
+			value := cap.Int64
+			m.MonthlyLimitMicro = &value
 		}
 		items = append(items, m)
 	}
@@ -80,12 +90,22 @@ func (s *Service) ListMembers(ctx context.Context, actorUserID, orgID int64) ([]
 // 成功时在同一事务里递增 org_revision 并写入一行 pending 的
 // policy_publications(scope=org)，供数据面后续撤销/收敛。
 func (s *Service) ChangeMemberRole(ctx context.Context, actorUserID, orgID, targetUserID int64, role string) error {
+	return s.ChangeMemberRoleWithLimit(ctx, actorUserID, orgID, targetUserID, role, nil, false)
+}
+
+// ChangeMemberRoleWithLimit allows an owner to appoint/dismiss admins. A role
+// transition to ordinary member must carry the cap field, with nil meaning
+// explicitly unlimited. Admins may only change ordinary members' role fields.
+func (s *Service) ChangeMemberRoleWithLimit(ctx context.Context, actorUserID, orgID, targetUserID int64, role string, monthlyLimit *int64, monthlyLimitProvided bool) error {
 	clean := strings.TrimSpace(role)
 	if clean == RolePlatformAdmin {
 		return ErrPlatformRole
 	}
 	if !validRole(clean) {
 		return ErrRoleInvalid
+	}
+	if monthlyLimit != nil && *monthlyLimit < 0 {
+		return errors.New("organization: monthly limit must not be negative")
 	}
 
 	return s.mutateMembership(ctx, actorUserID, orgID, ActionManageMembers, func(tx *sql.Tx, actorRole string) error {
@@ -96,13 +116,11 @@ func (s *Service) ChangeMemberRole(ctx context.Context, actorUserID, orgID, targ
 		if err != nil {
 			return err
 		}
-		// 只有 owner 可以改动 owner/admin 级别的成员；目标是自己时是“自我
-		// 降级/自助调整”，不受 canActOnTarget 限制（提升仍被 checkRoleGrant
-		// 拦住：owner 只能通过转移获得）。
-		if target.UserID != actorUserID && !canActOnTarget(actorRole, target.Role) {
+		if (actorRole == roleAdmin && (target.UserID == actorUserID || target.Role != roleMember)) ||
+			(target.UserID != actorUserID && !canActOnTarget(actorRole, target.Role)) {
 			return ErrForbidden
 		}
-		if target.Role == clean {
+		if target.Role == clean && (!monthlyLimitProvided || sameLimit(target.MonthlyLimitMicro, monthlyLimit)) {
 			return errNoChange
 		}
 		owners, err := countActiveOwnersInTx(ctx, tx, orgID)
@@ -112,7 +130,90 @@ func (s *Service) ChangeMemberRole(ctx context.Context, actorUserID, orgID, targ
 		if err := checkLastOwner(target.Role, clean, owners); err != nil {
 			return err
 		}
-		return setMemberRoleInTx(ctx, tx, orgID, targetUserID, clean, time.Now().UTC())
+		if clean == roleMember && target.Role != roleMember && !monthlyLimitProvided {
+			return ErrLimitRequired
+		}
+		limit := target.MonthlyLimitMicro
+		if monthlyLimitProvided {
+			limit = monthlyLimit
+		} else if clean == roleAdmin && target.Role != roleAdmin {
+			limit = nil
+		}
+		result, err := tx.ExecContext(ctx, queryUpdateMemberRoleAndLimit, orgID, targetUserID, clean, limit, time.Now().UTC())
+		if err != nil {
+			return err
+		}
+		if affected, err := result.RowsAffected(); err == nil && affected == 0 {
+			return ErrMemberNotFound
+		}
+		return nil
+	})
+}
+
+// ChangeMemberMonthlyLimit applies a monthly cap to one current membership. Admins may
+// change ordinary members only; the owner may change any membership, including their own.
+// This transaction never locks billing account or usage rows.
+func (s *Service) ChangeMemberMonthlyLimit(ctx context.Context, actorUserID, orgID, targetUserID int64, limit *int64) (Membership, error) {
+	if limit != nil && *limit < 0 {
+		return Membership{}, errors.New("organization: monthly limit must not be negative")
+	}
+	var changed Membership
+	err := s.mutateMembership(ctx, actorUserID, orgID, ActionChangeMemberPolicy, func(tx *sql.Tx, actorRole string) error {
+		target, err := memberInTx(ctx, tx, orgID, targetUserID)
+		if err != nil {
+			return err
+		}
+		if actorRole == roleAdmin && (targetUserID == actorUserID || target.Role != roleMember) {
+			return ErrForbidden
+		}
+		if targetUserID != actorUserID && !canActOnTarget(actorRole, target.Role) {
+			return ErrForbidden
+		}
+		if sameLimit(target.MonthlyLimitMicro, limit) {
+			changed = Membership{ID: target.MembershipID, OrgID: orgID, UserID: targetUserID,
+				Role: target.Role, Status: target.Status, MonthlyLimitMicro: cloneLimit(limit), CreatedAt: target.CreatedAt}
+			return errNoChange
+		}
+		return scanMembership(tx.QueryRowContext(ctx, queryUpdateMemberMonthlyLimit,
+			orgID, targetUserID, limit, time.Now().UTC()).Scan, &changed)
+	})
+	if err != nil {
+		return Membership{}, err
+	}
+	return changed, nil
+}
+
+// ChangeMemberStatus pauses or resumes a current member. A personal account
+// cannot use this team-management path, and the enterprise owner stays active.
+func (s *Service) ChangeMemberStatus(ctx context.Context, actorUserID, orgID, targetUserID int64, nextStatus string) error {
+	if nextStatus != memberActive && nextStatus != memberSuspended {
+		return ErrMemberStatusInvalid
+	}
+	return s.mutateMembership(ctx, actorUserID, orgID, ActionManageMembers, func(tx *sql.Tx, actorRole string) error {
+		target, err := memberInTx(ctx, tx, orgID, targetUserID)
+		if err != nil {
+			return err
+		}
+		if actorRole == roleAdmin && (targetUserID == actorUserID || target.Role != roleMember) {
+			return ErrForbidden
+		}
+		if targetUserID != actorUserID && !canActOnTarget(actorRole, target.Role) {
+			return ErrForbidden
+		}
+		if target.Role == roleOwner && nextStatus != memberActive {
+			return ErrLastOwner
+		}
+		if target.Status == nextStatus {
+			return errNoChange
+		}
+		result, err := tx.ExecContext(ctx, queryUpdateMemberStatus, orgID, targetUserID, nextStatus, time.Now().UTC())
+		if err != nil {
+			return err
+		}
+		if affected, err := result.RowsAffected(); err == nil && affected == 0 {
+			return ErrMemberNotFound
+		}
+		return nil
 	})
 }
 
@@ -148,7 +249,7 @@ func (s *Service) RemoveMember(ctx context.Context, actorUserID, orgID, targetUs
 
 // TransferOwnership 是授予 owner 的唯一路径：目标成员在同一事务里升为 owner，
 // 调用者降为 admin（owner 数量不变，因此不需要“最后 owner”判断）。只有 owner
-// 能调用（transfer_owner）。目标必须是组织的 active 成员，且不能是自己。
+// 能调用（transfer_owner）。目标必须是组织的 active 成员且用户账户 active，且不能是自己。
 //
 // 校验顺序是有约束的：调用者的成员关系与权限矩阵先判（mutateMembership 已完
 // 成），目标合法性后判。非成员必须拿到 ErrNotFound（不泄露组织存在性）、plain
@@ -166,15 +267,32 @@ func (s *Service) TransferOwnership(ctx context.Context, actorUserID, orgID, tar
 		if err != nil {
 			return err
 		}
+		if target.Status != memberActive {
+			return ErrMemberNotFound
+		}
+		var targetAccountStatus string
+		err = tx.QueryRowContext(ctx, queryLockActiveUser, targetUserID).Scan(&targetAccountStatus)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrMemberNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if targetAccountStatus != "active" {
+			return ErrMemberNotFound
+		}
 		if target.Role == roleOwner {
 			// 目标已经是 owner：无需提升，也不把调用者静默降级。
 			return ErrTargetAlreadyOwner
 		}
 		now := time.Now().UTC()
+		if err := setMemberRoleInTx(ctx, tx, orgID, actorUserID, roleAdmin, now); err != nil {
+			return err
+		}
 		if err := setMemberRoleInTx(ctx, tx, orgID, targetUserID, roleOwner, now); err != nil {
 			return err
 		}
-		if err := setMemberRoleInTx(ctx, tx, orgID, actorUserID, roleAdmin, now); err != nil {
+		if _, err := tx.ExecContext(ctx, queryUpdateOrganizationOwner, orgID, targetUserID, now); err != nil {
 			return err
 		}
 		return nil
@@ -207,9 +325,11 @@ func (s *Service) mutateMembership(ctx context.Context, actorUserID, orgID int64
 	if err != nil {
 		return err
 	}
-
 	actor, err := actorMembershipInTx(ctx, tx, orgID, actorUserID)
 	if err != nil {
+		return err
+	}
+	if err := ensureEnterpriseInTx(ctx, tx, orgID); err != nil {
 		return err
 	}
 	if !Allowed(actor.Role, action) {
@@ -237,15 +357,14 @@ func (s *Service) mutateMembership(ctx context.Context, actorUserID, orgID int64
 // 归一为 ErrMemberNotFound：对调用者来说，removed 与 never-existed 没有区别。
 func memberInTx(ctx context.Context, tx *sql.Tx, orgID, userID int64) (Member, error) {
 	var m Member
-	err := tx.QueryRowContext(ctx, queryGetMember, orgID, userID).
-		Scan(&m.UserID, &m.Email, &m.Role, &m.Status, &m.CreatedAt)
+	err := scanMember(tx.QueryRowContext(ctx, queryGetMember, orgID, userID).Scan, &m)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Member{}, ErrMemberNotFound
 	}
 	if err != nil {
 		return Member{}, err
 	}
-	if m.Status != memberActive {
+	if m.Status == memberRemoved {
 		return Member{}, ErrMemberNotFound
 	}
 	return m, nil
@@ -253,18 +372,27 @@ func memberInTx(ctx context.Context, tx *sql.Tx, orgID, userID int64) (Member, e
 
 func (s *Service) member(ctx context.Context, orgID, userID int64) (Member, error) {
 	var m Member
-	err := s.db.QueryRowContext(ctx, queryGetMember, orgID, userID).
-		Scan(&m.UserID, &m.Email, &m.Role, &m.Status, &m.CreatedAt)
+	err := scanMember(s.db.QueryRowContext(ctx, queryGetMember, orgID, userID).Scan, &m)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Member{}, ErrMemberNotFound
 	}
 	if err != nil {
 		return Member{}, err
 	}
-	if m.Status != memberActive {
-		return Member{}, ErrMemberNotFound
-	}
 	return m, nil
+}
+
+func scanMember(scan func(dest ...any) error, member *Member) error {
+	var cap sql.NullInt64
+	if err := scan(&member.MembershipID, &member.UserID, &member.Email, &member.Role,
+		&member.Status, &cap, &member.CreatedAt); err != nil {
+		return err
+	}
+	if cap.Valid {
+		value := cap.Int64
+		member.MonthlyLimitMicro = &value
+	}
+	return nil
 }
 
 func countActiveOwnersInTx(ctx context.Context, tx *sql.Tx, orgID int64) (int, error) {
@@ -284,4 +412,19 @@ func setMemberRoleInTx(ctx context.Context, tx *sql.Tx, orgID, userID int64, rol
 		return ErrMemberNotFound
 	}
 	return nil
+}
+
+func sameLimit(left, right *int64) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return *left == *right
+}
+
+func cloneLimit(limit *int64) *int64 {
+	if limit == nil {
+		return nil
+	}
+	value := *limit
+	return &value
 }

@@ -14,8 +14,8 @@
 #
 # 断言都在内嵌的 python3 驱动里（只用 curl + 标准库，不读产品源码、不直接改业务表，
 # 只有造压数据与少量 SQL 观测走 psql）。所有 4xx/5xx 都要求 T01A 错误信封，
-# 跨组织一律要求与"不存在的组织"逐字节同形，并扫描全部响应与进程日志里的
-# raw Key/session/CSRF/邀请 token/口令。
+# 跨组织一律要求与"不存在的组织"逐字节同形，并扫描响应、进程日志和落盘证据中的
+# raw credentials；完整驱动配置只在临时 secrets 目录里。
 #
 # 退出码：0 = 全部硬检查通过（允许显式 SKIP）；1 = 存在 FAIL；2 = 用法/环境错误。
 #
@@ -27,11 +27,20 @@ script_name="$(basename "$0")"
 # shellcheck source=scripts/t10-lab-common.sh
 source "$script_dir/t10-lab-common.sh"
 
-evidence_dir="$T10_ROOT/docs/verification/2026-10-01/t10-security"
+evidence_dir="$T10_ROOT/data/verification/t10-security"
 phases="all"
 timeout_seconds=20
 keep_lab=0
 lease_seconds=8
+driver_dir=""
+
+security_matrix_teardown() {
+  t10_teardown
+  if [[ -n "$driver_dir" ]]; then rm -rf -- "$driver_dir"; fi
+  if [[ "$keep_lab" != "1" && -n "${T10_SECRETS_DIR:-}" ]]; then
+    rm -rf -- "$T10_SECRETS_DIR"
+  fi
+}
 
 usage() {
   cat <<'USAGE'
@@ -39,7 +48,7 @@ usage() {
   scripts/security-matrix.sh [选项]
 
 选项:
-  --evidence-dir DIR   证据目录（默认 docs/verification/2026-10-01/t10-security）
+  --evidence-dir DIR   证据目录（默认 data/verification/t10-security）
   --phases LIST        all（默认）或逗号分隔: security,control,longstream,isolation
   --timeout-seconds N  单个 curl 超时，默认 20
   --lease-seconds N    Gateway 控制面租约（CONTROL_CONFIG_LEASE），默认 8s；
@@ -50,15 +59,15 @@ usage() {
 检查项:
   SEC-01..SEC-15   F16：无 token / 错误 scheme / 篡改与过期 session / 篡改邀请 token /
                    跨组织 orgs-users-keys-usage-audit-exceptions-statements 枚举 /
-                   角色提权 / 每个 unsafe 路由缺 CSRF 与错 CSRF / 禁用用户活跃 session /
-                   被移出成员的有效 Key / billing_viewer 写操作 / 无平台管理员访问 admin /
-                   全局 secret 扫描
+                   角色提权 / 列出的 unsafe 路由缺 CSRF 与错 CSRF / 禁用用户活跃 session /
+                   被移出成员的有效 Key / 普通成员自有数据与 Key 边界 / 无平台管理员访问 admin /
+                   手动开户、个人账户保留、Key 名称与成员关系归属 / 全局 secret 扫描
   CTRL-01..CTRL-04 F10：desired vs applied、控制面分区后 stale（不谎报 active）、
                    租约超时拒新请求、在途流排水、恢复后收敛、Control 重启不复活已撤销 Key
   REV-01..REV-04   F12：长流期间改价（在途钉住原价）/ 撤销 Key / 移除成员，
                    新请求拒绝、旧流排水、账本不重复
-  ISO-01..ISO-04   Console 分页/聚合报表压测下 Gateway SSE 不受影响；Console 重启不打断
-                   在途流；Console 连接池饱和不耗尽 Gateway 池（如实报告共享 PG 争用）
+  ISO-01..ISO-04   Gateway SSE 基线与 Console 报表负载下的完成数/错误/p95 观察；
+                   Console 重启不打断在途流；按 application_name 观测各自连接池上限
 USAGE
 }
 
@@ -85,8 +94,9 @@ case ",$phases," in
   *) t10_die "--phases 只支持 security,control,longstream,isolation,all: $phases" ;;
 esac
 
-t10_require docker curl python3 go git
+t10_require docker curl python3 go git shasum
 t10_install_traps
+trap 'security_matrix_teardown' EXIT
 
 # 每个 run 自己的 docker 项目名/容器名，避免与并行任务（含同 worktree 的失败注入任务）冲突。
 prefix="t10sec-$(printf '%s' "$T10_RUN_ID" | tr '[:upper:]' '[:lower:]')"
@@ -127,8 +137,8 @@ fixture_password_file="$T10_SECRETS_DIR/fixture-passwords.json"
 control_admin_token="$(t10_random_secret)"
 metering_admin_token="$(t10_random_secret)"
 dsn="postgres://gateway_test:test_only_local@127.0.0.1:${pg_port}/gateway_test?sslmode=disable"
-# 每个组件用不同的 application_name，便于在 pg_stat_activity 里证明"Console 连接池
-# 饱和 ≠ Gateway 连接池被耗尽"（ISO-04）。application_name 是纯观测标签，不改变语义。
+# 每个组件用不同的 application_name，便于在 pg_stat_activity 里观察 Console 与
+# Gateway 各自的连接池使用（ISO-04）。application_name 是纯观测标签，不改变语义。
 dsn_gateway="${dsn}&application_name=t10-gateway"
 dsn_console="${dsn}&application_name=t10-console"
 dsn_console_short="${dsn}&application_name=t10-console-short"
@@ -345,8 +355,9 @@ print("timeout: %r" % (last,), file=sys.stderr)
 sys.exit(1)
 PY
 
-# 驱动配置：所有 URL/端口/容器名/重启命令都给 python 驱动，断言全在驱动里。
-cat > "$T10_EVIDENCE_DIR/lab.json" <<JSON
+# 驱动配置包含 bearer token、DSN 与重启命令，只放 0700/0600 的临时 secrets 目录。
+private_lab_config="$T10_SECRETS_DIR/lab-private.json"
+cat > "$private_lab_config" <<JSON
 {
   "run_id": "$T10_RUN_ID",
   "root": "$T10_ROOT",
@@ -390,6 +401,34 @@ cat > "$T10_EVIDENCE_DIR/lab.json" <<JSON
   }
 }
 JSON
+chmod 600 "$private_lab_config"
+
+# Evidence carries connection metadata only; it never stores credentials, DSNs,
+# process environments, or command arguments.
+python3 - "$private_lab_config" "$T10_EVIDENCE_DIR/lab.json" <<'PY'
+import json
+import os
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    config = json.load(handle)
+public = {
+    "run_id": config["run_id"],
+    "root": config["root"],
+    "evidence_dir": config["evidence_dir"],
+    "timeout_seconds": config["timeout_seconds"],
+    "lease_seconds": config["lease_seconds"],
+    "phases": config["phases"],
+    "admin_email": config["admin_email"],
+    "containers": config["containers"],
+    "ports": config["ports"],
+    "urls": config["urls"],
+    "secret_material": "temporary private config; removed after teardown unless --keep is used",
+}
+with open(sys.argv[2], "w", encoding="utf-8") as handle:
+    json.dump(public, handle, indent=2)
+os.chmod(sys.argv[2], 0o600)
+PY
 
 # 断言驱动：写在临时目录（它是脚本本体的一部分，不属于证据）。
 driver_dir="$(mktemp -d "${TMPDIR:-/tmp}/t10sec-driver.XXXXXX")"
@@ -593,10 +632,10 @@ CSRF_DEFAULT = object()
 
 
 class Client:
-    def __init__(self, evidence_dir, timeout):
+    def __init__(self, evidence_dir, timeout, scratch_dir=None):
         self.evidence_dir = evidence_dir
         self.timeout = timeout
-        self.scratch = tempfile.mkdtemp(prefix="t10sec-http.")
+        self.scratch = tempfile.mkdtemp(prefix="t10sec-http.", dir=scratch_dir)
         self.records = []
 
     def call(self, check, label, method, path, *, base_url, query=None, body=None, raw_body=None,
@@ -694,7 +733,18 @@ class Client:
         for key, value in response.headers:
             resp_dump.append("%s: %s" % (key, value))
         resp_dump.append("")
-        resp_dump.append(response.body[:MAX_STORED_BODY])
+        response_body = response.body[:MAX_STORED_BODY]
+        # Activation codes are one-time credentials carried as `code`, not
+        # `token`; redact this response before it reaches evidence files.
+        if response.method == "POST" and response.path.split("?", 1)[0] == "/api/v1/admin/activation-codes":
+            try:
+                payload = json.loads(response_body)
+                if isinstance(payload, dict) and isinstance(payload.get("code"), str):
+                    payload["code"] = "<redacted: one-time activation code>"
+                    response_body = json.dumps(payload, ensure_ascii=False)
+            except (TypeError, ValueError):
+                pass
+        resp_dump.append(response_body)
         if len(response.body) > MAX_STORED_BODY:
             resp_dump.append("\n…(%d bytes truncated)" % (len(response.body) - MAX_STORED_BODY))
         with open(os.path.join(self.evidence_dir, stem + ".resp"), "w", encoding="utf-8") as handle:
@@ -1021,7 +1071,7 @@ class Actor:
 
 
 class Fixtures:
-    """Two enterprises, four roles each, created through real HTTP."""
+    """Two enterprises and their actors, created through real HTTP."""
 
     def __init__(self, lab, client, cid="FIX"):
         self.lab = lab
@@ -1031,11 +1081,91 @@ class Fixtures:
         self.orgs = {}
         self.keys = {}
         self.invitations = {}
+        self.opening_codes = {}
+        self.extra_passwords = []
+        self.session_tokens = []
+        self.csrf_tokens = []
         self.prices = {}
         self.secrets_path = os.path.join(lab.secret_dir, "fixtures.json")
 
     def url(self, name):
         return self.lab.urls[name]
+
+    def enable_platform_models(self, check, models):
+        """Merge required fixture models into the complete platform catalog."""
+        admin = self.actors["platform-admin"]
+        path = "/api/v1/admin/models"
+        current = self.client.call(check, "read-platform-model-catalog", "GET", path,
+                                   base_url=self.url("console"), session=admin.session)
+        check.require_status(current, 200, label="读取平台模型目录")
+        current_body = current.json()
+        check.require(isinstance(current_body, dict), "平台模型目录响应不是对象")
+        existing = current_body.get("items")
+        check.require(isinstance(existing, list), "平台模型目录响应缺少 items 数组")
+        catalog = {}
+        for item in existing:
+            check.require(isinstance(item, dict) and isinstance(item.get("model"), str) and
+                          isinstance(item.get("enabled"), bool),
+                          "平台模型目录包含无效条目：%r" % item)
+            check.require(item["model"] not in catalog,
+                          "平台模型目录包含重复条目：%s" % item["model"])
+            catalog[item["model"]] = item["enabled"]
+        for model in models:
+            catalog[model] = True
+        requested = [{"model": model, "enabled": catalog[model]} for model in sorted(catalog)]
+        updated = self.client.call(check, "enable-platform-fixture-models", "PUT", path,
+                                   base_url=self.url("console"), body={"items": requested},
+                                   session=admin.session)
+        check.require_status(updated, 200, label="启用平台测试模型并保留现有目录")
+        updated_body = updated.json()
+        check.require(isinstance(updated_body, dict), "更新平台模型目录响应不是对象")
+        items = updated_body.get("items")
+        check.require(isinstance(items, list), "更新平台模型目录响应缺少 items 数组")
+        updated_catalog = {}
+        for item in items:
+            check.require(isinstance(item, dict) and isinstance(item.get("model"), str) and
+                          isinstance(item.get("enabled"), bool),
+                          "更新后的平台模型目录包含无效条目：%r" % item)
+            check.require(item["model"] not in updated_catalog,
+                          "更新后的平台模型目录包含重复条目：%s" % item["model"])
+            updated_catalog[item["model"]] = item["enabled"]
+        check.require(updated_catalog == catalog,
+                      "更新平台模型目录时有条目被删除或改写：expected=%r actual=%r" %
+                      (catalog, updated_catalog))
+        enabled = {model for model, is_enabled in updated_catalog.items() if is_enabled}
+        check.require(set(models).issubset(enabled),
+                      "测试模型未全部启用：requested=%r enabled=%r" % (models, sorted(enabled)))
+        check.detail("platform_model_catalog_fixture_models", sorted(models))
+        check.detail("platform_model_catalog_preserved_entries", len(existing))
+
+    def require_personal_wallet(self, check, actor, only_personal=False):
+        response = self.client.call(check, "personal-account-" + actor.name, "GET", "/api/v1/organizations",
+                                    base_url=self.url("console"), session=actor.session)
+        check.require_status(response, 200, label="自助注册用户的账户 " + actor.name)
+        memberships = (response.json() or {}).get("items", [])
+        personal = [item for item in memberships
+                    if ((item.get("organization") or {}).get("type") == "personal")]
+        check.require(len(personal) == 1,
+                      "%s 应保留且仅有一个 personal 账户，实际=%r" % (actor.name, personal))
+        if len(personal) != 1:
+            return
+        check.require(personal[0].get("role") == "owner" and personal[0].get("status") == "active",
+                      "%s 的 personal membership 非 active owner：%r" % (actor.name, personal[0]))
+        if only_personal:
+            check.require(len(memberships) == 1,
+                          "%s 注册后不应自动加入 enterprise：%r" % (actor.name, memberships))
+        if not actor.user_id.isdigit() or int(actor.user_id) <= 0:
+            check.require(False, "%s 注册响应缺少有效 user id：%r" % (actor.name, actor.user_id))
+            return
+        wallets = self.lab.psql_lines(
+            "SELECT count(*) FROM organizations o "
+            "JOIN memberships m ON m.org_id=o.id AND m.user_id=o.owner_user_id "
+            "AND m.role='owner' AND m.status='active' "
+            "JOIN billing_accounts a ON a.org_id=o.id "
+            "WHERE o.type='personal' AND o.owner_user_id=%s AND m.user_id=%s"
+            % (actor.user_id, actor.user_id))
+        check.require(wallets == ["1"],
+                      "%s 的 personal 钱包/owner membership 未原子创建：%r" % (actor.name, wallets))
 
     def login(self, check, actor, console="console", label=None):
         response = self.client.call(check, label or ("login-" + actor.name), "POST", "/api/v1/auth/login",
@@ -1054,6 +1184,8 @@ class Fixtures:
         actor.session = session
         RED.add(token)
         RED.add(csrf)
+        self.session_tokens.append(token)
+        self.csrf_tokens.append(csrf)
         return session
 
     def create(self):
@@ -1066,56 +1198,115 @@ class Fixtures:
         self.actors["platform-admin"] = admin
         admin_id = admin.session["user_id"]
         admin.user_id = admin_id
+        self.enable_platform_models(check, ("default", "t10-model"))
 
         tag = self.lab.cfg["run_id"][-6:].lower().replace("-", "")[-6:]
         self.tag = tag
 
-        def create_user(name, platform_admin=False):
+        def register_user(name):
             email = "t10-%s-%s@t10.test" % (tag, name)
             password = secrets.token_urlsafe(18)
-            response = self.client.call(check, "create-user-" + name, "POST", "/api/v1/admin/users",
+            response = self.client.call(check, "register-user-" + name, "POST", "/api/v1/auth/register",
                                         base_url=self.url("console"),
-                                        body={"email": email, "password": password,
-                                              "platform_admin": platform_admin},
-                                        session=admin.session)
-            check.require_status(response, 201, label="create user " + email)
+                                        body={"email": email, "password": password}, csrf=None)
+            check.require_status(response, 201, label="self-register " + email)
             RED.add(password)
-            actor = Actor(name, email, password, str((response.json() or {}).get("id", "")), None, platform_admin)
+            registration = response.json() or {}
+            cookies = cookies_of(response)
+            registration_token = cookies.get("gw_session", "")
+            registration_csrf = cookies.get("gw_csrf") or registration.get("csrf_token", "")
+            check.require(bool(registration_token), "注册响应缺少 gw_session cookie")
+            check.require(bool(registration_csrf), "注册响应缺少 CSRF token")
+            RED.add(registration_token)
+            RED.add(registration_csrf)
+            self.session_tokens.append(registration_token)
+            self.csrf_tokens.append(registration_csrf)
+            user = registration.get("user") or {}
+            actor = Actor(name, email, password, str(user.get("id", "")), None, False)
             self.actors[name] = actor
+            self.login(check, actor, label="login-registered-" + name)
+            self.require_personal_wallet(check, actor, only_personal=True)
             return actor
 
         # Enterprise A
-        a_owner = create_user("a-owner")
-        a_admin = create_user("a-admin")
-        a_member = create_user("a-member")
-        a_viewer = create_user("a-viewer")
-        a_member2 = create_user("a-member2")     # removed-member-with-live-key case
-        a_disabled = create_user("a-disabled")   # disabled-user-with-live-session case
-        invitee = create_user("a-invitee")       # invitation tamper case
+        a_owner = register_user("a-owner")
+        a_admin = register_user("a-admin")
+        a_member = register_user("a-member")
+        a_member3 = register_user("a-member3")
+        a_member2 = register_user("a-member2")     # removed-member-with-live-key case
+        a_disabled = register_user("a-disabled")   # disabled-user-with-live-session case
+        invitee = register_user("a-invitee")       # invitation tamper case
+        register_user("csrf-invitee")              # isolated actor for unsafe-route probes
         # Enterprise B
-        b_owner = create_user("b-owner")
-        b_member = create_user("b-member")
+        b_owner = register_user("b-owner")
+        b_member = register_user("b-member")
 
-        # Organization A: created by its owner (POST /api/v1/organizations).
-        self.login(check, a_owner)
-        response = self.client.call(check, "create-org-acme", "POST", "/api/v1/organizations",
-                                    base_url=self.url("console"), body={"name": "t10-%s-acme" % tag},
-                                    session=a_owner.session)
-        check.require_status(response, 201, label="create org A")
+        # Ordinary users cannot open an enterprise from the user organization list.
+        legacy = self.client.call(check, "legacy-self-create-org", "POST", "/api/v1/organizations",
+                                  base_url=self.url("console"), body={"name": "t10-%s-forbidden" % tag},
+                                  session=a_owner.session)
+        check.require_status(legacy, 405, label="普通用户不能 POST /organizations 自助开户")
+        denied = self.client.call(check, "non-admin-create-org", "POST", "/api/v1/admin/organizations",
+                                  base_url=self.url("console"),
+                                  body={"name": "t10-%s-forbidden" % tag, "owner_email": a_owner.email},
+                                  session=a_owner.session)
+        check.require_status(denied, 403, "forbidden", label="普通用户不能手动开户")
+        response = self.client.call(check, "create-org-acme", "POST", "/api/v1/admin/organizations",
+                                    base_url=self.url("console"),
+                                    body={"name": "t10-%s-acme" % tag, "owner_email": a_owner.email},
+                                    session=admin.session)
+        check.require_status(response, 201, label="平台管理员按 owner_email 手动创建 org A")
         self.orgs["A"] = str(response.json()["organization"]["id"])
+        check.require(response.json().get("role") == "owner",
+                      "手动开户的 owner_email 未成为 owner：%r" % response.json())
+        # Platform admin is an independent identity, not an implicit member.
+        admin_members = self.client.call(check, "platform-admin-not-org-member", "GET",
+                                         "/api/v1/orgs/%s/members" % self.orgs["A"],
+                                         base_url=self.url("console"), session=admin.session)
+        check.require_status(admin_members, 404, "not_found", label="平台管理员未被自动加入企业")
+        # The legacy `organizations` assignment is rejected before any user is created.
+        assignment = self.client.call(check, "legacy-admin-user-org-assignment", "POST", "/api/v1/admin/users",
+                                      base_url=self.url("console"),
+                                      body={"email": "t10-%s-assignment@t10.test" % tag,
+                                            "password": secrets.token_urlsafe(18),
+                                            "organizations": [self.orgs["A"]]}, session=admin.session)
+        check.require_status(assignment, 400, "invalid_request",
+                             label="admin/users 不再支持 organizations 代建成员")
+        self.require_personal_wallet(check, a_owner, only_personal=False)
 
-        # Organization B.
-        self.login(check, b_owner)
-        response = self.client.call(check, "create-org-beta", "POST", "/api/v1/organizations",
-                                    base_url=self.url("console"), body={"name": "t10-%s-beta" % tag},
+        # Organization B uses the separate, single-use activation-code path.
+        code_response = self.client.call(check, "create-opening-code-beta", "POST", "/api/v1/admin/activation-codes",
+                                         base_url=self.url("console"),
+                                         body={"enterprise_name": "t10-%s-beta" % tag}, session=admin.session)
+        check.require_status(code_response, 201, label="平台管理员签发 enterprise 开户码")
+        opening_code = (code_response.json() or {}).get("code", "")
+        check.require(bool(opening_code), "开户码响应缺少一次性 code")
+        RED.add(opening_code)
+        self.opening_codes["B"] = {"code": opening_code, "id": (code_response.json() or {}).get("id", "")}
+        response = self.client.call(check, "activate-org-beta", "POST", "/api/v1/organizations/activate",
+                                    base_url=self.url("console"), body={"code": opening_code},
                                     session=b_owner.session)
-        check.require_status(response, 201, label="create org B")
+        check.require_status(response, 201, label="b-owner 使用开户码创建 org B")
         self.orgs["B"] = str(response.json()["organization"]["id"])
+        check.require(response.json().get("role") == "owner",
+                      "开户码创建的 user 未成为 owner：%r" % response.json())
+        self.require_personal_wallet(check, b_owner, only_personal=False)
+        check.require(self.orgs["A"].isdigit() and self.orgs["B"].isdigit(),
+                      "企业开户响应缺少数字组织 ID，无法验证默认模型范围")
+        inherited_scopes = self.lab.psql_lines(
+            "SELECT count(*) FROM organizations WHERE id IN (%s,%s) AND model_allowlist IS NULL"
+            % (int(self.orgs["A"]), int(self.orgs["B"])))
+        check.require(inherited_scopes == ["2"],
+                      "新建企业应以 NULL 范围继承全局模型目录：%r" % inherited_scopes)
+        check.detail("enterprise_model_scope", "A/B inherit platform catalog")
 
         def invite_and_accept(owner, actor, org, role):
+            invitation = {"email": actor.email, "role": role}
+            if role == "member":
+                invitation["monthly_limit_micro"] = "100000000"
             response = self.client.call(check, "invite-" + actor.name, "POST",
                                         "/api/v1/orgs/%s/invitations" % org, base_url=self.url("console"),
-                                        body={"email": actor.email, "role": role}, session=owner.session)
+                                        body=invitation, session=owner.session)
             check.require_status(response, 201, label="invite " + actor.name)
             token = (response.json() or {}).get("token", "")
             check.require(bool(token), "邀请响应缺少 token")
@@ -1125,11 +1316,21 @@ class Fixtures:
                                       "/api/v1/invitations/%s/accept" % token, base_url=self.url("console"),
                                       body={}, session=actor.session)
             check.require_status(accept, 200, label="accept " + actor.name)
+            membership = accept.json() or {}
+            if role == "member":
+                check.require(membership.get("monthly_limit_micro") == "100000000",
+                              "普通 member 接受邀请后额度未保留：%r" % membership)
+            self.invitations[actor.name] = {"token": token, "email": actor.email, "user_id": actor.user_id}
             return token
 
+        missing_member_cap = self.client.call(
+            check, "invite-member-without-cap", "POST", "/api/v1/orgs/%s/invitations" % self.orgs["A"],
+            base_url=self.url("console"), body={"email": "t10-%s-no-cap@t10.test" % tag, "role": "member"},
+            session=a_owner.session)
+        check.require_status(missing_member_cap, 400, label="普通 member 邀请必须显式提交额度")
         invite_and_accept(a_owner, a_admin, self.orgs["A"], "admin")
         invite_and_accept(a_owner, a_member, self.orgs["A"], "member")
-        invite_and_accept(a_owner, a_viewer, self.orgs["A"], "billing_viewer")
+        invite_and_accept(a_owner, a_member3, self.orgs["A"], "member")
         invite_and_accept(a_owner, a_member2, self.orgs["A"], "member")
         invite_and_accept(a_owner, a_disabled, self.orgs["A"], "member")
         invite_and_accept(b_owner, b_member, self.orgs["B"], "member")
@@ -1140,7 +1341,8 @@ class Fixtures:
         # A pending invitation (used by the tamper/negative cases).
         response = self.client.call(check, "invite-pending", "POST", "/api/v1/orgs/%s/invitations" % self.orgs["A"],
                                     base_url=self.url("console"),
-                                    body={"email": invitee.email, "role": "member"}, session=a_owner.session)
+                                    body={"email": invitee.email, "role": "member",
+                                          "monthly_limit_micro": "100000000"}, session=a_owner.session)
         check.require_status(response, 201, label="invite pending")
         pending_token = (response.json() or {}).get("token", "")
         RED.add(pending_token)
@@ -1148,10 +1350,9 @@ class Fixtures:
                                        "user_id": invitee.user_id}
 
         # Keys: every key is created through the Console → Control AdminService path.
-        def create_key(actor, org, owner_user_id=None, operation_id=None):
-            body = {}
-            if owner_user_id:
-                body["owner_user_id"] = str(owner_user_id)
+        def create_key(actor, org, name=None, operation_id=None):
+            name = name or "t10-%s-key" % actor.name
+            body = {"name": name}
             if operation_id:
                 body["operation_id"] = operation_id
             response = self.client.call(check, "create-key-" + actor.name, "POST",
@@ -1162,13 +1363,28 @@ class Fixtures:
             key = payload.get("secret", "")
             check.require(bool(key), "创建 Key 响应缺少 secret")
             RED.add(key)
-            return {"secret": key, "key_id": payload["key"]["key_id"], "prefix": payload["key"]["prefix"],
-                    "owner_user_id": payload["key"].get("owner_user_id")}
+            metadata = payload["key"]
+            membership = self.lab.psql_lines(
+                "SELECT k.membership_id, m.id, k.owner_user_id, m.user_id, k.name "
+                "FROM api_keys k JOIN memberships m ON m.id=k.membership_id AND m.org_id=k.org_id "
+                "AND m.user_id=k.owner_user_id AND m.status='active' "
+                "WHERE k.key_id='%s'" % metadata["key_id"])
+            parts = membership[0].split("|") if len(membership) == 1 else []
+            check.require(bool(parts) and parts[0] == parts[1] and parts[2] == actor.user_id and
+                          parts[3] == actor.user_id and parts[4] == name,
+                          "Key 未固定到本人当前 membership / 名称：actor=%s key=%r" % (actor.name, membership))
+            check.require(metadata.get("name") == name and metadata.get("owner_user_id") == actor.user_id and
+                          metadata.get("organization_id") == org,
+                          "Key DTO 的名称/归属与创建者不一致：%r" % metadata)
+            return {"secret": key, "key_id": metadata["key_id"], "prefix": metadata["prefix"],
+                    "owner_user_id": metadata.get("owner_user_id"), "name": name,
+                    "membership_id": parts[0] if parts else ""}
 
         self.keys["a-member"] = create_key(a_member, self.orgs["A"])
+        self.keys["a-member3"] = create_key(a_member3, self.orgs["A"])
         self.keys["a-member2"] = create_key(a_member2, self.orgs["A"])
         self.keys["a-disabled"] = create_key(a_disabled, self.orgs["A"])
-        self.keys["a-viewer"] = create_key(a_admin, self.orgs["A"], owner_user_id=a_viewer.user_id)
+        self.keys["a-admin"] = create_key(a_admin, self.orgs["A"])
         self.keys["b-member"] = create_key(b_member, self.orgs["B"])
         self.keys["a-owner"] = create_key(a_owner, self.orgs["A"])
 
@@ -1191,7 +1407,8 @@ class Fixtures:
             response = self.client.call(check, "fund-" + org, "POST",
                                         "/api/v1/admin/billing/accounts/%s/adjustments" % org,
                                         base_url=self.url("console"),
-                                        body={"amount_micro": str(amount), "direction": "credit",
+                                        body={"type": "recharge", "amount_micro": str(amount),
+                                              "payment_reference": "t10-fund-%s" % org,
                                               "reason": "t10 security matrix funding"},
                                         session=admin.session,
                                         extra_headers={"Idempotency-Key": "t10-fund-%s" % org})
@@ -1213,6 +1430,7 @@ class Fixtures:
             "orgs": self.orgs,
             "keys": self.keys,
             "invitations": self.invitations,
+            "opening_codes": self.opening_codes,
             "prices": self.prices,
             "actors": {name: {"email": a.email, "user_id": a.user_id, "password": a.password,
                               "session": a.session, "platform_admin": a.platform_admin}
@@ -1225,11 +1443,14 @@ class Fixtures:
             "orgs": self.orgs,
             "users": {name: {"email": a.email, "user_id": a.user_id, "platform_admin": a.platform_admin}
                       for name, a in self.actors.items()},
-            "keys": {name: {"key_id": k["key_id"], "prefix": k["prefix"], "owner_user_id": k["owner_user_id"]}
+            "keys": {name: {"key_id": k["key_id"], "prefix": k["prefix"],
+                            "owner_user_id": k["owner_user_id"], "name": k["name"],
+                            "membership_id": k["membership_id"]}
                      for name, k in self.keys.items()},
             "prices": self.prices,
             "invitations": {name: {"email": v["email"], "user_id": v["user_id"]}
                             for name, v in self.invitations.items()},
+            "opening_codes": {name: {"id": v["id"]} for name, v in self.opening_codes.items()},
         }
         with open(os.path.join(self.lab.evidence_dir, "fixtures.json"), "w", encoding="utf-8") as handle:
             json.dump(summary, handle, indent=2, ensure_ascii=False)
@@ -1621,8 +1842,8 @@ class Matrix:
                                  session={"token": token, "csrf": victim.session["csrf"]})
             check.require_status(response, 401, "unauthorized", label="tampered " + label)
         # A valid session with a tampered CSRF token on an unsafe route.
-        response = self.call(check, "tampered-csrf", "POST", "/api/v1/organizations",
-                             body={"name": "t10-should-not-exist"}, session=victim.session,
+        response = self.call(check, "tampered-csrf", "POST", "/api/v1/orgs/%s/keys" % self.fx.orgs["A"],
+                             body={"name": "t10-csrf-should-not-create"}, session=victim.session,
                              csrf=victim.session["csrf"][:-2] + "zz")
         check.require_status(response, 403, "forbidden", label="tampered csrf")
         check.require(response.message() == "missing or invalid CSRF token",
@@ -1646,6 +1867,8 @@ class Matrix:
         session = {"token": cookies["gw_session"], "csrf": cookies.get("gw_csrf", "")}
         RED.add(session["token"])
         RED.add(session["csrf"])
+        self.fx.session_tokens.append(session["token"])
+        self.fx.csrf_tokens.append(session["csrf"])
         first = self.client.call(check, "short-ttl-immediate", "GET", "/api/v1/me",
                                  base_url=self.lab.urls["console_short"], session=session)
         check.require_status(first, 200, label="短 TTL session 立即可用（证明 2s 前是有效的）")
@@ -1664,6 +1887,11 @@ class Matrix:
                                    base_url=self.lab.urls["console"],
                                    body={"email": actor.email, "password": password}, csrf=None)
         check.require_status(relogin, 200, label="主 Console 重新登录")
+        relogin_cookies = cookies_of(relogin)
+        RED.add(relogin_cookies.get("gw_session", ""))
+        RED.add(relogin_cookies.get("gw_csrf", ""))
+        self.fx.session_tokens.append(relogin_cookies.get("gw_session", ""))
+        self.fx.csrf_tokens.append(relogin_cookies.get("gw_csrf", ""))
 
     # -- SEC-05 ------------------------------------------------------------
     def sec05(self, check):
@@ -1758,16 +1986,16 @@ class Matrix:
         b_member_id = self.actor("b-member").user_id
         b_key_id = self.fx.keys["b-member"]["key_id"]
         members_before = self.org_member_snapshot(check, org_b, b_owner, "b-before")
-        keys_before = self.org_key_snapshot(check, org_b, b_owner, "b-before")
+        keys_before = self.org_key_snapshot(check, org_b, self.actor("b-member").session, "b-before")
         checks = [
             ("patch-member", "PATCH", "/api/v1/orgs/%s/members/%s" % (org_b, b_member_id),
              {"role": "admin"}),
             ("delete-member", "DELETE", "/api/v1/orgs/%s/members/%s" % (org_b, b_member_id), None),
             ("create-invitation", "POST", "/api/v1/orgs/%s/invitations" % org_b,
-             {"email": "cross@t10.test", "role": "member"}),
+             {"email": "cross@t10.test", "role": "member", "monthly_limit_micro": "100000000"}),
             ("owner-transfer", "POST", "/api/v1/orgs/%s/owner-transfer" % org_b,
              {"user": b_member_id}),
-            ("create-key", "POST", "/api/v1/orgs/%s/keys" % org_b, {}),
+            ("create-key", "POST", "/api/v1/orgs/%s/keys" % org_b, {"name": "cross-org-probe"}),
             ("revoke-key", "POST", "/api/v1/orgs/%s/keys/%s/revoke" % (org_b, b_key_id), None),
         ]
         for label, method, path, body in checks:
@@ -1777,7 +2005,7 @@ class Matrix:
             check.require_status(response, 404, "not_found", label="跨组织写 " + label)
             self.scan_no_leak(check, "跨组织写 " + label, response.body)
         members_after = self.org_member_snapshot(check, org_b, b_owner, "b-after")
-        keys_after = self.org_key_snapshot(check, org_b, b_owner, "b-after")
+        keys_after = self.org_key_snapshot(check, org_b, self.actor("b-member").session, "b-after")
         check.require(members_before == members_after,
                       "跨组织写尝试改变了 B 的成员: before=%r after=%r" % (members_before, members_after))
         check.require(keys_before == keys_after,
@@ -1807,7 +2035,8 @@ class Matrix:
         # admin 不能降级 owner
         response = self.call(check, "admin-demote-owner", "PATCH",
                              "/api/v1/orgs/%s/members/%s" % (org, owner.user_id),
-                             body={"role": "member"}, session=admin.session)
+                             body={"role": "member", "monthly_limit_micro": "100000000"},
+                             session=admin.session)
         check.require_status(response, 403, "forbidden", label="admin 降级 owner")
         # 自升 platform_admin：组织内任何角色都不行
         for name in ("a-member", "a-admin", "a-owner"):
@@ -1847,9 +2076,9 @@ class Matrix:
                       "platform_admin 不应自动获得组织内角色，实际 %d" % response.status)
 
     # -- SEC-09 ------------------------------------------------------------
-    def csrf_probe(self, check, route_label, method, path, body, session, csrf):
+    def csrf_probe(self, check, route_label, method, path, body, session, csrf, extra_headers=None):
         response = self.call(check, "csrf-%s-%s" % (route_label, csrf["label"]), method, path, body=body,
-                             session=session, csrf=csrf["value"])
+                             session=session, csrf=csrf["value"], extra_headers=extra_headers)
         check.require_status(response, 403, "forbidden", label="%s %s" % (route_label, csrf["label"]))
         check.require(response.message() == "missing or invalid CSRF token",
                       "%s %s: message=%r" % (route_label, csrf["label"], response.message()))
@@ -1860,55 +2089,121 @@ class Matrix:
         owner = self.actor("a-owner")
         member = self.actor("a-member")
         admin = self.actor("platform-admin")
+        invitee = self.actor("csrf-invitee")
+        csrf_created_user_email = "csrf-user-%s@t10.test" % self.fx.tag
         # 为了证明"本来可以成功"的路由也被 CSRF 保护，为 accept 专门建一个邀请。
         proposal = self.call(check, "csrf-invitation", "POST", "/api/v1/orgs/%s/invitations" % org,
-                             body={"email": self.actor("a-invitee").email, "role": "member"},
+                             body={"email": invitee.email, "role": "member",
+                                   "monthly_limit_micro": "100000000"},
                              session=owner.session)
         check.require_status(proposal, 201, label="CSRF 探针邀请")
         token = (proposal.json() or {}).get("token", "")
         RED.add(token)
-        invitee = self.actor("a-invitee")
+        self.fx.invitations["csrf"] = {"token": token, "email": invitee.email, "user_id": invitee.user_id}
+        # Prepare valid one-time inputs so missing/wrong CSRF reaches the middleware
+        # guard on routes that otherwise would mutate state.
+        opening = self.call(check, "csrf-opening-code", "POST", "/api/v1/admin/activation-codes",
+                            body={"enterprise_name": "t10-%s-csrf-opening" % self.fx.tag}, session=admin.session)
+        check.require_status(opening, 201, label="CSRF 开户码 setup")
+        opening_payload = opening.json() or {}
+        opening_code = opening_payload.get("code", "")
+        check.require(bool(opening_code), "CSRF 开户码 setup 缺少一次性 code")
+        RED.add(opening_code)
+        self.fx.opening_codes["csrf"] = {"code": opening_code, "id": opening_payload.get("id", "")}
+        application = self.call(check, "csrf-join-request-setup", "POST",
+                                "/api/v1/orgs/%s/join-requests" % org_b,
+                                body={"display_name": "t10 csrf applicant"}, session=invitee.session)
+        check.require_status(application, 201, label="CSRF 入企申请 setup")
+        application_id = str((application.json() or {}).get("id", ""))
+        check.require(bool(application_id), "入企申请 setup 缺少 id")
+        csrf_price_effective_at = (datetime.now(timezone.utc) - timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        csrf_new_password = secrets.token_urlsafe(18)
+        RED.add(csrf_new_password)
+        self.fx.extra_passwords.append(csrf_new_password)
 
         unsafe = [
             ("logout", "POST", "/api/v1/auth/logout", None, owner, "owner"),
-            ("create-org", "POST", "/api/v1/organizations", {"name": "t10-csrf-x"}, owner, "owner"),
+            ("change-password", "POST", "/api/v1/me/password",
+             {"old_password": invitee.password, "new_password": csrf_new_password}, invitee, "invitee"),
+            ("create-org", "POST", "/api/v1/admin/organizations",
+             {"name": "t10-%s-csrf-x" % self.fx.tag, "owner_email": invitee.email}, admin, "platform-admin"),
+            ("create-opening-code", "POST", "/api/v1/admin/activation-codes",
+             {"enterprise_name": "t10-%s-csrf-x" % self.fx.tag}, admin, "platform-admin"),
+            ("activate-enterprise", "POST", "/api/v1/organizations/activate",
+             {"code": opening_code}, invitee, "invitee"),
+            ("create-join-request", "POST", "/api/v1/orgs/%s/join-requests" % org_b,
+             {"display_name": "t10 should not join"}, invitee, "invitee"),
+            ("decide-join-request", "POST", "/api/v1/orgs/%s/join-requests/%s/decision" % (org_b, application_id),
+             {"status": "approved", "monthly_limit_micro": "100000000"},
+             self.actor("b-owner"), "b-owner"),
             ("admin-create-user", "POST", "/api/v1/admin/users",
-             {"email": "csrf@t10.test", "password": secrets.token_urlsafe(12)}, admin, "platform-admin"),
-            ("admin-user-status", "POST", "/api/v1/admin/users/%s/status" % member.user_id,
-             {"status": "active"}, admin, "platform-admin"),
+             {"email": csrf_created_user_email, "password": secrets.token_urlsafe(12)}, admin, "platform-admin"),
+            ("admin-user-status", "POST", "/api/v1/admin/users/%s/status" % self.actor("a-disabled").user_id,
+             {"status": "disabled"}, admin, "platform-admin"),
+            ("admin-org-status", "POST", "/api/v1/admin/organizations/%s/status" % org_b,
+             {"status": "suspended"}, admin, "platform-admin"),
             ("create-invitation", "POST", "/api/v1/orgs/%s/invitations" % org,
-             {"email": "csrf2@t10.test", "role": "member"}, owner, "owner"),
+             {"email": "csrf2@t10.test", "role": "member", "monthly_limit_micro": "100000000"}, owner, "owner"),
             ("accept-invitation", "POST", "/api/v1/invitations/%s/accept" % token, {}, invitee, "invitee"),
             ("change-member-role", "PATCH", "/api/v1/orgs/%s/members/%s" % (org, member.user_id),
-             {"role": "member"}, owner, "owner"),
+             {"role": "admin"}, owner, "owner"),
+            ("change-member-quota", "PATCH",
+             "/api/v1/orgs/%s/members/%s/quota?month=%s" % (org, self.actor("a-member3").user_id,
+                                                             datetime.now(timezone.utc).strftime("%Y-%m")),
+             {"monthly_limit_micro": "200000000"}, owner, "owner"),
             ("remove-member", "DELETE", "/api/v1/orgs/%s/members/%s" % (org, member.user_id), None,
              owner, "owner"),
             ("owner-transfer", "POST", "/api/v1/orgs/%s/owner-transfer" % org,
              {"user": self.actor("a-admin").user_id}, owner, "owner"),
-            ("create-key", "POST", "/api/v1/orgs/%s/keys" % org, {}, owner, "owner"),
-            ("revoke-key", "POST", "/api/v1/orgs/%s/keys/%s/revoke" % (org, self.fx.keys["a-member"]["key_id"]),
+            ("create-key", "POST", "/api/v1/orgs/%s/keys" % org,
+             {"name": "t10-csrf-should-not-create"}, owner, "owner"),
+            ("revoke-key", "POST", "/api/v1/orgs/%s/keys/%s/revoke" % (org, self.fx.keys["a-owner"]["key_id"]),
              None, owner, "owner"),
             ("create-price", "POST", "/api/v1/admin/prices",
              {"model": "default", "currency": "CNY", "input_price_micro_per_million": "1",
-              "output_price_micro_per_million": "1", "effective_at": "2026-01-01T00:00:00Z"},
+              "output_price_micro_per_million": "1", "effective_at": csrf_price_effective_at},
              admin, "platform-admin"),
             ("adjust-account", "POST", "/api/v1/admin/billing/accounts/%s/adjustments" % org,
-             {"amount_micro": "1", "direction": "credit", "reason": "csrf probe"},
+             {"type": "recharge", "amount_micro": "1", "payment_reference": "t10-csrf-recharge",
+              "reason": "csrf probe"},
              admin, "platform-admin"),
             ("resolve-exception", "POST",
              "/api/v1/admin/billing/exceptions/99999999/resolution",
              {"decision": "dismiss", "reason": "csrf probe"}, admin, "platform-admin"),
         ]
+        def snapshot_items(label, path, session):
+            response = self.call(check, label, "GET", path, session=session)
+            check.require_status(response, 200, label="CSRF 状态快照 " + label)
+            return (response.json() or {}).get("items", [])
+
         # 快照：CSRF 尝试前后必须逐字段一致。
         before = {
             "members": self.org_member_snapshot(check, org, owner.session, "before-csrf"),
-            "keys": self.org_key_snapshot(check, org, owner.session, "before-csrf"),
+            "b_members": self.org_member_snapshot(check, org_b, self.actor("b-owner").session, "b-before-csrf"),
+            "keys": {
+                "owner": self.org_key_snapshot(check, org, owner.session, "owner-before-csrf"),
+                "admin": self.org_key_snapshot(check, org, self.actor("a-admin").session, "admin-before-csrf"),
+                "member": self.org_key_snapshot(check, org, member.session, "member-before-csrf"),
+            },
+            "b_member_keys": self.org_key_snapshot(check, org_b, self.actor("b-member").session, "b-member-before-csrf"),
             "money": self.money_snapshot(check, org, "before-csrf"),
-            "prices": (self.call(check, "prices-before-csrf", "GET", "/api/v1/admin/prices",
-                                 session=admin.session).json() or {}).get("items", []),
-            "invitations": (self.call(check, "invitations-before-csrf", "GET",
-                                      "/api/v1/orgs/%s/invitations" % org,
-                                      session=owner.session).json() or {}).get("items", []),
+            "prices": snapshot_items("prices-before-csrf", "/api/v1/admin/prices", admin.session),
+            "invitations": snapshot_items("invitations-before-csrf", "/api/v1/orgs/%s/invitations" % org,
+                                           owner.session),
+            "opening_codes": snapshot_items("opening-codes-before-csrf", "/api/v1/admin/activation-codes",
+                                             admin.session),
+            "applications": snapshot_items("applications-before-csrf",
+                                            "/api/v1/orgs/%s/join-requests?status=pending" % org_b,
+                                            self.actor("b-owner").session),
+            "enterprises": snapshot_items("enterprises-before-csrf",
+                                           "/api/v1/admin/organizations?type=enterprise&limit=100",
+                                           admin.session),
+            "disabled_user_status": self.lab.psql_lines(
+                "SELECT status FROM users WHERE id=%s" % self.actor("a-disabled").user_id),
+            "csrf_created_user_count": self.lab.psql_lines(
+                "SELECT count(*) FROM users WHERE email='%s'" % csrf_created_user_email),
+            "password_actor_auth_version": self.lab.psql_lines(
+                "SELECT auth_version FROM users WHERE id=%s" % invitee.user_id),
         }
         for label, method, path, body, session, _actor in unsafe:
             for csrf in ({"label": "missing", "value": None}, {"label": "wrong", "value": "t10-wrong-token"}):
@@ -1916,16 +2211,35 @@ class Matrix:
                 extra = {}
                 if label == "adjust-account":
                     extra["Idempotency-Key"] = "t10-csrf-probe"
-                self.csrf_probe(check, label, method, path, body, session.session, csrf)
+                self.csrf_probe(check, label, method, path, body, session.session, csrf,
+                                extra_headers=extra or None)
         after = {
             "members": self.org_member_snapshot(check, org, owner.session, "after-csrf"),
-            "keys": self.org_key_snapshot(check, org, owner.session, "after-csrf"),
+            "b_members": self.org_member_snapshot(check, org_b, self.actor("b-owner").session, "b-after-csrf"),
+            "keys": {
+                "owner": self.org_key_snapshot(check, org, owner.session, "owner-after-csrf"),
+                "admin": self.org_key_snapshot(check, org, self.actor("a-admin").session, "admin-after-csrf"),
+                "member": self.org_key_snapshot(check, org, member.session, "member-after-csrf"),
+            },
+            "b_member_keys": self.org_key_snapshot(check, org_b, self.actor("b-member").session, "b-member-after-csrf"),
             "money": self.money_snapshot(check, org, "after-csrf"),
-            "prices": (self.call(check, "prices-after-csrf", "GET", "/api/v1/admin/prices",
-                                 session=admin.session).json() or {}).get("items", []),
-            "invitations": (self.call(check, "invitations-after-csrf", "GET",
-                                      "/api/v1/orgs/%s/invitations" % org,
-                                      session=owner.session).json() or {}).get("items", []),
+            "prices": snapshot_items("prices-after-csrf", "/api/v1/admin/prices", admin.session),
+            "invitations": snapshot_items("invitations-after-csrf", "/api/v1/orgs/%s/invitations" % org,
+                                           owner.session),
+            "opening_codes": snapshot_items("opening-codes-after-csrf", "/api/v1/admin/activation-codes",
+                                             admin.session),
+            "applications": snapshot_items("applications-after-csrf",
+                                            "/api/v1/orgs/%s/join-requests?status=pending" % org_b,
+                                            self.actor("b-owner").session),
+            "enterprises": snapshot_items("enterprises-after-csrf",
+                                           "/api/v1/admin/organizations?type=enterprise&limit=100",
+                                           admin.session),
+            "disabled_user_status": self.lab.psql_lines(
+                "SELECT status FROM users WHERE id=%s" % self.actor("a-disabled").user_id),
+            "csrf_created_user_count": self.lab.psql_lines(
+                "SELECT count(*) FROM users WHERE email='%s'" % csrf_created_user_email),
+            "password_actor_auth_version": self.lab.psql_lines(
+                "SELECT auth_version FROM users WHERE id=%s" % invitee.user_id),
         }
         for key in before:
             check.require(before[key] == after[key],
@@ -1935,7 +2249,8 @@ class Matrix:
         check.note("%d 个 unsafe 路由 × (缺 CSRF, 错 CSRF) 全部 403，且成员/Key/资金/价格/邀请无变化" % len(unsafe))
         # 反向：同一个 session 带正确 CSRF 时必须成功（否则上面的 403 可能只是路由坏了）。
         ok = self.call(check, "csrf-correct-control", "POST", "/api/v1/orgs/%s/invitations" % org,
-                       body={"email": "csrf-ok@t10.test", "role": "member"}, session=owner.session,
+                       body={"email": "csrf-ok@t10.test", "role": "member",
+                             "monthly_limit_micro": "100000000"}, session=owner.session,
                        csrf=owner.session["csrf"])
         check.require_status(ok, 201, label="正确 CSRF 必须成功")
 
@@ -2023,52 +2338,106 @@ class Matrix:
     # -- SEC-12 ------------------------------------------------------------
     def sec12(self, check):
         org = self.fx.orgs["A"]
-        viewer = self.actor("a-viewer")
+        member = self.actor("a-member3")
+        admin = self.actor("a-admin")
         month = datetime.now(timezone.utc).strftime("%Y-%m")
         writes = [
             ("invite", "POST", "/api/v1/orgs/%s/invitations" % org,
-             {"email": "viewer-write@t10.test", "role": "member"}),
+             {"email": "member-write@t10.test", "role": "member", "monthly_limit_micro": "100000000"}),
             ("change-role", "PATCH", "/api/v1/orgs/%s/members/%s" % (org, self.actor("a-member").user_id),
              {"role": "admin"}),
             ("remove-member", "DELETE", "/api/v1/orgs/%s/members/%s" % (org, self.actor("a-member").user_id), None),
             ("owner-transfer", "POST", "/api/v1/orgs/%s/owner-transfer" % org,
-             {"user": viewer.user_id}),
-            ("create-key", "POST", "/api/v1/orgs/%s/keys" % org, {}),
-            ("revoke-key", "POST", "/api/v1/orgs/%s/keys/%s/revoke" % (org, self.fx.keys["a-member"]["key_id"]), None),
+             {"user": member.user_id}),
             ("create-price", "POST", "/api/v1/admin/prices",
              {"model": "default", "currency": "CNY", "input_price_micro_per_million": "1",
-              "output_price_micro_per_million": "1", "effective_at": "2026-01-01T00:00:00Z"}),
+              "output_price_micro_per_million": "1", "effective_at": self.fx.prices["default"]["v1_effective_at"]}),
             ("adjust", "POST", "/api/v1/admin/billing/accounts/%s/adjustments" % org,
-             {"amount_micro": "1", "direction": "credit", "reason": "viewer probe"}),
+             {"type": "recharge", "amount_micro": "1", "payment_reference": "t10-member-probe",
+              "reason": "member probe"}),
             ("resolve-exception", "POST", "/api/v1/admin/billing/exceptions/99999999/resolution",
-             {"decision": "dismiss", "reason": "viewer probe"}),
+             {"decision": "dismiss", "reason": "member probe"}),
             ("admin-users", "POST", "/api/v1/admin/users",
-             {"email": "viewer-admin@t10.test", "password": secrets.token_urlsafe(12)}),
+             {"email": "member-admin@t10.test", "password": secrets.token_urlsafe(12)}),
         ]
         for label, method, path, body in writes:
-            extra = {"Idempotency-Key": "t10-viewer-%s" % label} if label == "adjust" else None
-            response = self.call(check, "viewer-write-" + label, method, path, body=body,
-                                 session=viewer.session, extra_headers=extra)
-            check.require_status(response, 403, "forbidden", label="billing_viewer 写 " + label)
-        # 审计列表对 viewer 也不可见（manage_members 权限）。
-        audit = self.call(check, "viewer-audit", "GET", "/api/v1/orgs/%s/audit" % org,
-                          session=viewer.session)
-        check.require_status(audit, 403, "forbidden", label="billing_viewer 读审计")
-        # 只读面必须可用：账号/流水/报表/异常/组织用量。
+            extra = {"Idempotency-Key": "t10-member-%s" % label} if label == "adjust" else None
+            response = self.call(check, "member-write-" + label, method, path, body=body,
+                                 session=member.session, extra_headers=extra)
+            check.require_status(response, 403, "forbidden", label="普通 member 写 " + label)
+
+        audit = self.call(check, "member-audit", "GET", "/api/v1/orgs/%s/audit" % org,
+                          session=member.session)
+        check.require_status(audit, 403, "forbidden", label="普通 member 读审计")
+
+        # Members may read their own usage/quota, but cannot widen the scope to another user.
+        usage = self.call(check, "member-own-usage", "GET", "/api/v1/orgs/%s/usage?limit=10" % org,
+                          session=member.session)
+        check.require_status(usage, 200, label="普通 member 读本人用量")
+        check.require((usage.json() or {}).get("scope") == "self",
+                      "member usage scope=%r（期望 self）" % (usage.json() or {}).get("scope"))
+        own_usage = self.call(check, "member-filter-own-usage", "GET",
+                              "/api/v1/orgs/%s/usage?user=%s" % (org, member.user_id),
+                              session=member.session)
+        check.require_status(own_usage, 200, label="普通 member 显式查询本人用量")
+        other_usage = self.call(check, "member-filter-other-usage", "GET",
+                                "/api/v1/orgs/%s/usage?user=%s" % (org, self.actor("a-member").user_id),
+                                session=member.session)
+        check.require_status(other_usage, 403, "forbidden", label="普通 member 不能读取他人用量")
+        quota = self.call(check, "member-own-quota", "GET", "/api/v1/orgs/%s/quota?month=%s" % (org, month),
+                          session=member.session)
+        check.require_status(quota, 200, label="普通 member 读本人额度")
+
+        # Enterprise account/ledger/reporting data is limited to owner/admin.
         reads = [
             ("account", "/api/v1/orgs/%s/billing/account" % org),
             ("entries", "/api/v1/orgs/%s/billing/entries?limit=10" % org),
             ("statements", "/api/v1/orgs/%s/billing/statements?month=%s" % (org, month)),
             ("exceptions", "/api/v1/orgs/%s/billing/exceptions" % org),
-            ("usage", "/api/v1/orgs/%s/usage?limit=10" % org),
         ]
         for label, path in reads:
-            response = self.call(check, "viewer-read-" + label, "GET", path, session=viewer.session)
-            check.require_status(response, 200, label="billing_viewer 读 " + label)
-        usage = self.call(check, "viewer-usage-scope", "GET", "/api/v1/orgs/%s/usage?limit=5" % org,
-                          session=viewer.session)
-        check.require((usage.json() or {}).get("scope") == "organization",
-                      "billing_viewer 的 usage scope=%r（期望 organization）" % (usage.json() or {}).get("scope"))
+            response = self.call(check, "member-read-org-" + label, "GET", path, session=member.session)
+            check.require_status(response, 403, "forbidden", label="普通 member 不能读企业 " + label)
+        admin_account = self.call(check, "admin-read-org-account", "GET",
+                                  "/api/v1/orgs/%s/billing/account" % org, session=admin.session)
+        check.require_status(admin_account, 200, label="企业 admin 可以读企业账户汇总")
+        admin_usage = self.call(check, "admin-read-org-usage", "GET",
+                                "/api/v1/orgs/%s/usage?limit=10" % org, session=admin.session)
+        check.require_status(admin_usage, 200, label="企业 admin 可以读企业成员用量汇总")
+        check.require((admin_usage.json() or {}).get("scope") == "organization",
+                      "admin usage scope=%r（期望 organization）" % (admin_usage.json() or {}).get("scope"))
+
+        # A member and an admin can manage their own named keys only. Neither can
+        # enumerate, create, or revoke another member's key by supplying its user id.
+        for actor in (member, admin):
+            own_keys = self.org_key_snapshot(check, org, actor.session, actor.name + "-own")
+            expected_key_name = "a-member3" if actor.name == "a-member3" else "a-admin"
+            check.require(self.fx.keys[expected_key_name]["key_id"] in
+                          {item.get("key_id") for item in own_keys},
+                          "%s 看不到自己的 active Key：%r" % (actor.name, own_keys))
+            check.require(all(item.get("owner_user_id") == actor.user_id and item.get("name")
+                              for item in own_keys),
+                          "%s 的 Key 列表不是仅含本人命名 Key：%r" % (actor.name, own_keys))
+            check.require(self.fx.keys["a-member"]["key_id"] not in
+                          {item.get("key_id") for item in own_keys},
+                          "%s 看到了普通成员的 Key" % actor.name)
+            listed = self.call(check, actor.name + "-list-other-keys", "GET",
+                               "/api/v1/orgs/%s/keys?owner_user_id=%s" % (org, self.actor("a-member").user_id),
+                               session=actor.session)
+            check.require_status(listed, 404, "not_found", label="%s 不能枚举其他成员 Key" % actor.name)
+            created = self.call(check, actor.name + "-create-other-key", "POST",
+                                "/api/v1/orgs/%s/keys" % org,
+                                body={"name": "t10-forbidden-other-key", "owner_user_id": self.actor("a-member").user_id},
+                                session=actor.session)
+            check.require_status(created, 404, "not_found", label="%s 不能代建其他成员 Key" % actor.name)
+            revoked = self.call(check, actor.name + "-revoke-other-key", "POST",
+                                "/api/v1/orgs/%s/keys/%s/revoke" % (org, self.fx.keys["a-member"]["key_id"]),
+                                session=actor.session)
+            check.require_status(revoked, 404, "not_found", label="%s 不能撤销其他成员 Key" % actor.name)
+
+        missing_name = self.call(check, "member-create-key-without-name", "POST",
+                                 "/api/v1/orgs/%s/keys" % org, body={}, session=member.session)
+        check.require_status(missing_name, 400, "invalid_request", label="Key 创建必须提供名称")
 
     # -- SEC-13 ------------------------------------------------------------
     def sec13(self, check):
@@ -2076,6 +2445,10 @@ class Matrix:
         admin_routes = [
             ("admin-users", "POST", "/api/v1/admin/users",
              {"email": "x@t10.test", "password": secrets.token_urlsafe(12)}),
+            ("admin-organizations", "POST", "/api/v1/admin/organizations",
+             {"name": "t10-forbidden-enterprise", "owner_email": self.actor("a-owner").email}),
+            ("admin-opening-codes", "POST", "/api/v1/admin/activation-codes",
+             {"enterprise_name": "t10-forbidden-opening"}),
             ("admin-user-status", "POST", "/api/v1/admin/users/%s/status" % self.actor("a-member").user_id,
              {"status": "active"}),
             ("admin-prices-get", "GET", "/api/v1/admin/prices", None),
@@ -2083,11 +2456,12 @@ class Matrix:
              {"model": "default", "currency": "CNY", "input_price_micro_per_million": "1",
               "output_price_micro_per_million": "1", "effective_at": "2026-01-01T00:00:00Z"}),
             ("admin-adjustments", "POST", "/api/v1/admin/billing/accounts/%s/adjustments" % org,
-             {"amount_micro": "1", "direction": "credit", "reason": "sec13 probe"}),
+             {"type": "recharge", "amount_micro": "1", "payment_reference": "t10-sec13-probe",
+              "reason": "sec13 probe"}),
             ("admin-exception-resolution", "POST", "/api/v1/admin/billing/exceptions/99999999/resolution",
              {"decision": "dismiss", "reason": "sec13 probe"}),
         ]
-        for name in ("a-owner", "a-admin", "a-member", "a-viewer"):
+        for name in ("a-owner", "a-admin", "a-member", "a-member3"):
             actor = self.actor(name)
             for label, method, path, body in admin_routes:
                 extra = {"Idempotency-Key": "t10-sec13"} if label == "admin-adjustments" else None
@@ -2114,14 +2488,15 @@ class Matrix:
         """Gateway 凭据矩阵：归属由 Key 决定，客户端不能改写租户。"""
         org_a = self.fx.orgs["A"]
         member_key = self.fx.keys["a-member"]["secret"]
-        viewer_key = self.fx.keys["a-viewer"]["secret"]
+        member3 = self.actor("a-member3")
+        member3_key = self.fx.keys["a-member3"]["secret"]
         b_key = self.fx.keys["b-member"]["secret"]
         allowed = sse_request(self.lab, member_key, timeout=30, request_id="t10-sec14-member")
         check.require(allowed["status"] == 200 and allowed["done"] is not None,
                       "member Key 应放行，实际 %s" % allowed["status"])
-        viewer = sse_request(self.lab, viewer_key, timeout=30, request_id="t10-sec14-viewer")
-        check.require(viewer["status"] == 403,
-                      "billing_viewer 的 Key 期望 403，实际 %s" % viewer["status"])
+        member3_result = sse_request(self.lab, member3_key, timeout=30, request_id="t10-sec14-member3")
+        check.require(member3_result["status"] == 200 and member3_result["done"] is not None,
+                      "普通 member 的命名 Key 应能调用，实际 %s" % member3_result["status"])
         cross = sse_request(self.lab, b_key, timeout=30, request_id="t10-sec14-crossorg",
                             extra_headers={"X-Organization-ID": org_a, "X-Org-ID": org_a,
                                            "X-Tenant-ID": "org:%s" % org_a,
@@ -2131,11 +2506,22 @@ class Matrix:
         # 归属必须是 Key 的 org，而不是请求头里的 org：计量行核对。
         time.sleep(2)
         rows = self.lab.psql_lines(
-            "SELECT org_id, count(*) FROM metering_events WHERE key_id='%s' GROUP BY org_id"
+            "SELECT org_id, user_id, count(*) FROM metering_events WHERE key_id='%s' GROUP BY org_id, user_id"
             % self.fx.keys["b-member"]["key_id"])
-        check.require(all(row.startswith(self.fx.orgs["B"] + "|") for row in rows),
-                      "B 的 Key 的计量行归属被请求头改写: %r" % rows)
-        check.note("伪造 X-Organization-ID/X-Tenant-ID 未改变归属（metering_events.org_id=B）")
+        check.require(bool(rows) and all(row.startswith(self.fx.orgs["B"] + "|" + self.actor("b-member").user_id + "|")
+                                         for row in rows),
+                      "伪造请求头改写了 B Key 的 organization/user 计量归属: %r" % rows)
+        metadata = self.lab.psql_lines(
+            "SELECT k.org_id, k.owner_user_id, k.membership_id, m.user_id, m.status, k.name "
+            "FROM api_keys k JOIN memberships m ON m.id=k.membership_id AND m.org_id=k.org_id "
+            "WHERE k.key_id='%s'" % self.fx.keys["b-member"]["key_id"])
+        expected = [self.fx.orgs["B"], self.actor("b-member").user_id,
+                    self.fx.keys["b-member"]["membership_id"], self.actor("b-member").user_id,
+                    "active", self.fx.keys["b-member"]["name"]]
+        check.require(metadata == ["|".join(expected)],
+                      "B Key 的 membership/user/name 绑定错误：%r" % metadata)
+        check.require(member3.name == "a-member3", "普通 member Key 测试 actor 不正确")
+        check.note("伪造 X-Organization-ID/X-Tenant-ID/X-User-ID 未改写 B Key 归属；Key 元数据固定到 B member 当前 membership")
 
     # -- SEC-15 ------------------------------------------------------------
     def sec15(self, check):
@@ -2151,19 +2537,27 @@ class Matrix:
             if value:
                 provenance.append((value, patterns, kind))
 
+        for token in self.fx.session_tokens:
+            allow(token, set(), "session token")
+        # Registration/login responses carry a CSRF token; /me echoes the
+        # current session's token for the SPA's double-submit header.
+        for csrf in self.fx.csrf_tokens:
+            allow(csrf, {("POST", "/api/v1/auth/register"), ("POST", "/api/v1/auth/login"),
+                         ("GET", "/api/v1/me")}, "csrf token")
         for name, actor in self.fx.actors.items():
-            if actor.session:
-                allow(actor.session["token"], set(), "session token")
-                # /api/v1/me 按设计返回本 session 的 csrf_token（SPA 通过它取双提交
-                # 值）；除此之外只在登录响应里出现。
-                allow(actor.session["csrf"],
-                      {("POST", "/api/v1/auth/login"), ("GET", "/api/v1/me")}, "csrf token")
             allow(actor.password, set(), "password")
+        for password in self.fx.extra_passwords:
+            allow(password, set(), "password")
         for name, entry in self.fx.keys.items():
             allow(entry["secret"], {("POST", "/keys")}, "key secret")
         for name, entry in self.fx.invitations.items():
             allow(entry["token"], {("POST", "/invitations")}, "invitation token")
+        for name, entry in self.fx.opening_codes.items():
+            allow(entry["code"], {("POST", "/api/v1/admin/activation-codes")}, "enterprise opening code")
         allow(open(self.lab.cfg["admin_password_file"]).read().strip(), set(), "platform admin password")
+        for name, value in self.lab.cfg.get("tokens", {}).items():
+            allow(value, set(), name + " admin token")
+        allow(self.lab.cfg.get("provider_secret", ""), set(), "provider credential secret")
 
         leaks = []
         allowed_hits = 0
@@ -2191,16 +2585,36 @@ class Matrix:
                 if value and value in text:
                     log_leaks.append("%s 出现在日志 %s" % (kind, os.path.basename(path)))
 
+        evidence_leaks = []
+        evidence_files = 0
+        for directory, _subdirs, filenames in os.walk(self.lab.evidence_dir):
+            for filename in filenames:
+                path = os.path.join(directory, filename)
+                try:
+                    if os.path.getsize(path) > 64 * 1024 * 1024:
+                        continue
+                    with open(path, "rb") as handle:
+                        content = handle.read()
+                except OSError:
+                    continue
+                evidence_files += 1
+                for value, _patterns, kind in provenance:
+                    if value and value.encode("utf-8") in content:
+                        evidence_leaks.append("%s 出现在 evidence %s" % (
+                            kind, os.path.relpath(path, self.lab.evidence_dir)))
+
         check.detail("responses_scanned", len(self.client.records))
         check.detail("logs_scanned", len(log_files))
+        check.detail("evidence_files_scanned", evidence_files)
         check.detail("secret_values_tracked", len(provenance))
         check.detail("allowed_single_occurrences", allowed_hits)
         check.require(not leaks, "响应泄密: " + "; ".join(sorted(set(leaks))[:6]))
         check.require(not log_leaks, "日志泄密: " + "; ".join(sorted(set(log_leaks))[:6]))
+        check.require(not evidence_leaks, "Evidence 泄密: " + "; ".join(sorted(set(evidence_leaks))[:6]))
         check.require(allowed_hits > 0,
                       "没有任何 secret 出现在创建响应里（fixture 可能没跑）")
-        check.note("%d 个响应 + %d 个进程日志：%d 个 secret 值只在其创建响应里出现 %d 次，其余零出现"
-                   % (len(self.client.records), len(log_files), len(provenance), allowed_hits))
+        check.note("%d 个响应、%d 个进程日志、%d 个 evidence 文件：%d 个 secret 值只在其创建响应里出现 %d 次，其余零出现"
+                   % (len(self.client.records), len(log_files), evidence_files, len(provenance), allowed_hits))
 
 
 # ---------------------------------------------------------------------------
@@ -2414,22 +2828,39 @@ class FailurePhases:
         # 先证明两把 Key 都可用。
         before = sse_request(self.lab, revoke_key["secret"], timeout=30, request_id="t10-ctrl04-before")
         check.require(before["status"] == 200, "撤销前目标 Key 应可用，实际 %s" % before["status"])
-        # 撤销（Console → Control → 快照）并等待传播（目标 ≤5s）。
-        started = time.time()
+        # Measure the real end-to-end budget from before the revoke HTTP request
+        # until a fresh request receives 401. Probe with a one-token stream so an
+        # accepted response cannot hide the admission decision behind a long drain.
+        revoke_started = time.monotonic()
         response = self.matrix.call(check, "revoke-owner-key", "POST",
                                     "/api/v1/orgs/%s/keys/%s/revoke" % (org, revoke_key["key_id"]),
                                     session=owner.session)
         check.require_status(response, 200, label="撤销 Key")
+        revoke_acknowledged = time.monotonic()
         revocation_propagation = None
-        deadline = time.time() + 15
-        while time.time() < deadline:
-            probe = sse_request(self.lab, revoke_key["secret"], timeout=20, request_id="t10-ctrl04-revoked")
+        post_ack_propagation = None
+        revoke_probe_body = {"model": "t10-model", "messages": [{"role": "user", "content": "hi"}],
+                             "stream": True, "x_mock_ttft_ms": 1,
+                             "x_mock_token_interval_ms": 1, "x_mock_tokens": 1}
+        deadline = revoke_started + 5.0
+        probe_index = 0
+        probe = None
+        while time.monotonic() < deadline:
+            probe_index += 1
+            probe = sse_request(self.lab, revoke_key["secret"], body=revoke_probe_body,
+                                timeout=max(0.1, min(2.0, deadline - time.monotonic())),
+                                request_id="t10-ctrl04-revoked-%d" % probe_index)
+            observed = time.monotonic()
             if probe["status"] == 401:
-                revocation_propagation = time.time() - started
+                revocation_propagation = observed - revoke_started
+                post_ack_propagation = observed - revoke_acknowledged
                 break
-            time.sleep(0.3)
-        check.require(revocation_propagation is not None,
-                      "撤销后 15s 内 Key 仍可用（超过 5s 目标）")
+            remaining = deadline - observed
+            if remaining > 0:
+                time.sleep(min(0.2, remaining))
+        check.require(revocation_propagation is not None and revocation_propagation <= 5.0,
+                      "撤销提交开始后 5s 内新请求未收到 401：elapsed=%r last_status=%r" %
+                      (revocation_propagation, (probe or {}).get("status")))
         revoke_status, revoke_view = self.lab.control_json("/gateways")
         check.require(revoke_status == 200, "撤销后 /gateways 不可读")
         # 停 Control：租约到期后所有本地 Key 被撤销，新请求 fail-closed。
@@ -2465,10 +2896,15 @@ class FailurePhases:
         resurrected = sse_request(self.lab, revoke_key["secret"], timeout=20, request_id="t10-ctrl04-resurrect")
         check.require(resurrected["status"] == 401,
                       "Control 重启后已撤销的 Key 被复活了（status=%s）" % resurrected["status"])
-        check.detail("revocation_propagation_seconds", round(revocation_propagation, 3))
+        check.detail("revocation_timing_seconds", {
+            "request_to_first_refusal": round(revocation_propagation, 3),
+            "revoke_http": round(revoke_acknowledged - revoke_started, 3),
+            "post_ack_to_first_refusal": round(post_ack_propagation, 3),
+        })
         check.detail("view_after_control_restart", view)
-        check.note("撤销传播 %.3fs；Control 停机+租约到期 401；重启后合法 Key 200、已撤销 Key 仍 401"
-                   % revocation_propagation)
+        check.note("撤销请求发出后 %.3fs 内首个新请求收到 401（HTTP 请求 %.3fs，响应后传播 %.3fs）；"
+                   "Control 停机+租约到期 401；重启后合法 Key 200、已撤销 Key 仍 401"
+                   % (revocation_propagation, revoke_acknowledged - revoke_started, post_ack_propagation))
 
 
 # ---------------------------------------------------------------------------
@@ -2614,11 +3050,17 @@ class LongStreamPhases:
         member = self.fx.actors["a-member"]
         # 一把专用 Key：本轮结束时会被撤销。
         response = self.matrix.call(check, "create-revocation-key", "POST", "/api/v1/orgs/%s/keys" % org,
-                                    body={}, session=member.session)
+                                    body={"name": "t10-revoke-inflight"}, session=member.session)
         check.require_status(response, 201, label="创建撤销靶子 Key")
         payload = response.json() or {}
         key = {"secret": payload.get("secret", ""), "key_id": payload["key"]["key_id"]}
         RED.add(key["secret"])
+        self.fx.keys["rev02-revocation"] = {
+            "secret": key["secret"], "key_id": key["key_id"],
+            "prefix": payload["key"].get("prefix", ""),
+            "owner_user_id": payload["key"].get("owner_user_id"),
+            "name": payload["key"].get("name", "t10-revoke-inflight"),
+        }
         slow_body = {"model": "t10-model", "messages": [{"role": "user", "content": "hi"}], "stream": True,
                      "x_mock_ttft_ms": 300, "x_mock_token_interval_ms": 500, "x_mock_tokens": 14}
         holder = {}
@@ -2630,29 +3072,51 @@ class LongStreamPhases:
         thread = threading.Thread(target=run_stream)
         thread.start()
         time.sleep(1.2)
-        started = time.time()
+        revoke_started = time.monotonic()
         revoke = self.matrix.call(check, "revoke-midflight", "POST",
                                   "/api/v1/orgs/%s/keys/%s/revoke" % (org, key["key_id"]),
                                   session=member.session)
         check.require_status(revoke, 200, label="长流期间撤销 Key")
+        revoke_acknowledged = time.monotonic()
+        propagation = None
+        post_ack_propagation = None
+        revoke_probe_body = {"model": "t10-model", "messages": [{"role": "user", "content": "hi"}],
+                             "stream": True, "x_mock_ttft_ms": 1,
+                             "x_mock_token_interval_ms": 1, "x_mock_tokens": 1}
+        deadline = revoke_started + 5.0
+        probe_index = 0
+        probe = None
+        while time.monotonic() < deadline:
+            probe_index += 1
+            probe = sse_request(self.lab, key["secret"], body=revoke_probe_body,
+                                timeout=max(0.1, min(2.0, deadline - time.monotonic())),
+                                request_id="t10-rev02-after-%d" % probe_index)
+            observed = time.monotonic()
+            if probe["status"] == 401:
+                propagation = observed - revoke_started
+                post_ack_propagation = observed - revoke_acknowledged
+                break
+            remaining = deadline - observed
+            if remaining > 0:
+                time.sleep(min(0.2, remaining))
         thread.join(timeout=90)
+        check.require(not thread.is_alive(), "撤销后的在途流线程在 90s 内没有结束")
         result = holder.get("result") or {}
         check.require(result.get("status") == 200 and result.get("done") is not None,
                       "撤销打断了在途流: status=%s done=%s" % (result.get("status"), result.get("done")))
-        propagation = None
-        deadline = time.time() + 15
-        probe = None
-        while time.time() < deadline:
-            probe = sse_request(self.lab, key["secret"], timeout=20, request_id="t10-rev02-after")
-            if probe["status"] == 401:
-                propagation = time.time() - started
-                break
-            time.sleep(0.2)
-        check.require(propagation is not None,
-                      "撤销后 15s 内新请求仍未被拒（最后 status=%s）" % (probe or {}).get("status"))
-        check.detail("propagation_seconds", round(propagation, 3))
-        check.note("撤销在 %.3fs 内对新请求生效（目标 ≤5s），在途流排水完成（%.2fs）"
-                   % (propagation, result.get("total") or 0))
+        check.require(propagation is not None and propagation <= 5.0,
+                      "撤销提交开始后 5s 内新请求未收到 401：elapsed=%r last_status=%r" %
+                      (propagation, (probe or {}).get("status")))
+        check.detail("revocation_timing_seconds", {
+            "request_to_first_refusal": round(propagation, 3),
+            "revoke_http": round(revoke_acknowledged - revoke_started, 3),
+            "post_ack_to_first_refusal": round(post_ack_propagation, 3),
+            "inflight_drain": round(result.get("total") or 0, 3),
+        })
+        check.note("撤销请求发出后 %.3fs 内首个新请求收到 401（HTTP 请求 %.3fs，响应后传播 %.3fs）；"
+                   "在途流排水完成（%.2fs）"
+                   % (propagation, revoke_acknowledged - revoke_started, post_ack_propagation,
+                      result.get("total") or 0))
         self.revoked_key = key
 
     def rev03(self, check):
@@ -2663,28 +3127,45 @@ class LongStreamPhases:
         password = secrets.token_urlsafe(18)
         RED.add(password)
         admin = self.fx.actors["platform-admin"]
-        created = self.client.call(check, "rev03-create-user", "POST", "/api/v1/admin/users",
+        created = self.client.call(check, "rev03-register-user", "POST", "/api/v1/auth/register",
                                    base_url=self.lab.urls["console"],
-                                   body={"email": email, "password": password}, session=admin.session)
-        check.require_status(created, 201, label="REV-03 建用户")
-        user_id = str((created.json() or {}).get("id", ""))
+                                   body={"email": email, "password": password}, csrf=None)
+        check.require_status(created, 201, label="REV-03 用户自助注册")
+        registered = created.json() or {}
+        registered_cookies = cookies_of(created)
+        registration_token = registered_cookies.get("gw_session", "")
+        registration_csrf = registered_cookies.get("gw_csrf") or registered.get("csrf_token", "")
+        RED.add(registration_token)
+        RED.add(registration_csrf)
+        self.fx.session_tokens.append(registration_token)
+        self.fx.csrf_tokens.append(registration_csrf)
+        user_id = str((registered.get("user") or {}).get("id", ""))
         actor = Actor("rev03", email, password, user_id, None)
+        self.fx.actors["rev03"] = actor
         invite = self.client.call(check, "rev03-invite", "POST", "/api/v1/orgs/%s/invitations" % org,
                                   base_url=self.lab.urls["console"],
-                                  body={"email": email, "role": "member"},
+                                  body={"email": email, "role": "member", "monthly_limit_micro": "100000000"},
                                   session=self.fx.actors["a-owner"].session)
         check.require_status(invite, 201, label="REV-03 邀请")
         token = (invite.json() or {}).get("token", "")
         RED.add(token)
+        self.fx.invitations["rev03"] = {"token": token, "email": email, "user_id": user_id}
         self.fx.login(check, actor, label="rev03-login")
         accept = self.client.call(check, "rev03-accept", "POST", "/api/v1/invitations/%s/accept" % token,
                                   base_url=self.lab.urls["console"], body={}, session=actor.session)
         check.require_status(accept, 200, label="REV-03 接受邀请")
         key_response = self.client.call(check, "rev03-key", "POST", "/api/v1/orgs/%s/keys" % org,
-                                        base_url=self.lab.urls["console"], body={}, session=actor.session)
+                                        base_url=self.lab.urls["console"],
+                                        body={"name": "t10-rev03-drain"}, session=actor.session)
         check.require_status(key_response, 201, label="REV-03 建 Key")
-        key = (key_response.json() or {}).get("secret", "")
+        key_payload = key_response.json() or {}
+        key = key_payload.get("secret", "")
         RED.add(key)
+        key_metadata = key_payload.get("key") or {}
+        self.fx.keys["rev03"] = {"secret": key, "key_id": key_metadata.get("key_id", ""),
+                                  "prefix": key_metadata.get("prefix", ""),
+                                  "owner_user_id": key_metadata.get("owner_user_id"),
+                                  "name": key_metadata.get("name", "t10-rev03-drain")}
         # 等快照带上这把 Key，避免把传播延迟误判成失败。
         deadline = time.time() + 20
         while time.time() < deadline:
@@ -2820,16 +3301,21 @@ class IsolationPhases:
         org = self.fx.orgs["A"]
         month = datetime.now(timezone.utc).strftime("%Y-%m")
         # 只发**有权限**的读请求：否则 403/404 会把"报表负载"变成负向矩阵。
-        endpoints = [
-            "/api/v1/orgs/%s/usage?limit=100" % org,
-            "/api/v1/orgs/%s/usage?limit=100&user=%s" % (org, self.fx.actors["a-member"].user_id),
-            "/api/v1/orgs/%s/billing/entries?limit=100" % org,
-            "/api/v1/orgs/%s/billing/account" % org,
-            "/api/v1/orgs/%s/billing/statements?month=%s" % (org, month),
-            "/api/v1/orgs/%s/billing/exceptions" % org,
-        ]
         if role in ("owner", "admin"):
+            endpoints = [
+                "/api/v1/orgs/%s/usage?limit=100" % org,
+                "/api/v1/orgs/%s/usage?limit=100&user=%s" % (org, self.fx.actors["a-member"].user_id),
+                "/api/v1/orgs/%s/billing/entries?limit=100" % org,
+                "/api/v1/orgs/%s/billing/account" % org,
+                "/api/v1/orgs/%s/billing/statements?month=%s" % (org, month),
+                "/api/v1/orgs/%s/billing/exceptions" % org,
+            ]
             endpoints.append("/api/v1/orgs/%s/audit?limit=100" % org)
+        else:
+            endpoints = [
+                "/api/v1/orgs/%s/usage?limit=100" % org,
+                "/api/v1/orgs/%s/quota?month=%s" % (org, month),
+            ]
         if role == "admin":
             endpoints.append("/api/v1/orgs/%s/keys" % org)
         index = 0
@@ -2849,7 +3335,7 @@ class IsolationPhases:
 
     def iso01(self, check):
         # 先把组织 RPM 提到与隔离性实验无关的高位：否则 96 个请求会先撞上
-        # 动态限流（429），把"Console 与 Gateway 的资源隔离"变成"限流实验"。
+        # 动态限流（429），把"Console 报表负载下的 Gateway 观察"变成"限流实验"。
         self.lab.control_json("/config", method="POST", payload={
             "org_policies": {self.fx.orgs["A"]: {"requests_per_minute": 60000, "burst": 6000}}})
         time.sleep(2.0)
@@ -2863,13 +3349,19 @@ class IsolationPhases:
         result = run.run()
         summary = report_summary(result["report"])
         check.detail("baseline", summary)
+        check.require(result["exit_code"] == 0,
+                      "基线 loadtest 进程退出码非零：%s" % result["exit_code"])
         check.require(summary["completed"] == summary["scheduled"] and summary["scheduled"] == 96,
                       "基线轮次未全部完成（存在 429/拒绝）: %r" % summary)
         check.require((summary["incomplete"] or 0) == 0, "基线轮次出现 incomplete: %r" % summary)
+        for field in ("rejected", "transport_error", "cancelled", "parse_error", "loadgen_dropped"):
+            check.require((summary[field] or 0) == 0,
+                          "基线 loadtest 有 %s=%r: %r" % (field, summary[field], summary))
+        baseline_p95 = (summary["first_content"] or {}).get("p95_ms")
+        check.require(baseline_p95 is not None, "基线缺少 first_content p95 样本")
         self.baseline = summary
-        check.note("基线：%s/%s 完成，first_content p95=%sms，无 incomplete，status=%s" % (
-            summary["completed"], summary["scheduled"],
-            (summary["first_content"] or {}).get("p95_ms"), summary["status"]))
+        check.note("基线观察：%s/%s 完成，first_content p95=%sms，无错误/不完整请求；status=%s" % (
+            summary["completed"], summary["scheduled"], baseline_p95, summary["status"]))
 
     def iso02(self, check):
         # 造压数据：只写 metering_events 与 console_audit_events（两者都不在
@@ -2886,14 +3378,15 @@ class IsolationPhases:
         # ORG RPM 已在 ISO-01 提到高位（同一个 lab），这里只确保它仍然生效。
         owner = self.fx.actors["a-owner"]
         roles = [("owner", owner.session), ("admin", self.fx.actors["a-admin"].session),
-                 ("viewer", self.fx.actors["a-viewer"].session)]
+                 ("member", self.fx.actors["a-member3"].session)]
         results = []
         stop_event = threading.Event()
         deadline = time.time() + 45
+        worker_count = 40
         threads = [threading.Thread(target=self.console_worker,
                                     args=(roles[i % len(roles)][1], roles[i % len(roles)][0],
                                           deadline, results, stop_event))
-                   for i in range(40)]
+                   for i in range(worker_count)]
         for thread in threads:
             thread.start()
         time.sleep(2.0)
@@ -2908,6 +3401,8 @@ class IsolationPhases:
         stop_event.set()
         for thread in threads:
             thread.join(timeout=60)
+        check.require(all(not thread.is_alive() for thread in threads),
+                      "Console 报表 worker 未在 60s 内停止")
         elapsed = [item["elapsed"] for item in results if item["status"] == 200]
         statuses = {}
         for item in results:
@@ -2921,6 +3416,13 @@ class IsolationPhases:
         check.detail("console_load", console_stats)
         check.detail("gateway_under_load", summary)
         check.detail("pg_samples", samples)
+        check.require(len(results) >= worker_count,
+                      "Console 报表负载不足：%d 个 worker 只返回 %d 次" % (worker_count, len(results)))
+        check.require(statuses.get(200, 0) >= worker_count and
+                      all(item["status"] == 200 for item in results),
+                      "Console 报表负载存在错误响应：%r" % statuses)
+        check.require(result["exit_code"] == 0,
+                      "Console 负载期间 Gateway loadtest 进程退出码非零：%s" % result["exit_code"])
         baseline = self.baseline
         base_p95 = (baseline["first_content"] or {}).get("p95_ms")
         load_p95 = (summary["first_content"] or {}).get("p95_ms")
@@ -2928,14 +3430,25 @@ class IsolationPhases:
                       "Console 压测期间 Gateway 流未全部完成: %r" % summary)
         check.require((summary["incomplete"] or 0) == 0,
                       "Console 压测期间出现 incomplete: %r" % summary)
+        for field in ("rejected", "transport_error", "cancelled", "parse_error", "loadgen_dropped"):
+            check.require((summary[field] or 0) == 0,
+                          "Console 压测期间 Gateway 有 %s=%r: %r" % (field, summary[field], summary))
+        check.require(base_p95 is not None and load_p95 is not None,
+                      "基线或 Console 报表负载轮次缺少 first_content p95 样本")
         check.detail("first_content_p95_ms", {"baseline": base_p95, "under_console_load": load_p95})
-        # 归因：Console 自己的池（t10-console）在采样里不应超过 10；Gateway 仍然能拿到连接。
+        # 这些是负载期间的连接数观察；按进程 application_name 分开检查各自的池上限。
         gateway_conns = [sample["by_application"].get("t10-gateway", 0) for sample in samples]
-        console_conns = [sample["by_application"].get("t10-console", 0) +
-                         sample["by_application"].get("t10-console-short", 0) for sample in samples]
-        check.detail("pg_connections", {"gateway": gateway_conns, "console": console_conns})
-        check.require(max(console_conns) <= 11,
-                      "Console 连接数超过硬编码池上限 10: %r" % console_conns)
+        console_main_conns = [sample["by_application"].get("t10-console", 0) for sample in samples]
+        console_short_conns = [sample["by_application"].get("t10-console-short", 0) for sample in samples]
+        console_conns = [main + short for main, short in zip(console_main_conns, console_short_conns)]
+        check.detail("pg_connections", {"gateway": gateway_conns, "console": console_conns,
+                                        "console_main": console_main_conns, "console_short": console_short_conns})
+        check.require(max(console_main_conns) > 0,
+                      "PG 采样没有观察到 t10-console application_name")
+        check.require(max(console_short_conns) <= 10,
+                      "Console short 实例连接数超过自身池上限 10: %r" % console_short_conns)
+        check.require(max(console_main_conns) <= 10,
+                      "Console 主实例连接数超过自身池上限 10: %r" % console_main_conns)
         check.require(max(gateway_conns) >= 1,
                       "压测期间 Gateway 没有拿到任何 PG 连接: %r" % gateway_conns)
         contention = {
@@ -2951,10 +3464,10 @@ class IsolationPhases:
             self.matrix.finding("共享 PG 争用可见：Console 压测下 Gateway first_content p95 从 %sms 升到 %sms "
                                 "（Console 自身 p95=%sms）——进程/连接池是隔离的，但 PG 是共享的"
                                 % (base_p95, load_p95, console_stats["p95_ms"]))
-        check.note("Console %d 次报表请求（status=%s，p95=%sms）；Gateway 96/96 完成，"
-                   "first_content p95 %sms→%sms；PG 连接 console≤%s gateway≥%s"
+        check.note("Console 报表负载观察：%d 次请求（status=%s，p95=%sms）；Gateway 96/96 无错误，"
+                   "first_content p95 基线/负载=%s/%sms（未设性能 SLO）；PG 采样连接 console=%s gateway=%s"
                    % (console_stats["requests"], statuses, console_stats["p95_ms"], base_p95, load_p95,
-                      max(console_conns), min(gateway_conns)))
+                      max(console_conns), max(gateway_conns)))
 
     def iso03(self, check):
         """Console 重启不能打断在途 Gateway 流。"""
@@ -3008,21 +3521,34 @@ class IsolationPhases:
                    % (restart_seconds, durations))
 
     def iso04(self, check):
-        """连接池归属：Console 池饱和时 Gateway 池仍独立可用（含共享 PG 事实）。"""
+        """报表负载期间按 application_name 观察 Console 与 Gateway 各自连接池。"""
         samples = self.isolation["pg_samples"]
+        check.require(bool(samples), "ISO-02 没有 PostgreSQL 连接池采样")
         gateway_max = max(sample["by_application"].get("t10-gateway", 0) for sample in samples)
+        console_main_max = max(sample["by_application"].get("t10-console", 0) for sample in samples)
+        console_short_max = max(sample["by_application"].get("t10-console-short", 0) for sample in samples)
         console_max = max(sample["by_application"].get("t10-console", 0) +
                           sample["by_application"].get("t10-console-short", 0) for sample in samples)
         total_max = max(sum(value for key, value in sample["by_application"].items()
                             if not key.startswith("<")) for sample in samples)
         check.detail("gateway_conns_max", gateway_max)
+        check.detail("console_main_conns_max", console_main_max)
+        check.detail("console_short_conns_max", console_short_max)
         check.detail("console_conns_max", console_max)
         check.detail("all_backends_max", total_max)
+        check.require(console_main_max > 0,
+                      "采样中没有观察到 t10-console application_name")
+        check.require(gateway_max > 0,
+                      "采样中没有观察到 t10-gateway application_name")
+        check.require(console_main_max <= 10,
+                      "Console 主实例连接数 %d 超过自身池上限 10" % console_main_max)
+        check.require(console_short_max <= 10,
+                      "Console short 实例连接数 %d 超过自身池上限 10" % console_short_max)
         check.require(gateway_max <= 16,
-                      "Gateway 连接数 %d 超过自己的两个池（8+8）" % gateway_max)
-        # 压测期间 Gateway 的 SSE 成功与延迟已经记录在 ISO-02；这里给出池归属结论。
-        check.note("Console 池上限 10（硬编码），Gateway 两个池各 8；采样中 console=%d、gateway=%d、"
-                   "全部后端=%d —— Console 饱和没有耗尽 Gateway 池" % (console_max, gateway_max, total_max))
+                      "Gateway 连接数 %d 超过自身两个池上限（8+8）" % gateway_max)
+        check.note("报表负载期间的连接池隔离观察：t10-console=%d/10、t10-console-short=%d/10、"
+                   "t10-gateway=%d/16、全部后端=%d；这些是观测上限检查，不代表池已饱和"
+                   % (console_main_max, console_short_max, gateway_max, total_max))
 
 
 # ---------------------------------------------------------------------------
@@ -3060,7 +3586,7 @@ def main():
     wanted = {"security", "control", "longstream", "isolation"} if phases == "all" else set(phases.split(","))
 
     lab = Lab(cfg)
-    client = Client(cfg["evidence_dir"], cfg["timeout_seconds"])
+    client = Client(cfg["evidence_dir"], cfg["timeout_seconds"], scratch_dir=cfg["secret_dir"])
     fx = Fixtures(lab, client)  # cid 默认 FIX（与恢复演练的 BFIX 区分）
     matrix = Matrix(lab, fx, client)
     extra = {}
@@ -3096,10 +3622,10 @@ def main():
         matrix.run("SEC-06", "跨组织读取枚举（orgs/users/keys/usage/audit/statements/exceptions）", matrix.sec06)
         matrix.run("SEC-07", "跨组织写入被拒且目标组织不变", matrix.sec07)
         matrix.run("SEC-08", "角色提权（member→admin、admin→owner、自升平台管理员）", matrix.sec08)
-        matrix.run("SEC-09", "每个 unsafe 路由的缺/错 CSRF + 无状态变更", matrix.sec09)
+        matrix.run("SEC-09", "列出的 unsafe 路由缺/错 CSRF + 无状态变更", matrix.sec09)
         matrix.run("SEC-10", "禁用用户 + 活跃 session（旧 session 立即失效）", matrix.sec10)
         matrix.run("SEC-11", "被移出成员 + 有效 Key（在途流排水、新请求 403）", matrix.sec11)
-        matrix.run("SEC-12", "billing_viewer 写操作全拒、只读面可用", matrix.sec12)
+        matrix.run("SEC-12", "普通 member 自有额度/用量及 Key 边界", matrix.sec12)
         matrix.run("SEC-13", "/api/v1/admin/* 非平台管理员全拒", matrix.sec13)
         matrix.run("SEC-14", "Gateway 凭据归属不可被请求头改写", matrix.sec14)
 
@@ -3121,9 +3647,10 @@ def main():
     if "isolation" in wanted:
         log("\n== 管理面/数据面隔离 ==")
         matrix.run("ISO-01", "Gateway SSE 基线（loadtest closed-loop）", isolation_phases.iso01)
-        matrix.run("ISO-02", "Console 报表压测下 Gateway SSE 不受影响", isolation_phases.iso02)
+        matrix.run("ISO-02", "Console 报表负载下 Gateway SSE 完成/错误/p95 实测", isolation_phases.iso02)
         matrix.run("ISO-03", "Console 重启不打断在途 Gateway 流", isolation_phases.iso03)
-        matrix.run("ISO-04", "Console 池饱和不等于 Gateway 池被耗尽", isolation_phases.iso04)
+        matrix.run("ISO-04", "报表负载下连接池隔离观察（按 application_name 和池上限）",
+                   isolation_phases.iso04)
 
     if "security" in wanted:
         log("\n== 全局泄密扫描 ==")
@@ -3165,10 +3692,11 @@ DRIVER_EOF
 
 t10_log "运行断言驱动（phases=${phases}）"
 set +e
-python3 "$driver_path" --lab "$T10_EVIDENCE_DIR/lab.json" 2>&1 | tee "$T10_LOG_DIR/driver.log"
+python3 "$driver_path" --lab "$private_lab_config" 2>&1 | tee "$T10_LOG_DIR/driver.log"
 driver_rc=${PIPESTATUS[0]}
 set -e
-rm -rf "$driver_dir"
+rm -rf -- "$driver_dir"
+driver_dir=""
 
 # 进程日志收尾：把 driver 之外的静态日志也放进 logs/（spawn 时已经直接写进去了）。
 if [[ "$keep_lab" == "1" ]]; then

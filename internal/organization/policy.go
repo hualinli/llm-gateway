@@ -14,16 +14,16 @@ import (
 // 也永远不会被 Allowed 授予任何组织操作。企业的 owner 与“个人组织创建者”
 // 语义一致，但判定只看 memberships，不看 organizations.owner_user_id。
 //
-//	操作                                member  billing_viewer  admin  owner
-//	use_model                             ✓          —            ✓      ✓
-//	manage_own_keys                       ✓          —            ✓      ✓
-//	view_own_usage                        ✓          —            ✓      ✓
-//	view_org_usage                        —          ✓（只读）     ✓      ✓
-//	manage_members                        —          —            ✓      ✓
-//	change_member_policy                  —          —            ✓      ✓
-//	create_admin                          —          —            —      ✓
-//	transfer_owner                        —          —            —      ✓
-//	platform_admin_ops                    —          —            —      —
+//	操作                       member  admin  owner
+//	use_model                    ✓       ✓      ✓
+//	manage_own_keys              ✓       ✓      ✓
+//	view_own_usage               ✓       ✓      ✓
+//	view_org_usage               —       ✓      ✓
+//	manage_members               —       ✓      ✓
+//	change_member_policy         —       ✓      ✓
+//	create_admin                 —       —      ✓
+//	transfer_owner               —       —      ✓
+//	platform_admin_ops           —       —      —
 type Action string
 
 const (
@@ -33,7 +33,7 @@ const (
 	ActionManageOwnKeys Action = "manage_own_keys"
 	// ActionViewOwnUsage：查看本人用量。
 	ActionViewOwnUsage Action = "view_own_usage"
-	// ActionViewOrgUsage：查看企业汇总与账单（billing_viewer 的只读财务视角）。
+	// ActionViewOrgUsage：负责人和管理员查看企业账单与成员消费汇总。
 	ActionViewOrgUsage Action = "view_org_usage"
 	// ActionManageMembers：邀请/移除普通成员、读取成员与邀请列表。
 	ActionManageMembers Action = "manage_members"
@@ -69,11 +69,6 @@ var permissionMatrix = map[string]map[Action]bool{
 		ActionUseModel:      true,
 		ActionManageOwnKeys: true,
 		ActionViewOwnUsage:  true,
-	},
-	roleBillingViewer: {
-		// 独立只读财务角色：不生成请求、不建 Key、不改成员，也不看别人的明细，
-		// 只看企业汇总与账单。
-		ActionViewOrgUsage: true,
 	},
 	roleAdmin: {
 		ActionUseModel:           true,
@@ -111,7 +106,7 @@ func ValidRole(role string) bool { return validRole(role) }
 
 // Roles 返回 memberships.role 的全部合法取值（ADR-0002 §3 的冻结词表）。
 // 角色不叠加：这些是仅有的四个，platform_admin 不在其中。
-func Roles() []string { return []string{roleOwner, roleAdmin, roleMember, roleBillingViewer} }
+func Roles() []string { return []string{roleOwner, roleAdmin, roleMember} }
 
 // RolePlatformAdmin 是用户级平台标志的名字，刻意不是组织角色：它只用于
 // 错误信息与文档，任何把它当 role 传入的写入都会被拒绝。
@@ -177,14 +172,14 @@ func checkRoleGrant(actorRole, newRole string) error {
 }
 
 // canActOnTarget 判断 actorRole 是否有资格管理当前角色为 targetRole 的成员。
-// admin 只能管理 member / billing_viewer：既不能删/降 owner，也不能动其他
+// admin 只能管理普通 member：既不能删/降 owner，也不能动其他
 // admin；owner 可以管理任何人（仍受最后 owner 与转移规则约束）。
 func canActOnTarget(actorRole, targetRole string) bool {
 	switch actorRole {
 	case roleOwner:
 		return true
 	case roleAdmin:
-		return targetRole == roleMember || targetRole == roleBillingViewer
+		return targetRole == roleMember
 	default:
 		return false
 	}
@@ -207,8 +202,7 @@ func checkLastOwner(currentRole, newRole string, activeOwners int) error {
 // ErrNotFound（外部统一映射 404），不是 active 返回 ErrNotMember。
 func membershipInTx(ctx context.Context, tx *sql.Tx, orgID, userID int64) (Membership, error) {
 	var m Membership
-	err := tx.QueryRowContext(ctx, queryGetMembership, orgID, userID).
-		Scan(&m.OrgID, &m.UserID, &m.Role, &m.Status, &m.CreatedAt)
+	err := scanMembership(tx.QueryRowContext(ctx, queryGetMembership, orgID, userID).Scan, &m)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Membership{}, ErrNotFound
 	}

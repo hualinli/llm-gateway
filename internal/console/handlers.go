@@ -222,32 +222,6 @@ func (s *server) getOrganization(ctx context.Context, c *app.RequestContext) {
 	writeJSON(c, http.StatusOK, toMembershipDTO(membership))
 }
 
-// createOrganization implements POST /api/v1/organizations.
-func (s *server) createOrganization(ctx context.Context, c *app.RequestContext) {
-	auth, ok := authFrom(c)
-	if !ok {
-		s.writeError(c, http.StatusUnauthorized, "", "authentication required")
-		return
-	}
-	var req createOrganizationRequest
-	if !s.decodeJSON(c, &req) {
-		return
-	}
-	name := strings.TrimSpace(req.Name)
-	if name == "" {
-		s.writeError(c, http.StatusBadRequest, "", "name is required")
-		return
-	}
-	org, err := s.orgs.CreateEnterprise(ctx, auth.User.ID, name)
-	if err != nil {
-		s.writeOrganizationError(c, "create organization", err)
-		return
-	}
-	// The creator becomes owner in the same transaction (ADR-0002 §2.2), so the
-	// response can state the role without a second round trip.
-	writeJSON(c, http.StatusCreated, membershipDTO{Organization: toOrganizationDTO(org), Role: "owner"})
-}
-
 // createUser implements POST /api/v1/admin/users (session + platform admin +
 // CSRF). Audit is mandatory for this endpoint; the audit sink never sees a
 // password.
@@ -260,51 +234,21 @@ func (s *server) createUser(ctx context.Context, c *app.RequestContext) {
 		s.writeError(c, http.StatusBadRequest, "", "email and password are required")
 		return
 	}
-
-	auth, _ := authFrom(c)
-
-	// Resolve every requested organization BEFORE creating the user: an invalid
-	// or invisible org id must not leave an orphan account behind.
-	orgIDs := make([]int64, 0, len(req.Organizations))
-	for _, raw := range req.Organizations {
-		orgID, err := parsePathID(raw)
-		if err != nil {
-			s.writeError(c, http.StatusBadRequest, "", "organizations must be organization id strings")
-			return
-		}
-		if _, err := s.orgs.GetForUser(ctx, auth.User.ID, orgID); err != nil {
-			// Includes "not a member": a platform admin may only place a new
-			// user into organizations they can see themselves.
-			s.writeOrganizationError(c, "authorize organization for new user", err)
-			return
-		}
-		orgIDs = append(orgIDs, orgID)
+	if len(req.Organizations) != 0 {
+		s.writeError(c, http.StatusBadRequest, "", "organizations is no longer supported; create an account through the platform account endpoint")
+		return
 	}
 
 	user, err := s.iam.CreateUser(ctx, strings.TrimSpace(req.Email), req.Password, req.PlatformAdmin)
 	if err != nil {
 		event := s.auditFrom(c, "admin.user.create", "failure", err.Error())
 		event.TargetEmail = strings.TrimSpace(req.Email)
-		event.OrgIDs = orgIDs
 		s.audit.Record(ctx, event)
 		s.writeIAMError(c, "create user", err)
 		return
 	}
 
-	added := make([]int64, 0, len(orgIDs))
-	for _, orgID := range orgIDs {
-		if _, err := s.orgs.AddMember(ctx, orgID, user.ID, "member"); err != nil {
-			event := auditTarget(s.auditFrom(c, "admin.user.create", "failure", err.Error()), user)
-			event.OrgIDs = append(added, orgID)
-			s.audit.Record(ctx, event)
-			s.writeOrganizationError(c, "add user to organization", err)
-			return
-		}
-		added = append(added, orgID)
-	}
-
 	event := auditTarget(s.auditFrom(c, "admin.user.create", "success", ""), user)
-	event.OrgIDs = added
 	s.audit.Record(ctx, event)
 	writeJSON(c, http.StatusCreated, toUserDTO(user))
 }

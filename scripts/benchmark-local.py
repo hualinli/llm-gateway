@@ -11,7 +11,7 @@ import time
 import urllib.request
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-COMPOSE = ["docker", "compose", "-f", "docker-compose.yml", "-f", "docker-compose.bench.yml", "--profile", "demo-mocks"]
+COMPOSE = ["docker", "compose", "-f", "docker-compose.yml", "-f", "docker-compose.mock.yml", "-f", "docker-compose.bench.yml", "--profile", "demo-mocks"]
 
 
 def command(args, **kwargs):

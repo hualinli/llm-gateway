@@ -7,7 +7,7 @@
  * which guarantees the previous organization's cached rows are never rendered.
  */
 
-import { createContext, useCallback, useContext, useEffect, useMemo, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -24,13 +24,36 @@ export interface SessionValue {
   error: ApiError | null;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
+  register: (email: string, password: string) => Promise<void>;
+  changePassword: (oldPassword: string, newPassword: string) => Promise<void>;
   logout: () => Promise<void>;
   /** Navigate to another organization and drop its siblings' cached data. */
   switchOrg: (orgId: string) => void;
-  refresh: () => void;
+  refresh: () => Promise<void>;
 }
 
 const SessionContext = createContext<SessionValue | null>(null);
+const PUBLIC_AUTH_PATHS = new Set(['/login', '/register']);
+
+export function shouldRedirectOnUnauthorized(pathname: string): boolean {
+  const normalizedPath = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
+  return !PUBLIC_AUTH_PATHS.has(normalizedPath);
+}
+
+export function sessionSnapshot(
+  cachedMe: MeResponse | undefined,
+  unauthorized: boolean,
+): Pick<SessionValue, 'me' | 'memberships' | 'isAuthenticated'> {
+  // React Query keeps the last successful value after a failed refetch. Once
+  // `/me` returns 401, none of that cached identity or its memberships remain
+  // authoritative, even while the query cache is intentionally retained.
+  const me = unauthorized ? undefined : cachedMe;
+  return {
+    me,
+    memberships: me?.organizations ?? [],
+    isAuthenticated: me !== undefined,
+  };
+}
 
 export function toApiError(error: unknown): ApiError | null {
   if (error === null || error === undefined) return null;
@@ -63,9 +86,11 @@ export function SessionProvider({ children }: { children: ReactNode }): ReactNod
   const navigate = useNavigate();
   const location = useLocation();
   const meQuery = useMe();
+  const [sessionExpired, setSessionExpired] = useState(false);
 
-  // A 401 anywhere means the session is gone (expired, revoked or the user was
-  // disabled): drop every cached response and send the user to the login route.
+  // A 401 on protected work means the session is gone (expired, revoked or
+  // disabled): drop cached account data and send the user to login. Anonymous
+  // `/me` probes are expected on the public login and registration pages.
   //
   // The `me` query itself is deliberately kept: clearing it while its own
   // request is settling deletes the cache entry before React Query can record
@@ -75,10 +100,11 @@ export function SessionProvider({ children }: { children: ReactNode }): ReactNod
   useEffect(() => {
     consoleApi.setUnauthorizedHandler(() => {
       consoleApi.clearCsrfToken();
+      setSessionExpired(true);
       queryClient.removeQueries({
         predicate: (query) => query.queryKey[0] !== queryKeys.me[0],
       });
-      if (location.pathname !== '/login') {
+      if (shouldRedirectOnUnauthorized(location.pathname)) {
         navigate('/login', { replace: true });
       }
     });
@@ -88,10 +114,31 @@ export function SessionProvider({ children }: { children: ReactNode }): ReactNod
   const login = useCallback(
     async (email: string, password: string) => {
       const session = await consoleApi.login(email, password);
+      setSessionExpired(false);
       queryClient.setQueryData(queryKeys.me, session);
       await queryClient.invalidateQueries({ queryKey: queryKeys.organizations });
     },
     [queryClient],
+  );
+
+  const register = useCallback(
+    async (email: string, password: string) => {
+      const session = await consoleApi.register(email, password);
+      setSessionExpired(false);
+      queryClient.setQueryData(queryKeys.me, session);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.organizations });
+    },
+    [queryClient],
+  );
+
+  const changePassword = useCallback(
+    async (oldPassword: string, newPassword: string) => {
+      await consoleApi.changePassword(oldPassword, newPassword);
+      consoleApi.clearCsrfToken();
+      queryClient.clear();
+      navigate('/login', { replace: true, state: { passwordChanged: true } });
+    },
+    [navigate, queryClient],
   );
 
   const logout = useCallback(async () => {
@@ -114,26 +161,27 @@ export function SessionProvider({ children }: { children: ReactNode }): ReactNod
     [navigate, queryClient],
   );
 
-  const refresh = useCallback(() => {
-    void meQuery.refetch();
+  const refresh = useCallback(async () => {
+    await meQuery.refetch();
   }, [meQuery]);
 
   const error = meQuery.isError ? toApiError(meQuery.error) : null;
-  const unauthorized = error?.kind === 'unauthorized';
+  const unauthorized = sessionExpired || error?.kind === 'unauthorized';
+  const identity = sessionSnapshot(meQuery.data, unauthorized);
 
   const value = useMemo<SessionValue>(
     () => ({
-      me: meQuery.data,
-      memberships: meQuery.data?.organizations ?? [],
+      ...identity,
       isLoading: meQuery.isPending,
       error: unauthorized ? null : error,
-      isAuthenticated: meQuery.data !== undefined,
       login,
+      register,
+      changePassword,
       logout,
       switchOrg,
       refresh,
     }),
-    [error, login, logout, meQuery.data, meQuery.isPending, refresh, switchOrg, unauthorized],
+    [error, identity, login, register, changePassword, logout, meQuery.isPending, refresh, switchOrg, unauthorized],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
@@ -162,7 +210,11 @@ export function useActiveOrg(): {
 
   return {
     membership: membershipFor(memberships, orgId ?? undefined),
-    role: roleFor(memberships, orgId ?? undefined),
+    // Suspended memberships retain personal history access but no longer grant
+    // organization-wide permissions in navigation or page-level controls.
+    role: membershipFor(memberships, orgId ?? undefined)?.status === 'active'
+      ? roleFor(memberships, orgId ?? undefined)
+      : null,
     orgId,
   };
 }

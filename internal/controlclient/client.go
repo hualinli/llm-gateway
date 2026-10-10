@@ -152,9 +152,11 @@ func (c *Client) Close() error {
 // KeyMetadata is the redacted projection of one api_keys row. It never contains
 // the key hash or the raw secret.
 type KeyMetadata struct {
-	KeyID     string
-	KeyPrefix string
-	OrgID     int64
+	KeyID        string
+	Name         string
+	KeyPrefix    string
+	OrgID        int64
+	MembershipID int64
 	// OwnerUserID is nil for a legacy/unknown owner.
 	OwnerUserID *int64
 	CreatedBy   *int64
@@ -185,6 +187,8 @@ type CreateApiKeyRequest struct {
 	ActorOrgID      int64
 	RequestID       string
 	OrgID           int64
+	MembershipID    int64
+	Name            string
 	OwnerUserID     *int64
 	ExpiresAt       *time.Time
 	ModelAllowlist  *[]string
@@ -210,6 +214,7 @@ type RevokeApiKeyRequest struct {
 	RequestID       string
 	KeyID           string
 	OrgID           int64
+	MembershipID    int64
 }
 
 // RevokeApiKeyResult is the redacted result of a revoke (or of its replay).
@@ -230,6 +235,7 @@ type ListApiKeysRequest struct {
 	ActorOrgID      int64
 	RequestID       string
 	OrgID           int64
+	MembershipID    int64
 	OwnerUserID     *int64
 	PageSize        int
 	PageToken       string
@@ -249,6 +255,7 @@ type GetOperationRequest struct {
 	ActorUserID     int64
 	ActorOrgID      int64
 	RequestID       string
+	MembershipID    int64
 }
 
 // OperationResult is the redacted, replayable result of one mutation.
@@ -301,6 +308,60 @@ type ApplyOrgPolicyResult struct {
 	Replayed         bool
 }
 
+// ProviderTimeouts and ProviderConfig are the redacted, non-secret provider
+// settings managed through Control's mTLS AdminService.
+type ProviderTimeouts struct {
+	ConnectTimeoutMS        int64
+	TLSHandshakeTimeoutMS   int64
+	ResponseHeaderTimeoutMS int64
+	FirstByteTimeoutMS      int64
+	IdleTimeoutMS           int64
+	AttemptTimeoutMS        int64
+	MaxEventBytes           int64
+}
+
+type ProviderConfig struct {
+	ID            string
+	Protocol      string
+	URL           string
+	CredentialRef string
+	Model         string
+	Timeouts      *ProviderTimeouts
+	ModelMapping  map[string]string
+	MockDelayMS   int64
+}
+
+type ProviderListResult struct {
+	Items   []ProviderConfig
+	Version int64
+}
+
+type ProviderMutationResult struct {
+	Provider ProviderConfig
+	Version  int64
+}
+
+type ProviderRouteMap map[string][]string
+
+type ProviderRoutesResult struct {
+	Routes  ProviderRouteMap
+	Version int64
+}
+
+type ProviderCredentialMetadata struct {
+	CredentialID  string
+	CredentialRef string
+	ProviderID    string
+	Fingerprint   string
+	Status        string
+	CreatedAt     time.Time
+	RevokedAt     *time.Time
+}
+
+type ProviderCredentialPage struct {
+	Items []ProviderCredentialMetadata
+}
+
 // --- methods ----------------------------------------------------------------
 
 // CreateApiKey issues one API key. The raw secret is returned exactly once; a
@@ -314,6 +375,8 @@ func (c *Client) CreateApiKey(ctx context.Context, req CreateApiKeyRequest) (Cre
 		ActorOrgId:      req.ActorOrgID,
 		RequestId:       req.RequestID,
 		OrgId:           req.OrgID,
+		MembershipId:    req.MembershipID,
+		Name:            req.Name,
 		OwnerUserId:     req.OwnerUserID,
 		ExpiresAt:       timestampOrNil(req.ExpiresAt),
 		ModelAllowlist:  allowlistToProto(req.ModelAllowlist),
@@ -344,6 +407,7 @@ func (c *Client) RevokeApiKey(ctx context.Context, req RevokeApiKeyRequest) (Rev
 		RequestId:       req.RequestID,
 		KeyId:           req.KeyID,
 		OrgId:           req.OrgID,
+		MembershipId:    req.MembershipID,
 	}
 	var response *pb.RevokeApiKeyResponse
 	if err := c.invoke(ctx, "RevokeApiKey", req.OperationID, func(callCtx context.Context) error {
@@ -379,6 +443,7 @@ func (c *Client) ListApiKeys(ctx context.Context, req ListApiKeysRequest) (ListA
 		ActorOrgId:      req.ActorOrgID,
 		RequestId:       req.RequestID,
 		OrgId:           req.OrgID,
+		MembershipId:    req.MembershipID,
 		OwnerUserId:     req.OwnerUserID,
 		PageSize:        int32(req.PageSize),
 		PageToken:       req.PageToken,
@@ -407,6 +472,7 @@ func (c *Client) GetOperation(ctx context.Context, req GetOperationRequest) (Ope
 		ActorUserId:     req.ActorUserID,
 		ActorOrgId:      req.ActorOrgID,
 		RequestId:       req.RequestID,
+		MembershipId:    req.MembershipID,
 	}
 	var response *pb.GetOperationResponse
 	if err := c.invoke(ctx, "GetOperation", req.OperationID, func(callCtx context.Context) error {
@@ -447,7 +513,184 @@ func (c *Client) ApplyOrgPolicy(ctx context.Context, req ApplyOrgPolicyRequest) 
 	}, nil
 }
 
+// ListProviders reads the current redacted provider projection.
+func (c *Client) ListProviders(ctx context.Context, actorUserID, actorOrgID int64, requestID string) (ProviderListResult, error) {
+	operationID, err := generatedOperationID("list-providers")
+	if err != nil {
+		return ProviderListResult{}, err
+	}
+	request := &pb.ListProvidersRequest{OperationId: operationID, ActorUserId: actorUserID, ActorOrgId: actorOrgID, RequestId: requestID}
+	var response *pb.ListProvidersResponse
+	if err := c.invoke(ctx, "ListProviders", operationID, func(callCtx context.Context) error {
+		var callErr error
+		response, callErr = c.admin.ListProviders(callCtx, request)
+		return callErr
+	}); err != nil {
+		return ProviderListResult{}, err
+	}
+	items := make([]ProviderConfig, 0, len(response.GetProviders()))
+	for _, provider := range response.GetProviders() {
+		items = append(items, providerConfigFromProto(provider))
+	}
+	return ProviderListResult{Items: items, Version: response.GetVersion()}, nil
+}
+
+// UpsertProvider sends one provider patch. New provider mutations deliberately
+// use one RPC attempt: unlike API-key operations, Control does not persist an
+// operation result for these commands, so retrying after a lost reply could
+// apply a second version increment or create a duplicate credential.
+func (c *Client) UpsertProvider(ctx context.Context, actorUserID, actorOrgID int64, requestID string, provider ProviderConfig, createOnly bool) (ProviderMutationResult, error) {
+	operationID, err := generatedOperationID("provider-upsert")
+	if err != nil {
+		return ProviderMutationResult{}, err
+	}
+	providerProto, err := providerConfigToProto(provider)
+	if err != nil {
+		return ProviderMutationResult{}, err
+	}
+	request := &pb.UpsertProviderRequest{OperationId: operationID, ActorUserId: actorUserID, ActorOrgId: actorOrgID, RequestId: requestID, Provider: providerProto, CreateOnly: createOnly}
+	var response *pb.UpsertProviderResponse
+	if err := c.invokeOnce(ctx, "UpsertProvider", operationID, func(callCtx context.Context) error {
+		var callErr error
+		response, callErr = c.admin.UpsertProvider(callCtx, request)
+		return callErr
+	}); err != nil {
+		return ProviderMutationResult{}, err
+	}
+	return ProviderMutationResult{Provider: providerConfigFromProto(response.GetProvider()), Version: response.GetResultingVersion()}, nil
+}
+
+func (c *Client) DeleteProvider(ctx context.Context, actorUserID, actorOrgID int64, requestID, providerID string) (int64, error) {
+	operationID, err := generatedOperationID("provider-delete")
+	if err != nil {
+		return 0, err
+	}
+	request := &pb.DeleteProviderRequest{OperationId: operationID, ActorUserId: actorUserID, ActorOrgId: actorOrgID, RequestId: requestID, ProviderId: providerID}
+	var response *pb.DeleteProviderResponse
+	if err := c.invokeOnce(ctx, "DeleteProvider", operationID, func(callCtx context.Context) error {
+		var callErr error
+		response, callErr = c.admin.DeleteProvider(callCtx, request)
+		return callErr
+	}); err != nil {
+		return 0, err
+	}
+	return response.GetResultingVersion(), nil
+}
+
+func (c *Client) GetRoutes(ctx context.Context, actorUserID, actorOrgID int64, requestID string) (ProviderRoutesResult, error) {
+	operationID, err := generatedOperationID("get-routes")
+	if err != nil {
+		return ProviderRoutesResult{}, err
+	}
+	request := &pb.GetRoutesRequest{OperationId: operationID, ActorUserId: actorUserID, ActorOrgId: actorOrgID, RequestId: requestID}
+	var response *pb.GetRoutesResponse
+	if err := c.invoke(ctx, "GetRoutes", operationID, func(callCtx context.Context) error {
+		var callErr error
+		response, callErr = c.admin.GetRoutes(callCtx, request)
+		return callErr
+	}); err != nil {
+		return ProviderRoutesResult{}, err
+	}
+	return ProviderRoutesResult{Routes: providerRoutesFromProto(response.GetRoutes()), Version: response.GetVersion()}, nil
+}
+
+func (c *Client) ReplaceRoutes(ctx context.Context, actorUserID, actorOrgID int64, requestID string, routes ProviderRouteMap, expectedVersion int64) (ProviderRoutesResult, error) {
+	operationID, err := generatedOperationID("replace-routes")
+	if err != nil {
+		return ProviderRoutesResult{}, err
+	}
+	request := &pb.ReplaceRoutesRequest{OperationId: operationID, ActorUserId: actorUserID, ActorOrgId: actorOrgID, RequestId: requestID, Routes: providerRoutesToProto(routes), ExpectedVersion: expectedVersion}
+	var response *pb.ReplaceRoutesResponse
+	if err := c.invokeOnce(ctx, "ReplaceRoutes", operationID, func(callCtx context.Context) error {
+		var callErr error
+		response, callErr = c.admin.ReplaceRoutes(callCtx, request)
+		return callErr
+	}); err != nil {
+		return ProviderRoutesResult{}, err
+	}
+	return ProviderRoutesResult{Routes: providerRoutesFromProto(response.GetRoutes()), Version: response.GetResultingVersion()}, nil
+}
+
+func (c *Client) ListProviderCredentials(ctx context.Context, actorUserID, actorOrgID int64, requestID, providerID string) (ProviderCredentialPage, error) {
+	operationID, err := generatedOperationID("list-provider-credentials")
+	if err != nil {
+		return ProviderCredentialPage{}, err
+	}
+	request := &pb.ListProviderCredentialsRequest{OperationId: operationID, ActorUserId: actorUserID, ActorOrgId: actorOrgID, RequestId: requestID, ProviderId: providerID}
+	var response *pb.ListProviderCredentialsResponse
+	if err := c.invoke(ctx, "ListProviderCredentials", operationID, func(callCtx context.Context) error {
+		var callErr error
+		response, callErr = c.admin.ListProviderCredentials(callCtx, request)
+		return callErr
+	}); err != nil {
+		return ProviderCredentialPage{}, err
+	}
+	items := make([]ProviderCredentialMetadata, 0, len(response.GetItems()))
+	for _, item := range response.GetItems() {
+		items = append(items, providerCredentialMetadataFromProto(item))
+	}
+	return ProviderCredentialPage{Items: items}, nil
+}
+
+func (c *Client) CreateProviderCredential(ctx context.Context, actorUserID, actorOrgID int64, requestID, providerID string, secret []byte) (ProviderCredentialMetadata, error) {
+	operationID, err := generatedOperationID("provider-credential-create")
+	if err != nil {
+		return ProviderCredentialMetadata{}, err
+	}
+	secretCopy := append([]byte(nil), secret...)
+	request := &pb.CreateProviderCredentialRequest{OperationId: operationID, ActorUserId: actorUserID, ActorOrgId: actorOrgID, RequestId: requestID, ProviderId: providerID, Secret: secretCopy}
+	defer wipeBytes(request.Secret)
+	var response *pb.CreateProviderCredentialResponse
+	if err := c.invokeOnce(ctx, "CreateProviderCredential", operationID, func(callCtx context.Context) error {
+		var callErr error
+		response, callErr = c.admin.CreateProviderCredential(callCtx, request)
+		return callErr
+	}); err != nil {
+		return ProviderCredentialMetadata{}, err
+	}
+	return providerCredentialMetadataFromProto(response.GetCredential()), nil
+}
+
+func (c *Client) RevokeProviderCredential(ctx context.Context, actorUserID, actorOrgID int64, requestID, credentialID string) (ProviderCredentialMetadata, error) {
+	operationID, err := generatedOperationID("provider-credential-revoke")
+	if err != nil {
+		return ProviderCredentialMetadata{}, err
+	}
+	request := &pb.RevokeProviderCredentialRequest{OperationId: operationID, ActorUserId: actorUserID, ActorOrgId: actorOrgID, RequestId: requestID, CredentialId: credentialID}
+	var response *pb.RevokeProviderCredentialResponse
+	if err := c.invokeOnce(ctx, "RevokeProviderCredential", operationID, func(callCtx context.Context) error {
+		var callErr error
+		response, callErr = c.admin.RevokeProviderCredential(callCtx, request)
+		return callErr
+	}); err != nil {
+		return ProviderCredentialMetadata{}, err
+	}
+	return providerCredentialMetadataFromProto(response.GetCredential()), nil
+}
+
 // --- call plumbing ----------------------------------------------------------
+
+func generatedOperationID(prefix string) (string, error) { return newOperationID(prefix) }
+
+func (c *Client) invokeOnce(ctx context.Context, method, operationID string, call func(context.Context) error) error {
+	if c == nil || c.admin == nil {
+		return fmt.Errorf("%w: control client is not configured", ErrUnavailable)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	timeout := c.opts.CallTimeout
+	if timeout <= 0 {
+		timeout = DefaultCallTimeout
+	}
+	callCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	started := time.Now()
+	err := call(callCtx)
+	code := status.Code(err)
+	c.logAttempt(method, operationID, 1, code, time.Since(started))
+	return mapError(err)
+}
 
 // invoke runs one RPC under a deadline. It retries only transport-level
 // failures, and only while the caller's context is still live.
@@ -523,8 +766,10 @@ func keyMetadataFromProto(key *pb.ApiKeyMetadata) KeyMetadata {
 	}
 	metadata := KeyMetadata{
 		KeyID:          key.GetKeyId(),
+		Name:           key.GetName(),
 		KeyPrefix:      key.GetKeyPrefix(),
 		OrgID:          key.GetOrgId(),
+		MembershipID:   key.GetMembershipId(),
 		OwnerUserID:    key.OwnerUserId,
 		CreatedBy:      key.CreatedBy,
 		ModelAllowlist: allowlistFromProto(key.GetModelAllowlist()),
@@ -593,6 +838,123 @@ func orgPolicyFromProto(policy *pb.OrgPolicy) OrgPolicy {
 		out.UpdatedAt = ts.AsTime().UTC()
 	}
 	return out
+}
+
+func providerConfigToProto(provider ProviderConfig) (*pb.ProviderConfig, error) {
+	if provider.Timeouts != nil && (provider.Timeouts.MaxEventBytes < 0 || provider.Timeouts.MaxEventBytes > int64(1<<31-1)) {
+		return nil, fmt.Errorf("%w: max_event_bytes is outside the supported integer range", ErrInvalidArgument)
+	}
+	result := &pb.ProviderConfig{
+		Id:            provider.ID,
+		Protocol:      provider.Protocol,
+		Url:           provider.URL,
+		CredentialRef: provider.CredentialRef,
+		Model:         provider.Model,
+		MockDelayMs:   provider.MockDelayMS,
+		ModelMapping:  cloneStringMap(provider.ModelMapping),
+	}
+	if provider.Timeouts != nil {
+		result.Timeouts = &pb.ProviderTimeouts{
+			ConnectTimeoutMs:        provider.Timeouts.ConnectTimeoutMS,
+			TlsHandshakeTimeoutMs:   provider.Timeouts.TLSHandshakeTimeoutMS,
+			ResponseHeaderTimeoutMs: provider.Timeouts.ResponseHeaderTimeoutMS,
+			FirstByteTimeoutMs:      provider.Timeouts.FirstByteTimeoutMS,
+			IdleTimeoutMs:           provider.Timeouts.IdleTimeoutMS,
+			AttemptTimeoutMs:        provider.Timeouts.AttemptTimeoutMS,
+			MaxEventBytes:           int32(provider.Timeouts.MaxEventBytes),
+		}
+	}
+	return result, nil
+}
+
+func providerConfigFromProto(provider *pb.ProviderConfig) ProviderConfig {
+	if provider == nil {
+		return ProviderConfig{}
+	}
+	result := ProviderConfig{
+		ID:            provider.GetId(),
+		Protocol:      provider.GetProtocol(),
+		URL:           provider.GetUrl(),
+		CredentialRef: provider.GetCredentialRef(),
+		Model:         provider.GetModel(),
+		MockDelayMS:   provider.GetMockDelayMs(),
+		ModelMapping:  cloneStringMap(provider.GetModelMapping()),
+	}
+	if timeouts := provider.GetTimeouts(); timeouts != nil {
+		result.Timeouts = &ProviderTimeouts{
+			ConnectTimeoutMS:        timeouts.GetConnectTimeoutMs(),
+			TLSHandshakeTimeoutMS:   timeouts.GetTlsHandshakeTimeoutMs(),
+			ResponseHeaderTimeoutMS: timeouts.GetResponseHeaderTimeoutMs(),
+			FirstByteTimeoutMS:      timeouts.GetFirstByteTimeoutMs(),
+			IdleTimeoutMS:           timeouts.GetIdleTimeoutMs(),
+			AttemptTimeoutMS:        timeouts.GetAttemptTimeoutMs(),
+			MaxEventBytes:           int64(timeouts.GetMaxEventBytes()),
+		}
+	}
+	return result
+}
+
+func providerRoutesToProto(routes ProviderRouteMap) map[string]*pb.ProviderList {
+	result := make(map[string]*pb.ProviderList, len(routes))
+	for model, providers := range routes {
+		copyProviders := make([]string, len(providers))
+		copy(copyProviders, providers)
+		result[model] = &pb.ProviderList{Providers: copyProviders}
+	}
+	return result
+}
+
+func providerRoutesFromProto(routes map[string]*pb.ProviderList) ProviderRouteMap {
+	result := make(ProviderRouteMap, len(routes))
+	for model, list := range routes {
+		if list == nil {
+			result[model] = []string{}
+			continue
+		}
+		providers := list.GetProviders()
+		copyProviders := make([]string, len(providers))
+		copy(copyProviders, providers)
+		result[model] = copyProviders
+	}
+	return result
+}
+
+func providerCredentialMetadataFromProto(metadata *pb.ProviderCredentialMetadata) ProviderCredentialMetadata {
+	if metadata == nil {
+		return ProviderCredentialMetadata{}
+	}
+	result := ProviderCredentialMetadata{
+		CredentialID:  metadata.GetCredentialId(),
+		CredentialRef: metadata.GetCredentialRef(),
+		ProviderID:    metadata.GetProviderId(),
+		Fingerprint:   metadata.GetFingerprint(),
+		Status:        metadata.GetStatus(),
+	}
+	if ts := metadata.GetCreatedAt(); ts != nil && ts.IsValid() {
+		result.CreatedAt = ts.AsTime().UTC()
+	}
+	if ts := metadata.GetRevokedAt(); ts != nil && ts.IsValid() {
+		value := ts.AsTime().UTC()
+		result.RevokedAt = &value
+	}
+	return result
+}
+
+func cloneStringMap(source map[string]string) map[string]string {
+	if source == nil {
+		return nil
+	}
+	result := make(map[string]string, len(source))
+	for key, value := range source {
+		result[key] = value
+	}
+	return result
+}
+
+func wipeBytes(value []byte) {
+	for i := range value {
+		value[i] = 0
+	}
 }
 
 // allowlistToProto preserves message presence: nil stays absent (NULL, inherit)

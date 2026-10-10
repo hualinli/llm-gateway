@@ -116,6 +116,7 @@ type billingHarness struct {
 	closeBilling  func() error
 	orgID         int64
 	userID        int64
+	membershipID  int64
 	price         billing.PriceVersion
 	upstreamCalls *atomic.Int32
 	producer      *recordingEventProducer
@@ -258,6 +259,7 @@ func newBillingHarness(t *testing.T, options ...billingHarnessOption) *billingHa
 	keyRecord := auth.NewKeyRecord("key-billing", h.rawKey, fmt.Sprintf("org:%d", h.orgID))
 	keyRecord.OrgID = h.orgID
 	keyRecord.OwnerUserID = &h.userID
+	keyRecord.MembershipID = h.membershipID
 	authStore := auth.NewMemoryStoreFromRecords([]auth.KeyRecord{keyRecord})
 
 	rotator := limiter.New(nil, 1000, 1000, 0)
@@ -333,6 +335,11 @@ VALUES ($1, 'hash', 'active', false, 1, $2, $2) RETURNING id`, name+"@example.co
   (type, name, status, owner_user_id, created_at, updated_at)
 VALUES ('enterprise', $1, 'active', $2, $3, $3) RETURNING id`, name, userID, now).Scan(&orgID); err != nil {
 		h.t.Fatalf("seed organization: %v", err)
+	}
+	if err := h.db.QueryRow(`INSERT INTO memberships
+  (org_id, user_id, role, status, monthly_limit_micro, created_at, updated_at)
+VALUES ($1, $2, 'owner', 'active', NULL, $3, $3) RETURNING id`, orgID, userID, now).Scan(&h.membershipID); err != nil {
+		h.t.Fatalf("seed owner membership: %v", err)
 	}
 	return orgID, userID
 }

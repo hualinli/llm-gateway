@@ -140,6 +140,13 @@ type ConfigPatch struct {
 func (s *Server) PatchConfig(patch ConfigPatch) (*pb.Config, error) {
 	s.applyMu.Lock()
 	defer s.applyMu.Unlock()
+	return s.patchConfigLocked(patch)
+}
+
+// patchConfigLocked applies a field-level patch while applyMu is held. Provider
+// and route administration use the same merge/persist path as credential
+// mutations, so a snapshot read before the lock can never restore stale keys.
+func (s *Server) patchConfigLocked(patch ConfigPatch) (*pb.Config, error) {
 	current := s.CurrentConfig()
 	if patch.ExpectedVersion != nil && *patch.ExpectedVersion != current.Version {
 		return nil, fmt.Errorf("%w: expected %d, current %d", ErrConfigVersionConflict, *patch.ExpectedVersion, current.Version)
@@ -496,12 +503,13 @@ func KeyRecordsToAuth(records []*pb.KeyRecord) []auth.KeyRecord {
 			continue
 		}
 		projected := auth.KeyRecord{
-			ID:       record.KeyId,
-			Hash:     record.KeyHash,
-			Prefix:   record.KeyPrefix,
-			TenantID: record.TenantId,
-			Status:   record.Status,
-			OrgID:    record.OrgId,
+			ID:           record.KeyId,
+			Hash:         record.KeyHash,
+			Prefix:       record.KeyPrefix,
+			TenantID:     record.TenantId,
+			Status:       record.Status,
+			OrgID:        record.OrgId,
+			MembershipID: record.GetMembershipId(),
 		}
 		if record.OwnerUserId != nil {
 			owner := record.GetOwnerUserId()

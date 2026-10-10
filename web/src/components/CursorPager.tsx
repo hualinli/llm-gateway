@@ -73,7 +73,7 @@ export function CursorPagination({
       </Button>
       <Tag>第 {pager.page} 页</Tag>
       <Typography.Text type="secondary">
-        本页 {itemCount} 条 · 游标不透明，客户端不解析
+        本页 {itemCount} 条
       </Typography.Text>
     </Space>
   );

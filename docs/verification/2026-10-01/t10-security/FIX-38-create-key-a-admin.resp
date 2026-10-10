@@ -1,9 +1,0 @@
-HTTP 201 (0.008s)
-Server: hertz
-Date: Thu, 01 Oct 2026 06:44:33 GMT
-Content-Type: application/json
-Content-Length: 563
-X-Request-Id: t10-FIX-38
-X-Trace-Id: 2ac98a0d530b09bb139bfec6abe4c44e
-
-{"key":{"key_id":"key_6cdc62674b7d31e5fb9508bad316c38e","prefix":"sk-zo_1I...","organization_id":"4","owner_user_id":"5","created_by":"3","status":"active","expires_at":null,"revoked_at":null,"model_allowlist":null,"policy_version":"2","created_at":"2026-10-01T06:44:33Z","tenant_id":"org:4"},"secret":"sk-z…<redacted:46>","secret_returned_once":true,"replayed":false,"resulting_version":"7","notice":"Copy this secret now: it is shown only once and can never be retrieved again. If you lose it, revoke this key and create a new one."}

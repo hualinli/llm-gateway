@@ -1,9 +1,0 @@
-{
-  "request": {
-    "step": "docker compose restart gateway"
-  },
-  "response": {
-    "readyz": true,
-    "after_status": 200
-  }
-}
