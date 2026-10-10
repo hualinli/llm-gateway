@@ -11,7 +11,8 @@ import (
 )
 
 // T09: the per-organization active-stream cap is an explicitly *per-instance*
-// protection (roadmap §4.3: 组织并发首版也是每实例保护，不实施分布式并发租约).
+// protection (docs/decisions.md「已知限制与决策索引」§ 组织并发上限是每实例
+// 保护：不实施分布式并发租约).
 // Two instances therefore add up. This test pins the semantics of one instance:
 // the cap counts real in-flight streams, releases them when the handler returns,
 // gives each organization its own budget, and passes through when disabled or

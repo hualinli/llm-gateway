@@ -21,7 +21,8 @@ import (
 
 // T09 per-instance active-stream metrics. They are process-local by
 // construction: the series of two Gateway instances add up, and nothing here
-// coordinates across them (roadmap §4.3).
+// coordinates across them (docs/decisions.md「已知限制与决策索引」§
+// 组织并发上限是每实例保护).
 var (
 	// OrgActiveStreams counts stream-slot decisions on this instance.
 	OrgActiveStreams = promauto.NewCounterVec(prometheus.CounterOpts{
@@ -172,8 +173,8 @@ func (l *Limiter) SetOnRedisError(policy string) error {
 }
 
 // SetMaxActiveStreamsPerOrg caps concurrent chat streams per organization **on
-// this Gateway instance** (roadmap §4.3: 组织并发首版也是每实例保护，不做分布式
-// 并发租约). Zero disables the cap.
+// this Gateway instance**（docs/decisions.md「已知限制与决策索引」§
+// 组织并发上限是每实例保护：首版不做分布式并发租约）. Zero disables the cap.
 //
 // The cap is deliberately process-local and additive: with two Gateway
 // instances the effective ceiling an organization can reach is 2 x the
@@ -241,6 +242,10 @@ func (l *Limiter) releaseOrgStream(orgID int64) {
 // applied inside the rate limiter so a request that spends a token also gets a
 // stream slot, and only around the chat endpoint — a /v1/models call is not a
 // stream and must never consume this budget.
+//
+// A nil l means "no cap configured" and passes every request through; that is
+// the same meaning Middleware gives a nil limiter, and the two constructors are
+// the only entry points where nil is a legal argument.
 func StreamLimit(l *Limiter) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -382,6 +387,17 @@ func Middleware(l *Limiter) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path == "/healthz" {
+				next.ServeHTTP(w, r)
+				return
+			}
+			// nil limiter = 不限流，与 StreamLimit 的 nil 处理对齐：两个
+			// Middleware 构造器是「没装限流器」这一配置状态的唯一入口，
+			// 调用方可以直接把 nil 接上去（未配置限流的部署、单测里只关心
+			// 下游行为的链路）。判据是「参数是否可能合法地为 nil」，不是
+			// 「方法是否导出」：Allow/Decide/Set* 这些方法只在拿到 New 的
+			// 结果后调用，nil 出现在那里是接线 bug，静默放行会把 bug 变成
+			// 线上不限流，所以让它们照常 panic。
+			if l == nil {
 				next.ServeHTTP(w, r)
 				return
 			}
