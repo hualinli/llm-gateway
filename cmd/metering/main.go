@@ -301,16 +301,16 @@ func meteringChecks(lookup appenv.Lookup) []appenv.Check {
 		},
 		{
 			Name:   "METERING_ADMIN_TOKEN",
-			Detail: "must be at least 16 characters so /ledger/count, /ledger/balance and /reconcile are not anonymous",
-			OK:     len(strings.TrimSpace(lookup("METERING_ADMIN_TOKEN"))) >= 16,
+			Detail: "must be at least 16 characters and not a shipped demo placeholder so /ledger/count, /ledger/balance and /reconcile are not anonymous",
+			OK:     len(strings.TrimSpace(lookup("METERING_ADMIN_TOKEN"))) >= 16 && !appenv.IsDemoSecret(lookup("METERING_ADMIN_TOKEN")),
 		},
 		{
 			Name:   "METERING_POLICY_TOKEN",
-			Detail: "when set, must be at least 16 characters and differ from METERING_ADMIN_TOKEN; it is only for the read-only /recovery/policy endpoint",
+			Detail: "when set, must be at least 16 characters, not a shipped demo placeholder, and differ from METERING_ADMIN_TOKEN; it is only for the read-only /recovery/policy endpoint",
 			OK: func() bool {
 				policyToken := strings.TrimSpace(lookup("METERING_POLICY_TOKEN"))
 				adminToken := strings.TrimSpace(lookup("METERING_ADMIN_TOKEN"))
-				return policyToken == "" || (len(policyToken) >= 16 && policyToken != adminToken)
+				return policyToken == "" || (len(policyToken) >= 16 && policyToken != adminToken && !appenv.IsDemoSecret(policyToken))
 			}(),
 		},
 		{

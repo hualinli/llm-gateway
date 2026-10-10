@@ -257,9 +257,21 @@ func main() {
 	// listener 上同样提供 /healthz（本进程目前没有注册 metrics，不凭空发明）。
 	var diagnosticsSrv *http.Server
 	httpSrv := &http.Server{Addr: httpAddr, Handler: observability.Middleware(mux)}
+	// The admin API takes CONTROL_ADMIN_TOKEN as a bearer token, so it is served
+	// over TLS whenever a certificate pair is configured. Production requires the
+	// pair (controlChecks); plaintext is the demo default.
+	httpCertFile := strings.TrimSpace(os.Getenv("CONTROL_HTTP_TLS_CERT_FILE"))
+	httpKeyFile := strings.TrimSpace(os.Getenv("CONTROL_HTTP_TLS_KEY_FILE"))
 	go func() {
-		log.Printf("control http listening on %s", httpAddr)
-		if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		var err error
+		if httpCertFile != "" {
+			log.Printf("control http listening on %s (TLS)", httpAddr)
+			err = httpSrv.ListenAndServeTLS(httpCertFile, httpKeyFile)
+		} else {
+			log.Printf("control http listening on %s (plaintext, demo only)", httpAddr)
+			err = httpSrv.ListenAndServe()
+		}
+		if err != nil && err != http.ErrServerClosed {
 			log.Fatalf("control http: %v", err)
 		}
 	}()
@@ -367,8 +379,8 @@ func controlChecks(lookup appenv.Lookup, controlTLSConfigured bool) []appenv.Che
 		},
 		{
 			Name:   "CONTROL_ADMIN_TOKEN",
-			Detail: "must be at least 16 characters",
-			OK:     len(strings.TrimSpace(lookup("CONTROL_ADMIN_TOKEN"))) >= 16,
+			Detail: "must be at least 16 characters and must not be a shipped demo placeholder",
+			OK:     len(strings.TrimSpace(lookup("CONTROL_ADMIN_TOKEN"))) >= 16 && !appenv.IsDemoSecret(lookup("CONTROL_ADMIN_TOKEN")),
 		},
 		{
 			Name:   "CONTROL_IDENTITY_SIGNING_SECRET",
@@ -394,6 +406,11 @@ func controlChecks(lookup appenv.Lookup, controlTLSConfigured bool) []appenv.Che
 			Name:   "CONTROL_TLS_REQUIRE_CLIENT_CERT/CONTROL_TLS_CA_FILE",
 			Detail: "must require client certificates and set the client CA file so gateway connections are mutually authenticated",
 			OK:     requireClientCert && caFile != "",
+		},
+		{
+			Name:   "CONTROL_HTTP_TLS_CERT_FILE/CONTROL_HTTP_TLS_KEY_FILE",
+			Detail: "must both be set: the HTTP admin API carries CONTROL_ADMIN_TOKEN as a bearer token and must be served over TLS, not plaintext",
+			OK:     strings.TrimSpace(lookup("CONTROL_HTTP_TLS_CERT_FILE")) != "" && strings.TrimSpace(lookup("CONTROL_HTTP_TLS_KEY_FILE")) != "",
 		},
 		{
 			Name:   "CONTROL_DIAGNOSTICS_ADDR",

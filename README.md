@@ -180,6 +180,7 @@ eval "$(scripts/dev-certs.sh | grep '^export ')"
 | `GATEWAY_MAX_ACTIVE_STREAMS(_PER_ORG)` | 代码默认 0/0（= 不限） | **单实例**上限（全局 503 / 组织 429）；Compose demo 设 256 / 0（`gateway-b` 为 256/32）；prod 必须显式 >0；**不是跨实例硬配额** |
 | `GATEWAY_LIMITER_RATE/BURST`、`LIMITER_ON_REDIS_ERROR` | 20/40、`open` | Redis 令牌桶；prod 必须显式设置且 `closed` |
 | `CONTROL_ADDR` | 空 | Console→Control 管理通道；空 = Key 接口 503、不启动发布 loop（prod 必填） |
+| `CONTROL_HTTP_TLS_CERT_FILE` + `CONTROL_HTTP_TLS_KEY_FILE` | 空 | Control HTTP 管理口（`/config`、`/keys`、`/provider-credentials`，Bearer 令牌）的证书对；设置后用 TLS 提供，prod 必须同时设置，否则拒绝启动 |
 | `CONTROL_ADMIN_SERVICE_ENABLED` + `CONTROL_CONSOLE_SERVICE_NAME` + `CONTROL_TLS_*` | 关 | Control 内部管理面（生产必须 mTLS） |
 | `METERING_ADMIN_TOKEN` | 空 | 非空时 `/ledger/*`、`/reconcile`、`/receipts/*`、`/recovery/*`（除专用只读 `/recovery/policy`）要求 Bearer；prod 必填 |
 | `METERING_RECOVERY`（`_MAX_EXECUTION`/`_GRACE`/`_LEASE`/`_SLA`） | `auto`（30m/10m/60s/24h） | 僵尸 execution 的有界恢复策略，见 [恢复 runbook](docs/runbooks/billing-recovery.md) |

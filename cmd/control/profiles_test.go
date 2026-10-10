@@ -24,6 +24,8 @@ func goodControlEnv() map[string]string {
 		"CONTROL_TLS_KEY_FILE":            "data/dev-certs/control.key",
 		"CONTROL_TLS_CA_FILE":             "data/dev-certs/ca.crt",
 		"CONTROL_TLS_REQUIRE_CLIENT_CERT": "true",
+		"CONTROL_HTTP_TLS_CERT_FILE":      "data/dev-certs/control-http.crt",
+		"CONTROL_HTTP_TLS_KEY_FILE":       "data/dev-certs/control-http.key",
 	}
 }
 
@@ -59,6 +61,7 @@ func TestControlChecksCoverEveryRequiredItem(t *testing.T) {
 		"CONTROL_ALLOW_INSECURE_CREDENTIAL_RESOLVE",
 		"CONTROL_TLS_CERT_FILE/CONTROL_TLS_KEY_FILE",
 		"CONTROL_TLS_REQUIRE_CLIENT_CERT/CONTROL_TLS_CA_FILE",
+		"CONTROL_HTTP_TLS_CERT_FILE/CONTROL_HTTP_TLS_KEY_FILE",
 		"CONTROL_DIAGNOSTICS_ADDR",
 	}
 	names := make([]string, 0, len(checks))
@@ -206,5 +209,28 @@ func TestControlChecksRequireUsableTLSConfig(t *testing.T) {
 	failed := controlFailures(controlChecks(lookupFrom(env), false))
 	if _, ok := failed["CONTROL_TLS_CERT_FILE/CONTROL_TLS_KEY_FILE"]; !ok {
 		t.Fatalf("nil control TLS config must fail the certificate check: %v", failed)
+	}
+}
+
+// The compose default admin token is 18 characters, so a length check alone
+// lets it through. Production must refuse it by value.
+func TestControlChecksRefuseShippedDemoAdminToken(t *testing.T) {
+	env := goodControlEnv()
+	env["CONTROL_ADMIN_TOKEN"] = "demo-control-token"
+	failed := controlFailures(controlChecks(lookupFrom(env), true))
+	if _, ok := failed["CONTROL_ADMIN_TOKEN"]; !ok {
+		t.Fatalf("the shipped demo admin token passed production preflight: %v", failed)
+	}
+}
+
+// The HTTP admin API carries CONTROL_ADMIN_TOKEN as a bearer token, so production
+// must serve it over TLS. A plaintext listener is a demo-only configuration.
+func TestControlChecksRequireTLSOnHTTPAdminListener(t *testing.T) {
+	env := goodControlEnv()
+	delete(env, "CONTROL_HTTP_TLS_CERT_FILE")
+	delete(env, "CONTROL_HTTP_TLS_KEY_FILE")
+	failed := controlFailures(controlChecks(lookupFrom(env), true))
+	if _, ok := failed["CONTROL_HTTP_TLS_CERT_FILE/CONTROL_HTTP_TLS_KEY_FILE"]; !ok {
+		t.Fatalf("a plaintext HTTP admin listener passed production preflight: %v", failed)
 	}
 }

@@ -103,6 +103,16 @@ func TestMeteringChecksRejectRelaxedSettings(t *testing.T) {
 			failing: "",
 		},
 		{
+			name:    "admin token is a shipped demo placeholder",
+			mutate:  func(env map[string]string) { env["METERING_ADMIN_TOKEN"] = "demo-policy-read-token" },
+			failing: "METERING_ADMIN_TOKEN",
+		},
+		{
+			name:    "policy token is a shipped demo placeholder",
+			mutate:  func(env map[string]string) { env["METERING_POLICY_TOKEN"] = "demo-policy-read-token" },
+			failing: "METERING_POLICY_TOKEN",
+		},
+		{
 			name:    "policy token too short",
 			mutate:  func(env map[string]string) { env["METERING_POLICY_TOKEN"] = "0123456789abcde" },
 			failing: "METERING_POLICY_TOKEN",
