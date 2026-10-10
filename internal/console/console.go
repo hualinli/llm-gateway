@@ -209,9 +209,10 @@ type Options struct {
 	// nil means no control channel is configured: those routes answer 503
 	// unavailable instead of pretending an organization has no keys.
 	Keys KeyService
-	// Usage backs GET /api/v1/orgs/{org}/usage. nil answers 500 internal_error,
-	// like a missing audit store: an empty page would be a lie.
-	Usage UsageStore
+	// Usage backs the billing read surface: GET /api/v1/orgs/{org}/usage,
+	// /quota and /billing/member-summary, plus the platform admin summary.
+	// nil answers 503 unavailable: an empty report would be a lie.
+	Usage BillingReports
 	// Prices backs GET/POST /api/v1/admin/prices. nil means no billing store is
 	// configured: those routes answer 503 instead of pretending no model has a
 	// price.
@@ -229,8 +230,8 @@ type Options struct {
 	// ReviewPolicySource fetches the current Metering policy for each queue read
 	// and manual money operation. nil fails closed.
 	ReviewPolicySource ReviewPolicySource
-	// Now is the clock used for the usage window and key-expiry validation. nil
-	// means time.Now().UTC().
+	// Now is the clock used for the billing month and key-expiry validation.
+	// nil means time.Now().UTC().
 	Now func() time.Time
 
 	// Logger receives access, audit and error logs. nil means log.Default().
@@ -249,7 +250,7 @@ type server struct {
 	iam              IAMService
 	orgs             OrganizationService
 	keys             KeyService
-	usage            UsageStore
+	usage            BillingReports
 	prices           PriceService
 	accounts         BillingAccountService
 	statements       StatementService
@@ -302,9 +303,6 @@ func newServer(opts Options) (*server, error) {
 	}
 	if s.keys == nil {
 		s.keys = unavailableKeyService{}
-	}
-	if s.usage == nil {
-		s.usage = unavailableUsageStore{}
 	}
 	if s.prices == nil {
 		s.prices = unavailablePriceService{}

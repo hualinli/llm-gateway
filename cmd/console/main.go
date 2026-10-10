@@ -161,8 +161,9 @@ type serveOptions struct {
 	// keys is optional: nil (no CONTROL_ADDR) makes the key endpoints answer 503
 	// instead of pretending an organization has no keys.
 	keys console.KeyService
-	// usage backs GET /api/v1/orgs/{org}/usage. nil answers 500.
-	usage console.UsageStore
+	// usage backs the billing read surface (GET /api/v1/orgs/{org}/usage,
+	// /quota, /billing/member-summary and the admin summary). nil answers 503.
+	usage console.BillingReports
 	// prices and accounts back the T05 billing surface (ADR-0004). nil answers
 	// 503 instead of pretending the platform has no prices and no ledger.
 	prices   console.PriceService

@@ -3,9 +3,11 @@ package console
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"llm-gateway/internal/billing"
@@ -30,6 +32,60 @@ type PaidUsageQuery struct {
 	KeyID  string
 	Limit  int
 	Cursor *UsageCursor
+}
+
+// UsageCursor is the (occurred_at, id) position of the last row of a page. The
+// id is the report's own ordering key (the execution id), so the tuple is total
+// even when many rows share a timestamp.
+type UsageCursor struct {
+	OccurredAt time.Time
+	EventID    string
+}
+
+// encodeUsageCursor renders a cursor as an opaque, URL-safe token. Each part is
+// base64url-encoded separately so neither the timestamp's colons nor an event id
+// containing a separator can be confused with the structure.
+func encodeUsageCursor(cursor UsageCursor) string {
+	stamp := base64.RawURLEncoding.EncodeToString([]byte(cursor.OccurredAt.UTC().Format(time.RFC3339Nano)))
+	id := base64.RawURLEncoding.EncodeToString([]byte(cursor.EventID))
+	return "v1." + stamp + "." + id
+}
+
+// errBadUsageCursor is a caller-fixable malformed cursor (400).
+var errBadUsageCursor = errors.New("cursor is not a valid usage cursor")
+
+func decodeUsageCursor(raw string) (*UsageCursor, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil, nil
+	}
+	parts := strings.Split(trimmed, ".")
+	if len(parts) != 3 || parts[0] != "v1" {
+		return nil, errBadUsageCursor
+	}
+	stamp, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return nil, errBadUsageCursor
+	}
+	occurredAt, err := time.Parse(time.RFC3339Nano, string(stamp))
+	if err != nil {
+		return nil, errBadUsageCursor
+	}
+	id, err := base64.RawURLEncoding.DecodeString(parts[2])
+	if err != nil {
+		return nil, errBadUsageCursor
+	}
+	if strings.TrimSpace(string(id)) == "" {
+		return nil, errBadUsageCursor
+	}
+	// The cursor is echoed back to the client, so it must be canonical: a token
+	// that decodes to a different tuple than it encodes would let a caller
+	// craft a page boundary that never advances.
+	cursor := UsageCursor{OccurredAt: occurredAt.UTC(), EventID: string(id)}
+	if encodeUsageCursor(cursor) != trimmed {
+		return nil, errBadUsageCursor
+	}
+	return &cursor, nil
 }
 
 type PaidUsageRow struct {

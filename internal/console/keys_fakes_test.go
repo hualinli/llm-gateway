@@ -105,38 +105,11 @@ func (f *fakeControl) lastRevoke(t interface{ Fatalf(string, ...any) }) controlc
 // what the store was actually asked for.
 type fakeUsage struct {
 	mu                sync.Mutex
-	queries           []UsageQuery
-	queryFn           func(ctx context.Context, query UsageQuery) (UsagePage, error)
 	paidQueries       []PaidUsageQuery
 	paidQueryFn       func(ctx context.Context, query PaidUsageQuery) (PaidUsagePage, error)
 	quotaFn           func(ctx context.Context, orgID, userID int64, month billing.BillingMonth) (billing.MemberQuota, error)
 	memberSummaryFn   func(ctx context.Context, orgID int64, month billing.BillingMonth) ([]MemberBillingSummary, error)
 	platformSummaryFn func(ctx context.Context, month billing.BillingMonth) (PlatformBillingSummary, error)
-}
-
-func (f *fakeUsage) Query(ctx context.Context, query UsageQuery) (UsagePage, error) {
-	f.mu.Lock()
-	f.queries = append(f.queries, query)
-	f.mu.Unlock()
-	if f.queryFn != nil {
-		return f.queryFn(ctx, query)
-	}
-	return UsagePage{Rows: []UsageRow{}}, nil
-}
-
-func (f *fakeUsage) last(t interface{ Fatalf(string, ...any) }) UsageQuery {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if len(f.queries) == 0 {
-		t.Fatalf("no usage query reached the store")
-	}
-	return f.queries[len(f.queries)-1]
-}
-
-func (f *fakeUsage) count() int {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return len(f.queries)
 }
 
 func (f *fakeUsage) QueryUsage(ctx context.Context, query PaidUsageQuery) (PaidUsagePage, error) {

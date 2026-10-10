@@ -51,7 +51,7 @@ func TestUsageRequiresSession(t *testing.T) {
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("usage without a session = %d, want 401", rec.Code)
 	}
-	if h.usage.count() != 0 {
+	if h.usage.paidCount() != 0 {
 		t.Fatal("an unauthenticated request reached the usage store")
 	}
 }
@@ -433,19 +433,6 @@ func TestUsageCursorCodec(t *testing.T) {
 	// The token must be canonical: a padded variant is rejected.
 	if _, err := decodeUsageCursor(encoded + "="); err == nil {
 		t.Fatal("a non-canonical cursor must be rejected")
-	}
-}
-
-func TestUsageWindowValidation(t *testing.T) {
-	from := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
-	if err := validateUsageWindow(from, from.Add(MaxUsageWindow)); err != nil {
-		t.Fatalf("a 31-day window must be allowed: %v", err)
-	}
-	if err := validateUsageWindow(from, from.Add(MaxUsageWindow+time.Second)); err == nil {
-		t.Fatal("a window longer than 31 days must be rejected")
-	}
-	if err := validateUsageWindow(from, from); err == nil {
-		t.Fatal("an empty window must be rejected")
 	}
 }
 

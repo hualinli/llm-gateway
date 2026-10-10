@@ -15,6 +15,13 @@ import (
 
 const ActionMemberQuotaChange = "org.member.quota_change"
 
+// Usage scope labels returned to the client so a dashboard can state whether it
+// is showing "your usage" or "organization usage".
+const (
+	usageScopeSelf         = "self"
+	usageScopeOrganization = "organization"
+)
+
 type paidUsageEventDTO struct {
 	ExecutionID      string  `json:"execution_id"`
 	UserID           *string `json:"user_id,omitempty"`
@@ -409,9 +416,15 @@ func (s *server) getAdminBillingSummary(ctx context.Context, c *app.RequestConte
 	writeJSON(c, http.StatusOK, toPlatformBillingSummaryDTO(summary))
 }
 
+// billingReports is the nil-safe accessor for the reports store. A nil store
+// answers 503 on every billing read: an empty report would claim the
+// organization consumed nothing, which is exactly the lie a missing store must
+// not tell.
 func (s *server) billingReports() (BillingReports, bool) {
-	reports, ok := s.usage.(BillingReports)
-	return reports, ok && reports != nil
+	if s.usage == nil {
+		return nil, false
+	}
+	return s.usage, true
 }
 
 func (s *server) authorizeOwnBillingHistory(ctx context.Context, actorUserID, orgID int64) (organization.Membership, error) {
