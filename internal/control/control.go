@@ -440,7 +440,7 @@ func validateProviderConfigs(configs map[string]*pb.ProviderConfig) error {
 		}
 		protocol := normalizeProviderProtocol(cfg.Protocol)
 		switch protocol {
-		case "openai-compatible":
+		case "openai-compatible", "openai-responses":
 			providerURL := strings.TrimSpace(cfg.Url)
 			if providerURL == "" {
 				return fmt.Errorf("provider %q url is required", id)

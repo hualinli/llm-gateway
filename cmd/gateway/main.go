@@ -148,6 +148,9 @@ func main() {
 		log.Fatalf("billing: %v", err)
 	}
 	if billingAdmission != nil {
+		billingAdmission.knownProtocolModel = func(model, protocol string) bool {
+			return len(registry.ProvidersForProtocol(model, protocol)) > 0
+		}
 		// 只有安装 finalizer 才会在完整 SSE 终态事件边界阻塞 [DONE]；没有它
 		// 就是 T06A 之前的透传语义（demo 显式选择）。
 		proxyHandler.SetFinalizer(billingAdmission)
@@ -233,6 +236,7 @@ func main() {
 		gatewayReadyz(w, ready.Gateway(len(registry.Models()), rdb.Ping(ctx).Err(), lim.FailClosed()))
 	})
 	mux.Handle("/v1/chat/completions", authedLimitedProxy)
+	mux.Handle("/v1/responses", authedLimitedProxy)
 	guarded := gatewayguard.Middleware(accessGuard, gatewayguard.Options{KnownModel: registry.HasModel})
 	mux.Handle("/v1/models", auth.Middleware(authStore)(guarded(limiter.Middleware(lim)(proxy.NewModelsHandler(registry)))))
 

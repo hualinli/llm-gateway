@@ -192,6 +192,15 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		httperr.WriteStatus(w, r, http.StatusBadRequest, `only streaming requests are supported (set "stream": true)`)
 		return
 	}
+	protocol := provider.ProtocolChat
+	if r.URL.Path == "/v1/responses" {
+		protocol = provider.ProtocolResponses
+		if _, err := provider.ResponsesTextInputs(body); err != nil {
+			metrics.RequestsTotal.WithLabelValues(tenant, h.metricModel(model), "400").Inc()
+			httperr.WriteStatus(w, r, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
 	model, err = normalizeModel(model)
 	if err != nil {
 		metrics.RequestsTotal.WithLabelValues(tenant, "", "400").Inc()
@@ -203,10 +212,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		httperr.WriteStatus(w, r, http.StatusNotFound, fmt.Sprintf("unknown model %q; see GET /v1/models", model))
 		return
 	}
-	providers := h.registry.ProvidersFor(model)
+	providers := h.registry.ProvidersForProtocol(model, protocol)
 	if len(providers) == 0 {
 		metrics.RequestsTotal.WithLabelValues(tenant, model, "502").Inc()
-		httperr.WriteStatus(w, r, http.StatusBadGateway, "no provider available")
+		httperr.WriteStatus(w, r, http.StatusBadGateway, "no native provider available for this request protocol")
 		return
 	}
 	if h.finalizer != nil {
@@ -379,6 +388,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			metrics.GatewayStreamIncompleteTotal.WithLabelValues(tenant, model).Inc()
 			metrics.RequestsTotal.WithLabelValues(tenant, model, "200").Inc()
 			return
+		}
+		// A terminal event can be the first event. A receipt veto is already a
+		// billing decision (possibly an unknown COMMIT), not permission to run
+		// another paid generation under the same execution identity.
+		if errors.Is(err, provider.ErrTerminalGateVetoed) {
+			break
 		}
 		var ue *provider.UpstreamError
 		if errors.As(err, &ue) && !ue.Retryable {

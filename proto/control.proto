@@ -90,7 +90,7 @@ message KeyRecord {
 // Gateway applies a snapshot. They are never stored in Config.
 message ProviderConfig {
   string id = 1;
-  string protocol = 2;       // openai-compatible; mocks run as external compatible servers
+  string protocol = 2;       // openai-compatible or openai-responses; mocks run as external compatible servers
   string url = 3;            // base URL for HTTP providers
   string credential_ref = 4; // opaque reference; never a raw secret
   string model = 5;          // optional upstream model override

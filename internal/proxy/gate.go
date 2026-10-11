@@ -158,7 +158,7 @@ func usageChargeable(usage *provider.Usage) bool {
 	if !usageValid(usage) {
 		return false
 	}
-	return usage.TotalTokens == 0 ||
+	return (usage.TotalTokens == 0 && !usage.TotalTokensDeclared) ||
 		usage.TotalTokens == usage.PromptTokens+usage.CompletionTokens
 }
 

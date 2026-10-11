@@ -41,12 +41,12 @@ func TestProviderConfigAdminPatchesPreserveUnrelatedSnapshotFields(t *testing.T)
 	}
 
 	created, err := srv.UpsertProviderConfig("provider-b", &pb.ProviderConfig{
-		Id: "provider-b", Protocol: "openai-compatible", Url: "https://b.example/v1",
+		Id: "provider-b", Protocol: "openai-responses", Url: "https://b.example/v1",
 	}, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if created.Version != 2 || len(created.Providers) != 2 || len(created.KeyRecords) != 1 || created.KeyRecords[0].Status != "active" {
+	if created.Providers["provider-b"].Protocol != "openai-responses" || created.Version != 2 || len(created.Providers) != 2 || len(created.KeyRecords) != 1 || created.KeyRecords[0].Status != "active" {
 		t.Fatalf("provider create did not preserve the rest of the latest snapshot: %+v", created)
 	}
 

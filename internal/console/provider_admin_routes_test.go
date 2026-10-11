@@ -134,7 +134,7 @@ func TestProviderAdminRoutesRequirePlatformAdminAndRedactCredential(t *testing.T
 		t.Fatalf("provider write without CSRF status=%d calls=%d", missingCSRF.Code, control.upsertCalls)
 	}
 
-	created := h.orgReq(http.MethodPost, PathAdminProviders, `{"id":"secondary","protocol":"openai-compatible","url":"https://upstream.example/v1","timeouts":{"attempt_timeout_ms":0},"mock_delay_ms":0}`, admin, true)
+	created := h.orgReq(http.MethodPost, PathAdminProviders, `{"id":"secondary","protocol":"openai-responses","url":"https://upstream.example/v1","timeouts":{"attempt_timeout_ms":0},"mock_delay_ms":0}`, admin, true)
 	if created.Code != http.StatusCreated || control.upsertCalls != 1 {
 		t.Fatalf("provider create status=%d body=%s calls=%d", created.Code, created.Body.String(), control.upsertCalls)
 	}

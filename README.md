@@ -20,6 +20,7 @@ Mock 只定义在开发专用 `docker-compose.mock.yml` 中，主 `docker-compos
 |---|---|
 | [业务方案](docs/BUSINESS.md) | 平台、企业负责人、管理员和成员的边界；Key、余额、额度、价格、开户；后续 TODO |
 | [当前状态](docs/PROJECT-STATUS.md) | 已实现能力与尚需完成的部分 |
+| [原生 Responses](docs/NATIVE-RESPONSES.md) | 上游配置、调用方式、计费行为与第一版范围 |
 | [架构](docs/ARCHITECTURE.md) | 服务职责、数据归属和调用计费链路 |
 | [技术决策](docs/decisions.md) | 运行模式、权限、金额、价格版本和持久化边界 |
 | [开发与验证](docs/DEVELOPMENT.md) | 启停、依赖、测试、发布候选和实验入口 |

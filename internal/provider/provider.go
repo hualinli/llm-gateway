@@ -18,6 +18,9 @@ type Usage struct {
 	PromptTokens     int `json:"prompt_tokens"`
 	CompletionTokens int `json:"completion_tokens"`
 	TotalTokens      int `json:"total_tokens"`
+	// Responses distinguishes an omitted total from an explicitly reported
+	// zero; the latter cannot override nonzero input/output components.
+	TotalTokensDeclared bool `json:"-"`
 }
 
 // Provider 抽象一家上游推理服务。
@@ -315,6 +318,18 @@ func (r *Registry) CloseIdleConnections() {
 	closeProviders(instancesToSlice(instances))
 }
 
+// ProvidersForProtocol preserves failover order while preventing a native
+// Responses body from reaching a Chat provider, or vice versa.
+func (r *Registry) ProvidersForProtocol(model, protocol string) []Provider {
+	var compatible []Provider
+	for _, p := range r.ProvidersFor(model) {
+		if StreamProtocol(p) == protocol {
+			compatible = append(compatible, p)
+		}
+	}
+	return compatible
+}
+
 func (r *Registry) buildProvider(cfg ProviderConfig) (Provider, error) {
 	protocol := normalizeProtocol(cfg.Protocol)
 	switch protocol {
@@ -324,7 +339,7 @@ func (r *Registry) buildProvider(cfg ProviderConfig) (Provider, error) {
 			return nil, fmt.Errorf("mock delay must be non-negative")
 		}
 		return NewMockProvider(cfg.ID, delay), nil
-	case "openai-compatible":
+	case "openai-compatible", "openai-responses":
 		apiKey := ""
 		if cfg.CredentialRef != "" {
 			if r.credentials == nil {
@@ -343,6 +358,7 @@ func (r *Registry) buildProvider(cfg ProviderConfig) (Provider, error) {
 			}
 		}
 		openAI := DefaultOpenAIConfig(cfg.ID, cfg.URL, apiKey)
+		openAI.Protocol = protocol
 		openAI.Model = cfg.Model
 		openAI.ModelMapping = cloneStringMap(cfg.ModelMapping)
 		if cfg.Timeouts.ConnectTimeout > 0 {
@@ -446,7 +462,7 @@ func normalizeProviderConfigs(configs map[string]ProviderConfig) (map[string]Pro
 			return nil, fmt.Errorf("provider %q protocol is required", id)
 		}
 		cfg.Protocol = normalizeProtocol(protocol)
-		if cfg.Protocol != "mock" && cfg.Protocol != "openai-compatible" {
+		if cfg.Protocol != "mock" && cfg.Protocol != "openai-compatible" && cfg.Protocol != "openai-responses" {
 			return nil, fmt.Errorf("provider %q has unsupported protocol %q", id, cfg.Protocol)
 		}
 		cfg.URL = strings.TrimSpace(cfg.URL)
@@ -467,7 +483,7 @@ func normalizeProviderConfigs(configs map[string]ProviderConfig) (map[string]Pro
 				}
 			}
 		}
-		if cfg.Protocol == "openai-compatible" {
+		if cfg.Protocol == "openai-compatible" || cfg.Protocol == "openai-responses" {
 			if strings.TrimSpace(cfg.URL) == "" {
 				return nil, fmt.Errorf("provider %q url is required", id)
 			}

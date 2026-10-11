@@ -21,10 +21,12 @@ import (
 // The client deliberately has no http.Client.Timeout: an SSE request can be
 // long-lived. Its lifetime is bounded by AttemptTimeout and IdleTimeout.
 type OpenAIConfig struct {
-	Name    string
-	BaseURL string
-	APIKey  string
-	Model   string // optional upstream model override
+	// Protocol selects a native wire protocol; no cross-protocol conversion.
+	Protocol string
+	Name     string
+	BaseURL  string
+	APIKey   string
+	Model    string // optional upstream model override
 	// ModelMapping optionally maps the gateway model name to the upstream
 	// model name. A direct Model override takes precedence.
 	ModelMapping map[string]string
@@ -65,6 +67,12 @@ type OpenAIProvider struct {
 }
 
 func NewOpenAIProvider(cfg OpenAIConfig) (*OpenAIProvider, error) {
+	if cfg.Protocol == "" {
+		cfg.Protocol = ProtocolChat
+	}
+	if cfg.Protocol != ProtocolChat && cfg.Protocol != ProtocolResponses {
+		return nil, fmt.Errorf("unsupported OpenAI protocol %q", cfg.Protocol)
+	}
 	if strings.TrimSpace(cfg.Name) == "" {
 		return nil, fmt.Errorf("openai provider name is empty")
 	}
@@ -111,9 +119,13 @@ func NewOpenAIProvider(cfg OpenAIConfig) (*OpenAIProvider, error) {
 		transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
 	}
 
+	endpoint := openAIEndpoint(base)
+	if cfg.Protocol == ProtocolResponses {
+		endpoint = strings.TrimSuffix(endpoint, "/chat/completions") + "/responses"
+	}
 	return &OpenAIProvider{
 		name:     cfg.Name,
-		endpoint: openAIEndpoint(base),
+		endpoint: endpoint,
 		model:    cfg.Model,
 		apiKey:   cfg.APIKey,
 		client:   &http.Client{Transport: transport},
@@ -122,6 +134,8 @@ func NewOpenAIProvider(cfg OpenAIConfig) (*OpenAIProvider, error) {
 }
 
 func (p *OpenAIProvider) Name() string { return p.name }
+
+func (p *OpenAIProvider) StreamProtocol() string { return p.cfg.Protocol }
 
 // CloseIdleConnections releases keep-alive sockets when a dynamic snapshot
 // retires this provider. Active SSE requests retain their response body and
@@ -157,7 +171,11 @@ func (p *OpenAIProvider) ChatStreamGated(ctx context.Context, reqBody []byte, w 
 			modelOverride = p.cfg.ModelMapping[request.Model]
 		}
 	}
-	body, err := rewriteOpenAIRequest(reqBody, modelOverride)
+	rewrite := rewriteOpenAIRequest
+	if p.cfg.Protocol == ProtocolResponses {
+		rewrite = rewriteResponsesRequest
+	}
+	body, err := rewrite(reqBody, modelOverride)
 	if err != nil {
 		return nil, &UpstreamError{Status: http.StatusBadRequest, Message: "rewrite request: " + err.Error(), Retryable: false}
 	}
@@ -321,6 +339,9 @@ func receiveEvent(results <-chan sseResult, timer *time.Timer) (sse.Event, error
 // content event that legitimately contains the text "[DONE]" is just another
 // data event.
 func (p *OpenAIProvider) forwardEvent(ctx context.Context, event sse.Event, w io.Writer, gate TerminalGate, usage *Usage) (bool, *Usage, error) {
+	if p.cfg.Protocol == ProtocolResponses {
+		return forwardResponsesEvent(ctx, event, w, gate)
+	}
 	data := strings.TrimSpace(event.DataText())
 	endMarker := data == "[DONE]"
 	carriesUsage := false

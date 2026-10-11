@@ -19,6 +19,7 @@ import (
 	"llm-gateway/internal/httperr"
 	"llm-gateway/internal/metrics"
 	"llm-gateway/internal/observability"
+	"llm-gateway/internal/provider"
 	"llm-gateway/internal/proxy"
 	"llm-gateway/internal/testsupport/failpoint"
 
@@ -97,7 +98,10 @@ type billingAdapter struct {
 	// are the proxy's 404 and can never reach an upstream call, so they are not
 	// admitted (and no funds are reserved for them).
 	knownModel func(model string) bool
-	observer   BillingObserver
+	// knownProtocolModel prevents reserving for a model with no compatible
+	// native upstream. Configured before serving traffic.
+	knownProtocolModel func(model, protocol string) bool
+	observer           BillingObserver
 }
 
 // openBilling builds the configured adapter and its shutdown function. The
@@ -199,7 +203,7 @@ func (a *billingAdapter) Middleware(next http.Handler) http.Handler {
 		return next
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != billingPath || r.Method != http.MethodPost {
+		if (r.URL.Path != billingPath && r.URL.Path != "/v1/responses") || r.Method != http.MethodPost {
 			// Every other route (and method) keeps the proxy's own contract.
 			next.ServeHTTP(w, r)
 			return
@@ -298,7 +302,13 @@ func (a *billingAdapter) admit(w http.ResponseWriter, r *http.Request) (*billing
 		// Unreadable or oversized body: the proxy's MaxBytesReader answers it.
 		return nil, admissionPassThrough
 	}
-	bounds, failure := a.policy.Bounds(body)
+	var bounds RequestBounds
+	var failure *boundFailure
+	if r.URL.Path == "/v1/responses" {
+		bounds, failure = a.policy.ResponsesBounds(body)
+	} else {
+		bounds, failure = a.policy.Bounds(body)
+	}
 	if failure != nil {
 		if failure.PassThrough {
 			r.Body = billingReplayBody{Reader: bytes.NewReader(body), closer: closer}
@@ -316,6 +326,13 @@ func (a *billingAdapter) admit(w http.ResponseWriter, r *http.Request) (*billing
 	if a.knownModel != nil && !a.knownModel(bounds.Model) {
 		// The registry cannot serve this model, so the proxy answers 404 and no
 		// upstream call (and no money) is involved.
+		return nil, admissionPassThrough
+	}
+	protocol := provider.ProtocolChat
+	if r.URL.Path == "/v1/responses" {
+		protocol = provider.ProtocolResponses
+	}
+	if a.knownProtocolModel != nil && !a.knownProtocolModel(bounds.Model, protocol) {
 		return nil, admissionPassThrough
 	}
 

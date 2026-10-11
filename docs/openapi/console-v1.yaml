@@ -1334,7 +1334,7 @@ components:
       required: [id, protocol, url]
       properties:
         id: { type: string, pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$' }
-        protocol: { type: string, enum: [openai-compatible] }
+        protocol: { type: string, enum: [openai-compatible, openai-responses] }
         url: { type: string, format: uri, pattern: '^https?://', description: HTTP or HTTPS base URL }
         credential_ref: { type: string }
         model: { type: string }

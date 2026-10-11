@@ -32,6 +32,7 @@ import { useSession } from '../session/SessionProvider';
 
 interface ModelMappingRow { source?: string; target?: string }
 interface ProviderForm {
+  protocol: ProviderConfiguration['protocol'];
   id: string;
   url: string;
   credential_ref?: string;
@@ -66,7 +67,7 @@ function providerBody(values: ProviderForm): ProviderConfiguration {
   }
   return {
     id: values.id.trim(),
-    protocol: 'openai-compatible',
+    protocol: values.protocol ?? 'openai-compatible',
     url: values.url.trim(),
     ...(values.credential_ref ? { credential_ref: values.credential_ref } : {}),
     ...(values.model?.trim() ? { model: values.model.trim() } : {}),
@@ -197,6 +198,7 @@ export function PlatformProvidersPage(): ReactNode {
     providerForm.resetFields();
     providerForm.setFieldsValue({
       id: provider.id,
+      protocol: provider.protocol,
       url: provider.url,
       ...(provider.credential_ref === undefined ? {} : { credential_ref: provider.credential_ref }),
       ...(provider.model === undefined ? {} : { model: provider.model }),
@@ -407,6 +409,9 @@ export function PlatformProvidersPage(): ReactNode {
               <Input placeholder="https://api.example.com/v1" />
             </Form.Item>
           </Space>
+          <Form.Item name="protocol" label="上游接口格式" rules={[{ required: true }]} extra="调用接口需与上游格式一致；当前不转换两种协议。">
+            <Select options={[{ value: 'openai-compatible', label: 'Chat Completions' }, { value: 'openai-responses', label: 'Responses' }]} />
+          </Form.Item>
           <Form.Item name="credential_ref" label="访问凭据">
             <Select allowClear options={credentialOptions.filter((item) => !providerForm.getFieldValue('id') || item.provider_id === providerForm.getFieldValue('id'))} placeholder="可稍后添加" />
           </Form.Item>

@@ -224,7 +224,7 @@ export interface UpdatePlatformModelCatalogRequest {
   items: PlatformModel[];
 }
 
-export type ProviderProtocol = 'openai-compatible';
+export type ProviderProtocol = 'openai-compatible' | 'openai-responses';
 
 export interface ProviderTimeouts {
   connect_timeout_ms?: number;

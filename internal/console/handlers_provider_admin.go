@@ -263,8 +263,8 @@ func providerFromDTO(dto providerDTO) (controlclient.ProviderConfig, error) {
 	if !validAdminProviderID(dto.ID) {
 		return controlclient.ProviderConfig{}, errors.New("provider id is invalid")
 	}
-	if dto.Protocol != "openai-compatible" {
-		return controlclient.ProviderConfig{}, errors.New("protocol must be openai-compatible")
+	if dto.Protocol != "openai-compatible" && dto.Protocol != "openai-responses" {
+		return controlclient.ProviderConfig{}, errors.New("protocol must be openai-compatible or openai-responses")
 	}
 	parsed, err := url.Parse(strings.TrimSpace(dto.URL))
 	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {

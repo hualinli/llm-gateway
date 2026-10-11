@@ -570,7 +570,7 @@ func (x *KeyRecord) GetMembershipId() int64 {
 type ProviderConfig struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Protocol      string                 `protobuf:"bytes,2,opt,name=protocol,proto3" json:"protocol,omitempty"`                                // openai-compatible; mocks run as external compatible servers
+	Protocol      string                 `protobuf:"bytes,2,opt,name=protocol,proto3" json:"protocol,omitempty"`                                // openai-compatible or openai-responses; mocks run as external compatible servers
 	Url           string                 `protobuf:"bytes,3,opt,name=url,proto3" json:"url,omitempty"`                                          // base URL for HTTP providers
 	CredentialRef string                 `protobuf:"bytes,4,opt,name=credential_ref,json=credentialRef,proto3" json:"credential_ref,omitempty"` // opaque reference; never a raw secret
 	Model         string                 `protobuf:"bytes,5,opt,name=model,proto3" json:"model,omitempty"`                                      // optional upstream model override

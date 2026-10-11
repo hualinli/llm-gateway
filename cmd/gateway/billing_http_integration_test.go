@@ -84,6 +84,7 @@ func sseResponder(events ...string) func(http.ResponseWriter, *http.Request) {
 }
 
 type billingHarnessConfig struct {
+	protocol string
 	// respond is the upstream SSE behaviour.
 	respond func(http.ResponseWriter, *http.Request)
 	// creditMicro is the organization's opening balance. Ignored when
@@ -107,6 +108,7 @@ type billingHarnessConfig struct {
 }
 
 type billingHarness struct {
+	requestPath   string
 	t             *testing.T
 	server        *httptest.Server
 	db            *sql.DB
@@ -209,6 +211,7 @@ func newBillingHarness(t *testing.T, options ...billingHarnessOption) *billingHa
 	t.Cleanup(upstream.Close)
 
 	providerConfig := provider.DefaultOpenAIConfig("upstream", upstream.URL, "")
+	providerConfig.Protocol = config.protocol
 	providerConfig.AttemptTimeout = 30 * time.Second
 	providerConfig.IdleTimeout = 5 * time.Second
 	providerConfig.FirstByteTimeout = 5 * time.Second
@@ -221,6 +224,10 @@ func newBillingHarness(t *testing.T, options ...billingHarnessOption) *billingHa
 		registryModels[billingUnpricedModel] = []provider.Provider{provider.NewMockProvider("unpriced", 0)}
 	}
 	registry := provider.NewRegistry(registryModels)
+	h.requestPath = "/v1/chat/completions"
+	if config.protocol == provider.ProtocolResponses {
+		h.requestPath = "/v1/responses"
+	}
 
 	proxyHandler := proxy.NewHandler(registry, h.producer)
 	proxyHandler.SetFinalizeTimeout(config.finalizeTimeout)
@@ -246,6 +253,9 @@ func newBillingHarness(t *testing.T, options ...billingHarnessOption) *billingHa
 			t.Fatal("GATEWAY_BILLING=pg must return an adapter")
 		}
 		adapter.SetObserver(config.observer)
+		adapter.knownProtocolModel = func(model, protocol string) bool {
+			return len(registry.ProvidersForProtocol(model, protocol)) > 0
+		}
 		h.adapter = adapter
 		h.closeBilling = closer
 		t.Cleanup(func() { _ = closer() })
@@ -379,7 +389,7 @@ func (h *billingHarness) defaultBody(model string) string {
 func (h *billingHarness) post(model, body string) (*http.Response, context.CancelFunc) {
 	h.t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.server.URL+"/v1/chat/completions", strings.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.server.URL+h.requestPath, strings.NewReader(body))
 	if err != nil {
 		cancel()
 		h.t.Fatal(err)
