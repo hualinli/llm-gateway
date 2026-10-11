@@ -50,6 +50,9 @@ func TestMiddlewareWithNilLimiterPassesThroughWithoutLimiting(t *testing.T) {
 	// A tenant label no other test uses, so the metric assertions below cannot
 	// be polluted by a neighbouring test in the same package binary.
 	const tenant = "tenant-nil-limiter"
+	// Counters survive repeated test runs in the same process (-count).
+	allowedBefore := limiterCounter(t, metrics.LimiterAllowed, tenant)
+	limitedBefore := limiterCounter(t, metrics.LimiterLimited, tenant)
 
 	reached := 0
 	handler := Middleware(nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -82,11 +85,11 @@ func TestMiddlewareWithNilLimiterPassesThroughWithoutLimiting(t *testing.T) {
 		t.Fatalf("downstream reached %d times, want 3", reached)
 	}
 
-	if got := limiterCounter(t, metrics.LimiterAllowed, tenant); got != 0 {
-		t.Fatalf("limiter_allowed_total{tenant=%q}=%v, want 0: a nil limiter admits traffic without deciding", tenant, got)
+	if got := limiterCounter(t, metrics.LimiterAllowed, tenant) - allowedBefore; got != 0 {
+		t.Fatalf("limiter_allowed_total{tenant=%q} delta=%v, want 0: a nil limiter admits traffic without deciding", tenant, got)
 	}
-	if got := limiterCounter(t, metrics.LimiterLimited, tenant); got != 0 {
-		t.Fatalf("limiter_limited_total{tenant=%q}=%v, want 0", tenant, got)
+	if got := limiterCounter(t, metrics.LimiterLimited, tenant) - limitedBefore; got != 0 {
+		t.Fatalf("limiter_limited_total{tenant=%q} delta=%v, want 0", tenant, got)
 	}
 
 	// The contrast that keeps the metric assertion honest: a *real* limiter
@@ -103,8 +106,8 @@ func TestMiddlewareWithNilLimiterPassesThroughWithoutLimiting(t *testing.T) {
 	if failOpenRec.Code != http.StatusTeapot {
 		t.Fatalf("fail-open status=%d, want 418", failOpenRec.Code)
 	}
-	if got := limiterCounter(t, metrics.LimiterAllowed, tenant); got != 1 {
-		t.Fatalf("limiter_allowed_total{tenant=%q}=%v after a real fail-open, want 1", tenant, got)
+	if got := limiterCounter(t, metrics.LimiterAllowed, tenant) - allowedBefore; got != 1 {
+		t.Fatalf("limiter_allowed_total{tenant=%q} delta=%v after a real fail-open, want 1", tenant, got)
 	}
 }
 

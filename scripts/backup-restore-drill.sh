@@ -1871,6 +1871,26 @@ class Drill:
             time.sleep(0.5)
         return False, statuses
 
+    def wait_backlog_drained(self, env, timeout=180):
+        deadline = time.monotonic() + timeout
+        status, payload = None, None
+        counts = ("pending_dispatch", "dispatched", "exception", "claimed", "unsettled")
+        while time.monotonic() < deadline:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            status, payload = env.metering_json("/receipts/backlog", timeout=min(5, remaining))
+            backlog = payload.get("backlog") if isinstance(payload, dict) else None
+            transport = payload.get("transport") if isinstance(payload, dict) else None
+            if (status == 200 and isinstance(backlog, dict) and isinstance(transport, dict)
+                    and all(backlog.get(key) == 0 for key in counts)
+                    and transport.get("pending") == 0):
+                return True, status, payload
+            remaining = deadline - time.monotonic()
+            if remaining > 0:
+                time.sleep(min(0.5, remaining))
+        return False, status, payload
+
     # -- BK-01 -------------------------------------------------------------
     def bk01(self, check):
         settled, statuses = self.wait_settled(self.a, timeout=120)
@@ -2238,7 +2258,7 @@ class Drill:
         check.detail("pre_rf03_receipt_statuses", preceding_statuses)
         check.require(preceding_settled,
                       "RF-03 前 B 仍有未结算收据: %r" % preceding_statuses)
-        quiet_status, quiet_payload = env.metering_json("/receipts/backlog")
+        drained, quiet_status, quiet_payload = self.wait_backlog_drained(env)
         quiet_backlog = (quiet_payload or {}).get("backlog") if isinstance(quiet_payload, dict) else None
         quiet_transport = (quiet_payload or {}).get("transport") if isinstance(quiet_payload, dict) else None
         check.detail("pre_rf03_backlog_status", quiet_status)
@@ -2248,9 +2268,7 @@ class Drill:
                       and isinstance(quiet_transport, dict),
                       "RF-03 前无法读取 durable backlog/transport 状态: %s %r"
                       % (quiet_status, quiet_payload))
-        quiet_counts = ("pending_dispatch", "dispatched", "exception", "claimed", "unsettled")
-        check.require(all(quiet_backlog.get(key) == 0 for key in quiet_counts)
-                      and quiet_transport.get("pending") == 0,
+        check.require(drained,
                       "RF-03 前 backlog/Redis consumer 尚未归零: backlog=%r transport=%r"
                       % (quiet_backlog, quiet_transport))
         metering.stop()

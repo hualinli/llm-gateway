@@ -535,6 +535,71 @@ func isExpectedConcurrentFailure(err error) bool {
 
 // --- owner 转移 ------------------------------------------------------------
 
+// Model Reserve paused after locking the membership but before locking its user.
+// Transfer must wait without holding the user lock needed by that reservation.
+func TestTransferOwnershipLocksMembershipBeforeUser(t *testing.T) {
+	db, _ := isolatedDSN(t)
+	svc := organization.NewService(db)
+	owner := createUser(t, db, "lock-owner@example.com")
+	target := createUser(t, db, "lock-target@example.com")
+	org := seedEnterprise(t, db, svc, "Lock order", []int64{owner.ID, target.ID}, []string{"owner", "member"})
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	reservation, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reservation.Rollback()
+	var pid, membershipID int
+	if err := reservation.QueryRowContext(ctx, `SELECT pg_backend_pid()`).Scan(&pid); err != nil {
+		t.Fatal(err)
+	}
+	if err := reservation.QueryRowContext(ctx, `SELECT id FROM memberships
+WHERE org_id=$1 AND user_id=$2 FOR UPDATE`, org.ID, target.ID).Scan(&membershipID); err != nil {
+		t.Fatal(err)
+	}
+	result := make(chan error, 1)
+	go func() { result <- svc.TransferOwnership(ctx, owner.ID, org.ID, target.ID) }()
+
+	// Synchronize on PostgreSQL's actual lock wait, not a scheduling delay.
+	for {
+		var blocked bool
+		if err := db.QueryRowContext(ctx, `SELECT EXISTS (
+SELECT 1 FROM pg_stat_activity WHERE $1::int = ANY(pg_blocking_pids(pid)))`, pid).Scan(&blocked); err != nil {
+			t.Fatal(err)
+		}
+		if blocked {
+			break
+		}
+		select {
+		case err := <-result:
+			t.Fatalf("transfer returned before waiting for membership: %v", err)
+		case <-ctx.Done():
+			t.Fatal("transfer never waited for the membership lock")
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	var userID int
+	if err := reservation.QueryRowContext(ctx, `SELECT id FROM users WHERE id=$1 FOR UPDATE NOWAIT`, target.ID).Scan(&userID); err != nil {
+		t.Fatalf("transfer locked user before membership, blocking reservation: %v", err)
+	}
+	if err := reservation.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-result:
+		if err != nil {
+			t.Fatalf("transfer after reservation released its locks: %v", err)
+		}
+	case <-ctx.Done():
+		t.Fatal("transfer remained blocked after reservation committed")
+	}
+	if role, _ := membershipRole(t, db, org.ID, target.ID); role != "owner" {
+		t.Fatalf("target role=%q, want owner", role)
+	}
+}
+
 func TestTransferOwnershipPromotesTargetAndBumpsRevision(t *testing.T) {
 	db, _ := isolatedDSN(t)
 	svc := organization.NewService(db)

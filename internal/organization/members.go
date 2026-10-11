@@ -263,7 +263,15 @@ func (s *Service) TransferOwnership(ctx context.Context, actorUserID, orgID, tar
 		if targetUserID == actorUserID {
 			return ErrTransferTarget
 		}
-		target, err := memberInTx(ctx, tx, orgID, targetUserID)
+		// Reserve locks membership before user. Hold the same lock order here:
+		// taking the user SHARE lock first would deadlock with a reservation
+		// holding the membership lock while it waits for that user.
+		var target Member
+		err := scanMember(tx.QueryRowContext(ctx, queryGetMember+" FOR UPDATE OF m",
+			orgID, targetUserID).Scan, &target)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrMemberNotFound
+		}
 		if err != nil {
 			return err
 		}
