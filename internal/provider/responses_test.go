@@ -15,8 +15,10 @@ import (
 	"llm-gateway/internal/provider/sse"
 )
 
-const responsesDelta = "event: response.output_text.delta\r\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"hello [DONE]\",\"vendor_field\":7}\r\n\r\n"
-const responsesCompleted = "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"usage\":{\"input_tokens\":10,\"output_tokens\":2,\"total_tokens\":12}}}\n\n"
+const (
+	responsesDelta     = "event: response.output_text.delta\r\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"hello [DONE]\",\"vendor_field\":7}\r\n\r\n"
+	responsesCompleted = "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"usage\":{\"input_tokens\":10,\"output_tokens\":2,\"total_tokens\":12}}}\n\n"
+)
 
 func TestResponsesNativeStreamAndCompletionGate(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -149,5 +151,24 @@ func TestResponsesUnexpectedEOFCannotComplete(t *testing.T) {
 	_, err := p.ChatStreamGated(context.Background(), []byte(`{"input":"hi","stream":true}`), &output, TerminalGateFunc(func(context.Context, TerminalEvent) error { calls++; return nil }))
 	if !errors.Is(err, io.ErrUnexpectedEOF) || calls != 0 || output.String() != responsesDelta {
 		t.Fatalf("err=%v gateCalls=%d output=%q", err, calls, output.String())
+	}
+}
+
+func TestResponsesServiceTierOnlyDefault(t *testing.T) {
+	for _, body := range []string{
+		`{"input":"hi","service_tier":"priority"}`, `{"input":"hi","service_tier":"flex"}`,
+		`{"input":"hi","service_tier":"scale"}`, `{"input":"hi","service_tier":7}`,
+	} {
+		if _, err := ResponsesTextInputs([]byte(body)); err == nil {
+			t.Errorf("accepted unpriced service tier: %s", body)
+		}
+	}
+	for _, body := range []string{
+		`{"input":"hi"}`, `{"input":"hi","service_tier":null}`,
+		`{"input":"hi","service_tier":"auto"}`, `{"input":"hi","service_tier":"default"}`,
+	} {
+		if _, err := ResponsesTextInputs([]byte(body)); err != nil {
+			t.Errorf("rejected default tier: %s: %v", body, err)
+		}
 	}
 }

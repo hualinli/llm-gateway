@@ -48,6 +48,15 @@ func ResponsesTextInputs(body []byte) ([]json.RawMessage, error) {
 			return nil, fmt.Errorf("Responses field %q is not supported by the stateless text gateway", name)
 		}
 	}
+	// service_tier selects the upstream price (priority/flex/scale), but the
+	// funds policy prices only the default tier. Reject anything else instead
+	// of letting a client buy a tier the gateway does not charge for.
+	if raw, ok := fields["service_tier"]; ok && !bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		var tier string
+		if json.Unmarshal(raw, &tier) != nil || (tier != "auto" && tier != "default") {
+			return nil, fmt.Errorf("Responses service_tier must be \"auto\" or \"default\"")
+		}
+	}
 	for _, name := range []string{"store", "background"} {
 		if raw, ok := fields[name]; ok {
 			var value bool
