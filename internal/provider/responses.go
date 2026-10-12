@@ -154,6 +154,35 @@ func rewriteResponsesRequest(body []byte, modelOverride string) ([]byte, error) 
 	return json.Marshal(fields)
 }
 
+// responsesErrorBeforeOutput reports whether the first upstream event is a
+// bare "error": nothing has been generated or written and no usage exists,
+// so it is an ordinary pre-first-byte upstream failure, not a billing
+// exception. Server and rate-limit errors stay eligible for failover.
+func responsesErrorBeforeOutput(event sse.Event) *UpstreamError {
+	var payload struct {
+		Type     string          `json:"type"`
+		Code     *string         `json:"code"`
+		Message  string          `json:"message"`
+		Response json.RawMessage `json:"response"`
+	}
+	if json.Unmarshal([]byte(event.DataText()), &payload) != nil || payload.Type != "error" || len(payload.Response) != 0 {
+		return nil
+	}
+	if event.Event != "" && event.Event != payload.Type {
+		return nil
+	}
+	code := ""
+	if payload.Code != nil {
+		code = *payload.Code
+	}
+	retryable := code == "" || code == "server_error" || code == "rate_limit_exceeded"
+	status := http.StatusBadGateway
+	if code == "rate_limit_exceeded" {
+		status = http.StatusTooManyRequests
+	}
+	return &UpstreamError{Status: status, Message: "Responses error before output: " + code, Retryable: retryable}
+}
+
 // Native events retain their exact SSE bytes. Usage is authoritative only on
 // the response lifecycle terminal event, never on output_text.done.
 func forwardResponsesEvent(ctx context.Context, event sse.Event, w io.Writer, gate TerminalGate) (bool, *Usage, error) {

@@ -243,6 +243,11 @@ func (p *OpenAIProvider) ChatStreamGated(ctx context.Context, reqBody []byte, w 
 		return nil, err
 	}
 
+	if p.cfg.Protocol == ProtocolResponses {
+		if ue := responsesErrorBeforeOutput(first); ue != nil {
+			return nil, ue
+		}
+	}
 	var usage *Usage
 	done, usage, err := p.forwardEvent(attemptCtx, first, w, gate, usage)
 	if err != nil {

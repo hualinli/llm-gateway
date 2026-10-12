@@ -172,3 +172,65 @@ func TestResponsesServiceTierOnlyDefault(t *testing.T) {
 		}
 	}
 }
+
+func TestResponsesErrorBeforeOutputIsUpstreamFailure(t *testing.T) {
+	for _, tc := range []struct {
+		name, data string
+		retryable  bool
+		status     int
+	}{
+		{"server", `{"type":"error","code":"server_error","message":"boom"}`, true, http.StatusBadGateway},
+		{"rate_limit", `{"type":"error","code":"rate_limit_exceeded","message":"slow"}`, true, http.StatusTooManyRequests},
+		{"invalid", `{"type":"error","code":"invalid_prompt","message":"no"}`, false, http.StatusBadGateway},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				io.WriteString(w, "event: error\ndata: "+tc.data+"\n\n")
+			}))
+			defer upstream.Close()
+			cfg := DefaultOpenAIConfig("native", upstream.URL+"/v1", "secret")
+			cfg.Protocol = ProtocolResponses
+			p, err := NewOpenAIProvider(cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer p.CloseIdleConnections()
+			var output bytes.Buffer
+			gateCalls := 0
+			gate := TerminalGateFunc(func(context.Context, TerminalEvent) error { gateCalls++; return nil })
+			usage, err := p.ChatStreamGated(context.Background(), []byte(`{"input":"hi","stream":true}`), &output, gate)
+			var ue *UpstreamError
+			if !errors.As(err, &ue) || ue.Retryable != tc.retryable || ue.Status != tc.status {
+				t.Fatalf("err=%v", err)
+			}
+			if gateCalls != 0 || output.Len() != 0 || usage != nil {
+				t.Fatalf("pre-output error reached billing: gate=%d output=%q usage=%v", gateCalls, output.String(), usage)
+			}
+		})
+	}
+}
+
+func TestResponsesErrorAfterOutputStillGated(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		io.WriteString(w, responsesDelta+"event: error\ndata: {\"type\":\"error\",\"code\":\"server_error\"}\n\n")
+	}))
+	defer upstream.Close()
+	cfg := DefaultOpenAIConfig("native", upstream.URL+"/v1", "secret")
+	cfg.Protocol = ProtocolResponses
+	p, err := NewOpenAIProvider(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.CloseIdleConnections()
+	var output bytes.Buffer
+	var seen []TerminalEvent
+	gate := TerminalGateFunc(func(_ context.Context, e TerminalEvent) error { seen = append(seen, e); return nil })
+	if _, err := p.ChatStreamGated(context.Background(), []byte(`{"input":"hi","stream":true}`), &output, gate); err == nil {
+		t.Fatal("error after output must fail the stream")
+	}
+	if len(seen) != 1 || seen[0].Usage != nil {
+		t.Fatalf("output without usage must remain a billing exception: %+v", seen)
+	}
+}
