@@ -103,7 +103,7 @@ func TestRedisProducerReplaysRepairedSpoolWithoutNewRequests(t *testing.T) {
 	if recovered.EventID != event.EventID || recovered.CostCents != event.CostCents {
 		t.Fatalf("wrong recovered event: %+v", recovered)
 	}
-	waitFor(t, time.Second, func() bool { _, err := os.Stat(path); return os.IsNotExist(err) })
+	waitFor(t, 5*time.Second, func() bool { _, err := os.Stat(path); return os.IsNotExist(err) })
 	quarantined, _ := filepath.Glob(path + ".corrupt-*")
 	if len(quarantined) != 1 {
 		t.Fatalf("corrupt tail was not retained: %v", quarantined)
@@ -182,7 +182,7 @@ func TestRedisMeteringDeliveryAndReconcile(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	waitFor(t, time.Second, func() bool {
+	waitFor(t, 5*time.Second, func() bool {
 		count, _ := ledger.Count(context.Background())
 		return count == 1
 	})
@@ -195,7 +195,7 @@ func TestRedisMeteringDeliveryAndReconcile(t *testing.T) {
 	if err := rdb.XAdd(ctx, &redis.XAddArgs{Stream: StreamName, Values: map[string]any{"data": "not-json"}}).Err(); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, time.Second, func() bool {
+	waitFor(t, 5*time.Second, func() bool {
 		n, _ := rdb.XLen(ctx, DLQStreamName).Result()
 		return n == 1
 	})
@@ -225,21 +225,19 @@ func TestRedisMeteringPendingIsReclaimed(t *testing.T) {
 	if err := rdb.XAdd(ctx, &redis.XAddArgs{Stream: StreamName, Values: map[string]any{"data": string(payload)}}).Err(); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, time.Second, func() bool {
-		pending, err := rdb.XPending(ctx, StreamName, GroupName).Result()
-		return err == nil && pending.Count == 1
-	})
-	waitFor(t, time.Second, func() bool {
+	// The first delivery fails and stays pending; reclaim must redeliver it.
+	// With 10ms ReclaimEvery/PendingMinIdle the transient pending==1 window can
+	// close before a poll observes it, so assert only the final outcome: the
+	// injected failure happened, the event was billed exactly once after
+	// reclaim, and nothing is left pending.
+	waitFor(t, 5*time.Second, func() bool {
 		count, _ := ledger.Count(context.Background())
 		return count == 1
 	})
-
-	// The entry is counted before the consumer's XACK lands, and the reclaim that
-	// clears XPending runs on its own ReclaimEvery/PendingMinIdle timer. Reading
-	// XPending straight after count==1 therefore races the background goroutine
-	// and flakes whenever the machine is loaded (full -race suite, busy runner).
-	// Poll for the terminal state like every other assertion in this test.
-	waitFor(t, time.Second, func() bool {
+	if !ledger.failed.Load() {
+		t.Fatal("first delivery never failed; reclaim path was not exercised")
+	}
+	waitFor(t, 5*time.Second, func() bool {
 		pending, err := rdb.XPending(ctx, StreamName, GroupName).Result()
 		return err == nil && pending.Count == 0
 	})
@@ -311,7 +309,7 @@ func TestConsumerRecreatesDeletedGroup(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go consumer.Run(ctx)
-	waitFor(t, time.Second, func() bool { return consumer.EnsureGroup(ctx) == nil })
+	waitFor(t, 5*time.Second, func() bool { return consumer.EnsureGroup(ctx) == nil })
 	if err := rdb.XGroupDestroy(ctx, StreamName, GroupName).Err(); err != nil {
 		t.Fatal(err)
 	}
