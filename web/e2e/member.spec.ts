@@ -112,7 +112,7 @@ test.describe('member account', () => {
 
   test('only the signed-in member can list and stop their own named Keys', async ({ page }) => {
     test.skip(!state.controlAvailable, '完整 Key 工作流需要本地 Control 服务');
-    const response = await page.request.get('/api/v1/orgs/' + state.orgA.id + '/keys?limit=20');
+    const response = await page.request.get('/api/v1/orgs/' + state.orgA.id + '/keys?limit=100');
     expect(response.status()).toBe(200);
     const result = (await response.json()) as {
       items: Array<{ key_id: string; name: string; organization_id: string; owner_user_id: string | null }>;
