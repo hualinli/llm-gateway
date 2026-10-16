@@ -269,10 +269,12 @@ services:
     volumes:
       - pg-data:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U gateway -d llm_gateway"]
+      # 必须走 TCP。官方镜像初始化时会短暂拉起只监听 Unix socket 的临时进程，
+      # 不带 -h 的 pg_isready 会把它判成健康，迁移随即对 5432 连接被拒绝。
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U gateway -d llm_gateway"]
       interval: 2s
-      timeout: 1s
-      retries: 10
+      timeout: 3s
+      retries: 30
 
   redis:
     image: redis:8.10.2-alpine

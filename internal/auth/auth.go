@@ -53,14 +53,14 @@ func NewMemoryStoreFromRecords(records []KeyRecord) *MemoryStore {
 	return m
 }
 
+// Validate 是只需要租户编号的旧入口。未命中时 TenantID 为空字符串，ok 为 false。
 func (m *MemoryStore) Validate(rawKey string) (string, bool) {
 	record, ok := m.Lookup(rawKey)
 	return record.TenantID, ok
 }
 
-// Lookup resolves a raw key to its snapshot record. It is read-only and never
-// consults the database: authoritative org/user/member state is the access
-// guard's job (ADR-0003 §2.8).
+// Lookup 先对 rawKey 做 SHA-256，再在内存快照里取 KeyRecord。只读，不查数据库。
+// ok 为 false 表示未知 Key。组织、用户和成员是否仍然有效，由后面的 access guard 核对。
 func (m *MemoryStore) Lookup(rawKey string) (KeyRecord, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -74,6 +74,7 @@ func (m *MemoryStore) Update(keys map[string]string) {
 	m.UpdateRecords(LegacyRecords(keys))
 }
 
+// UpdateRecords 热更全量 KeyRecord（控制面推送时调用），原子替换。
 func (m *MemoryStore) UpdateRecords(records []KeyRecord) {
 	newKeys := make(map[string]KeyRecord, len(records))
 	for _, record := range records {
@@ -131,48 +132,52 @@ func Middleware(store Store) func(http.Handler) http.Handler {
 				return
 			}
 
+			// 没有 Authorization 头：401 missing Authorization。
 			auth := r.Header.Get("Authorization")
 			if auth == "" {
 				httperr.WriteStatus(w, r, http.StatusUnauthorized, "missing Authorization")
 				return
 			}
+			// 必须是 "Bearer" 加一个值，方案名大小写不敏感。格式不对：401 invalid Authorization。
 			scheme, rawKey, ok := strings.Cut(auth, " ")
 			if !ok || !strings.EqualFold(scheme, "Bearer") {
 				httperr.WriteStatus(w, r, http.StatusUnauthorized, "invalid Authorization")
 				return
 			}
+			// 去掉首尾空白。Key 中间有空格、制表符或换行则拒绝。
 			rawKey = strings.TrimSpace(rawKey)
-			if rawKey == "" || strings.IndexAny(rawKey, " \t\r\n") >= 0 {
+			if rawKey == "" || strings.ContainsAny(rawKey, " \t\r\n") {
 				httperr.WriteStatus(w, r, http.StatusUnauthorized, "invalid Authorization")
 				return
 			}
 
+			// 快照未命中：401 invalid api key。和上面的格式错误不是同一条 message。
 			record, ok := store.Lookup(rawKey)
 			if !ok {
 				httperr.WriteStatus(w, r, http.StatusUnauthorized, "invalid api key")
 				return
 			}
 
+			// 把租户编号和整条 KeyRecord 放进新的 context，再交给下一层。
 			ctx := WithKeyRecord(context.WithValue(r.Context(), TenantKey, record.TenantID), record)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }
 
-// WithKeyRecord attaches the snapshot-resolved credential to the context.
+// WithKeyRecord 把 KeyRecord 附加到上下文，供后续访问 guard 核对。
 func WithKeyRecord(ctx context.Context, record KeyRecord) context.Context {
 	return context.WithValue(ctx, keyRecordKey, record)
 }
 
-// KeyFromContext returns the snapshot-resolved credential. false means the
-// request never passed the auth middleware (or a caller replaced the context).
+// KeyFromContext 从上下文中获取 KeyRecord。ok 为 false 表示从未经过中间件（或调用方
+// 替换过 context），没有权威的组织、用户和成员数据，access guard 无法核对。
 func KeyFromContext(ctx context.Context) (KeyRecord, bool) {
 	record, ok := ctx.Value(keyRecordKey).(KeyRecord)
 	return record, ok
 }
 
-// OrgIDFromContext returns the snapshot's organization attribution for the
-// request, or 0 when the key is legacy or anonymous.
+// OrgIDFromContext 从上下文中获取 KeyRecord 的 OrgID。
 func OrgIDFromContext(ctx context.Context) int64 {
 	record, ok := KeyFromContext(ctx)
 	if !ok {
@@ -181,7 +186,7 @@ func OrgIDFromContext(ctx context.Context) int64 {
 	return record.OrgID
 }
 
-// TenantFromContext 供 proxy/limiter/metering 读取租户
+// TenantFromContext 供 proxy/limiter/metering 读取租户编号。
 func TenantFromContext(ctx context.Context) string {
 	if v, ok := ctx.Value(TenantKey).(string); ok {
 		return v

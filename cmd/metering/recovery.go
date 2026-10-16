@@ -222,7 +222,7 @@ func startRecovery(ctx context.Context, ledger metering.Ledger, config recoveryC
 	}
 
 	if config.Mode == recoveryModeOff {
-		log.Printf("WARNING: METERING_RECOVERY=off: no abandoned reserved/executing execution will be released automatically; /recovery/review-required still reports the human queue and its manual release/settle actions stay available (SLA %s)", config.ReviewSLA)
+		log.Printf("WARNING: METERING_RECOVERY=off: automatic release and stale-execution review promotion are disabled; /recovery/review-required still reports the existing human queue and its manual release/settle actions stay available (SLA %s)", config.ReviewSLA)
 		return runtime, nil
 	}
 

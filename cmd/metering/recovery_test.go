@@ -125,6 +125,10 @@ type fakeRecoveryStore struct {
 	lastSettled  string
 }
 
+func (s *fakeRecoveryStore) ReviewStaleExecutions(context.Context, billing.RecoveryCandidateScanParams, time.Time) (int, error) {
+	return 0, nil
+}
+
 func (s *fakeRecoveryStore) ListRecoveryCandidates(context.Context, billing.RecoveryCandidateScanParams) ([]billing.Execution, error) {
 	return nil, nil
 }

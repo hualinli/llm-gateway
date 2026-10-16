@@ -17,29 +17,21 @@ type KeyRecord struct {
 	TenantID string
 	Status   string
 
-	// OrgID is the Control-side organization attribution. Zero means
-	// "legacy/unknown": the record predates org attribution, so the data-plane
-	// access guard has no authoritative organization row to check. OrgID is
-	// never a substitute for the guard's PG read.
+	// 组织编号。0 表示 "legacy/unknown"：记录没有组织归属，不能替代 access guard 的 PG 读取。
+	// access guard 没有权威的组织行，无法核对。OrgID 不能替代 access guard 的 PG 读取。
 	OrgID int64
-	// OwnerUserID is nil for legacy or organization-scoped keys that have no
-	// user owner. A nil owner keeps the metering user_id NULL.
+	// 用户编号。nil 表示无用户，保留在计量表中的 user_id 为 NULL。
 	OwnerUserID *int64
-	// MembershipID is the membership incarnation bound to this key. It is
-	// advisory snapshot data; the PostgreSQL guard revalidates the same id
-	// against the key's organization and owner before admission.
+	// 成员身份编号，用于在 PostgreSQL 中核对成员身份。
 	MembershipID int64
-	// ExpiresAt is nil when the key has no expiry. The value is always UTC.
+	// 过期时间。nil 表示永不过期。
 	ExpiresAt *time.Time
-	// ModelAllowlist is the tri-state key-level model restriction from
-	// api_keys.model_allowlist: nil inherits the parent scope (org policy) and a
-	// non-nil slice, including an empty one, is explicit. An empty slice is
-	// deny-all and must never be treated as "no restriction" (ADR-0003 2.7).
+	// ModelAllowlist 模型访问控制列表。nil 表示不限制，沿用组织的模型策略。
+	// 非 nil 切片，包括空切片，表示显式限制。空切片表示拒绝所有模型，不能当作不限制。
 	ModelAllowlist *[]string
 }
 
-// AllowlistRestricted reports whether the record carries a key-level model
-// restriction. false means "inherit", not "deny".
+// AllowlistRestricted 报告记录是否携带模型访问控制。false 表示继承，不是拒绝。
 func (r KeyRecord) AllowlistRestricted() bool { return r.ModelAllowlist != nil }
 
 func NewKeyRecord(id, rawKey, tenantID string) KeyRecord {

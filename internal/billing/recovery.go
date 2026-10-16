@@ -51,6 +51,12 @@ import (
 //     chargeable receipt afterwards; a late usage event lands as an audited
 //     exception instead (cmd/gateway's billing adapter).
 //
+// Before the release pass, a separate bounded sweep moves stale executions
+// with live/unknown owners into review_required (stale_review_pg.go). It checks
+// receipts under the execution lock, holds all funds, and retries from the
+// durable execution row after outages. A heartbeat proves process liveness,
+// not progress of every request it once admitted.
+//
 // What this file deliberately does *not* do:
 //
 //   - it does not release `review_required` executions automatically. The
@@ -70,7 +76,7 @@ const (
 	// DefaultRecoveryMaxExecutionDuration is the platform's declared maximum
 	// duration of one upstream attempt. A stream that has been in
 	// reserved/executing for longer than this plus the grace period is not
-	// "slow", it is abandoned: the gateway that owned it either died or lost it.
+	// healthy by assumption: it needs either audited recovery or human review.
 	DefaultRecoveryMaxExecutionDuration = 30 * time.Minute
 	// DefaultRecoveryGrace is the extra margin on top of the maximum execution
 	// duration. It covers clock skew between the gateway that stamped
@@ -301,8 +307,8 @@ type RecoveryGapParams struct {
 	Before time.Time
 }
 
-// RecoveryGap is the visibility half of the recovery loop: stuck executions it
-// must *not* touch automatically, counted so an operator can act.
+// RecoveryGap counts unknown-owner executions still awaiting the bounded review
+// sweep. They cannot be refunded automatically.
 //
 // OwnerUnknown is the dangerous one: an execution has been in reserved/executing
 // past the whole recovery window and there is no liveness record at all for its
@@ -464,6 +470,9 @@ type RecoveryResult struct {
 // operation; RecoverExecution is the only one that moves money, and it does so
 // in one transaction.
 type RecoveryStore interface {
+	// ReviewStaleExecutions makes expired, receipt-less executions with a live
+	// or unknown owner actionable. It holds funds and audits the queue transition.
+	ReviewStaleExecutions(ctx context.Context, params RecoveryCandidateScanParams, now time.Time) (int, error)
 	// ListRecoveryCandidates returns the bounded set of executions that may be
 	// abandoned: status reserved/executing, updated_at strictly before Before,
 	// and an owner that is provably not alive for the admission. Oldest first.
@@ -473,8 +482,7 @@ type RecoveryStore interface {
 	// typed error. All three checks (window, owner liveness, no chargeable
 	// receipt) are re-verified inside its transaction.
 	RecoverExecution(ctx context.Context, params RecoveryParams) (RecoveryResult, error)
-	// RecoveryGap reports stuck executions no automatic path may touch (an owner
-	// with no liveness record at all).
+	// RecoveryGap reports unknown-owner executions not yet moved into review.
 	RecoveryGap(ctx context.Context, params RecoveryGapParams) (RecoveryGap, error)
 	// ReviewRequiredBacklog reports the human queue: how many executions are
 	// waiting and how old the oldest one is.
@@ -488,6 +496,7 @@ type RecoveryStore interface {
 // closed vocabulary of RecoveryResults (released, replayed, instance_alive,
 // owner_unknown, too_young, receipt_exists, state, check_missing, error).
 type RecoveryBatchResult struct {
+	Reviewed int
 	Scanned  int
 	Outcomes map[string]int
 	// ReviewOpen/ReviewOldest/ReviewBreaches mirror the human queue snapshot the
@@ -495,8 +504,8 @@ type RecoveryBatchResult struct {
 	ReviewOpen     int64
 	ReviewOldest   time.Duration
 	ReviewBreaches int64
-	// OwnerUnknown counts stuck executions the automatic path may never touch
-	// because their owner has no liveness record, and how old the oldest is.
+	// OwnerUnknown counts remaining unknown-owner executions awaiting review,
+	// and how old the oldest is.
 	OwnerUnknown       int64
 	OwnerUnknownOldest time.Duration
 }
@@ -639,7 +648,8 @@ type RecoveryObserver interface {
 
 // ExecutionRecovery is the bounded recovery loop.
 //
-// One tick is: refresh the human queue snapshot (one aggregate read) → scan a
+// One tick is: promote stale live/unknown-owner executions to review → refresh
+// the human queue snapshot (one aggregate read) → scan a
 // bounded batch of candidates → for each candidate, one short transaction that
 // either releases with recorded evidence or refuses with a typed error. Nothing
 // is held between candidates, so a graceful stop (context cancellation) leaves
@@ -745,7 +755,20 @@ func (r *ExecutionRecovery) Tick(ctx context.Context) (RecoveryBatchResult, erro
 		return result, err
 	}
 
-	// The queue snapshot is refreshed first: it is the surface an operator uses
+	// Sweep before reading the queue so new reviews and their SLA are visible in
+	// this tick. The DB row retries this work after any outage or process restart.
+	windowStart := started.Add(-r.opts.MinAge())
+	reviewCtx, cancelReview := context.WithTimeout(ctx, r.opts.Timeout)
+	reviewed, reviewErr := r.store.ReviewStaleExecutions(reviewCtx, RecoveryCandidateScanParams{
+		Before: windowStart, HeartbeatBefore: started.Add(-r.opts.LivenessLease), Limit: r.opts.BatchSize,
+	}, started)
+	result.Reviewed = reviewed
+	cancelReview()
+	if result.Reviewed > 0 {
+		r.logf("recovery: moved %d stale executions to manual review; funds remain held", result.Reviewed)
+	}
+
+	// The queue snapshot is refreshed next: it is the surface an operator uses
 	// while the automatic path refuses. A failure here is reported but does not
 	// stop the release pass — the two halves fail independently.
 	backlog, backlogErr := r.store.ReviewRequiredBacklog(ctx, ReviewBacklogParams{Now: started, SLA: r.opts.ReviewSLA})
@@ -755,10 +778,9 @@ func (r *ExecutionRecovery) Tick(ctx context.Context) (RecoveryBatchResult, erro
 		result.ReviewBreaches = backlog.Breaches
 		r.observeReviewQueue(backlog.Open, result.ReviewOldest, backlog.Breaches)
 	}
+	backlogErr = errors.Join(reviewErr, backlogErr)
 
-	// The gap snapshot: stuck executions whose owner has no liveness record are
-	// never candidates, but they must not be invisible either.
-	windowStart := started.Add(-r.opts.MinAge())
+	// Report unknown-owner rows left for a later bounded review sweep.
 	if gap, gapErr := r.store.RecoveryGap(ctx, RecoveryGapParams{Before: windowStart}); gapErr == nil {
 		result.OwnerUnknown = gap.OwnerUnknown
 		result.OwnerUnknownOldest = gap.OldestAge(started)

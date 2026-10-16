@@ -150,7 +150,7 @@ func (s *PGAccountStore) ListRecoveryCandidates(ctx context.Context, params Reco
 	return items, rows.Err()
 }
 
-// RecoveryGap returns the stuck executions the automatic path may never touch:
+// RecoveryGap returns stuck executions that cannot be automatically refunded:
 // past the whole recovery window and with no liveness record for their owner.
 // It is a read; the number and its age are the operator signal (and the reason
 // the candidate scan can skip them instead of looping on them forever).

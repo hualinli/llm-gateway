@@ -143,7 +143,7 @@ func TestAdmissionPolicyBounds(t *testing.T) {
 		return []byte(`{"model":"gpt-billing","stream":true,"messages":[` + messages + `]` + extra + `}`)
 	}
 
-	t.Run("messages are bounded by their raw size and output is pinned", func(t *testing.T) {
+	t.Run("the complete request is bounded and output is pinned", func(t *testing.T) {
 		first, second := message("hello"), message("world")
 		bounds, failure := policy.Bounds(body(first+","+second, ""))
 		if failure != nil {
@@ -152,7 +152,7 @@ func TestAdmissionPolicyBounds(t *testing.T) {
 		if bounds.Model != "gpt-billing" || bounds.Messages != 2 {
 			t.Fatalf("bounds=%+v", bounds)
 		}
-		wantInput := int64(len(first)+len(second)) + 2*policy.MessageOverheadTokens + policy.RequestOverheadTokens
+		wantInput := int64(max(len(body(first+","+second, "")), len(bounds.Body))) + 2*policy.MessageOverheadTokens + policy.RequestOverheadTokens
 		if bounds.InputTokensUpper != wantInput {
 			t.Fatalf("input bound=%d, want %d", bounds.InputTokensUpper, wantInput)
 		}
@@ -305,6 +305,65 @@ func TestAdmissionPolicyBounds(t *testing.T) {
 			t.Fatalf("bounds=%+v failure=%+v", bounds, failure)
 		}
 	})
+}
+
+func TestChatBillingBoundsIncludeSchemaAndRejectUnboundedExtensions(t *testing.T) {
+	policy := defaultAdmissionPolicy()
+	request := map[string]any{
+		"model": "gpt-billing", "stream": true, "max_tokens": 1,
+		"messages": []any{map[string]any{"role": "user", "content": "hi"}},
+	}
+	encode := func() []byte {
+		b, err := json.Marshal(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return b
+	}
+	baseline, failure := policy.Bounds(encode())
+	if failure != nil {
+		t.Fatal(failure)
+	}
+	request["response_format"] = map[string]any{
+		"type": "json_schema", "json_schema": map[string]any{
+			"name": "result", "schema": map[string]any{"type": "object", "description": strings.Repeat("schema description ", 5000)},
+		},
+	}
+	body := encode()
+	bounds, failure := policy.Bounds(body)
+	if failure != nil {
+		t.Fatal(failure)
+	}
+	if bounds.InputTokensUpper < int64(len(body)) || bounds.InputTokensUpper-baseline.InputTokensUpper < 90000 {
+		t.Fatalf("schema was under-reserved: baseline=%d schema=%d bytes=%d", baseline.InputTokensUpper, bounds.InputTokensUpper, len(body))
+	}
+	if string(bounds.Body) != string(body) {
+		t.Fatal("schema must reach the upstream intact")
+	}
+	policy.MaxInputBytes = int64(len(body) - 1)
+	if _, failure := policy.Bounds(body); failure == nil || failure.PassThrough {
+		t.Fatal("oversized schema must be refused before reservation")
+	}
+	delete(request, "response_format")
+	policy = defaultAdmissionPolicy()
+	for _, field := range []string{"modalities", "audio", "prediction", "provider_extension", "previous_response_id", "x_mock_unknown"} {
+		request[field] = "external or unbounded input"
+		if _, failure := policy.Bounds(encode()); failure == nil || failure.PassThrough {
+			t.Fatalf("%s was accepted", field)
+		}
+		delete(request, field)
+	}
+	request["x_mock_tps"] = 80
+	if _, failure := policy.Bounds(encode()); failure != nil {
+		t.Fatalf("known local mock control refused: %+v", failure)
+	}
+	// Even a request that fits before max_tokens is pinned must fit afterwards.
+	delete(request, "max_tokens")
+	body = encode()
+	policy.MaxInputBytes = int64(len(body))
+	if _, failure := policy.Bounds(body); failure == nil || failure.PassThrough {
+		t.Fatal("pinned request exceeds the input limit")
+	}
 }
 
 func TestAdmissionRefusalMapping(t *testing.T) {

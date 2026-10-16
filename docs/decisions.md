@@ -1,6 +1,6 @@
 # 当前实现必须遵守的约束
 
-这里汇总仍适用于代码的技术约束。系统组件和数据流见[架构说明](ARCHITECTURE.md)；产品目标见[业务方案](BUSINESS.md)；HTTP 接口以[OpenAPI 文件](openapi/console-v1.yaml)为准。
+改资金、身份或生产启动方式之前再读本文。系统怎么串起来见[架构说明](ARCHITECTURE.md)。文末的 ADR 和 `KNOWN-LIMITS` 编号是给代码注释用的索引，那份旧路线图不在仓库里。
 
 ## 运行与秘密
 
@@ -28,10 +28,14 @@
 
 ## 流式调用与结算
 
+- Chat 预占按完整请求（含 JSON Schema 和平台补入字段）字节数加模板开销估算输入，按固定输出 Token 上限估算输出；只接受已列明的纯文本字段，未知扩展、工具和多模态拒绝。完整请求受 `GATEWAY_BILLING_MAX_INPUT_BYTES` 限制。上游须符合 tokenizer／模板假设并遵守输出限制；异常超额不截断真实账单。
+
 - Gateway 在发出 SSE `[DONE]` 之前完成终态检查，并先持久化有效 usage receipt。缺失或非法 usage 是未知金额，不能当作零费用成功。
 - 已向客户端写出响应字节后不能再改 HTTP 状态或追加 JSON 错误。未完整结束的流记录为不完整调用，不能伪装成成功完成。
 - PostgreSQL 保存 execution、receipt 和账务事实；Redis 负责事件派发。派发允许重试，结算事务必须幂等，避免重复扣款。
 - 自动释放预占必须超过恢复时间窗且不存在可收费 receipt。普通执行还必须有心跳记录并证明原 Gateway 实例不再存活；无心跳记录代表状态未知，不能自动释放。Gateway 写下持久化 `abandoned:` 终止标记，能证明 attempt 已结束，允许恢复流程跳过实例存活判定，但不跳过时间窗、receipt 检查或审计。
+- 超过恢复窗口、没有放弃标记和可收费 receipt、但实例仍存活或心跳未知的 `reserved/executing`，由 Metering 分批锁行重查后转入 `review_required`，同时写 `billing.execution.stale_review` 审计，不动余额和预占。数据库不可用时保留执行记录供后续重试，不能依赖 Gateway 内存标记完成恢复。有效 receipt 若已提交则交给结算；人工处置前迟到的有效 receipt 可将执行恢复为 `receipt_recorded`。
+- 中途断流或客户端取消且未触发终态用量异常／收据写入失败时，可以记录 `abandoned:`；已交付部分内容不阻止恢复流程全额释放。未知上游成本由平台承担，当前没有上游对账或专门的取消滥用控制。内部结算幂等不等于客户端请求幂等，客户端重试会创建新执行。
 - `review_required` 由人工决定释放或按准入时预占结算。SLA 超时只触发关注，不触发资金动作；人工动作必须记录操作人、理由和审计。
 
 ## 故障注入

@@ -1,5 +1,37 @@
 # 本地开发
 
+第一次跑通系统，只做下面这些。进程和调用链见[仓库说明](../README.md)与[架构](ARCHITECTURE.md)。下文从「配置上游 Provider」起是操作手册，接到真实上游、压测或浏览器验收时再看。
+
+```bash
+bash scripts/preview.sh up
+```
+
+打开 http://127.0.0.1:5173 。这条命令会建库、创建平台管理员，并种入两家演示企业和三名成员。再次 `up` 复用已有数据，不会重复充值。
+
+| 角色 | 邮箱 | 密码 |
+|---|---|---|
+| 企业 A 的成员 | `rc-member-a-local-preview@rc.test` | `rc-member_a-local-preview` |
+| 企业 B 的成员 | `rc-member-b-local-preview@rc.test` | `rc-member_b-local-preview` |
+| 平台管理员 | `rc-admin@example.com` | `data/preview/local/secrets/admin-password` 文件里的内容 |
+
+成员登录后可以在个人账户和 `demo-enterprise-a`（或 B）之间切换。企业 A 有一笔演示充值。模型试用使用 `default`，并且请求体要带 `"stream": true`。`rc-refuse-probe` 指向一个故意不可达的上游，用来看「预占后退回、不扣费」。
+
+```bash
+bash scripts/preview.sh stop    # 停止，数据还在
+bash scripts/preview.sh down    # 删掉本项目容器和数据卷
+```
+
+如果第一次 `up` 在开户之前失败，工作目录里可能已经写下 `data/preview/local/state.env`。下次 `up` 会以为初始化做过了，从而跳过管理员和演示账户。把这个 `state.env` 移走后再执行一次 `up`，才会补上开户。不要对一个已经种过数据的目录重复这样做。
+
+和调用链对应的单测，不需要把预览栈拉起来：
+
+```bash
+go test ./internal/auth ./internal/gatewayguard ./internal/limiter ./internal/proxy -count=1
+go test ./cmd/gateway -count=1 -run 'TestOrgStreamCapRefusesBeforeBillingReservesFunds|TestRateLimitedRequestsNeverReachBilling'
+```
+
+带 PostgreSQL 的集成测试用 `make integration-test`，结束用 `make test-down`。
+
 ## 启动完整预览
 
 一条命令启动 Web、Gateway、Console、Control、Metering、PostgreSQL、Redis、原有主备 Mock 和三个可控 Mock：
@@ -81,6 +113,12 @@ go run ./cmd/democtl credential-revoke --id 旧凭据ID
 ```
 
 仍被当前配置引用的凭据不能撤销；先移除或替换该引用。凭据创建、配置发布和撤销都需要 Control 管理权限。生产部署需按[当前技术约束](decisions.md)启用 mTLS 并安全挂载主密钥。
+
+## 计费请求与故障恢复边界
+
+开启正式计费后，Chat 请求按完整 JSON（包括 `response_format.json_schema` 和平台补入的输出限制）估算输入上限。`GATEWAY_BILLING_MAX_INPUT_BYTES` 默认 256 KiB，限制完整请求；单条消息仍受 `GATEWAY_BILLING_MAX_MESSAGE_BYTES` 默认 64 KiB 限制。相比只统计 messages，相同请求的预占可能增加。工具、多模态和未知顶层扩展返回 400；已有明确列出的 `x_mock_*` 控制字段保留用于本地故障实验，也计入请求体积，不允许任意 `x_mock_` 扩展。
+
+Metering 的恢复循环必须启用，才能自动把收据写入失败后遗留的超时执行转入人工队列。默认窗口仍为 `30m + 10m`；无可收费收据和放弃标记、所属实例仍存活或心跳未知的执行转入 `review_required`，资金继续冻结。`METERING_RECOVERY=off` 会同时停用这项扫描和自动释放。操作入口、审计和退款政策见[资金恢复手册](runbooks/billing-recovery.md)。
 
 ## 可控 Mock Provider 与压测
 

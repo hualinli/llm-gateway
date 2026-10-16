@@ -260,9 +260,12 @@ func TestReviewBacklogAgeAndCursorValidation(t *testing.T) {
 // scriptedRecoveryStore is a RecoveryStore whose answers are scripted per
 // candidate. It records what the loop asked for, so the bounds can be asserted.
 type scriptedRecoveryStore struct {
-	candidates []Execution
-	outcomes   map[string]error
-	lastScan   RecoveryCandidateScanParams
+	staleReviewErr   error
+	staleReviewCount int
+	staleReviewScan  RecoveryCandidateScanParams
+	candidates       []Execution
+	outcomes         map[string]error
+	lastScan         RecoveryCandidateScanParams
 
 	mu            sync.Mutex
 	recovered     []string
@@ -270,6 +273,37 @@ type scriptedRecoveryStore struct {
 	reviewErr     error
 	gap           RecoveryGap
 	page          ReviewQueuePage
+}
+
+func (s *scriptedRecoveryStore) ReviewStaleExecutions(_ context.Context, params RecoveryCandidateScanParams, _ time.Time) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.staleReviewScan = params
+	return s.staleReviewCount, s.staleReviewErr
+}
+
+func TestRecoveryTickRetriesFailedStaleReview(t *testing.T) {
+	now := testTime()
+	store := &scriptedRecoveryStore{staleReviewErr: errors.New("database unavailable")}
+	loop, err := NewExecutionRecovery(store, RecoveryOptions{Now: func() time.Time { return now }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loop.Tick(context.Background()); err == nil {
+		t.Fatal("review failure must make the tick unhealthy")
+	}
+	store.staleReviewErr = nil
+	store.staleReviewCount = 2
+	result, err := loop.Tick(context.Background())
+	if err != nil || result.Reviewed != 2 {
+		t.Fatalf("retry result=%+v err=%v", result, err)
+	}
+	if !store.staleReviewScan.Before.Equal(now.Add(-loop.Options().MinAge())) || store.staleReviewScan.Limit != loop.Options().BatchSize {
+		t.Fatalf("unbounded scan: %+v", store.staleReviewScan)
+	}
+	if loop.Health().LastError != "" {
+		t.Fatal("successful retry did not clear loop error")
+	}
 }
 
 func (s *scriptedRecoveryStore) ListRecoveryCandidates(_ context.Context, params RecoveryCandidateScanParams) ([]Execution, error) {

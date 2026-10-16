@@ -730,13 +730,12 @@ func TestRecoveryLoopIsBoundedIdempotentAndProgressive(t *testing.T) {
 		env.heartbeat(t, owner, time.Now().UTC().Add(-2*time.Hour), time.Now().UTC().Add(-10*time.Minute))
 	}
 
-	// A live owner inside the window: not a candidate, and its row must not be
-	// touched.
+	// A stale execution with a live owner belongs in review, not automatic release.
 	env.admitOwned(t, "exec_loop_alive", "gw-loop-live", 100)
 	env.age(t, "exec_loop_alive", 25*time.Minute)
 	env.heartbeat(t, "gw-loop-live", time.Now().UTC().Add(-2*time.Hour), time.Now().UTC())
 
-	// An owner with no liveness record: never a candidate, always visible.
+	// Missing owner liveness also becomes an actionable review.
 	env.admitOwned(t, "exec_loop_unknown", "gw-loop-unknown", 100)
 	env.age(t, "exec_loop_unknown", 15*time.Minute)
 
@@ -778,17 +777,17 @@ func TestRecoveryLoopIsBoundedIdempotentAndProgressive(t *testing.T) {
 	if got := env.status(t, "exec_loop_new"); got != StatusExecuting {
 		t.Fatalf("third zombie status=%s, want it still executing after a bounded batch", got)
 	}
-	if got := env.status(t, "exec_loop_alive"); got != StatusExecuting {
-		t.Fatalf("live-owner status=%s, want executing", got)
+	if got := env.status(t, "exec_loop_alive"); got != StatusReviewRequired {
+		t.Fatalf("live-owner status=%s, want review_required", got)
 	}
-	if got := env.status(t, "exec_loop_unknown"); got != StatusExecuting {
-		t.Fatalf("unknown-owner status=%s, want executing", got)
+	if got := env.status(t, "exec_loop_unknown"); got != StatusReviewRequired {
+		t.Fatalf("unknown-owner status=%s, want review_required", got)
 	}
-	if first.OwnerUnknown != 1 {
-		t.Fatalf("owner_unknown=%d, want the unjudgeable execution reported", first.OwnerUnknown)
+	if first.OwnerUnknown != 0 || first.Reviewed != 2 {
+		t.Fatalf("stale executions were not moved to review: %+v", first)
 	}
-	if first.ReviewOpen != 1 || first.ReviewBreaches != 1 {
-		t.Fatalf("review snapshot=%+v, want one breached review_required", first)
+	if first.ReviewOpen != 3 || first.ReviewBreaches != 1 {
+		t.Fatalf("review snapshot=%+v, want three reviews including one breached", first)
 	}
 
 	second, err := loop.Tick(ctx)

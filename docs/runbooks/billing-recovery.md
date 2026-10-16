@@ -49,9 +49,13 @@ curl -sS -H "Authorization: Bearer ${METERING_ADMIN_TOKEN}" \
   'http://127.0.0.1:8091/recovery/review-required?limit=50&sla=24h'
 ```
 
-默认恢复时间窗为最大执行时长 `30m` 加宽限 `10m`；心跳默认每 `10s` 写入，租约默认 `60s`；人工队列 SLA 默认 `24h`。运行中生效的值以 `/recovery/status` 返回的 policy 为准。
+默认恢复时间窗为最大执行时长 `30m` 加宽限 `10m`；心跳默认每 `10s` 写入，租约默认 `60s`；人工队列 SLA 默认 `24h`。运行中生效的值以 `/recovery/status` 返回的 policy 为准。恢复窗口应覆盖实际配置的最大上游执行时长；超时转人工只是要求核对，不是证明请求已结束或上游没有收费。关闭 `METERING_RECOVERY` 会同时停止自动释放和超时转人工扫描。
 
-自动恢复只处理超过时间窗且没有可收费 receipt 的执行。普通执行需要已有心跳记录并证明原实例不再存活；缺失心跳会进入 owner-unknown，等待人工判断。`abandoned:` 标记证明 Gateway 已记录 attempt 结束，可以跳过实例存活判断，但仍需满足时间窗、receipt 检查和审计条件。receipt 为 `pending_dispatch`、`dispatched` 或 `settled` 时必须交给结算路径。`exception` 可能来自 usage 未知、数据错误或派发失败；必须结合 `last_error` 与审计分类，不能仅凭状态决定扣款、释放或重投。
+自动恢复只处理超过时间窗且没有可收费 receipt 的执行。普通执行需要已有心跳记录并证明原实例不再存活；缺失心跳属于 owner-unknown，不能自动退款。Metering 每轮先将超过窗口、无放弃标记和可收费 receipt、实例仍存活或心跳未知的执行转入 `review_required`，供现有人工入口处置；待扫描的 owner-unknown 仍由指标报告。`abandoned:` 标记证明 Gateway 已记录 attempt 结束，可以跳过实例存活判断，但仍需满足时间窗、receipt 检查和审计条件。receipt 为 `pending_dispatch`、`dispatched` 或 `settled` 时必须交给结算路径。`exception` 可能来自 usage 未知、数据错误或派发失败；必须结合 `last_error` 与审计分类，不能仅凭状态决定扣款、释放或重投。
+
+收据或异常写入失败后，只剩 `executing` 是允许的暂态，不应永久依赖重启 Gateway 才能处理。后台以数据库执行记录重试；扫描期间锁住 execution 并重查 receipt，跳过其他事务锁住的行。成功提交的有效 receipt 不转人工；迟到的有效 receipt 在人工处置前仍可恢复正常结算。状态变更与 `billing.execution.stale_review` 审计原子提交，不修改余额、预占或成员额度。每轮人工转入和自动释放各自最多处理配置的 batch 数；人工 SLA 从进入队列开始计算，人工资金处置仍需满足其状态时间窗。
+
+放弃标记也可能来自已经向客户端交付部分内容的取消／断流。满足恢复条件后仍全额释放，未知上游费用由平台承担；不能据此认定上游未产生费用。收据写入失败或终态用量异常不写放弃标记。
 
 `review_required` 是单独的人工队列，时间到了也不会自动扣款或释放。平台计费运维界面应以已登录的平台管理员身份提交决定。底层 Metering 手工操作仅能处置 `review_required` execution，操作必须写入真实 `actor_user_id` 和理由：
 
@@ -70,7 +74,7 @@ curl -sS -H "Authorization: Bearer ${METERING_ADMIN_TOKEN}" \
 SELECT created_at, actor_user_id, action, detail
 FROM console_audit_events
 WHERE target_id = 'EXECUTION_ID'
-  AND action IN ('billing.execution.recovered', 'billing.execution.manual_settled');
+  AND action IN ('billing.execution.stale_review', 'billing.execution.recovered', 'billing.execution.manual_settled');
 ```
 
 处置后再核对 `billing_entries` 与 `billing_accounts` 投影。关于金额、账本和事务边界的技术约束见[当前实现决策](../decisions.md)。

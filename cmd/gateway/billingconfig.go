@@ -45,31 +45,28 @@ func parseBillingMode(raw string) (billingMode, error) {
 // refuses a request it cannot bound instead of admitting it with a guessed
 // upper bound:
 //
-//   - input: every element of `messages` is counted as its raw JSON size. A
-//     byte-level tokenizer produces at most one token per byte (each token
-//     covers at least one byte), so the raw size plus a per-message template
-//     overhead is a conservative upper bound. Only text content is supported;
-//     image/audio/file parts and unknown message fields are refused. Requests
-//     carrying tool/function
-//     definitions are refused outright: their input tokens are not bounded by
-//     the message size;
+//   - input: count the entire JSON request, including response_format schemas
+//     and platform-pinned fields, then add message/template overhead. This is
+//     conservative for byte-level tokenizers with bounded template overhead.
+//     Only self-contained text requests are supported; unknown top-level or
+//     message fields, tools, external inputs and other modalities are refused;
 //   - output: `max_tokens`/`max_completion_tokens` when present (the largest of
 //     the two), otherwise the platform default, which is *pinned into the
 //     forwarded body* so the bound is real rather than assumed. A declared
 //     limit above the platform cap is refused. Only a single output choice
 //     (omitted n or n=1) is supported;
-//   - size: message count, per-message size and total message size are capped,
+//   - size: message count, per-message size and total request size are capped,
 //     so a request cannot make the platform hold an unbounded reservation.
 //
-// The result is an over-reserve, never an under-reserve: real usage above the
-// reservation is an explicit receivable/account policy decision (T07), not a
-// silently truncated charge.
+// Providers must honor the output limit and fit the tokenizer/template policy.
+// Usage exceeding the reservation remains an explicit receivable/account policy
+// decision (T07), not a silently truncated charge or a claim of universal bounds.
 type admissionPolicy struct {
 	// MaxMessages bounds len(messages).
 	MaxMessages int
 	// MaxMessageBytes bounds one raw message object.
 	MaxMessageBytes int64
-	// MaxInputBytes bounds the sum of the raw message objects.
+	// MaxInputBytes bounds the entire request, including schemas and pinned fields.
 	MaxInputBytes int64
 	// MessageOverheadTokens covers the chat-template tokens one message adds on
 	// top of its content (role markers, separators).
@@ -138,6 +135,31 @@ const maxBillingBodyBytes = 4 << 20
 // explicitly instead of under-reserving.
 var unsupportedBillingFields = []string{"tools", "functions", "tool_choice"}
 
+// Only self-contained text generation settings may cross the billing boundary.
+// Unknown provider extensions could reference external input or enable a different
+// output modality, whose cost cannot be bounded by the request's byte length.
+func boundedChatField(field string) bool {
+	switch field {
+	case "model", "messages", "stream", "stream_options", "n",
+		"max_tokens", "max_completion_tokens", "temperature", "top_p", "stop",
+		"presence_penalty", "frequency_penalty", "logit_bias", "seed",
+		"logprobs", "top_logprobs", "response_format", "user", "metadata",
+		"store", "service_tier", "reasoning_effort", "verbosity",
+		"safety_identifier", "prompt_cache_key", "prompt_cache_retention":
+		return true
+	case "tools", "functions", "tool_choice":
+		return true // Only null survives the explicit capability check below.
+	case "x_mock_ttft_ms", "x_mock_token_interval_ms", "x_mock_tokens",
+		"x_mock_event_line_bytes", "x_mock_role_only_first", "x_mock_usage",
+		"x_mock_tps", "x_mock_status", "x_mock_hang", "x_mock_fail_after",
+		"x_mock_stall_after", "x_mock_stall_ms":
+		// Explicit local test controls, also counted in the complete body.
+		// This is not a wildcard permission for arbitrary provider extensions.
+		return true
+	}
+	return false
+}
+
 // Bounds parses the request body and derives the trusted token upper bounds, or
 // explains why the request cannot be priced. It is a pure function so the
 // policy is unit-testable without HTTP or PostgreSQL.
@@ -194,6 +216,14 @@ func (p admissionPolicy) Bounds(body []byte) (RequestBounds, *boundFailure) {
 			Status:  http.StatusBadRequest,
 			Code:    httperr.CodeInvalidRequest,
 			Message: fmt.Sprintf("the billing policy of this version cannot bound requests with %q; send plain text messages only", unsupported),
+		}
+	}
+	for field := range fields {
+		if !boundedChatField(field) {
+			return RequestBounds{}, &boundFailure{
+				Status: http.StatusBadRequest, Code: httperr.CodeInvalidRequest,
+				Message: fmt.Sprintf("the billing policy does not support request field %q", field),
+			}
 		}
 	}
 
@@ -265,12 +295,6 @@ func (p admissionPolicy) Bounds(body []byte) (RequestBounds, *boundFailure) {
 		MessageBytes: messageBytes,
 		Body:         body,
 	}
-	// Each token covers at least one byte, so the raw message size is an upper
-	// bound on its tokens; the template overheads are added per message and per
-	// request.
-	bounds.InputTokensUpper = messageBytes +
-		int64(len(messages))*p.MessageOverheadTokens + p.RequestOverheadTokens
-
 	switch {
 	case declaredOutput <= 0:
 		// No usable output limit: pin the platform default into the forwarded
@@ -297,6 +321,17 @@ func (p admissionPolicy) Bounds(body []byte) (RequestBounds, *boundFailure) {
 	default:
 		bounds.OutputTokensUpper = declaredOutput
 	}
+	// Schemas and other text settings outside messages also reach the provider.
+	// Include both the original bytes and any fields inserted by the platform.
+	inputBytes := max(int64(len(body)), int64(len(bounds.Body)))
+	if inputBytes > p.MaxInputBytes {
+		return RequestBounds{}, &boundFailure{
+			Status: http.StatusBadRequest, Code: httperr.CodeInvalidRequest,
+			Message: fmt.Sprintf("the request exceeds the %d byte billing limit", p.MaxInputBytes),
+		}
+	}
+	bounds.InputTokensUpper = inputBytes +
+		int64(len(messages))*p.MessageOverheadTokens + p.RequestOverheadTokens
 	return bounds, nil
 }
 
