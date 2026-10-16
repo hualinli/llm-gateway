@@ -15,7 +15,7 @@ function QuotaCard({ orgId, compact = false }: { orgId: string; compact?: boolea
   const content = <Card title="我的月度额度" data-testid="overview-quota">
     <DataState query={quota}>
       {(data) => <Row gutter={[16, 16]}>
-        <Col xs={12} md={6}><Statistic title="本月最多可用" value={data.limit_micro === null ? '不限额' : data.limit_micro === '0' ? '禁止消费' : `${formatMicroYuan(data.limit_micro)} 元`} /></Col>
+        <Col xs={12} md={6} data-testid="overview-quota-limit"><Statistic title="本月最多可用" value={data.limit_micro === null ? '不限额' : data.limit_micro === '0' ? '禁止消费' : `${formatMicroYuan(data.limit_micro)} 元`} /></Col>
         <Col xs={12} md={6}><Statistic title="已结算消费" value={`${formatMicroYuan(data.used_micro)} 元`} /></Col>
         <Col xs={12} md={6}><Statistic title="调用中暂占" value={`${formatMicroYuan(data.reserved_micro)} 元`} /></Col>
         <Col xs={12} md={6}><Statistic title="本月还能使用" value={data.remaining_micro === null ? '不限额' : `${formatMicroYuan(data.remaining_micro)} 元`} /></Col>

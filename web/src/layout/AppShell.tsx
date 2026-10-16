@@ -152,7 +152,7 @@ export function AppShell(): ReactNode {
           <Space size={8} wrap>
             {isNarrow ? <Button icon={<MenuOutlined />} onClick={() => setDrawerOpen(true)} aria-label="打开导航" /> : null}
             {inPlatform ? <div className="workspace-context"><strong>平台管理</strong><span>全部个人与企业账户</span></div> : <OrgSwitcher />}
-            {membership && roleLabel ? <Tag color={membership.organization.type === 'personal' ? 'default' : 'blue'}>{roleLabel}</Tag> : null}
+            {membership && roleLabel ? <Tag data-testid="active-role-tag" data-org-type={membership.organization.type} color={membership.organization.type === 'personal' ? 'default' : 'blue'}>{roleLabel}</Tag> : null}
             {membership?.organization.status === 'suspended' ? <Tag color="red">账户已暂停</Tag> : null}
             {membership?.organization.type === 'enterprise' && membership.status === 'suspended' ? <Tag color="orange">成员资格已暂停</Tag> : null}
           </Space>

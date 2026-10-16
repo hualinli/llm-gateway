@@ -20,7 +20,8 @@ test.describe('account entry', () => {
     await page.getByLabel('确认密码', { exact: true }).fill(originalPassword);
     await page.getByRole('button', { name: '创建账号' }).click();
     await expect(page).toHaveURL(/\/orgs\/[^/]+\/overview$/);
-    await expect(page.getByText('个人账户管理员')).toBeVisible();
+    await expect(page.getByTestId('active-role-tag')).toBeVisible();
+    await expect(page.getByTestId('active-role-tag')).toHaveAttribute('data-org-type', 'personal');
     await expect(page.getByTestId('overview-usage')).toBeVisible();
 
     await page.goto('/settings');
@@ -50,14 +51,16 @@ test.describe('member account', () => {
 
   test('the member sees their own real usage and current quota', async ({ page }) => {
     await gotoOrg(page, state.orgA.id, 'overview');
-    await expect(page.getByTestId('overview-quota')).toBeVisible();
-    await expect(page.getByTestId('overview-quota').getByText('月度上限')).toBeVisible();
-    await expect(page.getByTestId('overview-quota')).not.toContainText('禁止消费');
-    await expect(page.getByTestId('overview-balance')).toHaveCount(0);
-
     const quotaResponse = await page.request.get('/api/v1/orgs/' + state.orgA.id + '/quota');
     expect(quotaResponse.status()).toBe(200);
     expect(((await quotaResponse.json()) as { limit_micro: string | null }).limit_micro).toBe('100000000');
+
+    await expect(page.getByTestId('overview-quota')).toBeVisible();
+    // limit_micro 100000000 µ¥ = 100 元：额度卡必须展示 API 返回的真实上限，而不是只出现标题。
+    await expect(page.getByTestId('overview-quota-limit')).toBeVisible();
+    await expect(page.getByTestId('overview-quota-limit')).toContainText(/(^|\D)100 元/);
+    await expect(page.getByTestId('overview-quota')).not.toContainText('禁止消费');
+    await expect(page.getByTestId('overview-balance')).toHaveCount(0);
 
     const usageResponse = await page.request.get(
       '/api/v1/orgs/' + state.orgA.id + '/usage?month=' + beijingMonthOf(),
@@ -109,7 +112,7 @@ test.describe('member account', () => {
 
   test('only the signed-in member can list and stop their own named Keys', async ({ page }) => {
     test.skip(!state.controlAvailable, '完整 Key 工作流需要本地 Control 服务');
-    const response = await page.request.get('/api/v1/orgs/' + state.orgA.id + '/keys?limit=20');
+    const response = await page.request.get('/api/v1/orgs/' + state.orgA.id + '/keys?limit=100');
     expect(response.status()).toBe(200);
     const result = (await response.json()) as {
       items: Array<{ key_id: string; name: string; organization_id: string; owner_user_id: string | null }>;
