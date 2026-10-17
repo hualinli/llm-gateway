@@ -147,7 +147,17 @@ export async function selectPlatformAccount(
     const match = visibleSelectOption(page, accountName, false);
     const count = await match.count();
     if (count === 1) {
-      await match.click();
+      // 不用鼠标点选项：antd 下拉展开后还会按触发框重新对齐位置，Playwright 判定
+      // “稳定”后选项仍可能移动，点击落空会直接关掉下拉，表单值保持为空
+      // （CI 截图里的“请选择个人或企业账户”）。搜索结果只剩一项时它就是激活项，
+      // 用 Enter 选中与位置和动画无关；随后确认选择框确实显示了该账户。
+      const select = field.locator('xpath=ancestor::div[contains(concat(" ", normalize-space(@class), " "), " ant-select ")][1]');
+      await expect(
+        page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option-active').filter({ hasText: accountName }),
+      ).toHaveCount(1);
+      await field.press('Enter');
+      // antd 6 的选择框没有 .ant-select-selection-item；空值时只显示占位符，选中后显示账户标签。
+      await expect(select).toContainText(accountName);
       return;
     }
     if (count > 1) throw new Error(`账户名称匹配到多个选项：${accountName}`);

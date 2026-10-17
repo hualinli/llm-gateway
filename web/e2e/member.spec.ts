@@ -128,14 +128,37 @@ test.describe('member account', () => {
     const otherKeys = (await otherAccount.json()) as { items: Array<{ key_id: string; name: string; organization_id: string; owner_user_id: string | null }> };
     expect(otherKeys.items.every((item) => item.organization_id === state.orgB.id && item.owner_user_id === state.member.userId)).toBe(true);
     await gotoOrg(page, state.orgA.id, 'keys');
-    await expect(page.getByTestId('keys-list-card').getByText('web-e2e first app')).toBeVisible();
-    await expect(page.getByTestId('keys-list-card').getByText('web-e2e second app')).toBeVisible();
+    // Control 按随机 key_id 排序，21 把 Key 里任意一把都可能落在第 2 页。
+    // 逐页收集 UI 上展示的名称，而不是假定某把 Key 一定在第 1 页。
+    const list = page.getByTestId('keys-list-card');
     const nextPage = page.getByRole('button', { name: '下一页' });
-    await expect(nextPage).toBeEnabled();
-    await nextPage.click();
-    await expect(page.getByText('第 2 页')).toBeVisible();
-    await expect(page.getByRole('button', { name: '上一页' })).toBeEnabled();
-    await page.getByRole('button', { name: '上一页' }).click();
+    const previousPage = page.getByRole('button', { name: '上一页' });
+    const nameCells = list.locator('.ant-table-tbody tr.ant-table-row td:first-child');
+    const firstName = nameCells.first();
+    const shownNames = new Set<string>();
+    let pageNumber = 1;
+    for (;;) {
+      await expect(list.getByText('第 ' + pageNumber + ' 页')).toBeVisible();
+      await expect(firstName).toBeVisible();
+      for (const name of await nameCells.allInnerTexts()) {
+        shownNames.add(name.trim());
+      }
+      if (!(await nextPage.isEnabled())) break;
+      expect(pageNumber).toBeLessThan(10);
+      const firstRowBefore = await firstName.innerText();
+      await nextPage.click();
+      pageNumber += 1;
+      // 页码标签先于数据更新；等首行换成下一页的内容再读，避免读到上一页的行。
+      await expect.poll(async () => firstName.innerText().catch(() => firstRowBefore)).not.toBe(firstRowBefore);
+    }
+    expect(pageNumber).toBeGreaterThanOrEqual(2);
+    expect([...shownNames]).toEqual(expect.arrayContaining(['web-e2e first app', 'web-e2e second app']));
+    await expect(previousPage).toBeEnabled();
+    while (pageNumber > 1) {
+      await previousPage.click();
+      pageNumber -= 1;
+      await expect(list.getByText('第 ' + pageNumber + ' 页')).toBeVisible();
+    }
     await expect(page.getByText('第 1 页')).toBeVisible();
   });
 });
