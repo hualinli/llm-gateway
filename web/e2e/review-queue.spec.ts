@@ -1,4 +1,4 @@
-import { AUTH, button, expect, loadState, requireBackend, test } from './fixtures';
+import { AUTH, button, expect, loadState, requireBackend, test, waitForOverlayReady } from './fixtures';
 
 const state = loadState();
 
@@ -68,11 +68,15 @@ test.describe('platform review queue', () => {
     const row = card.locator('tbody tr').filter({ hasText: 'review-model' });
     await button(row, '完成结算').click();
     const dialog = page.getByRole('dialog', { name: '确认完成结算' });
+    // 弹窗缩放动画结束前点确认会点空（CI 里按钮获得焦点但 onOk 没触发）。
+    await waitForOverlayReady(dialog);
+    const reason = dialog.getByLabel('处理原因');
     await button(dialog, '确认扣款并结算').click();
-    await expect(dialog.getByText('请写明处理原因')).toBeVisible();
+    // 断言真实的校验状态，而不是提示文案。
+    await expect(reason).toHaveAttribute('aria-invalid', 'true');
     expect(writes).toBe(0);
 
-    await dialog.getByLabel('处理原因').fill('provider verified');
+    await reason.fill('provider verified');
     await button(dialog, '确认扣款并结算').click();
     await expect(dialog).toBeHidden();
     const result = card.getByRole('alert').filter({ hasText: '已完成结算' });

@@ -134,6 +134,49 @@ export function visibleSelectOption(scope: Page | Locator, label: string, exact 
     .filter({ hasText: pattern });
 }
 
+/**
+ * Waits until an antd overlay (Modal / Select dropdown) has finished its open motion.
+ * antd 用 rc-motion 做缩放/滑入动画：动画期间 Playwright 也可能判定元素“稳定”，
+ * 但点击坐标会落在仍在移动的元素之外（点空了，表单校验不会触发）。
+ * 这里等真实状态：元素上不再有进行中的 CSS 动画/过渡，也没有 rc-motion 的 *-appear / *-enter 类。
+ */
+export async function waitForOverlayReady(overlay: Locator): Promise<void> {
+  await expect(overlay).toBeVisible();
+  await expect.poll(() => overlay.evaluate((node) => {
+    const root = (node.closest('.ant-modal-wrap, .ant-select-dropdown') ?? node) as HTMLElement;
+    const moving = [root, ...Array.from(root.querySelectorAll<HTMLElement>('*'))]
+      .some((el) => /-(appear|enter)(-active)?(\s|$)/.test(el.className && typeof el.className === 'string' ? el.className : ''));
+    const running = root.getAnimations({ subtree: true }).some((animation) => animation.playState === 'running');
+    return !moving && !running;
+  })).toBe(true);
+}
+
+/**
+ * Opens an antd Select and chooses one option by keyboard, then checks the popup closed
+ * and the select shows the choice. 鼠标点选项会因为下拉重新对齐位置而落空，下拉一直开着
+ * 并遮住后面的控件（CI：“subtree intercepts pointer events”）。
+ */
+export async function chooseSelectOption(page: Page, trigger: Locator, label: string): Promise<void> {
+  await trigger.click();
+  const popup = page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)');
+  await waitForOverlayReady(popup);
+  const content = page.locator('.ant-select-item-option-content').filter({ hasText: new RegExp(`^\\s*${escapeRegExp(label)}\\s*$`) });
+  const options = popup.locator('.ant-select-item-option');
+  const target = options.filter({ has: content });
+  await expect(target).toHaveCount(1);
+  const active = popup.locator('.ant-select-item-option-active');
+  const total = await options.count();
+  for (let step = 0; step <= total; step += 1) {
+    if (await active.filter({ has: content }).count() === 1) break;
+    await page.keyboard.press('ArrowDown');
+  }
+  await expect(active.filter({ has: content })).toHaveCount(1);
+  await page.keyboard.press('Enter');
+  await expect(popup).toHaveCount(0);
+  const select = trigger.locator('xpath=ancestor-or-self::div[contains(concat(" ", normalize-space(@class), " "), " ant-select ")][1]');
+  await expect(select).toContainText(label);
+}
+
 /** Searches and selects one account, loading another bounded server page when needed. */
 export async function selectPlatformAccount(
   page: Page,

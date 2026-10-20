@@ -1,4 +1,4 @@
-import { AUTH, button, expect, loadState, requireBackend, test, visibleSelectOption } from './fixtures';
+import { AUTH, button, expect, loadState, requireBackend, test, chooseSelectOption, visibleSelectOption, waitForOverlayReady } from './fixtures';
 
 const state = loadState();
 
@@ -49,12 +49,13 @@ test.describe('enterprise owner', () => {
     await page.goto('/orgs/' + state.orgA.id + '/members');
     await button(page, '邀请成员').click();
     const dialog = page.getByRole('dialog', { name: '邀请成员' });
+    await waitForOverlayReady(dialog);
     await dialog.getByLabel('对方邮箱').fill(state.invitee.email);
-    await dialog.getByLabel('加入后的角色').click();
-    await visibleSelectOption(page, '成员').click();
+    await chooseSelectOption(page, dialog.getByLabel('加入后的角色'), '成员');
     await dialog.getByRole('radio', { name: '不限额' }).check();
     await button(dialog, '生成邀请链接').click();
     const invitationDialog = page.getByRole('dialog', { name: '邀请链接已生成' });
+    await waitForOverlayReady(invitationDialog);
     const inviteUrl = await invitationDialog.getByLabel('邀请链接').inputValue();
     expect(inviteUrl).toContain('/invitations/');
 
